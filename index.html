@@ -1,95 +1,107 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <meta name="viewport" content="width=deivce-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
+    <title>Home • VulkanMod</title>
+    <link rel="stylesheet" href="static/styles/main.css">
+    <link rel="stylesheet" href="static/styles/buttons.css">
+    <link rel="stylesheet" href="static/styles/cards.css">
+    <link rel="stylesheet" href="static/styles/modal.css">
+    <link rel="stylesheet" href="static/styles/scroll.css">
     <link rel="stylesheet" href="https://unicons.iconscout.com/release/v2.1.5/css/unicons.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css'> 
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    <link rel="icon" type="image/x-icon" href="VulkanMod.ico">
-    <title>VulkanMod</title>
-    <meta name="title" content="VulkanMod" />
-    <meta name="description" content="A fabric mod that rewrites Minecraft OpenGL® renderer to use Vulkan® API." />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+
+    <link rel="icon" type="image/x-icon" href="/VulkanMod.ico">
+
     <meta name="theme-color" content="#FF5A5A">
-    
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="vkminecraft.dev" />
-    <meta property="og:title" content="VulkanMod" />
-    <meta property="og:description" content="A fabric mod that rewrites Minecraft OpenGL® renderer to use Vulkan® API." />
-    <meta property="og:image" content="https://raw.githubusercontent.com/morikoa/VulkanMod/web/VulkanModStars.png" />
+    <meta property="og:title" content="Home • VulkanMod">
+    <meta property="og:description" content="A fabric mod that rewrites Minecraft OpenGL® renderer to use Vulkan® API.">
+    <meta property="og:image"
+        content="https://raw.githubusercontent.com/xCollateral/VulkanMod/web/VulkanModStars.png" />
 
-    <meta property="twitter:url" content="vkminecraft.dev" />
-    <meta property="twitter:title" content="VulkanMod" />
-    <meta property="twitter:description" content="A fabric mod that rewrites Minecraft OpenGL® renderer to use Vulkan® API." />
-    <meta property="twitter:image" content="https://raw.githubusercontent.com/morikoa/VulkanMod/web/VulkanModStars.png"/>
+    <meta property="twitter:url" content="vulkanmod.dev" />
+    <meta property="twitter:title" content="Home • VulkanMod" />
+    <meta property="twitter:description"
+        content="A fabric mod that rewrites Minecraft OpenGL® renderer to use Vulkan® API." />
+    <meta property="twitter:image"
+        content="https://raw.githubusercontent.com/VulkanMod/VulkanMod/web/VulkanModStars.png" />
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body>
-    <div id="particles"></div>
-    <div class="container">
-        <div class="content">
-            <img src="VulkanMod.png" class="logo" alt="VulkanMod">
-            <div class="heading">
-                <h1>VulkanMod</h1>
-            </div>
-            <div class="text">
-                <p>A <u><a href="https://fabricmc.net/" class="link">fabric</a></u> mod that rewrites Minecraft <u><a href="https://opengl.org/" class="link">OpenGL®</a></u> renderer to use <u><a href="https://vulkan.org/" class="link"">Vulkan®</a></u> API.</p>
-            </div>
-            <div class="button">
-                <a class="btn" href="https://modrinth.com/mod/vulkanmod"><i class="bi bi-download"></i><span class="btn-text"> Download</span></a>
-                <a class="btn" href="https://github.com/xCollateral/VulkanMod"><i class="bi bi-github"></i><span class="btn-text"> GitHub</span></a>
-                <a class="btn" href="https://ko-fi.com/V7V7CHHJV"><i class="bi bi-cup"></i><span class="btn-text"> Donate</span></a>
-                <a class="btn" href="https://discord.gg/FVXg7AYR2Q"><i class="bi bi-discord"></i><span class="btn-text"> Discord</span></a>
-            </div>
-        </div>
-    </div>
-    <div id="disclaimer" class="modal">
-        <div class="content animate__animated animate__fadeInDown">
-          <span class="close" onclick="disclaimerModal()">&times;</span>
-          <h4 class="header">Disclaimer:</h4>
-          <ul class="text">
-            <li>Vulkan and the Vulkan logo are registered trademarks of the Khronos Group Inc.</li>
-            <li>OpenGL and the OpenGL logo are registered trademarks of the Khronos Group Inc.</li>
-            <li>Minecraft is the trademark of Microsoft Corporation.</li>
-            <li>Fabric is the trademark of FabricMC.</li>
-          </ul>
-          <div style="display: block; margin-top: 12px"><a class="btn button" href="javascript:void(0)" onclick="disclaimerModal()">Close</a></div>  
-        </div>
-    </div>
-    <div id="contributor" class="modal">
-        <div class="content animate__animated animate__fadeInDown">
-          <span class="close" onclick="conModal()">&times;</span>
-          <h4 class="header">Contributors:</h4>
-          <ul class="text">
-            <li><a class="link" href="https://github.com/thr3343">thr3343</a> - Core Mod Development</li>
-            <li><a class="link" href="https://github.com/CADIndie">CADIndie</a> - Forge Port and many other fixes</li>
-            <li><a class="link" href="https://pieman.dev">piemanau</a> - Website adjustments</li>
-            <li><a class="link" href="https://github.com/Sollace">Sollace</a> - OpenGL Mod Compatibility fixes</li>
-            <li><a class="link" href="https://www.youtube.com/@SpidFightFR">SpidFightFR</a> - VulkanMod contents</li>
-            <li><a class="link" href="https://github.com/khanhduytran0">DuyKhanhTran</a> - Mobile Devices ports</li>
-          </ul>
-          <div style="display: block; margin-top: 12px"><a class="btn button" href="javascript:void(1)" onclick="conModal()">Close</a></div>  
-        </div>
-    </div>
-    <div class="footer">
-        <p>© COPYRIGHT 2024 XCOLLATERAL. NOT APPROVED BY OR ASSOCIATED WITH MOJANG. <a href="javascript:void(0)" onclick="disclaimerModal()" class="link">DISCLAIMER</a></p>
-        <p>Made with 💖 by <a class="link" href="https://github.com/xCollateral"> xCollateral</a>. Special thanks to our <a href="javascript:void(1)" onclick="conModal()" class="link">Contributors</a></p>
-    </div>
-    <script src="./particles.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.1/jquery.min.js" integrity="sha512-aVKKRRi/Q/YV+4mjoKBsE4x3H+BkegoM/em46NNlCqNTmUYADjBbeNefNxYV7giUp0VxICtqdrbqU7iVaeZNXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script>
-        particlesJS.load('particles', 'particles.json');
 
-        var modal = $("#disclaimer");
-        function disclaimerModal() {
-            modal.toggle();
-        }
-        var Modal = $("#contributor");
-        function conModal() {
-            Modal.toggle();
-        }
-    </script>
+<body>
+    <div class="hb-menu">
+        <div class="hb-content">
+            <a href="" class="nav-option">Home</a>
+            <a href="/faq" class="nav-option">FAQ</a>
+            <a href="https://ko-fi.com/V7V7CHHJV"><i class="bi bi-cup"></i> Donate</a>
+            <a href="https://modrinth.com/mod/vulkanmod" style="background-color: #1bd96a; color: black;"><i
+                    class="bi bi-download"></i> Download on Modrinth</a>
+        </div>
+    </div>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <div id="hb-logo"></div>
+                <img loading="lazy" src="/VulkanMod.png" alt="VulkanMod" id="vkmod-logo">
+                <p id="mod-version" class="markdown">0.0.0 ~ 0.0.0</p>
+                <p class="bullet">•</p>
+
+                <div class="navbar">
+                    <a href="" class="nav-option">Home</a>
+                    <a href="/faq" class="nav-option">FAQ</a>
+                </div>
+            </div>
+
+            <div class="button-container" style="justify-content: flex-end; margin-right: 10px;">
+                <a href="https://ko-fi.com/V7V7CHHJV" class="pretty" style="text-decoration: none;"><i
+                        class="bi bi-cup"></i> Donate</a>
+                <a href="https://modrinth.com/mod/vulkanmod" class="always-active-green"
+                    style="text-decoration: none;"><i class="bi bi-download"></i> Download on
+                    Modrinth</a>
+            </div>
+        </div>
+
+        <div class="content">
+            <img loading="lazy" src="https://vulkanmod.dev/VulkanMod.png" alt="VulkanMod" style="margin-bottom: -50px;">
+            <h1 id="vulkan-mod-mentioned" style="font-size: 2.5rem;">VulkanMod</h1>
+
+            <h2>A <a href="https://fabricmc.net/">fabric</a> mod that rewrites Minecraft <a
+                    href="https://opengl.org/">OpenGL®</a> renderer to use <a href="https://vulkan.org/">Vulkan®</a>
+                API.</h2>
+
+            <div class="card-wrapper">
+                <div class="card">
+                    <h3>Open Source</h3>
+                    <p>Our project is open-source, what means you can either see the code on <i
+                            class="bi bi-github"></i> <a href="https://github.com/xCollateral/VulkanMod">GitHub</a> or
+                        be like our <span id="contributors">Contributors</span> and help us in any way useful to <span
+                            id="vulkan-mod-mentioned">VulkanMod</span> be the best optimization mod!</p>
+
+                    <h3>Discord</h3>
+                    <p>If you want, you can come by our <i class="bi bi-discord"> </i><a
+                            href="https://discord.gg/FVXg7AYR2Q">Discord</a> server, we have very useful informations
+                        about
+                        the mod and wonderful folk.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="tooltip-container">
+                <p id="disclaimer">© Copyright {year} xCollateral - Not approved by or associated with Mojang or
+                    Microsoft.</p><br>
+                <span class="tooltip">Click to see disclaimer</span>
+            </div>
+            <p style="opacity: 0.7;">Made with 💖 by <a href="https://github.com/xCollateral">xCollateral</a>. Special
+                thanks to our <span id="contributors-f">Contributors</span></p>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="static/js/Modal.js"></script>
+    <script src="static/js/main.js"></script>
 </body>
+
 </html>

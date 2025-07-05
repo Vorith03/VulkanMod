@@ -1,0 +1,44 @@
+.button-container {
+    display: flex;
+    width: 100vw;
+    gap: 10px;
+}
+
+.always-active {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    border-radius: 12px;
+}
+
+.always-active-green {
+    background-color: #1bd96a;
+    color: black;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    border-radius: 12px;
+}
+
+.pretty {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    border-radius: 12px;
+    transition: all 0.3s ease-in-out;
+}
+
+.pretty:hover {
+    background-color: var(--primary-color);
+    color: white;
+    cursor: pointer;
+}
+
+.always-active:hover,
+.always-active-green:hover {
+    cursor: pointer;
+}

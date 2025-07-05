@@ -1,0 +1,21 @@
+.card-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.card {
+    text-align: left;
+    background-color: var(--header-color);
+    width: 50%;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0px 0px 35px 0px rgba(0,0,0,0.75);
+}
+
+@media only screen and (max-width: 600px) {
+    .card {
+        width: 80%;
+    }
+}

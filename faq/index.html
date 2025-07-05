@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>FAQ • VulkanMod</title>
+    <link rel="stylesheet" href="../static/styles/main.css">
+    <link rel="stylesheet" href="../static/styles/buttons.css">
+    <link rel="stylesheet" href="../static/styles/cards.css">
+    <link rel="stylesheet" href="../static/styles/modal.css">
+    <link rel="stylesheet" href="../static/styles/scroll.css">
+    <link rel="stylesheet" href="https://unicons.iconscout.com/release/v2.1.5/css/unicons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+
+    <link rel="icon" type="image/x-icon" href="../VulkanMod.ico">
+
+    <meta name="theme-color" content="#FF5A5A">
+    <meta property="og:title" content="FAQ • VulkanMod">
+    <meta property="og:description" content="See the Frequently Asked Questions about VulkanMod.">
+    <meta property="og:image"
+        content="https://raw.githubusercontent.com/xCollateral/VulkanMod/web/VulkanModStars.png" />
+
+    <meta property="twitter:url" content="vulkanmod.dev" />
+    <meta property="twitter:title" content="FAQ • VulkanMod" />
+    <meta property="twitter:description"
+        content="See the Frequently Asked Questions about VulkanMod." />
+    <meta property="twitter:image"
+        content="https://raw.githubusercontent.com/morikoa/VulkanMod/web/VulkanModStars.png" />
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+    <div class="hb-menu">
+        <div class="hb-content">
+            <a href="/" class="nav-option">Home</a>
+            <a href="" class="nav-option">FAQ</a>
+            <a href="https://ko-fi.com/V7V7CHHJV"><i class="bi bi-cup"></i> Donate</a>
+            <a href="https://modrinth.com/mod/vulkanmod" style="background-color: #1bd96a; color: black;"><i
+                    class="bi bi-download"></i> Download on Modrinth</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <div id="hb-logo"></div>
+                <img loading="lazy" src="/VulkanMod.png" alt="VulkanMod" id="vkmod-logo">
+
+                <p id="mod-version" class="markdown">0.0.0 ~ 0.0.0</p>
+                <p class="bullet">•</p>
+
+                <div class="navbar">
+                    <a href="/" class="nav-option">Home</a>
+                    <a href="" class="nav-option">FAQ</a>
+                </div>
+            </div>
+
+            <div class="button-container" style="justify-content: flex-end; margin-right: 10px;">
+                <a href="https://ko-fi.com/V7V7CHHJV" class="pretty" style="text-decoration: none;"><i
+                        class="bi bi-cup"></i> Donate</a>
+                <a href="https://modrinth.com/mod/vulkanmod" class="always-active-green"
+                    style="text-decoration: none;"><i class="bi bi-download"></i> Download on
+                    Modrinth</a>
+            </div>
+        </div>
+
+        <div class="content">
+            <h1>Frequently Asked Questions</h1>
+            <div class="card-wrapper">
+                <div class="card">
+                    <h2>What is <span id="vulkan-mod-mentioned">VulkanMod</span>?</h2>
+                    <p>You can think of <span id="vulkan-mod-mentioned">VulkanMod</span> as a voxel rendering engine
+                        built with Vulkan, which replaces
+                        Minecraft's OpenGL engine to improve performance. Therefore it's not a just a direct port of
+                        vanilla OpenGL engine.</p>
+
+                    <h2>What do I need to run this mod?</h2>
+                    <p>You will need a GPU with at least Vulkan 1.2 support to run this mod. To check if your GPU
+                        support Vulkan please run <span id="markdown">vulkaninfo</span> in a terminal.</p>
+
+                    <h2>How can I fix "Vulkan Loader not found"?</h2>
+                    <p>The message means that your GPU doesn't support Vulkan. Make sure that your GPU drivers are
+                        up-to-date and that your GPU model actually supports Vulkan. If that's not the case you will
+                        need to use another GPU.</p>
+
+                    <h2>What launcher do I need?</h2>
+                    <p>Most launchers are fine, but we would generally recommend using a legit launcher instead of
+                        cheat, pirate or modded clients. Though we do provide support for third party clients if proper
+                        logs are given, we can't fix launcher issues.</p>
+
+                    <h2>Does this mod support shaders? <span id="vulkan-mod-mentioned">(not the priority)</span></h2>
+                    <p>Not yet, We are working on them but there's still a long way to go. No ETA at this moment.</p>
+
+                    <h2>What about Linux and macOS?</h2>
+                    <p>You shouldn't encounter any issues with using <span id="vulkan-mod-mentioned">VulkanMod</span> on
+                        Linux, for help on how to install it
+                        on Linux, please check out <a
+                            href="https://github.com/xCollateral/VulkanMod/wiki/Linux-installation">the linux install
+                            guide</a>.
+                        Native Wayland support has been added in <span id="markdown">0.3.6</span>, ensure you are
+                        running the latest update.</p>
+
+                    <h2>I still have issues, where can I get help?</h2>
+                    <p>For assistance, visit our <a href="https://github.com/xCollateral/VulkanMod/issues">issue
+                            tab</a>.
+                        Include launcher, logs or crash reports, steps to reproduce and list of installed mods for a
+                        quick and effective problem solving. </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="tooltip-container">
+                <p id="disclaimer">© Copyright {year} xCollateral - Not approved by or associated with Mojang or
+                    Microsoft.</p><br>
+                <span class="tooltip">Click to see disclaimer</span>
+            </div>
+            <p style="opacity: 0.7;">Made with 💖 by <a href="https://github.com/xCollateral">xCollateral</a>. Special
+                thanks to our <span id="contributors-f">Contributors</span></p>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="../static/js/Modal.js"></script>
+    <script src="../static/js/main.js"></script>
+</body>
+
+</html>
