@@ -19,23 +19,21 @@ public class Initializer {
     public static Config CONFIG;
 
     public Initializer() {
-        initialize();
+        ModList.get().getModContainerById(MOD_ID).ifPresent(container ->
+                VERSION = container.getModInfo().getVersion().toString());
+        LOGGER.info("== VulkanMod Forge ==");
     }
 
     /**
-     * Forge normally constructs mods before Minecraft creates its Window when
-     * earlyWindowControl is disabled. Keep this method idempotent so mixins can
-     * safely request configuration even if loader ordering changes.
+     * VulkanMod's video-mode discovery touches GLFW and must run on Minecraft's
+     * render thread. Forge constructs @Mod classes on a loading worker, so the
+     * Window mixin invokes this immediately before the real game window is
+     * created instead of doing it from the mod constructor.
      */
     public static synchronized void initialize() {
         if (CONFIG != null) {
             return;
         }
-
-        ModList.get().getModContainerById(MOD_ID).ifPresent(container ->
-                VERSION = container.getModInfo().getVersion().toString());
-
-        LOGGER.info("== VulkanMod Forge ==");
 
         VideoResolution.init();
 
