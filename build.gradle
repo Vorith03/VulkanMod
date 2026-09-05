@@ -1,118 +1,114 @@
-plugins {
-	id 'fabric-loom' version '0.12-SNAPSHOT'
-	id 'maven-publish'
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net/' }
+        mavenCentral()
+    }
 }
 
-sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_17
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
 
-archivesBaseName = project.archives_base_name
 version = project.mod_version
 group = project.maven_group
 
-project.ext.lwjglVersion = "3.3.1"
-project.ext.jomlVersion = "1.10.4"
-project.ext.winNatives = "natives-windows"
-project.ext.linuxNatives = "natives-linux"
-project.ext.macosNatives = "natives-macos"
-project.ext.macosArmNatives = "natives-macos-arm64"
+base {
+    archivesName = project.archives_base_name
+}
 
-dependencies {
-//	include(implementation("org.lwjgl:lwjgl:$lwjglVersion"))
-//	include(implementation("org.lwjgl:lwjgl-glfw:$lwjglVersion"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-glfw:$lwjglVersion:$winNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-glfw:$lwjglVersion:$linuxNatives"))
-//	include(implementation("org.lwjgl:lwjgl-stb:$lwjglVersion"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-stb:$lwjglVersion:$winNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-stb:$lwjglVersion:$linuxNatives"))
-//	include(implementation("org.lwjgl:lwjgl-openal:$lwjglVersion"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-openal:$lwjglVersion:$winNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-openal:$lwjglVersion:$linuxNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl:$lwjglVersion:$winNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl:$lwjglVersion:$linuxNatives"))
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
-	include(implementation("org.lwjgl:lwjgl-vulkan:$lwjglVersion"))
-	include(implementation("org.lwjgl:lwjgl-vma:$lwjglVersion"))
-//	include(implementation("org.joml:joml:${jomlVersion}"))
-	include(runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion:$winNatives"))
-	include(runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion:$linuxNatives"))
+minecraft {
+    mappings channel: 'official', version: project.minecraft_version
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
 
-	include(implementation("org.lwjgl:lwjgl-shaderc:$lwjglVersion"))
-	include(runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion:$winNatives"))
-	include(runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion:$linuxNatives"))
-
-	//MacOS
-//	include(runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosArmNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion:$macosNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion:$macosArmNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion:$macosNatives"))
-//	include(runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion:$macosArmNatives"))
-
-//	implementation("org.openjdk.jol:jol-core:0.17")
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                vulkanmod {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
 }
 
 repositories {
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
+    mavenCentral()
+}
+
+configurations {
+    shade
+    implementation.extendsFrom shade
 }
 
 dependencies {
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
 
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    // Minecraft already supplies LWJGL core/GLFW. VulkanMod needs these extra modules.
+    shade "org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"
+    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}"
+    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}"
+
+    // Native libraries required by VMA/shaderc at runtime.
+    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-windows"
+    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-linux"
+    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-windows"
+    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-linux"
 }
 
-processResources {
-	inputs.property "version", project.version
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+            minecraft_version: minecraft_version,
+            forge_version: forge_version,
+            mod_id: mod_id,
+            mod_version: mod_version
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
 
-	filesMatching("fabric.mod.json") {
-		expand "version": project.version
-	}
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : project.mod_id,
+                'Specification-Vendor'    : 'xCollateral / Vorith03 Forge port',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : 'Vorith03',
+                'MixinConfigs'            : 'vulkanmod.mixins.json'
+        ])
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.shade.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    finalizedBy 'reobfJar'
 }
 
 tasks.withType(JavaCompile).configureEach {
-	// Minecraft 1.18 (1.18-pre2) upwards uses Java 17.
-	it.options.release = 17
-}
-
-loom {
-	accessWidenerPath = file("src/main/resources/vulkanmod.accesswidener")
+    options.encoding = 'UTF-8'
+    options.release = 17
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
+    withSourcesJar()
 }
 
-jar {
-	from("LICENSE") {
-		rename { "${it}_${project.archivesBaseName}"}
-	}
-}
-
-// configure the maven publication
 publishing {
-	publications {
-		mavenJava(MavenPublication) {
-			from components.java
-		}
-	}
-
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
-	}
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
 }
