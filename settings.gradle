@@ -1,10 +1,12 @@
 pluginManagement {
     repositories {
+        gradlePluginPortal()
         maven {
-            name = 'Fabric'
-            url = 'https://maven.fabricmc.net/'
+            name = 'MinecraftForge'
+            url = 'https://maven.minecraftforge.net/'
         }
         mavenCentral()
-        gradlePluginPortal()
     }
 }
+
+rootProject.name = 'VulkanMod-Forge'
