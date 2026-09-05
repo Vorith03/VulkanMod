@@ -3,8 +3,6 @@ package net.vulkanmod.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
@@ -16,7 +14,6 @@ import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
 
-@Environment(EnvType.CLIENT)
 public class VBO {
     private VertexBuffer vertexBuffer;
     private IndexBuffer indexBuffer;
