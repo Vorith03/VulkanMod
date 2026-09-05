@@ -2,6 +2,7 @@ package net.vulkanmod.mixin;
 
 import com.mojang.blaze3d.platform.*;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraftforge.fml.loading.ImmediateWindowHandler;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.config.Config;
 import net.vulkanmod.config.Options;
@@ -21,6 +22,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.function.IntSupplier;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import static org.lwjgl.glfw.GLFW.*;
 
@@ -66,7 +71,7 @@ public abstract class WindowMixin {
         return null;
     }
 
-    @Inject(
+    @Redirect(
             method = "<init>",
             at = @At(
                     value = "INVOKE",
@@ -74,9 +79,10 @@ public abstract class WindowMixin {
                     remap = false
             )
     )
-    private void vulkanHint(WindowEventHandler windowEventHandler, ScreenManager screenManager, DisplayData displayData, String string, String string2, CallbackInfo ci) {
+    private long vulkanHint(IntSupplier width, IntSupplier height, Supplier<String> title, LongSupplier monitor) {
         Initializer.initialize();
         GLFW.glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        return ImmediateWindowHandler.setupMinecraftWindow(width, height, title, monitor);
     }
 
     @Inject(method = "<init>", at = @At(value = "RETURN"))
