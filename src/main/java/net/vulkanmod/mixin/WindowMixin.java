@@ -68,6 +68,7 @@ public abstract class WindowMixin {
 
     @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lorg/lwjgl/glfw/GLFW;glfwCreateWindow(IILjava/lang/CharSequence;JJ)J"))
     private void vulkanHint(WindowEventHandler windowEventHandler, ScreenManager screenManager, DisplayData displayData, String string, String string2, CallbackInfo ci) {
+        Initializer.initialize();
         GLFW.glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     }
 
