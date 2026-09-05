@@ -32,7 +32,7 @@ public class Config {
         Config config;
         Config.path = path;
 
-        if (Files.exists(path)) {
+        if (Files.exists(path) && !Files.isDirectory(path)) {
             try (FileReader fileReader = new FileReader(path.toFile())) {
                 config = GSON.fromJson(fileReader, Config.class);
             }
@@ -48,19 +48,19 @@ public class Config {
     }
 
     public void write() {
-
-        if(!Files.exists(path.getParent())) {
+        Path parent = path.getParent();
+        if(parent != null && !Files.exists(parent)) {
             try {
-                Files.createDirectories(path);
+                Files.createDirectories(parent);
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new RuntimeException("Failed to create VulkanMod config directory", e);
             }
         }
 
         try {
             Files.write(path, Collections.singleton(GSON.toJson(this)));
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to write VulkanMod config", e);
         }
     }
 }
