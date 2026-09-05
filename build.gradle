@@ -10,6 +10,7 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 version = project.mod_version
@@ -50,6 +51,10 @@ configurations {
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
 
+    // Forge 47.3.0 ships Mixin 0.8.5. The annotation processor generates the
+    // production refmap used to remap Mojmap-named mixin targets after reobf.
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+
     // Minecraft already supplies LWJGL core/GLFW. VulkanMod needs these extra modules.
     shade "org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"
     shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}"
@@ -60,6 +65,11 @@ dependencies {
     shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-linux"
     shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-windows"
     shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-linux"
+}
+
+mixin {
+    add sourceSets.main, 'vulkanmod.refmap.json'
+    config 'vulkanmod.mixins.json'
 }
 
 tasks.named('processResources', ProcessResources).configure {
