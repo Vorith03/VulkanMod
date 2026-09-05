@@ -61,16 +61,19 @@ dependencies {
     // production refmap used to remap Mojmap-named mixin targets after reobf.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // Minecraft already supplies LWJGL core/GLFW. VulkanMod needs these extra modules.
-    shade "org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}"
-    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}"
-    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}"
+    // Minecraft already supplies LWJGL core/GLFW. Shade only VulkanMod's extra
+    // modules themselves; their transitive lwjgl-core dependency must not be
+    // duplicated inside the mod JAR.
+    shade("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}") { transitive = false }
+    shade("org.lwjgl:lwjgl-vma:${project.lwjgl_version}") { transitive = false }
+    shade("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}") { transitive = false }
 
-    // Native libraries required by VMA/shaderc at runtime.
-    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-windows"
-    shade "org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-linux"
-    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-windows"
-    shade "org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-linux"
+    // Native libraries required by VMA/shaderc at runtime. Keep these
+    // non-transitive for the same reason.
+    shade("org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-windows") { transitive = false }
+    shade("org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-linux") { transitive = false }
+    shade("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-windows") { transitive = false }
+    shade("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-linux") { transitive = false }
 }
 
 mixin {
