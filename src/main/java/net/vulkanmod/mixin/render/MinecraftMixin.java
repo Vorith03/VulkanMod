@@ -65,6 +65,9 @@ public class MinecraftMixin {
             Initializer.LOGGER.error("Fabulous graphics mode not supported, forcing Fancy");
             graphicsModeOption.set(GraphicsStatus.FANCY);
         }
+
+        var deviceInfo = Vulkan.getDeviceInfo();
+        Initializer.LOGGER.info("Vulkan renderer active: {}", deviceInfo != null ? deviceInfo.deviceName : "device info unavailable");
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
