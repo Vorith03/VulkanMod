@@ -42,6 +42,7 @@ minecraft {
 
 repositories {
     mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
 }
 
 configurations {
@@ -51,6 +52,10 @@ configurations {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+
+    // Temporary compile-only bridge for the one remaining @Environment annotation
+    // in LiquidRenderer. This dependency is not shaded or required at runtime.
+    compileOnly 'net.fabricmc:fabric-loader:0.14.21'
 
     // Forge 47.3.0 ships Mixin 0.8.5. The annotation processor generates the
     // production refmap used to remap Mojmap-named mixin targets after reobf.
