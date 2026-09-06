@@ -33,13 +33,16 @@ public class SPIRVUtils {
         if (resourceStart >= 0) {
             String resourcePath = shaderFile.substring(resourceStart);
 
-            // Some SecureJar union URLs normalize the directory URL returned for
-            // /shaders/ without retaining its trailing slash. Pipeline appends
-            // "basic/..." directly, yielding "shadersbasic/...". Repair only
-            // that known classpath boundary rather than guessing arbitrary paths.
-            String collapsedRoot = SHADER_RESOURCE_ROOT + "basic/";
-            if (resourcePath.startsWith(collapsedRoot)) {
-                resourcePath = SHADER_RESOURCE_ROOT + "/basic/" + resourcePath.substring(collapsedRoot.length());
+            // SecureJar union directory URLs can lose the trailing slash from
+            // /assets/vulkanmod/shaders/. Pipeline then appends the shader path
+            // directly, producing e.g. "shadersbasic/..." or
+            // "shadersminecraft/...". Restore that classpath boundary for any
+            // shader subtree instead of special-casing individual directories.
+            if (resourcePath.startsWith(SHADER_RESOURCE_ROOT)
+                    && resourcePath.length() > SHADER_RESOURCE_ROOT.length()
+                    && resourcePath.charAt(SHADER_RESOURCE_ROOT.length()) != '/') {
+                resourcePath = SHADER_RESOURCE_ROOT + "/"
+                        + resourcePath.substring(SHADER_RESOURCE_ROOT.length());
             }
 
             return compileShaderResource(resourcePath, shaderKind);
