@@ -47,6 +47,20 @@ adds a separate cached path; it does not claim to invent multi-draw or GPU culli
 
 ## Validation
 
+Repository checkpoint: `forge-1.20.1`, implementation commit `9b0512b5`.
+[CI run 34027446704](https://github.com/Vorith03/VulkanMod/actions/runs/34027446704)
+passed the build, distribution verification, layout tests, and both Vulkan startup
+probes. Both probes reported region batching enabled and cache tests passed.
+[Installable artifact](https://github.com/Vorith03/VulkanMod/actions/runs/34027446704/artifacts/9987545872):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-all.jar`.
+
+Local build could not run in the agent environment (Gradle download networking
+blocked and standalone `javac` unavailable); the above validation ran in CI.
+RX 6900 XT gameplay with this new path and performance gains are **not yet tested**.
+The confirmed successful local log from 03:13–03:15 on 2026-09-06 belongs to the
+preceding forge.1 water-fix build: RADV NAVI21 active, world save, exit code 0.
+Its narrator/OpenAL errors are environmental and separate from terrain rendering.
+
 - Build checks cover all 512 coordinate encodings, invalid coordinates, signed
   vertex offsets, command layout, negative/distant origins, and unsigned limits.
 - Startup smoke tests compile the new GLSL and create its shader modules/layout.
