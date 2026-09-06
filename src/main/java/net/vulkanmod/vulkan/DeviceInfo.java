@@ -185,4 +185,9 @@ public class DeviceInfo {
     public boolean isDrawIndirectSupported() {
         return drawIndirectSupported;
     }
+
+    public boolean isRegionBatchingSupported() {
+        return availableFeatures.features().multiDrawIndirect()
+                && availableFeatures.features().drawIndirectFirstInstance();
+    }
 }

@@ -16,6 +16,7 @@ public class ChunkArea {
     DrawBuffers drawBuffers;
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
+    long visibilityRevision;
 
     public ChunkArea(int i, Vector3i origin) {
         this.index = i;
@@ -124,10 +125,12 @@ public class ChunkArea {
 
     public void addSection(RenderSection section) {
         this.sectionQueue.add(section);
+        this.visibilityRevision++;
     }
 
     public void resetQueue() {
         this.sectionQueue.clear();
+        this.visibilityRevision++;
     }
 
     public void setPosition(int x, int y, int z) {

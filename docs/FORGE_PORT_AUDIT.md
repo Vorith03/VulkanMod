@@ -27,7 +27,7 @@ This document records the current state of the Forge port after the first succes
 ## Current checkpoint — 2026-09-06
 
 - User confirmed real Vulkan gameplay on AMD Radeon RX 6900 XT (RADV NAVI21), with good performance and successful world load/save/exit. Vulkan activation is now proven; the earlier `radeonsi` investigation is superseded.
-- Highest verified milestone: playable minimal-Forge Vulkan world (milestone 6), with a reported fluid rendering defect still awaiting post-fix visual confirmation. This does not establish full rendering correctness or Create Chronicles compatibility.
+- Highest verified milestone: playable minimal-Forge Vulkan world (milestone 6), with the water texture fix now visually confirmed by the user. This does not establish full rendering correctness or Create Chronicles compatibility.
 - `019747cc` fixes Forge's `LiquidBlockRenderer.vertex` semantic float order: red, green, blue, **alpha, U, V**. A wrong permutation still has the same JVM descriptor, so Mixin application alone cannot catch it.
 - `bff88648` adds liquid target loading to startup smoke coverage. CI #60 / run `34026156239` passed distribution verification and Vulkan startup with early splash enabled and disabled.
 - `0076a41c` extends the smoke test to invoke the transformed Forge liquid method with distinct alpha/U/V values and check the full emitted vertex, including packed light and cancellation. It checks translucent and opaque alpha. CI #61 / run `34026506701` passed the production build/distribution checks and both Vulkan startup probes, including the new semantic assertions. Runtime artifact: `VulkanMod-Forge-build` from that run.
@@ -35,7 +35,7 @@ This document records the current state of the Forge port after the first succes
 
 ### Next unresolved gate
 
-Test the latest green runtime JAR in the same minimal Forge 47.3.0 instance, preserving `earlyWindowControl=false`. Check still and flowing water, water sides, underwater view, and lava. Then exercise resource reload (F3+T), window resizing, and world re-entry. Report any remaining defect and provide the instance's `.minecraft/logs/latest.log` (plus screenshot for visual issues).
+Water is confirmed fixed. The user requested terrain batching/performance work next; see `docs/TERRAIN_BATCHING.md`. For further rendering validation, use the latest green **`-all.jar`** in the same minimal Forge 47.3.0 instance, preserving `earlyWindowControl=false`. Check still and flowing water, water sides, underwater view, and lava. Then exercise resource reload (F3+T), window resizing, and world re-entry. Report any remaining defect and provide the instance's `.minecraft/logs/latest.log` (plus screenshot for visual issues).
 
 Do not begin renderer optimization or infer full modpack compatibility from the successful minimal session. If this check passes, continue the existing Phase 3 minimal-rendering matrix, then Phase 4 compatibility triage. The Fabric compile-only annotation bridge remains documented mechanical cleanup.
 
@@ -329,7 +329,7 @@ The log should let us prove the exact renderer activation stage without requirin
 
 ## Current priority summary
 
-P0: Confirm the water fix visually on the RX 6900 XT; Vulkan takeover is proven.
+P0: Validate the requested terrain batching implementation against the confirmed RX 6900 XT water/gameplay baseline.
 
 P1: Remove Fabric compile-only bridge and normalize Forge targeting/config debt.
 

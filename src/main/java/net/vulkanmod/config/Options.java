@@ -208,6 +208,12 @@ public class Options {
                         () -> config.entityCulling)
                         .setTooltip(Component.nullToEmpty("""
                         Enables culling for entities on non visible sections.""")),
+                new SwitchOption("Region Batching",
+                        value -> config.regionBatching = value,
+                        () -> config.regionBatching)
+                        .setTooltip(Component.nullToEmpty("""
+                        Batches opaque terrain and caches draw commands to reduce CPU work.
+                        Automatically falls back when unsupported. Disable to compare performance.""")),
                 new SwitchOption("Indirect Draw",
                         value -> config.indirectDraw = value,
                         () -> config.indirectDraw)

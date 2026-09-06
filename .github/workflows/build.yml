@@ -41,6 +41,8 @@ jobs:
           timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke.log
           grep -F "Vulkan smoke test passed" vulkan-smoke.log
           grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke.log
+          grep -F "Terrain region cache smoke test passed" vulkan-smoke.log
+          grep -F "Terrain region batching: enabled" vulkan-smoke.log
       - name: Smoke-test Forge client Vulkan startup without early splash
         shell: bash
         run: |
@@ -63,6 +65,7 @@ jobs:
           grep -F "Created Vulkan NO_API window without Forge early splash context" vulkan-smoke-no-splash.log
           grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
+          grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,5 +80,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VulkanMod-Forge-build
-          path: build/libs/
+          path: build/libs/*-all.jar
           if-no-files-found: ignore

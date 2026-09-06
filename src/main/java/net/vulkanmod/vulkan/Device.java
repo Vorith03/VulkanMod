@@ -135,6 +135,10 @@ public class Device {
                 deviceFeatures.features().multiDrawIndirect(true);
                 deviceVulkan11Features.shaderDrawParameters(true);
             }
+            if (deviceInfo.isRegionBatchingSupported()) {
+                deviceFeatures.features().multiDrawIndirect(true);
+                deviceFeatures.features().drawIndirectFirstInstance(true);
+            }
 
             VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.calloc(stack);
 

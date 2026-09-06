@@ -4,7 +4,7 @@
 
 This audit looks for code-level performance bugs in the 1.20.1 renderer base used by the Forge port. The emphasis is on accidental serialization, synchronization mistakes, memory-selection problems, unnecessary queue submissions, native leaks, and hot-path allocation behavior—not generic optimization ideas.
 
-The current minimal Forge runtime is useful as a stability baseline, but Vulkan activation still needs direct proof. These findings therefore describe the renderer code itself and should be addressed only after the Vulkan takeover is proven end-to-end.
+The RX 6900 XT / RADV minimal-Forge gameplay baseline and water fix are now user-confirmed. On 2026-09-06 the user explicitly requested Nvidium-like terrain work as the next priority, ahead of full Create Chronicles compatibility. The older findings below remain audit hypotheses until individually tested; this session targets terrain submission first.
 
 ## Severity summary
 

@@ -24,6 +24,8 @@ public class DrawBuffers {
     private boolean allocated = false;
     AreaBuffer vertexBuffer;
     AreaBuffer indexBuffer;
+    long meshRevision;
+    private final RegionDrawBatch regionBatch = new RegionDrawBatch();
 
     public void allocateBuffers() {
         this.vertexBuffer = new AreaBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 3500000, VERTEX_SIZE);
@@ -33,6 +35,7 @@ public class DrawBuffers {
     }
 
     public DrawParameters upload(UploadBuffer buffer, DrawParameters drawParameters) {
+        this.meshRevision++;
         int vertexOffset = drawParameters.vertexOffset;
         int firstIndex = 0;
 
@@ -65,6 +68,11 @@ public class DrawBuffers {
         buffer.release();
 
         return drawParameters;
+    }
+
+    public void drawRegion(ChunkArea area, Pipeline pipeline, RenderType renderType,
+                           double camX, double camY, double camZ) {
+        this.regionBatch.draw(this, area, pipeline, renderType, camX, camY, camZ);
     }
 
     public int buildDrawBatchesIndirect(IndirectBuffer indirectBuffer, ChunkArea chunkArea, RenderType renderType, double camX, double camY, double camZ) {
@@ -281,6 +289,8 @@ public class DrawBuffers {
     }
 
     public void releaseBuffers() {
+        this.regionBatch.free();
+        this.meshRevision++;
         if(!this.allocated)
             return;
 
@@ -311,6 +321,7 @@ public class DrawBuffers {
         }
 
         public void reset(ChunkArea chunkArea) {
+            if (chunkArea != null) chunkArea.drawBuffers.meshRevision++;
             this.indexCount = 0;
             this.firstIndex = 0;
             this.vertexOffset = 0;

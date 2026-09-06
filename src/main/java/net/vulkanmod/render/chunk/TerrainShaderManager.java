@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.vertex.CustomVertexFormat;
+import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
 
@@ -19,6 +20,7 @@ public abstract class TerrainShaderManager {
 
     static GraphicsPipeline terrainIndirectShader;
     public static GraphicsPipeline terrainDirectShader;
+    private static GraphicsPipeline terrainRegionShader;
 
     private static Function<RenderType, GraphicsPipeline> shaderGetter;
 
@@ -29,12 +31,28 @@ public abstract class TerrainShaderManager {
     }
 
     public static void setDefaultShader() {
-        setShaderGetter(renderType -> Initializer.CONFIG.indirectDraw ? terrainIndirectShader : terrainDirectShader);
+        setShaderGetter(renderType -> useRegionBatching(renderType) ? terrainRegionShader
+                : useLegacyIndirect() ? terrainIndirectShader : terrainDirectShader);
+    }
+
+    public static boolean useRegionBatching(RenderType renderType) {
+        return Initializer.CONFIG.regionBatching && terrainRegionShader != null
+                && renderType != RenderType.translucent() && renderType != RenderType.tripwire();
+    }
+
+    public static boolean useLegacyIndirect() {
+        return Initializer.CONFIG.indirectDraw && Vulkan.getDeviceInfo().isDrawIndirectSupported();
     }
 
     private static void createBasicPipelines() {
         terrainIndirectShader = createPipeline("terrain_indirect");
         terrainDirectShader = createPipeline("terrain_direct");
+        if (Vulkan.getDeviceInfo().isRegionBatchingSupported()) {
+            terrainRegionShader = createPipeline("terrain_region");
+        }
+        Initializer.LOGGER.info("Terrain region batching: {} (multiDrawIndirect + drawIndirectFirstInstance)",
+                terrainRegionShader == null ? "unsupported; using fallback" :
+                        Initializer.CONFIG.regionBatching ? "enabled" : "disabled in config");
     }
 
     private static GraphicsPipeline createPipeline(String name) {
@@ -65,5 +83,9 @@ public abstract class TerrainShaderManager {
     public static void destroyPipelines() {
         terrainIndirectShader.cleanUp();
         terrainDirectShader.cleanUp();
+        if (terrainRegionShader != null) {
+            terrainRegionShader.cleanUp();
+            terrainRegionShader = null;
+        }
     }
 }

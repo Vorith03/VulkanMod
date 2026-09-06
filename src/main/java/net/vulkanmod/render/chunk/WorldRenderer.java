@@ -231,6 +231,7 @@ public class WorldRenderer {
         }
 
         this.indirectBuffers[Renderer.getCurrentFrame()].reset();
+        RegionBatchStats.reset();
 //        this.uniformBuffers.reset();
 
         this.minecraft.getProfiler().pop();
@@ -307,7 +308,7 @@ public class WorldRenderer {
         while(this.chunkQueue.hasNext()) {
             RenderSection renderSection = this.chunkQueue.poll();
 
-            renderSection.getChunkArea().sectionQueue.add(renderSection);
+            renderSection.getChunkArea().addSection(renderSection);
 
             if(!renderSection.isCompletelyEmpty()) {
                 this.chunkAreaQueue.add(renderSection.getChunkArea());
@@ -348,7 +349,7 @@ public class WorldRenderer {
         while(this.chunkQueue.hasNext()) {
             RenderSection renderSection = this.chunkQueue.poll();
 
-            renderSection.getChunkArea().sectionQueue.add(renderSection);
+            renderSection.getChunkArea().addSection(renderSection);
 
             if(!renderSection.isCompletelyEmpty()) {
                 this.chunkAreaQueue.add(renderSection.getChunkArea());
@@ -576,7 +577,8 @@ public class WorldRenderer {
             return "render_" + renderType;
         });
         boolean flag = renderType == RenderType.translucent();
-        boolean indirectDraw = Initializer.CONFIG.indirectDraw;
+        boolean regionBatching = TerrainShaderManager.useRegionBatching(renderType);
+        boolean indirectDraw = !regionBatching && TerrainShaderManager.useLegacyIndirect();
 
         VRenderSystem.applyMVP(poseStack.last().pose(), projection);
 
@@ -599,7 +601,9 @@ public class WorldRenderer {
             while(iterator.hasNext()) {
                 ChunkArea chunkArea = iterator.next();
 
-                if(indirectDraw) {
+                if (regionBatching) {
+                    chunkArea.getDrawBuffers().drawRegion(chunkArea, pipeline, renderType, camX, camY, camZ);
+                } else if(indirectDraw) {
                     chunkArea.getDrawBuffers().buildDrawBatchesIndirect(indirectBuffers[Renderer.getCurrentFrame()], chunkArea, renderType, camX, camY, camZ);
                 } else {
                     chunkArea.getDrawBuffers().buildDrawBatchesDirect(chunkArea.sectionQueue, pipeline, renderType, camX, camY, camZ);
@@ -736,7 +740,8 @@ public class WorldRenderer {
 //        int j = this.sectionsInFrustum.size();
         int j = this.chunkQueue.size();
         String tasksInfo = this.taskDispatcher == null ? "null" : this.taskDispatcher.getStats();
-        return String.format("Chunks: %d(%d)/%d D: %d, %s", this.nonEmptyChunks, j, i, this.lastViewDistance, tasksInfo);
+        return String.format("Chunks: %d(%d)/%d D: %d, %s", this.nonEmptyChunks, j, i, this.lastViewDistance, tasksInfo)
+                + (TerrainShaderManager.useRegionBatching(RenderType.cutoutMipped()) ? RegionBatchStats.describe() : "");
     }
 
     public void cleanUp() {
