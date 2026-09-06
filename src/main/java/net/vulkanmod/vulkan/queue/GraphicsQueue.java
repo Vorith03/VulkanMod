@@ -8,7 +8,7 @@ import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
 public class GraphicsQueue extends Queue {
     public static GraphicsQueue INSTANCE;
 
-    private static CommandPool.CommandBuffer currentCmdBuffer;
+    private static volatile CommandPool.CommandBuffer currentCmdBuffer;
 
     public GraphicsQueue(MemoryStack stack, int familyIndex) {
         super(stack, familyIndex);
@@ -53,7 +53,10 @@ public class GraphicsQueue extends Queue {
         }
     }
 
-    public synchronized boolean isRecording(CommandPool.CommandBuffer commandBuffer) {
+    public boolean isRecording(CommandPool.CommandBuffer commandBuffer) {
+        // Lock-free on purpose: Synchronization calls this while holding its own
+        // monitor, while queue submission holds the queue monitor before entering
+        // Synchronization. Volatile publication avoids reversing that lock order.
         return commandBuffer != null && commandBuffer == currentCmdBuffer;
     }
 
