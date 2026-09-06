@@ -102,6 +102,16 @@ public class MinecraftMixin {
                 throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }
             net.vulkanmod.render.chunk.RegionBatchSmokeTest.verify();
+
+            // Vanilla 1.20.1's Unihex glyph provider bypasses NativeImage and calls
+            // GlStateManager.upload directly. A zero-sized upload proves our Vulkan
+            // overwrite owns that entry point without requiring a bound texture.
+            var glyphUploadSmoke = org.lwjgl.system.MemoryUtil.memAllocInt(1);
+            com.mojang.blaze3d.platform.GlStateManager.upload(
+                    0, 0, 0, 0, 0,
+                    com.mojang.blaze3d.platform.NativeImage.Format.RGBA,
+                    glyphUploadSmoke, org.lwjgl.system.MemoryUtil::memFree);
+
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
         }
