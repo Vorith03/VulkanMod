@@ -32,16 +32,20 @@ public abstract class MTextureManager {
         if(Renderer.skipRendering)
             return;
 
-        //Debug D
-        if(SpriteUtil.shouldUpload())
+        // MinecraftMixin selects the one catch-up tick that is allowed to upload
+        // animated sprites before Minecraft.tick() begins. Snapshot that decision so
+        // the command-buffer batch has a symmetric start/end lifecycle.
+        boolean uploadSprites = SpriteUtil.shouldUpload();
+        if(uploadSprites)
             Device.getGraphicsQueue().startRecording();
+
         for (Tickable tickable : this.tickableTextures) {
             tickable.tick();
         }
-        if(SpriteUtil.shouldUpload()) {
+
+        if(uploadSprites) {
             SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
             Device.getGraphicsQueue().endRecordingAndSubmit();
-//            Synchronization.INSTANCE.waitFences();
         }
     }
 
