@@ -23,4 +23,8 @@ public class ThreadBuilderPack {
         this.builders.values().forEach(TerrainBufferBuilder::discard);
     }
 
+    public void freeAll() {
+        this.builders.values().forEach(TerrainBufferBuilder::free);
+    }
+
 }
