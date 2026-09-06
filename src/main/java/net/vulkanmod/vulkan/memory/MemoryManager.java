@@ -205,6 +205,10 @@ public class MemoryManager {
     private static void freeBuffer(Buffer.BufferInfo bufferInfo) {
         vmaDestroyBuffer(allocator, bufferInfo.id(), bufferInfo.allocation());
 
+        if(bufferInfo.data() != null) {
+            MemoryUtil.memFree(bufferInfo.data());
+        }
+
         if(bufferInfo.type() == MemoryType.Type.DEVICE_LOCAL) {
             deviceMemory -= bufferInfo.bufferSize();
         } else {
