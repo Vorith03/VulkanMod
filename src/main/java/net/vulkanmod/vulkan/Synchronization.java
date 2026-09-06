@@ -34,6 +34,11 @@ public class Synchronization {
     }
 
     public synchronized void addCommandBuffer(CommandPool.CommandBuffer commandBuffer, boolean useSemaphore) {
+        // Some legacy callers register a command buffer after queue submission while newer
+        // queue helpers already registered it. Never track the same submission twice.
+        if(this.fenceCommandBuffers.contains(commandBuffer) || this.semaphoreCommandBuffers.contains(commandBuffer))
+            return;
+
         if(useSemaphore) {
             this.semaphores.add(commandBuffer.getSemaphore());
             this.semaphoreCommandBuffers.add(commandBuffer);
