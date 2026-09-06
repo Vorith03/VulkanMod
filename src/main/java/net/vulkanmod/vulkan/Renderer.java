@@ -293,8 +293,15 @@ public class Renderer {
     }
 
     public void resetBuffers() {
-        drawer.resetBuffers(currentFrame);
+        // runTick resets these resources before texture/resource work, which is
+        // earlier than beginFrame's normal frame-slot fence wait. Retire the slot
+        // here first so staging/drawer memory cannot be reused while the previous
+        // graphics frame (and any semaphore-ordered helper transfer) still uses it.
+        if(!skipRendering) {
+            vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
+        }
 
+        drawer.resetBuffers(currentFrame);
         Vulkan.getStagingBuffer(currentFrame).reset();
     }
 
