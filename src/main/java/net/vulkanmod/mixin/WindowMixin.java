@@ -91,6 +91,7 @@ public abstract class WindowMixin {
         if (forgeWindow == 0L) {
             // No early Forge window (for example earlyWindowControl=false): this
             // is equivalent to vanilla's creation point, so just create Vulkan.
+            Initializer.markVulkanWindowActive();
             return createNoApiWindow(width.getAsInt(), height.getAsInt(), title.get(), monitor.getAsLong(), null, null);
         }
 
@@ -106,7 +107,7 @@ public abstract class WindowMixin {
         // progressWindowTick callback and direct ImmediateWindowHandler.renderTick
         // calls. Disable both before the OpenGL window is destroyed.
         FMLLoader.progressWindowTick = () -> { };
-        ForgeImmediateWindowHandlerMixin.vulkanmod$disableEarlyDisplayTicks();
+        Initializer.markVulkanWindowActive();
         GLFW.glfwMakeContextCurrent(0L);
         GLFW.glfwHideWindow(forgeWindow);
         GLFW.glfwDestroyWindow(forgeWindow);
