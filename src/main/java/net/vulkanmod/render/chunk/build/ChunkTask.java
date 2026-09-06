@@ -137,79 +137,80 @@ public class ChunkTask {
             PoseStack poseStack = new PoseStack();
             if (renderChunkRegion != null) {
                 ModelBlockRenderer.enableCaching();
-                Set<RenderType> set = new ReferenceArraySet<>(RenderType.chunkBufferLayers().size());
-                RandomSource randomSource = RandomSource.create();
-                BlockRenderDispatcher blockRenderDispatcher = Minecraft.getInstance().getBlockRenderer();
+                try {
+                    Set<RenderType> set = new ReferenceArraySet<>(RenderType.chunkBufferLayers().size());
+                    RandomSource randomSource = RandomSource.create();
+                    BlockRenderDispatcher blockRenderDispatcher = Minecraft.getInstance().getBlockRenderer();
 
-                for(BlockPos blockPos3 : BlockPos.betweenClosed(blockPos, blockPos2)) {
-                    BlockState blockState = renderChunkRegion.getBlockState(blockPos3);
-                    if (blockState.isSolidRender(renderChunkRegion, blockPos3)) {
-                        visGraph.setOpaque(blockPos3);
-                    }
+                    for(BlockPos blockPos3 : BlockPos.betweenClosed(blockPos, blockPos2)) {
+                        BlockState blockState = renderChunkRegion.getBlockState(blockPos3);
+                        if (blockState.isSolidRender(renderChunkRegion, blockPos3)) {
+                            visGraph.setOpaque(blockPos3);
+                        }
 
-                    if (blockState.hasBlockEntity()) {
-                        BlockEntity blockEntity = renderChunkRegion.getBlockEntity(blockPos3);
-                        if (blockEntity != null) {
-                            this.handleBlockEntity(compileResults, blockEntity);
+                        if (blockState.hasBlockEntity()) {
+                            BlockEntity blockEntity = renderChunkRegion.getBlockEntity(blockPos3);
+                            if (blockEntity != null) {
+                                this.handleBlockEntity(compileResults, blockEntity);
+                            }
+                        }
+
+                        FluidState fluidState = blockState.getFluidState();
+                        RenderType renderType;
+                        TerrainBufferBuilder bufferBuilder;
+                        if (!fluidState.isEmpty()) {
+                            renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
+
+                            //Force compact RenderType
+                            renderType = compactRenderTypes(renderType);
+
+                            bufferBuilder = chunkBufferBuilderPack.builder(renderType);
+                            if (set.add(renderType)) {
+                                bufferBuilder.begin(VertexFormat.Mode.QUADS, TerrainShaderManager.TERRAIN_VERTEX_FORMAT);
+                            }
+
+                            blockRenderDispatcher.renderLiquid(blockPos3, renderChunkRegion, bufferBuilder, blockState, fluidState);
+                        }
+
+                        if (blockState.getRenderShape() != RenderShape.INVISIBLE) {
+                            renderType = ItemBlockRenderTypes.getChunkRenderType(blockState);
+
+                            //Force compact RenderType
+                            renderType = compactRenderTypes(renderType);
+
+                            bufferBuilder = chunkBufferBuilderPack.builder(renderType);
+                            if (set.add(renderType)) {
+                                bufferBuilder.begin(VertexFormat.Mode.QUADS, TerrainShaderManager.TERRAIN_VERTEX_FORMAT);
+                            }
+
+                            poseStack.pushPose();
+                            poseStack.translate(blockPos3.getX() & 15, blockPos3.getY() & 15, blockPos3.getZ() & 15);
+                            blockRenderDispatcher.renderBatched(blockState, blockPos3, renderChunkRegion, poseStack, bufferBuilder, true, randomSource);
+                            poseStack.popPose();
                         }
                     }
 
-                    BlockState blockState2 = renderChunkRegion.getBlockState(blockPos3);
-                    FluidState fluidState = blockState2.getFluidState();
-                    RenderType renderType;
-                    TerrainBufferBuilder bufferBuilder;
-                    if (!fluidState.isEmpty()) {
-                        renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
+                    if (set.contains(RenderType.translucent())) {
+                        TerrainBufferBuilder bufferBuilder2 = chunkBufferBuilderPack.builder(RenderType.translucent());
+                        if (!bufferBuilder2.isCurrentBatchEmpty()) {
+                            bufferBuilder2.setQuadSortOrigin(camX - (float)blockPos.getX(), camY - (float)blockPos.getY(), camZ - (float)blockPos.getZ());
+                            compileResults.transparencyState = bufferBuilder2.getSortState();
+                        }
+                    }
 
-                        //Force compact RenderType
-                        renderType = compactRenderTypes(renderType);
-
-                        bufferBuilder = chunkBufferBuilderPack.builder(renderType);
-                        if (set.add(renderType)) {
-                            bufferBuilder.begin(VertexFormat.Mode.QUADS, TerrainShaderManager.TERRAIN_VERTEX_FORMAT);
+                    for(RenderType renderType2 : set) {
+                        TerrainBufferBuilder.RenderedBuffer renderedBuffer = chunkBufferBuilderPack.builder(renderType2).endOrDiscardIfEmpty();
+                        if (renderedBuffer != null) {
+                            UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
+                            compileResults.renderedLayers.put(TerrainRenderType.get(renderType2), uploadBuffer);
                         }
 
-                        blockRenderDispatcher.renderLiquid(blockPos3, renderChunkRegion, bufferBuilder, blockState2, fluidState);
+                        if(renderedBuffer != null)
+                            renderedBuffer.release();
                     }
-
-                    if (blockState.getRenderShape() != RenderShape.INVISIBLE) {
-                        renderType = ItemBlockRenderTypes.getChunkRenderType(blockState);
-
-                        //Force compact RenderType
-                        renderType = compactRenderTypes(renderType);
-
-                        bufferBuilder = chunkBufferBuilderPack.builder(renderType);
-                        if (set.add(renderType)) {
-                            bufferBuilder.begin(VertexFormat.Mode.QUADS, TerrainShaderManager.TERRAIN_VERTEX_FORMAT);
-                        }
-
-                        poseStack.pushPose();
-                        poseStack.translate(blockPos3.getX() & 15, blockPos3.getY() & 15, blockPos3.getZ() & 15);
-                        blockRenderDispatcher.renderBatched(blockState, blockPos3, renderChunkRegion, poseStack, bufferBuilder, true, randomSource);
-                        poseStack.popPose();
-                    }
+                } finally {
+                    ModelBlockRenderer.clearCache();
                 }
-
-                if (set.contains(RenderType.translucent())) {
-                    TerrainBufferBuilder bufferBuilder2 = chunkBufferBuilderPack.builder(RenderType.translucent());
-                    if (!bufferBuilder2.isCurrentBatchEmpty()) {
-                        bufferBuilder2.setQuadSortOrigin(camX - (float)blockPos.getX(), camY - (float)blockPos.getY(), camZ - (float)blockPos.getZ());
-                        compileResults.transparencyState = bufferBuilder2.getSortState();
-                    }
-                }
-
-                for(RenderType renderType2 : set) {
-                    TerrainBufferBuilder.RenderedBuffer renderedBuffer = chunkBufferBuilderPack.builder(renderType2).endOrDiscardIfEmpty();
-                    if (renderedBuffer != null) {
-                        UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
-                        compileResults.renderedLayers.put(TerrainRenderType.get(renderType2), uploadBuffer);
-                    }
-
-                    if(renderedBuffer != null)
-                        renderedBuffer.release();
-                }
-
-                ModelBlockRenderer.clearCache();
             }
 
             compileResults.visibilitySet = visGraph.resolve();
