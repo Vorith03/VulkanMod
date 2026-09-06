@@ -151,6 +151,10 @@ public abstract class LevelRendererMixin {
     @Overwrite
     private void setSectionDirty(int x, int y, int z, boolean flag) {
         this.worldRenderer.setSectionDirty(x, y, z, flag);
+        // This renderer schedules dirty rebuilds only during its graph/update pass.
+        // Unlike vanilla's independent compileChunks scheduler, merely marking the
+        // section dirty is not enough while the camera is stationary.
+        this.worldRenderer.setNeedsUpdate();
     }
 
     /**
