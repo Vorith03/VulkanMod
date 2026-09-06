@@ -22,7 +22,7 @@ public class StagingBuffer extends Buffer {
     public void copyBuffer(int size, ByteBuffer byteBuffer) {
 
         if(size > this.bufferSize - this.usedBytes) {
-            resizeBuffer((this.bufferSize + size) * 2);
+            resizeBuffer(Math.max(this.bufferSize * 2, this.usedBytes + size));
         }
 
 //        VUtil.memcpy(byteBuffer, this.data.getByteBuffer(0, this.bufferSize), this.usedBytes);
@@ -38,7 +38,7 @@ public class StagingBuffer extends Buffer {
         int alignedValue = Util.align(usedBytes, alignment);
 
         if(alignedValue > this.bufferSize) {
-            resizeBuffer((this.bufferSize) * 2);
+            resizeBuffer(Math.max(this.bufferSize * 2, alignedValue));
         }
 
         usedBytes = alignedValue;
