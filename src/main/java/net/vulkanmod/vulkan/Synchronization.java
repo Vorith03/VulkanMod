@@ -9,6 +9,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkDevice;
 
 import java.nio.LongBuffer;
+import java.util.Locale;
 
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -24,6 +25,12 @@ public class Synchronization {
 
     private final LongArrayList semaphores = new LongArrayList();
     private final ObjectArrayList<CommandPool.CommandBuffer> semaphoreCommandBuffers = new ObjectArrayList<>();
+
+    private long semaphoreRegistrations;
+    private long fenceRegistrations;
+    private long fenceWaitCalls;
+    private long fenceWaitedCount;
+    private long fenceWaitNanos;
 
     Synchronization(int allocSize) {
         this.fences = MemoryUtil.memAllocLong(allocSize);
@@ -48,6 +55,7 @@ public class Synchronization {
         if(useSemaphore) {
             this.semaphores.add(commandBuffer.getSemaphore());
             this.semaphoreCommandBuffers.add(commandBuffer);
+            this.semaphoreRegistrations++;
         } else {
             this.addFence(commandBuffer.getFence());
             this.fenceCommandBuffers.add(commandBuffer);
@@ -60,6 +68,7 @@ public class Synchronization {
 
         fences.put(idx, fence);
         idx++;
+        this.fenceRegistrations++;
     }
 
     public synchronized void waitFences() {
@@ -67,9 +76,15 @@ public class Synchronization {
         if(idx == 0) return;
 
         VkDevice device = Vulkan.getDevice();
+        int waitCount = idx;
+        long startNanos = System.nanoTime();
 
-        fences.limit(idx);
+        fences.limit(waitCount);
         vkWaitForFences(device, fences, true, VUtil.UINT64_MAX);
+
+        this.fenceWaitNanos += Math.max(0L, System.nanoTime() - startNanos);
+        this.fenceWaitCalls++;
+        this.fenceWaitedCount += waitCount;
 
         this.fenceCommandBuffers.forEach(CommandPool.CommandBuffer::reset);
         this.fenceCommandBuffers.clear();
@@ -80,6 +95,7 @@ public class Synchronization {
 
     public synchronized void addWaitSemaphore(long semaphore) {
         this.semaphores.add(semaphore);
+        this.semaphoreRegistrations++;
     }
 
     public synchronized int getWaitSemaphoreCount() {
@@ -99,6 +115,13 @@ public class Synchronization {
                 () -> frameCommandBuffers.forEach(CommandPool.CommandBuffer::reset)
         );
         this.semaphoreCommandBuffers.clear();
+    }
+
+    public synchronized String getStats() {
+        double waitMs = this.fenceWaitNanos / 1_000_000.0D;
+        return String.format(Locale.ROOT, "sync(s/f/w):%d/%d/%d(%.1fms)",
+                this.semaphoreRegistrations, this.fenceRegistrations,
+                this.fenceWaitedCount, waitMs);
     }
 
     public static void waitFence(long fence) {
