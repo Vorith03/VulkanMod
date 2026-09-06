@@ -215,7 +215,7 @@ public abstract class Pipeline {
 
         private final int frame;
         private final VulkanImage.Sampler[] boundTextures = new VulkanImage.Sampler[images.size()];
-        private final IntBuffer dynamicOffsets = MemoryUtil.memAllocInt(buffers.size());;
+        private final IntBuffer dynamicOffsets = MemoryUtil.memAllocInt(buffers.size());
 
         DescriptorSets(int frame) {
             this.frame = frame;
@@ -299,15 +299,14 @@ public abstract class Pipeline {
             this.currentSet = this.sets.get(this.currentIdx);
 
             VkWriteDescriptorSet.Buffer descriptorWrites = VkWriteDescriptorSet.calloc(buffers.size() + images.size(), stack);
-            VkDescriptorBufferInfo.Buffer[] bufferInfos = new VkDescriptorBufferInfo.Buffer[buffers.size()];
 
             //TODO maybe ubo update is not needed everytime
             int i = 0;
             for(UBO ubo : buffers) {
 
-                bufferInfos[i] = VkDescriptorBufferInfo.calloc(1, stack);
-                bufferInfos[i].buffer(this.uniformBufferId);
-                bufferInfos[i].range(ubo.getSize());
+                VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
+                bufferInfo.buffer(this.uniformBufferId);
+                bufferInfo.range(ubo.getSize());
 
                 VkWriteDescriptorSet uboDescriptorWrite = descriptorWrites.get(i);
                 uboDescriptorWrite.sType$Default();
@@ -315,13 +314,11 @@ public abstract class Pipeline {
                 uboDescriptorWrite.dstArrayElement(0);
                 uboDescriptorWrite.descriptorType(ubo.getType());
                 uboDescriptorWrite.descriptorCount(1);
-                uboDescriptorWrite.pBufferInfo(bufferInfos[i]);
+                uboDescriptorWrite.pBufferInfo(bufferInfo);
                 uboDescriptorWrite.dstSet(currentSet);
 
                 ++i;
             }
-
-            VkDescriptorImageInfo.Buffer[] imageInfo = new VkDescriptorImageInfo.Buffer[images.size()];
 
             for(int j = 0; j < images.size(); ++j) {
                 Image image = images.get(j);
@@ -329,11 +326,11 @@ public abstract class Pipeline {
                 VulkanImage.Sampler textureSampler = texture.getTextureSampler();
                 texture.readOnlyLayout();
 
-                imageInfo[j] = VkDescriptorImageInfo.calloc(1, stack);
-                imageInfo[j].imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                VkDescriptorImageInfo.Buffer imageInfo = VkDescriptorImageInfo.calloc(1, stack);
+                imageInfo.imageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-                imageInfo[j].imageView(texture.getImageView());
-                imageInfo[j].sampler(textureSampler.sampler());
+                imageInfo.imageView(texture.getImageView());
+                imageInfo.sampler(textureSampler.sampler());
 
                 VkWriteDescriptorSet samplerDescriptorWrite = descriptorWrites.get(i);
                 samplerDescriptorWrite.sType(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET);
@@ -341,7 +338,7 @@ public abstract class Pipeline {
                 samplerDescriptorWrite.dstArrayElement(0);
                 samplerDescriptorWrite.descriptorType(image.getType());
                 samplerDescriptorWrite.descriptorCount(1);
-                samplerDescriptorWrite.pImageInfo(imageInfo[j]);
+                samplerDescriptorWrite.pImageInfo(imageInfo);
                 samplerDescriptorWrite.dstSet(currentSet);
 
                 this.boundTextures[j] = textureSampler;
@@ -364,12 +361,18 @@ public abstract class Pipeline {
             allocInfo.descriptorPool(descriptorPool);
             allocInfo.pSetLayouts(layout);
 
-            this.sets = MemoryUtil.memAllocLong(this.poolSize);
+            LongBuffer newSets = MemoryUtil.memAllocLong(this.poolSize);
 
-            int result = vkAllocateDescriptorSets(DEVICE, allocInfo, this.sets);
+            int result = vkAllocateDescriptorSets(DEVICE, allocInfo, newSets);
             if (result != VK_SUCCESS) {
+                MemoryUtil.memFree(newSets);
                 throw new RuntimeException("Failed to allocate descriptor sets. Result:" + result);
             }
+
+            if(this.sets != null) {
+                MemoryUtil.memFree(this.sets);
+            }
+            this.sets = newSets;
         }
 
         private void createDescriptorPool(MemoryStack stack) {
@@ -417,6 +420,8 @@ public abstract class Pipeline {
         private void cleanUp() {
             vkResetDescriptorPool(DEVICE, descriptorPool, 0);
             vkDestroyDescriptorPool(DEVICE, descriptorPool, null);
+            MemoryUtil.memFree(this.sets);
+            MemoryUtil.memFree(this.dynamicOffsets);
         }
 
     }
