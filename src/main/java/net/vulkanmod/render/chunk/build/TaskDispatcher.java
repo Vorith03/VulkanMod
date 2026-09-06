@@ -15,11 +15,15 @@ import org.slf4j.Logger;
 import javax.annotation.Nullable;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class TaskDispatcher {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -35,6 +39,12 @@ public class TaskDispatcher {
     private final AtomicInteger activeTasks = new AtomicInteger();
     private final AtomicInteger acceptedResults = new AtomicInteger();
     private final AtomicInteger droppedResults = new AtomicInteger();
+    private final AtomicInteger completedBuilds = new AtomicInteger();
+    private final AtomicInteger publishedBuilds = new AtomicInteger();
+    private final AtomicLong buildQueueNanos = new AtomicLong();
+    private final AtomicLong buildNanos = new AtomicLong();
+    private final AtomicLong handoffNanos = new AtomicLong();
+    private final ConcurrentMap<ChunkTask, Long> scheduledAt = new ConcurrentHashMap<>();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
 
@@ -91,9 +101,20 @@ public class TaskDispatcher {
             if(task == null)
                 continue;
 
+            Long scheduledNanos = this.scheduledAt.remove(task);
+            long startNanos = System.nanoTime();
+            long queueNanos = scheduledNanos == null ? 0L : Math.max(0L, startNanos - scheduledNanos);
+
             this.activeTasks.incrementAndGet();
             try {
-                task.doTask(builderPack);
+                CompletableFuture<ChunkTask.Result> result = task.doTask(builderPack);
+                long elapsedNanos = System.nanoTime() - startNanos;
+                if(task instanceof ChunkTask.BuildTask && result != null && result.isDone()
+                        && result.getNow(ChunkTask.Result.CANCELLED) == ChunkTask.Result.SUCCESSFUL) {
+                    this.completedBuilds.incrementAndGet();
+                    this.buildQueueNanos.addAndGet(queueNanos);
+                    this.buildNanos.addAndGet(elapsedNanos);
+                }
             } finally {
                 this.activeTasks.decrementAndGet();
             }
@@ -103,6 +124,8 @@ public class TaskDispatcher {
     public void schedule(ChunkTask chunkTask) {
         if(chunkTask == null)
             return;
+
+        this.scheduledAt.put(chunkTask, System.nanoTime());
 
         if (chunkTask.highPriority) {
                 this.highPriorityTasks.offer(chunkTask);
@@ -162,6 +185,7 @@ public class TaskDispatcher {
     public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
                                       EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
                                       Runnable publishResult) {
+        long queuedAt = System.nanoTime();
         this.toUpload.add(() -> {
             if(task.cancelled.get()) {
                 releaseUploads(uploadBuffers);
@@ -172,6 +196,8 @@ public class TaskDispatcher {
             this.doSectionUpdate(section, uploadBuffers);
             publishResult.run();
             this.acceptedResults.incrementAndGet();
+            this.publishedBuilds.incrementAndGet();
+            this.handoffNanos.addAndGet(Math.max(0L, System.nanoTime() - queuedAt));
         });
     }
 
@@ -235,6 +261,7 @@ public class TaskDispatcher {
         while(!this.highPriorityTasks.isEmpty()) {
             ChunkTask chunkTask = this.highPriorityTasks.poll();
             if (chunkTask != null) {
+                this.scheduledAt.remove(chunkTask);
                 chunkTask.cancel();
             }
         }
@@ -242,19 +269,35 @@ public class TaskDispatcher {
         while(!this.lowPriorityTasks.isEmpty()) {
             ChunkTask chunkTask = this.lowPriorityTasks.poll();
             if (chunkTask != null) {
+                this.scheduledAt.remove(chunkTask);
                 chunkTask.cancel();
             }
         }
 
         this.acceptedResults.set(0);
         this.droppedResults.set(0);
+        this.completedBuilds.set(0);
+        this.publishedBuilds.set(0);
+        this.buildQueueNanos.set(0L);
+        this.buildNanos.set(0L);
+        this.handoffNanos.set(0L);
+    }
+
+    private static double averageMillis(long nanos, int samples) {
+        return samples == 0 ? 0.0D : (nanos / 1_000_000.0D) / samples;
     }
 
     public String getStats() {
         int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
-        return String.format("iT:%d aT:%d qT:%d uQ:%d okR:%d dropR:%d",
+        int buildSamples = this.completedBuilds.get();
+        int publishSamples = this.publishedBuilds.get();
+        return String.format(Locale.ROOT,
+                "iT:%d aT:%d qT:%d uQ:%d okR:%d dropR:%d lat(q/b/h):%.1f/%.1f/%.1fms",
                 this.idleThreads, this.activeTasks.get(), queuedTasks, this.toUpload.size(),
-                this.acceptedResults.get(), this.droppedResults.get());
+                this.acceptedResults.get(), this.droppedResults.get(),
+                averageMillis(this.buildQueueNanos.get(), buildSamples),
+                averageMillis(this.buildNanos.get(), buildSamples),
+                averageMillis(this.handoffNanos.get(), publishSamples));
     }
 
 }
