@@ -98,8 +98,6 @@ public class ChunkTask {
                 float h = (float)vec3.z;
                 CompileResults compileResults = this.compile(f, g, h, chunkBufferBuilderPack);
 
-                this.renderSection.updateGlobalBlockEntities(compileResults.globalBlockEntities);
-
                 if (this.cancelled.get()) {
                     compileResults.renderedLayers.values().forEach(UploadBuffer::release);
                     return CompletableFuture.completedFuture(Result.CANCELLED);
@@ -112,12 +110,13 @@ public class ChunkTask {
                     if(!compileResults.renderedLayers.isEmpty())
                         compiledChunk.isCompletelyEmpty = false;
 
-                    taskDispatcher.scheduleSectionUpdate(renderSection, compileResults.renderedLayers);
                     compiledChunk.renderTypes.addAll(compileResults.renderedLayers.keySet());
-
-                    this.renderSection.setCompiledSection(compiledChunk);
-                    this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
-                    this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
+                    taskDispatcher.scheduleSectionUpdate(this, renderSection, compileResults.renderedLayers, () -> {
+                        this.renderSection.updateGlobalBlockEntities(compileResults.globalBlockEntities);
+                        this.renderSection.setCompiledSection(compiledChunk);
+                        this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
+                        this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
+                    });
 
                     this.buildTime = (System.nanoTime() - startTime) * 0.000001f;
                     return CompletableFuture.completedFuture(Result.SUCCESSFUL);
@@ -295,15 +294,17 @@ public class ChunkTask {
                     bufferbuilder.restoreSortState(transparencyState);
 //                    bufferbuilder.setQuadSortOrigin(f - (float) this.renderSection.origin.getX(), f1 - (float) renderSection.origin.getY(), f2 - (float) renderSection.origin.getZ());
                     bufferbuilder.setQuadSortOrigin(f - (float) this.renderSection.xOffset(), f1 - (float) renderSection.yOffset(), f2 - (float) renderSection.zOffset());
-                    this.compiledSection.transparencyState = bufferbuilder.getSortState();
+                    TerrainBufferBuilder.SortState newTransparencyState = bufferbuilder.getSortState();
                     TerrainBufferBuilder.RenderedBuffer renderedBuffer = bufferbuilder.end();
                     if (this.cancelled.get()) {
+                        renderedBuffer.release();
                         return CompletableFuture.completedFuture(Result.CANCELLED);
                     } else {
 
                         UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
-                        taskDispatcher.scheduleUploadChunkLayer(renderSection, TerrainRenderType.get(RenderType.translucent()), uploadBuffer);
                         renderedBuffer.release();
+                        taskDispatcher.scheduleUploadChunkLayer(this, renderSection, TerrainRenderType.get(RenderType.translucent()), uploadBuffer,
+                                () -> this.compiledSection.transparencyState = newTransparencyState);
                         return CompletableFuture.completedFuture(Result.SUCCESSFUL);
 
                     }
