@@ -62,12 +62,24 @@ public class CommandPool {
                 fenceInfo.sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
                 fenceInfo.flags(VK_FENCE_CREATE_SIGNALED_BIT);
 
+                VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.callocStack(stack);
+                semaphoreInfo.sType(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
+
                 for(int i = 0; i < size; ++i) {
                     LongBuffer pFence = stack.mallocLong(1);
-                    vkCreateFence(Vulkan.getDevice(), fenceInfo, null, pFence);
+                    if(vkCreateFence(Vulkan.getDevice(), fenceInfo, null, pFence) != VK_SUCCESS) {
+                        throw new RuntimeException("Failed to create command buffer fence");
+                    }
 
-                    CommandBuffer commandBuffer = new CommandBuffer(new VkCommandBuffer(pCommandBuffer.get(i), Vulkan.getDevice()), pFence.get(0));
-                    commandBuffer.handle = new VkCommandBuffer(pCommandBuffer.get(i), Vulkan.getDevice());
+                    LongBuffer pSemaphore = stack.mallocLong(1);
+                    if(vkCreateSemaphore(Vulkan.getDevice(), semaphoreInfo, null, pSemaphore) != VK_SUCCESS) {
+                        throw new RuntimeException("Failed to create command buffer semaphore");
+                    }
+
+                    CommandBuffer commandBuffer = new CommandBuffer(
+                            new VkCommandBuffer(pCommandBuffer.get(i), Vulkan.getDevice()),
+                            pFence.get(0),
+                            pSemaphore.get(0));
                     commandBuffers.add(commandBuffer);
                     availableCmdBuffers.add(commandBuffer);
                 }
@@ -81,14 +93,17 @@ public class CommandPool {
             beginInfo.flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
             vkBeginCommandBuffer(commandBuffer.handle, beginInfo);
-
-//            current++;
+            commandBuffer.recording = true;
 
             return commandBuffer;
         }
     }
 
     public synchronized long submitCommands(CommandBuffer commandBuffer, VkQueue queue) {
+        return submitCommands(commandBuffer, queue, false);
+    }
+
+    public synchronized long submitCommands(CommandBuffer commandBuffer, VkQueue queue, boolean useSemaphore) {
 
         try(MemoryStack stack = stackPush()) {
             long fence = commandBuffer.fence;
@@ -101,10 +116,14 @@ public class CommandPool {
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
             submitInfo.pCommandBuffers(stack.pointers(commandBuffer.handle));
 
-            vkQueueSubmit(queue, submitInfo, fence);
-            //vkQueueWaitIdle(graphicsQueue);
+            if(useSemaphore) {
+                submitInfo.pSignalSemaphores(stack.longs(commandBuffer.semaphore));
+            }
 
-            //vkFreeCommandBuffers(device, commandPool, commandBuffer);
+            vkQueueSubmit(queue, submitInfo, fence);
+
+            commandBuffer.recording = false;
+            commandBuffer.submitted = true;
             return fence;
         }
     }
@@ -116,6 +135,7 @@ public class CommandPool {
     public void cleanUp() {
         for(CommandBuffer commandBuffer : commandBuffers) {
             vkDestroyFence(Vulkan.getDevice(), commandBuffer.fence, null);
+            vkDestroySemaphore(Vulkan.getDevice(), commandBuffer.semaphore, null);
         }
         vkResetCommandPool(Vulkan.getDevice(), id, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
         vkDestroyCommandPool(Vulkan.getDevice(), id, null);
@@ -124,12 +144,14 @@ public class CommandPool {
     public class CommandBuffer {
         VkCommandBuffer handle;
         long fence;
+        long semaphore;
         boolean submitted;
         boolean recording;
 
-        public CommandBuffer(VkCommandBuffer handle, long fence) {
+        public CommandBuffer(VkCommandBuffer handle, long fence, long semaphore) {
             this.handle = handle;
             this.fence = fence;
+            this.semaphore = semaphore;
         }
 
         public VkCommandBuffer getHandle() {
@@ -138,6 +160,10 @@ public class CommandPool {
 
         public long getFence() {
             return fence;
+        }
+
+        public long getSemaphore() {
+            return semaphore;
         }
 
         public boolean isSubmitted() {
