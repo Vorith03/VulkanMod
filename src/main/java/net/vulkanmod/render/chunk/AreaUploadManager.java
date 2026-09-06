@@ -55,11 +55,19 @@ public class AreaUploadManager {
     public synchronized void submitUploads() {
         Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
 
-        CommandPool.CommandBuffer commandBuffer = this.commandBuffers[this.currentFrame];
+        int frame = this.currentFrame;
+        CommandPool.CommandBuffer commandBuffer = this.commandBuffers[frame];
         if(commandBuffer == null || commandBuffer.isSubmitted())
             return;
 
-        Device.getTransferQueue().submitCommands(commandBuffer);
+        Device.getTransferQueue().submitCommands(commandBuffer, true);
+        Synchronization.INSTANCE.addCommandBuffer(commandBuffer, true);
+
+        // Graphics submission waits on the transfer semaphore, so these ranges are
+        // safe to reference while recording this same frame's draw commands. The
+        // command buffer itself is recycled only after that graphics frame retires.
+        markUploadsReady(frame);
+        this.commandBuffers[frame] = null;
     }
 
     public void uploadAsync(AreaBuffer.Segment uploadSegment, long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
@@ -121,18 +129,7 @@ public class AreaUploadManager {
         this.frameOps[frame].clear();
     }
 
-    private void waitUploads(int frame) {
-        CommandPool.CommandBuffer commandBuffer = commandBuffers[frame];
-        if(commandBuffer == null)
-            return;
-
-        // A copy-only command buffer may not have passed through submitUploads().
-        // Never mistake its initially-signaled fence for completed recorded work.
-        if(!commandBuffer.isSubmitted()) {
-            Device.getTransferQueue().submitCommands(commandBuffer);
-        }
-        Synchronization.waitFence(commandBuffer.getFence());
-
+    private void markUploadsReady(int frame) {
         if(!this.recordedUploads[frame].isEmpty() && this.firstUploadNanos[frame] != 0L) {
             long readyNanos = Math.max(0L, System.nanoTime() - this.firstUploadNanos[frame]);
             this.lastReadyNanos = readyNanos;
@@ -149,11 +146,29 @@ public class AreaUploadManager {
             parametersUpdate.setDrawParameters();
         }
 
-        this.commandBuffers[frame].reset();
-        this.commandBuffers[frame] = null;
         this.recordedUploads[frame].clear();
+        this.updatedParameters[frame].clear();
         this.firstUploadNanos[frame] = 0L;
         this.recordedUploadBytes[frame] = 0L;
+    }
+
+    private void waitUploads(int frame) {
+        CommandPool.CommandBuffer commandBuffer = commandBuffers[frame];
+        if(commandBuffer == null)
+            return;
+
+        // A synchronous flush may reach a copy-only or still-recording transfer
+        // command buffer. Submit it fence-only so no binary semaphore is left
+        // signaled without a corresponding graphics wait.
+        if(!commandBuffer.isSubmitted()) {
+            Device.getTransferQueue().submitCommands(commandBuffer);
+        }
+        Synchronization.waitFence(commandBuffer.getFence());
+
+        markUploadsReady(frame);
+
+        this.commandBuffers[frame].reset();
+        this.commandBuffers[frame] = null;
     }
 
     public synchronized void waitAllUploads() {
