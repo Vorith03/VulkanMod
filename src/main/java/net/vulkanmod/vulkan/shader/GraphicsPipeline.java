@@ -206,16 +206,7 @@ public class GraphicsPipeline extends Pipeline {
 
     private void createShaderModules(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv) {
         this.vertShaderModule = createShaderModule(vertSpirv.bytecode());
-        this.fragShaderModule = createShaderModule(vertSpirv, fragSpirv);
-    }
-
-    private void createShaderModules(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv, boolean ignored) {
-        this.vertShaderModule = createShaderModule(vertSpirv.bytecode());
         this.fragShaderModule = createShaderModule(fragSpirv.bytecode());
-    }
-
-    private static long createShaderModule(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv) {
-        return createShaderModule(fragSpirv.bytecode());
     }
 
     private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat, MemoryStack stack) {
