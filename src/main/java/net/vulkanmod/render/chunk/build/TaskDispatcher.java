@@ -36,6 +36,7 @@ public class TaskDispatcher {
     private volatile boolean stopThreads;
     private Thread[] threads;
     private volatile int idleThreads;
+    private int highPriorityQuota = HIGH_PRIORITY_QUOTA;
     private final AtomicInteger activeTasks = new AtomicInteger();
     private final AtomicInteger acceptedResults = new AtomicInteger();
     private final AtomicInteger droppedResults = new AtomicInteger();
@@ -76,18 +77,15 @@ public class TaskDispatcher {
     }
 
     private void runTaskThread(ThreadBuilderPack builderPack) {
-        int highPriorityStreak = 0;
-
         while(!this.stopThreads) {
-            boolean preferHighPriority = highPriorityStreak < HIGH_PRIORITY_QUOTA;
-            ChunkTask task = this.pollTask(preferHighPriority);
+            ChunkTask task = this.pollTask();
 
             if(task == null) {
                 synchronized (this) {
                     // Recheck while holding the same monitor used by schedule(). This
                     // closes the poll-before-wait race where a notification could be
                     // delivered before the worker actually began waiting.
-                    task = this.pollTask(preferHighPriority);
+                    task = this.pollTask();
                     if(task == null && !this.stopThreads) {
                         this.idleThreads++;
                         try {
@@ -105,12 +103,6 @@ public class TaskDispatcher {
             if(task == null)
                 continue;
 
-            if(task.highPriority) {
-                highPriorityStreak++;
-            } else {
-                highPriorityStreak = 0;
-            }
-
             Long scheduledNanos = this.scheduledAt.remove(task);
             long startNanos = System.nanoTime();
             long queueNanos = scheduledNanos == null ? 0L : Math.max(0L, startNanos - scheduledNanos);
@@ -125,6 +117,14 @@ public class TaskDispatcher {
                     this.buildQueueNanos.addAndGet(queueNanos);
                     this.buildNanos.addAndGet(elapsedNanos);
                 }
+            } catch (Throwable throwable) {
+                try {
+                    builderPack.discardAll();
+                } catch (Throwable cleanupFailure) {
+                    throwable.addSuppressed(cleanupFailure);
+                }
+                Minecraft.getInstance().delayCrash(CrashReport.forThrowable(throwable, "Batching chunks"));
+                return;
             } finally {
                 this.activeTasks.decrementAndGet();
             }
@@ -149,19 +149,23 @@ public class TaskDispatcher {
     }
 
     @Nullable
-    private ChunkTask pollTask(boolean preferHighPriority) {
-        ChunkTask task;
-        if(preferHighPriority) {
-            task = this.highPriorityTasks.poll();
-            if(task == null)
-                task = this.lowPriorityTasks.poll();
-        } else {
-            task = this.lowPriorityTasks.poll();
-            if(task == null)
-                task = this.highPriorityTasks.poll();
+    private synchronized ChunkTask pollTask() {
+        if(this.highPriorityQuota <= 0) {
+            ChunkTask lowPriorityTask = this.lowPriorityTasks.poll();
+            if(lowPriorityTask != null) {
+                this.highPriorityQuota = HIGH_PRIORITY_QUOTA;
+                return lowPriorityTask;
+            }
         }
 
-        return task;
+        ChunkTask highPriorityTask = this.highPriorityTasks.poll();
+        if(highPriorityTask != null) {
+            this.highPriorityQuota--;
+            return highPriorityTask;
+        }
+
+        this.highPriorityQuota = HIGH_PRIORITY_QUOTA;
+        return this.lowPriorityTasks.poll();
     }
 
     public void stopThreads() {
@@ -308,6 +312,10 @@ public class TaskDispatcher {
                 this.scheduledAt.remove(chunkTask);
                 chunkTask.cancel();
             }
+        }
+
+        synchronized(this) {
+            this.highPriorityQuota = HIGH_PRIORITY_QUOTA;
         }
 
         this.acceptedResults.set(0);
