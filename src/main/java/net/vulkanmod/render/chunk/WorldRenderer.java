@@ -191,11 +191,6 @@ public class WorldRenderer {
         this.needsUpdate |= cameraX != this.lastCameraX || cameraY != this.lastCameraY || cameraZ != this.lastCameraZ;
 
         if (!isCapturedFrustum) {
-
-            //Debug
-            this.needsUpdate = true;
-//            this.needsUpdate = false;
-
             if (this.needsUpdate) {
                 this.needsUpdate = false;
 
