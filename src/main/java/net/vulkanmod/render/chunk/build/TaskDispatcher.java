@@ -17,6 +17,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -45,6 +46,7 @@ public class TaskDispatcher {
     private final AtomicLong buildNanos = new AtomicLong();
     private final AtomicLong handoffNanos = new AtomicLong();
     private final ConcurrentMap<ChunkTask, Long> scheduledAt = new ConcurrentHashMap<>();
+    private final Set<UploadBuffer> pendingUploadBuffers = ConcurrentHashMap.newKeySet();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
 
@@ -149,23 +151,33 @@ public class TaskDispatcher {
     }
 
     public void stopThreads() {
-        if(this.stopThreads)
-            return;
+        if(!this.stopThreads) {
+            this.stopThreads = true;
 
-        this.stopThreads = true;
+            synchronized (this) {
+                notifyAll();
+            }
 
-        synchronized (this) {
-            notifyAll();
-        }
-
-        for (Thread thread : this.threads) {
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            for (Thread thread : this.threads) {
+                try {
+                    thread.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
             }
         }
 
+        this.clearBatchQueue();
+        this.discardPendingResults();
+        this.scheduledAt.clear();
+        this.threads = null;
+    }
+
+    private void discardPendingResults() {
+        this.toUpload.clear();
+        this.pendingUploadBuffers.forEach(UploadBuffer::release);
+        this.pendingUploadBuffers.clear();
     }
 
     public boolean uploadAllPendingUploads() {
@@ -186,18 +198,23 @@ public class TaskDispatcher {
                                       EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
                                       Runnable publishResult) {
         long queuedAt = System.nanoTime();
+        this.pendingUploadBuffers.addAll(uploadBuffers.values());
         this.toUpload.add(() -> {
-            if(task.cancelled.get()) {
-                releaseUploads(uploadBuffers);
-                this.droppedResults.incrementAndGet();
-                return;
-            }
+            try {
+                if(task.cancelled.get()) {
+                    this.droppedResults.incrementAndGet();
+                    return;
+                }
 
-            this.doSectionUpdate(section, uploadBuffers);
-            publishResult.run();
-            this.acceptedResults.incrementAndGet();
-            this.publishedBuilds.incrementAndGet();
-            this.handoffNanos.addAndGet(Math.max(0L, System.nanoTime() - queuedAt));
+                this.doSectionUpdate(section, uploadBuffers);
+                publishResult.run();
+                this.acceptedResults.incrementAndGet();
+                this.publishedBuilds.incrementAndGet();
+                this.handoffNanos.addAndGet(Math.max(0L, System.nanoTime() - queuedAt));
+            } finally {
+                releaseUploads(uploadBuffers);
+                this.pendingUploadBuffers.removeAll(uploadBuffers.values());
+            }
         });
     }
 
@@ -223,16 +240,21 @@ public class TaskDispatcher {
     public void scheduleUploadChunkLayer(ChunkTask task, RenderSection section,
                                          TerrainRenderType renderType, UploadBuffer uploadBuffer,
                                          Runnable publishResult) {
+        this.pendingUploadBuffers.add(uploadBuffer);
         this.toUpload.add(() -> {
-            if(task.cancelled.get()) {
-                uploadBuffer.release();
-                this.droppedResults.incrementAndGet();
-                return;
-            }
+            try {
+                if(task.cancelled.get()) {
+                    this.droppedResults.incrementAndGet();
+                    return;
+                }
 
-            this.doUploadChunkLayer(section, renderType, uploadBuffer);
-            publishResult.run();
-            this.acceptedResults.incrementAndGet();
+                this.doUploadChunkLayer(section, renderType, uploadBuffer);
+                publishResult.run();
+                this.acceptedResults.incrementAndGet();
+            } finally {
+                uploadBuffer.release();
+                this.pendingUploadBuffers.remove(uploadBuffer);
+            }
         });
     }
 
