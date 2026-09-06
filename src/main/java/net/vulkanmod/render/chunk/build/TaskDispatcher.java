@@ -64,16 +64,25 @@ public class TaskDispatcher {
         while(!this.stopThreads) {
             ChunkTask task = this.pollTask();
 
-            if(task == null)
+            if(task == null) {
                 synchronized (this) {
-                    try {
+                    // Recheck while holding the same monitor used by schedule(). This
+                    // closes the poll-before-wait race where a notification could be
+                    // delivered before the worker actually began waiting.
+                    task = this.pollTask();
+                    if(task == null && !this.stopThreads) {
                         this.idleThreads++;
-                        this.wait();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
+                        try {
+                            this.wait();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        } finally {
+                            this.idleThreads--;
+                        }
                     }
-                    this.idleThreads--;
                 }
+            }
 
             if(task == null)
                 continue;
