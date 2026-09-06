@@ -50,6 +50,8 @@ public class Renderer {
 
     public static int getCurrentFrame() { return currentFrame; }
 
+    public static int getCurrentImage() { return imageIndex; }
+
     private final Set<Pipeline> usedPipelines = new ObjectOpenHashSet<>();
 
     private final Drawer drawer;
@@ -64,7 +66,9 @@ public class Renderer {
     private RenderPass boundRenderPass;
 
     private static int currentFrame = 0;
+    private static int imageIndex = 0;
     private VkCommandBuffer currentCmdBuffer;
+    private boolean recordingFrame = false;
 
     MainPass mainPass = DefaultMainPass.PASS;
 
@@ -152,6 +156,8 @@ public class Renderer {
     }
 
     public void beginFrame() {
+        this.recordingFrame = false;
+
         Profiler2 p = Profiler2.getMainProfiler();
         p.push("Frame_fence");
 
@@ -176,6 +182,22 @@ public class Renderer {
         vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
 
         p.pop();
+
+        try(MemoryStack stack = stackPush()) {
+            IntBuffer pImageIndex = stack.mallocInt(1);
+            int vkResult = vkAcquireNextImageKHR(device, Vulkan.getSwapChain().getId(), VUtil.UINT64_MAX,
+                    imageAvailableSemaphores.get(currentFrame), VK_NULL_HANDLE, pImageIndex);
+
+            if(vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR) {
+                swapCahinUpdate = true;
+                return;
+            } else if(vkResult != VK_SUCCESS) {
+                throw new RuntimeException("Cannot get image: " + vkResult);
+            }
+
+            imageIndex = pImageIndex.get(0);
+        }
+
         p.start();
         p.push("Frame_ops");
 
@@ -210,18 +232,23 @@ public class Renderer {
             }
 
             mainPass.begin(commandBuffer, stack);
+            this.recordingFrame = true;
 
             vkCmdSetDepthBias(commandBuffer, 0.0F, 0.0F, 0.0F);
         }
     }
 
     public void endFrame() {
-        if(skipRendering)
+        if(skipRendering || !this.recordingFrame)
             return;
 
         mainPass.end(currentCmdBuffer);
 
-        submitFrame();
+        try {
+            submitFrame();
+        } finally {
+            this.recordingFrame = false;
+        }
     }
 
     public void endRenderPass() {
@@ -281,28 +308,8 @@ public class Renderer {
     }
 
     private void submitFrame() {
-        if(swapCahinUpdate)
-            return;
-
         try(MemoryStack stack = stackPush()) {
-
-            IntBuffer pImageIndex = stack.mallocInt(1);
-
-            int vkResult = vkAcquireNextImageKHR(device, Vulkan.getSwapChain().getId(), VUtil.UINT64_MAX,
-                    imageAvailableSemaphores.get(currentFrame), VK_NULL_HANDLE, pImageIndex);
-
-            if(vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR || swapCahinUpdate) {
-                swapCahinUpdate = true;
-//                shouldRecreate = false;
-//                waitForSwapChain();
-//                recreateSwapChain();
-//                shouldRecreate = true;
-                return;
-            } else if(vkResult != VK_SUCCESS) {
-                throw new RuntimeException("Cannot get image: " + vkResult);
-            }
-
-            final int imageIndex = pImageIndex.get(0);
+            int vkResult;
 
             VkSubmitInfo submitInfo = VkSubmitInfo.calloc(stack);
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
@@ -327,7 +334,7 @@ public class Renderer {
             submitInfo.pWaitSemaphores(waitSemaphores);
             submitInfo.pWaitDstStageMask(waitDstStageMask);
 
-            submitInfo.pSignalSemaphores(stackGet().longs(renderFinishedSemaphores.get(currentFrame)));
+            submitInfo.pSignalSemaphores(stackGet().longs(renderFinishedSemaphores.get(imageIndex)));
 
             submitInfo.pCommandBuffers(stack.pointers(currentCmdBuffer));
 
@@ -347,19 +354,17 @@ public class Renderer {
             VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack);
             presentInfo.sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
 
-            presentInfo.pWaitSemaphores(stackGet().longs(renderFinishedSemaphores.get(currentFrame)));
+            presentInfo.pWaitSemaphores(stackGet().longs(renderFinishedSemaphores.get(imageIndex)));
 
             presentInfo.swapchainCount(1);
             presentInfo.pSwapchains(stack.longs(Vulkan.getSwapChain().getId()));
 
-            presentInfo.pImageIndices(pImageIndex);
+            presentInfo.pImageIndices(stack.ints(imageIndex));
 
             vkResult = vkQueuePresentKHR(Device.getPresentQueue().queue(), presentInfo);
 
             if(vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR || swapCahinUpdate) {
                 swapCahinUpdate = true;
-//                shouldRecreate = false;
-//                recreateSwapChain();
                 return;
             } else if(vkResult != VK_SUCCESS) {
                 throw new RuntimeException("Failed to present swap chain image");
@@ -423,6 +428,8 @@ public class Renderer {
         this.onResizeCallbacks.forEach(Runnable::run);
 
         currentFrame = 0;
+        imageIndex = 0;
+        this.recordingFrame = false;
     }
 
     public void cleanUpResources() {
