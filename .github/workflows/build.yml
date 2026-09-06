@@ -19,8 +19,34 @@ jobs:
           cache: gradle
       - name: Make Gradle executable
         run: chmod +x ./gradlew
-      - name: Build
+      - name: Build and verify distributable
         run: ./gradlew build --stacktrace
+      - name: Install software Vulkan smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth mesa-vulkan-drivers
+      - name: Smoke-test Forge client Vulkan startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          if [[ -z "$LVP_ICD" ]]; then
+            echo "Lavapipe Vulkan ICD was not installed" >&2
+            exit 1
+          fi
+          echo "Using software Vulkan ICD: $LVP_ICD"
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
+          timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke.log
+          grep -F "Vulkan smoke test passed" vulkan-smoke.log
+      - name: Upload smoke-test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VulkanMod-Forge-smoke-log
+          path: vulkan-smoke.log
+          if-no-files-found: ignore
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
