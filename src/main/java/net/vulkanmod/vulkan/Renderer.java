@@ -188,9 +188,14 @@ public class Renderer {
             int vkResult = vkAcquireNextImageKHR(device, Vulkan.getSwapChain().getId(), VUtil.UINT64_MAX,
                     imageAvailableSemaphores.get(currentFrame), VK_NULL_HANDLE, pImageIndex);
 
-            if(vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR) {
+            if(vkResult == VK_ERROR_OUT_OF_DATE_KHR) {
                 swapCahinUpdate = true;
                 return;
+            } else if(vkResult == VK_SUBOPTIMAL_KHR) {
+                // The image was still acquired and the semaphore will be signaled.
+                // Render this frame so the graphics submit consumes that semaphore,
+                // then rebuild the swapchain on the next frame.
+                swapCahinUpdate = true;
             } else if(vkResult != VK_SUCCESS) {
                 throw new RuntimeException("Cannot get image: " + vkResult);
             }
@@ -398,6 +403,7 @@ public class Renderer {
 
 //        waitForSwapChain();
         Vulkan.waitIdle();
+        AreaUploadManager.INSTANCE.waitAllUploads();
 
 //        for(int i = 0; i < getSwapChainImages().size(); ++i) {
 //            vkDestroyFence(device, inFlightFences.get(i), null);
@@ -411,12 +417,13 @@ public class Renderer {
 
         int newFramesNum = getSwapChain().getFramesNum();
 
-        if(framesNum != newFramesNum) {
-            AreaUploadManager.INSTANCE.waitAllUploads();
-            destroySyncObjects();
+        // Acquire/present semaphores belong to the old swapchain lifecycle. Recreate
+        // them even when the image count is unchanged so every binary semaphore
+        // starts in a known unsignaled state after replacement.
+        destroySyncObjects();
 
+        if(framesNum != newFramesNum) {
             framesNum = newFramesNum;
-            createSyncObjects();
             allocateCommandBuffers();
 
             Pipeline.recreateDescriptorSets(framesNum);
@@ -424,6 +431,8 @@ public class Renderer {
             drawer.createResources(framesNum);
             AreaUploadManager.INSTANCE.createLists(framesNum);
         }
+
+        createSyncObjects();
 
         this.onResizeCallbacks.forEach(Runnable::run);
 
