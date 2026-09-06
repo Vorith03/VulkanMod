@@ -11,15 +11,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class LiquidBlockRendererM {
 
     /**
-     * Forge patches LiquidBlockRenderer#vertex by appending an alpha argument.
-     * The patched descriptor is not present in Mojang's original mapping table,
-     * so target both the development and production SRG names without asking
-     * Mixin's annotation processor to remap the patched descriptor.
+     * Forge 47.3.0 patches LiquidBlockRenderer#vertex with an alpha argument.
+     * Its runtime descriptor places that sixth float before the packed-light int:
+     * (VertexConsumer, double, double, double, float, float, float, float, float,
+     * float, int). The patched descriptor is not present in Mojang's original
+     * mapping table, so target both development and production names without
+     * asking Mixin's annotation processor to remap it.
      */
     @Inject(method = {"vertex", "m_110984_"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void vulkanmod$vertex(VertexConsumer vertexConsumer, double d, double e, double f,
                                   float red, float green, float blue, float u, float v,
-                                  int light, float alpha, CallbackInfo ci) {
+                                  float alpha, int light, CallbackInfo ci) {
         vertexConsumer.vertex((float) d, (float) e, (float) f,
                 red, green, blue, alpha, u, v, 0, light, 0.0F, 1.0F, 0.0F);
         ci.cancel();
