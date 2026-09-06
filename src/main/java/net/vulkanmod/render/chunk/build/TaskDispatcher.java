@@ -33,6 +33,8 @@ public class TaskDispatcher {
     private Thread[] threads;
     private volatile int idleThreads;
     private final AtomicInteger activeTasks = new AtomicInteger();
+    private final AtomicInteger acceptedResults = new AtomicInteger();
+    private final AtomicInteger droppedResults = new AtomicInteger();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
 
@@ -157,23 +159,19 @@ public class TaskDispatcher {
         return flag;
     }
 
-    public void scheduleSectionUpdate(RenderSection section, EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers) {
-        this.toUpload.add(
-                () -> this.doSectionUpdate(section, uploadBuffers)
-        );
-    }
-
     public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
                                       EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
                                       Runnable publishResult) {
         this.toUpload.add(() -> {
             if(task.cancelled.get()) {
                 releaseUploads(uploadBuffers);
+                this.droppedResults.incrementAndGet();
                 return;
             }
 
             this.doSectionUpdate(section, uploadBuffers);
             publishResult.run();
+            this.acceptedResults.incrementAndGet();
         });
     }
 
@@ -196,23 +194,19 @@ public class TaskDispatcher {
         }
     }
 
-    public void scheduleUploadChunkLayer(RenderSection section, TerrainRenderType renderType, UploadBuffer uploadBuffer) {
-        this.toUpload.add(
-                () -> this.doUploadChunkLayer(section, renderType, uploadBuffer)
-        );
-    }
-
     public void scheduleUploadChunkLayer(ChunkTask task, RenderSection section,
                                          TerrainRenderType renderType, UploadBuffer uploadBuffer,
                                          Runnable publishResult) {
         this.toUpload.add(() -> {
             if(task.cancelled.get()) {
                 uploadBuffer.release();
+                this.droppedResults.incrementAndGet();
                 return;
             }
 
             this.doUploadChunkLayer(section, renderType, uploadBuffer);
             publishResult.run();
+            this.acceptedResults.incrementAndGet();
         });
     }
 
@@ -252,12 +246,15 @@ public class TaskDispatcher {
             }
         }
 
-//        this.toBatchCount = 0;
+        this.acceptedResults.set(0);
+        this.droppedResults.set(0);
     }
 
     public String getStats() {
         int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
-        return String.format("iT: %d aT: %d qT: %d", this.idleThreads, this.activeTasks.get(), queuedTasks);
+        return String.format("iT:%d aT:%d qT:%d uQ:%d okR:%d dropR:%d",
+                this.idleThreads, this.activeTasks.get(), queuedTasks, this.toUpload.size(),
+                this.acceptedResults.get(), this.droppedResults.get());
     }
 
 }
