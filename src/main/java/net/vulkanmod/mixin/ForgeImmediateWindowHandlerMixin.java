@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin;
 
 import net.minecraftforge.fml.loading.ImmediateWindowHandler;
+import net.vulkanmod.Initializer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,15 +15,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(value = ImmediateWindowHandler.class, remap = false)
 public abstract class ForgeImmediateWindowHandlerMixin {
-    private static volatile boolean vulkanmod$vulkanWindowActive;
-
-    public static void vulkanmod$disableEarlyDisplayTicks() {
-        vulkanmod$vulkanWindowActive = true;
-    }
 
     @Inject(method = "renderTick", at = @At("HEAD"), cancellable = true, require = 0)
     private static void vulkanmod$skipEarlyOpenGLTick(CallbackInfo ci) {
-        if (vulkanmod$vulkanWindowActive) {
+        if (Initializer.isVulkanWindowActive()) {
             ci.cancel();
         }
     }
