@@ -9,6 +9,7 @@ import net.vulkanmod.vulkan.queue.TransferQueue;
 import org.apache.commons.lang3.Validate;
 
 import java.nio.ByteBuffer;
+import java.util.Locale;
 
 public class AreaUploadManager {
     public static AreaUploadManager INSTANCE;
@@ -21,6 +22,13 @@ public class AreaUploadManager {
     ObjectArrayList<DrawBuffers.ParametersUpdate>[] updatedParameters;
     ObjectArrayList<Runnable>[] frameOps;
     CommandPool.CommandBuffer[] commandBuffers;
+    long[] firstUploadNanos;
+    long[] recordedUploadBytes;
+
+    long completedUploadBatches;
+    long totalReadyNanos;
+    long lastReadyNanos;
+    long lastReadyBytes;
 
     int currentFrame;
 
@@ -29,6 +37,13 @@ public class AreaUploadManager {
         this.recordedUploads = new ObjectArrayList[frames];
         this.updatedParameters = new ObjectArrayList[frames];
         this.frameOps = new ObjectArrayList[frames];
+        this.firstUploadNanos = new long[frames];
+        this.recordedUploadBytes = new long[frames];
+
+        this.completedUploadBatches = 0L;
+        this.totalReadyNanos = 0L;
+        this.lastReadyNanos = 0L;
+        this.lastReadyBytes = 0L;
 
         for (int i = 0; i < frames; i++) {
             this.recordedUploads[i] = new ObjectArrayList<>();
@@ -49,6 +64,12 @@ public class AreaUploadManager {
 
     public void uploadAsync(AreaBuffer.Segment uploadSegment, long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
         Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
+
+        if(this.recordedUploads[this.currentFrame].isEmpty()) {
+            this.firstUploadNanos[this.currentFrame] = System.nanoTime();
+            this.recordedUploadBytes[this.currentFrame] = 0L;
+        }
+        this.recordedUploadBytes[this.currentFrame] += bufferSize;
 
         if(commandBuffers[currentFrame] == null)
             this.commandBuffers[currentFrame] = Device.getTransferQueue().beginCommands();
@@ -112,6 +133,14 @@ public class AreaUploadManager {
         }
         Synchronization.waitFence(commandBuffer.getFence());
 
+        if(!this.recordedUploads[frame].isEmpty() && this.firstUploadNanos[frame] != 0L) {
+            long readyNanos = Math.max(0L, System.nanoTime() - this.firstUploadNanos[frame]);
+            this.lastReadyNanos = readyNanos;
+            this.lastReadyBytes = this.recordedUploadBytes[frame];
+            this.totalReadyNanos += readyNanos;
+            this.completedUploadBatches++;
+        }
+
         for(AreaBuffer.Segment uploadSegment : this.recordedUploads[frame]) {
             uploadSegment.setReady();
         }
@@ -123,12 +152,24 @@ public class AreaUploadManager {
         this.commandBuffers[frame].reset();
         this.commandBuffers[frame] = null;
         this.recordedUploads[frame].clear();
+        this.firstUploadNanos[frame] = 0L;
+        this.recordedUploadBytes[frame] = 0L;
     }
 
     public synchronized void waitAllUploads() {
         for(int i = 0; i < this.commandBuffers.length; ++i) {
             waitUploads(i);
         }
+    }
+
+    public String getStats() {
+        double lastReadyMs = this.lastReadyNanos / 1_000_000.0D;
+        double averageReadyMs = this.completedUploadBatches == 0L
+                ? 0.0D
+                : (this.totalReadyNanos / 1_000_000.0D) / this.completedUploadBatches;
+        double lastKiB = this.lastReadyBytes / 1024.0D;
+        return String.format(Locale.ROOT, "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms",
+                lastReadyMs, lastKiB, averageReadyMs);
     }
 
 }
