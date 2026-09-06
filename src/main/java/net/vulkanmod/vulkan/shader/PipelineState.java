@@ -7,7 +7,6 @@ import net.vulkanmod.vulkan.VRenderSystem;
 import java.util.Objects;
 
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_EQUAL;
 
 public class PipelineState {
     public static final BlendState DEFAULT_BLEND_STATE = defaultBlendInfo().createBlendState();
@@ -21,12 +20,23 @@ public class PipelineState {
     public static PipelineState.LogicOpState currentLogicOpState = PipelineState.DEFAULT_LOGICOP_STATE;
     public static PipelineState.ColorMask currentColorMask = PipelineState.DEFAULT_COLORMASK;
 
+    private static PipelineState currentState;
+
     public static PipelineState getCurrentPipelineState(RenderPass renderPass) {
+        int colorMask = VRenderSystem.getColorMask();
+
+        if(currentState != null && currentState.matchesCurrentState(renderPass, colorMask)) {
+            currentBlendState = currentState.blendState;
+            currentDepthState = currentState.depthState;
+            currentColorMask = currentState.colorMask;
+            return currentState;
+        }
+
         currentBlendState = blendInfo.createBlendState();
         currentDepthState = VRenderSystem.getDepthState();
-        currentColorMask = new PipelineState.ColorMask(VRenderSystem.getColorMask());
+        currentColorMask = new PipelineState.ColorMask(colorMask);
 
-        return new PipelineState(currentBlendState, currentDepthState, currentLogicOpState, currentColorMask, renderPass);
+        return currentState = new PipelineState(currentBlendState, currentDepthState, currentLogicOpState, currentColorMask, renderPass);
     }
 
     final BlendState blendState;
@@ -39,10 +49,19 @@ public class PipelineState {
     public PipelineState(BlendState blendState, DepthState depthState, LogicOpState logicOpState, ColorMask colorMask, RenderPass renderPass) {
         this.blendState = blendState;
         this.depthState = depthState;
-        this.logicOpState = logicOpState;
+        this.logicOpState = new LogicOpState(logicOpState.enabled, logicOpState.getLogicOp());
         this.colorMask = colorMask;
         this.renderPass = renderPass;
         this.cullState = VRenderSystem.cull;
+    }
+
+    private boolean matchesCurrentState(RenderPass renderPass, int colorMask) {
+        return this.renderPass == renderPass
+                && this.cullState == VRenderSystem.cull
+                && this.colorMask.colorMask == colorMask
+                && this.blendState.matches(blendInfo)
+                && this.depthState.matches(VRenderSystem.depthTest, VRenderSystem.depthMask, VRenderSystem.depthFun)
+                && this.logicOpState.equals(currentLogicOpState);
     }
 
     @Override
@@ -57,7 +76,7 @@ public class PipelineState {
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState, depthState, logicOpState, cullState, renderPass);
+        return Objects.hash(blendState, depthState, logicOpState, cullState, renderPass, colorMask.colorMask);
     }
 
     public static BlendInfo defaultBlendInfo() {
@@ -134,13 +153,6 @@ public class PipelineState {
                 case 0x800A -> VK_BLEND_OP_SUBTRACT;
                 case 0x800B -> VK_BLEND_OP_REVERSE_SUBTRACT;
                 default -> throw new RuntimeException("unknown blend factor: " + value);
-
-
-//                GL_FUNC_ADD = 0x8006,
-//                GL_MIN      = 0x8007,
-//                GL_MAX      = 0x8008;
-//                GL_FUNC_SUBTRACT         = 0x800A,
-//                GL_FUNC_REVERSE_SUBTRACT = 0x800B;
             };
         }
 
@@ -155,23 +167,6 @@ public class PipelineState {
                 case 774 -> VK_BLEND_FACTOR_DST_COLOR;
                 case 768 -> VK_BLEND_FACTOR_SRC_COLOR;
                 default -> throw new RuntimeException("unknown blend factor: " + value);
-
-
-//                        CONSTANT_ALPHA(32771),
-//                        CONSTANT_COLOR(32769),
-//                        DST_ALPHA(772),
-//                        DST_COLOR(774),
-//                        ONE(1),
-//                        ONE_MINUS_CONSTANT_ALPHA(32772),
-//                        ONE_MINUS_CONSTANT_COLOR(32770),
-//                        ONE_MINUS_DST_ALPHA(773),
-//                        ONE_MINUS_DST_COLOR(775),
-//                        ONE_MINUS_SRC_ALPHA(771),
-//                        ONE_MINUS_SRC_COLOR(769),
-//                        SRC_ALPHA(770),
-//                        SRC_ALPHA_SATURATE(776),
-//                        SRC_COLOR(768),
-//                        ZERO(0);
             };
         }
     }
@@ -193,6 +188,16 @@ public class PipelineState {
             this.blendOp = blendOp;
         }
 
+        boolean matches(BlendInfo blendInfo) {
+            if(!this.enabled && !blendInfo.enabled) return true;
+            if(this.enabled != blendInfo.enabled) return false;
+            return srcRgbFactor == blendInfo.srcRgbFactor
+                    && dstRgbFactor == blendInfo.dstRgbFactor
+                    && srcAlphaFactor == blendInfo.srcAlphaFactor
+                    && dstAlphaFactor == blendInfo.dstAlphaFactor
+                    && blendOp == blendInfo.blendOp;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -208,7 +213,8 @@ public class PipelineState {
 
         @Override
         public int hashCode() {
-            return Objects.hash(srcRgbFactor, dstRgbFactor, srcAlphaFactor, dstAlphaFactor, blendOp);
+            if(!enabled) return Boolean.hashCode(false);
+            return Objects.hash(true, srcRgbFactor, dstRgbFactor, srcAlphaFactor, dstAlphaFactor, blendOp);
         }
     }
 
@@ -285,6 +291,10 @@ public class PipelineState {
             this.function = glToVulkan(function);
         }
 
+        boolean matches(boolean depthTest, boolean depthMask, int function) {
+            return this.depthTest == depthTest && this.depthMask == depthMask && this.function == glToVulkan(function);
+        }
+
         private static int glToVulkan(int value) {
             return switch (value) {
                 case 515 -> VK_COMPARE_OP_LESS_OR_EQUAL;
@@ -293,16 +303,6 @@ public class PipelineState {
                 case 518 -> VK_COMPARE_OP_GREATER_OR_EQUAL;
                 case 514 -> VK_COMPARE_OP_EQUAL;
                 default -> throw new RuntimeException("unknown blend factor..");
-
-
-//                public static final int GL_NEVER = 512;
-//                public static final int GL_LESS = 513;
-//                public static final int GL_EQUAL = 514;
-//                public static final int GL_LEQUAL = 515;
-//                public static final int GL_GREATER = 516;
-//                public static final int GL_NOTEQUAL = 517;
-//                public static final int GL_GEQUAL = 518;
-//                public static final int GL_ALWAYS = 519;
             };
         }
 
