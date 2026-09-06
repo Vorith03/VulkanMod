@@ -51,8 +51,8 @@ public class IndirectBuffer extends Buffer {
         if(commandBuffer == null)
             return;
 
-        Device.getTransferQueue().submitCommands(commandBuffer);
-        Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+        Device.getTransferQueue().submitCommands(commandBuffer, true);
+        Synchronization.INSTANCE.addCommandBuffer(commandBuffer, true);
         commandBuffer = null;
     }
 
