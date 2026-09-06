@@ -8,6 +8,7 @@ import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.gui.font.FontManager;
+import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.main.GameConfig;
 import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.client.renderer.GameRenderer;
@@ -18,6 +19,7 @@ import net.minecraft.client.resources.MobEffectTextureManager;
 import net.minecraft.client.resources.PaintingTextureManager;
 import net.minecraft.client.resources.model.ModelManager;
 import net.minecraft.client.sounds.SoundManager;
+import net.minecraft.server.packs.resources.ReloadInstance;
 import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.profiling.Profiler2;
@@ -37,6 +39,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 @Mixin(Minecraft.class)
 public class MinecraftMixin {
@@ -77,6 +81,30 @@ public class MinecraftMixin {
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
         }
+    }
+
+    /**
+     * Forge's default post-handoff loading overlay continues rendering the early
+     * display's OpenGL framebuffer directly. The Vulkan window has no GL context,
+     * so use Mojang's normal LoadingOverlay once the early splash has handed off.
+     */
+    @SuppressWarnings("unchecked")
+    @Redirect(
+            method = "<init>",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraftforge/fml/loading/ImmediateWindowHandler;loadingOverlay(Ljava/util/function/Supplier;Ljava/util/function/Supplier;Ljava/util/function/Consumer;Z)Ljava/util/function/Supplier;",
+                    remap = false
+            )
+    )
+    private <T> Supplier<T> useVulkanSafeLoadingOverlay(Supplier<?> minecraft, Supplier<?> reload,
+                                                        Consumer<Optional<Throwable>> onFinish, boolean fade) {
+        return () -> (T) new LoadingOverlay(
+                (Minecraft) minecraft.get(),
+                (ReloadInstance) reload.get(),
+                onFinish,
+                fade
+        );
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
