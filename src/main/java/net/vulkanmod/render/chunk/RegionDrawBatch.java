@@ -73,13 +73,14 @@ final class RegionDrawBatch {
         int drawCount;
 
         boolean update(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
-            if (visibilityRevision == area.visibilityRevision && meshRevision == buffers.meshRevision
+            long currentVisibilityRevision = area.getVisibilityRevision();
+            if (visibilityRevision == currentVisibilityRevision && meshRevision == buffers.meshRevision
                     && !pendingUploads) return false;
-            rebuild(buffers, area, type);
+            rebuild(buffers, area, type, currentVisibilityRevision);
             return true;
         }
 
-        void rebuild(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
+        void rebuild(DrawBuffers buffers, ChunkArea area, TerrainRenderType type, long currentVisibilityRevision) {
             if (area.sectionQueue.size() > MAX_SECTIONS) {
                 throw new IllegalStateException("Region contains more than 512 sections");
             }
@@ -112,7 +113,7 @@ final class RegionDrawBatch {
                     RegionBatchStats.bytes += drawCount * STRIDE;
                 }
             }
-            visibilityRevision = area.visibilityRevision;
+            visibilityRevision = currentVisibilityRevision;
             meshRevision = buffers.meshRevision;
         }
     }

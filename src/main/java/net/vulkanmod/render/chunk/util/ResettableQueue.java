@@ -11,6 +11,9 @@ public class ResettableQueue<T> implements Iterable<T> {
     int limit = 0;
     int capacity;
 
+    private int previousLimit = -1;
+    private boolean rewriteMatches;
+
     public ResettableQueue() {
         this(1024);
     }
@@ -38,6 +41,12 @@ public class ResettableQueue<T> implements Iterable<T> {
             return;
 
         if(limit == capacity) resize();
+
+        if(this.previousLimit >= 0 && this.rewriteMatches
+                && (this.limit >= this.previousLimit || this.queue[this.limit] != t)) {
+            this.rewriteMatches = false;
+        }
+
         this.queue[limit] = t;
 
         this.limit++;
@@ -60,6 +69,38 @@ public class ResettableQueue<T> implements Iterable<T> {
     public void clear() {
         this.position = 0;
         this.limit = 0;
+        this.previousLimit = -1;
+        this.rewriteMatches = false;
+    }
+
+    /**
+     * Rebuild this queue while retaining the old references long enough to compare
+     * the new ordered contents without allocating a second collection.
+     */
+    public void beginRewrite() {
+        if(this.previousLimit >= 0)
+            throw new IllegalStateException("Queue rewrite already active");
+
+        this.previousLimit = this.limit;
+        this.rewriteMatches = true;
+        this.position = 0;
+        this.limit = 0;
+    }
+
+    /**
+     * Finish a beginRewrite/add sequence.
+     *
+     * @return true when the ordered queue contents are reference-identical to the
+     * previous contents, including length.
+     */
+    public boolean endRewrite() {
+        if(this.previousLimit < 0)
+            return true;
+
+        boolean unchanged = this.rewriteMatches && this.limit == this.previousLimit;
+        this.previousLimit = -1;
+        this.rewriteMatches = false;
+        return unchanged;
     }
 
     public Iterator<T> iterator(boolean reverseOrder) {
