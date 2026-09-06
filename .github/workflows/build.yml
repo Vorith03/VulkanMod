@@ -86,7 +86,7 @@ jobs:
           export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
           timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke-flywheel.log
           grep -F "Vulkan smoke test passed" vulkan-smoke-flywheel.log
-          grep -F "flywheel" vulkan-smoke-flywheel.log
+          grep -F "Flywheel 0.6 compatibility smoke test passed" vulkan-smoke-flywheel.log
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
