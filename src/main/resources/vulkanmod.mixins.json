@@ -73,7 +73,6 @@
     "vertex.VertexMultiConsumersM$MultipleM",
     "vertex.VertexMultiConsumersM$SheetDecalM",
 
-    "ForgeImmediateWindowHandlerMixin",
     "WindowMixin"
   ],
   "injectors": {
