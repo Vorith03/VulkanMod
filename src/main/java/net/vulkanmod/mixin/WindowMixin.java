@@ -84,14 +84,12 @@ public abstract class WindowMixin {
         Initializer.initialize();
 
         // Forge's default early display is an OpenGL window created before any
-        // game mixins can run. Allow Forge to finish its documented handoff so
-        // its render thread and callbacks are stopped, then replace that handle
-        // with the NO_API window Vulkan requires.
+        // game mixins can run. Allow Forge to finish its documented handoff, then
+        // create a separate NO_API window for Vulkan. Forge still calls its early
+        // provider directly during parts of mod bootstrap, so keep the hidden GL
+        // window alive until Minecraft construction has completed.
         long forgeWindow = ImmediateWindowHandler.setupMinecraftWindow(width, height, title, monitor);
         if (forgeWindow == 0L) {
-            // No early Forge window (for example earlyWindowControl=false): this
-            // is equivalent to vanilla's creation point, so just create Vulkan.
-            Initializer.markVulkanWindowActive();
             return createNoApiWindow(width.getAsInt(), height.getAsInt(), title.get(), monitor.getAsLong(), null, null);
         }
 
@@ -103,14 +101,13 @@ public abstract class WindowMixin {
         GLFW.glfwGetWindowSize(forgeWindow, oldWidth, oldHeight);
         boolean maximized = GLFW.glfwGetWindowAttrib(forgeWindow, GLFW_MAXIMIZED) == GLFW_TRUE;
 
-        // Forge has two early-display tick paths during bootstrap: the public
-        // progressWindowTick callback and direct ImmediateWindowHandler.renderTick
-        // calls. Disable both before the OpenGL window is destroyed.
+        // Stop the public progress callback. Direct ImmediateWindowHandler ticks
+        // can still occur, so hide and retain the valid GL window instead of
+        // destroying the context underneath Forge.
         FMLLoader.progressWindowTick = () -> { };
-        Initializer.markVulkanWindowActive();
         GLFW.glfwMakeContextCurrent(0L);
         GLFW.glfwHideWindow(forgeWindow);
-        GLFW.glfwDestroyWindow(forgeWindow);
+        Initializer.retainForgeEarlyWindow(forgeWindow);
 
         long vulkanWindow = createNoApiWindow(
                 oldWidth[0] > 0 ? oldWidth[0] : width.getAsInt(),
@@ -124,7 +121,7 @@ public abstract class WindowMixin {
             GLFW.glfwMaximizeWindow(vulkanWindow);
         }
 
-        Initializer.LOGGER.info("Replaced Forge early OpenGL window with Vulkan NO_API window");
+        Initializer.LOGGER.info("Created Vulkan NO_API window while retaining hidden Forge splash context");
         return vulkanWindow;
     }
 
