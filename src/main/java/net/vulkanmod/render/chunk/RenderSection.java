@@ -8,6 +8,8 @@ import net.minecraft.client.renderer.chunk.RenderRegionCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.CompiledSection;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
@@ -235,8 +237,28 @@ public class RenderSection {
         return this.completelyEmpty;
     }
 
+    private boolean doesChunkExistAt(int chunkX, int chunkZ) {
+        var level = WorldRenderer.getLevel();
+        return level != null && level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false) != null;
+    }
+
     public boolean hasXYNeighbours() {
-        return true; //checks if chunks exist in level
+        Vec3 cameraPos = WorldRenderer.getCameraPos();
+        if(cameraPos == null)
+            return true;
+
+        double dx = this.xOffset + 8.0D - cameraPos.x;
+        double dy = this.yOffset + 8.0D - cameraPos.y;
+        double dz = this.zOffset + 8.0D - cameraPos.z;
+        if(dx * dx + dy * dy + dz * dz <= 576.0D)
+            return true;
+
+        int chunkX = this.xOffset >> 4;
+        int chunkZ = this.zOffset >> 4;
+        return this.doesChunkExistAt(chunkX - 1, chunkZ)
+                && this.doesChunkExistAt(chunkX, chunkZ - 1)
+                && this.doesChunkExistAt(chunkX + 1, chunkZ)
+                && this.doesChunkExistAt(chunkX, chunkZ + 1);
     }
 
     public void updateGlobalBlockEntities(Collection<BlockEntity> fullSet) {
