@@ -22,8 +22,12 @@ public class GraphicsQueue extends Queue {
         if(commandBuffer == currentCmdBuffer)
             return VK_NULL_HANDLE;
 
-        long fence = super.submitCommands(commandBuffer, true);
-        Synchronization.INSTANCE.addCommandBuffer(commandBuffer, true);
+        // Helper graphics submissions are ordered before the main frame because
+        // they use this same VkQueue. They therefore do not need a binary semaphore
+        // solely to make the later main submission wait for them. Track the command
+        // buffer until the main frame fence retires instead.
+        long fence = super.submitCommands(commandBuffer, false);
+        Synchronization.INSTANCE.addSameQueueCommandBuffer(commandBuffer);
         return fence;
     }
 
