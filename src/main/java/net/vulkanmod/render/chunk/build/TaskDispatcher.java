@@ -28,8 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TaskDispatcher {
     private static final Logger LOGGER = LogUtils.getLogger();
-
-    private int highPriorityQuota = 2;
+    private static final int HIGH_PRIORITY_QUOTA = 2;
 
     private final Queue<Runnable> toUpload = Queues.newLinkedBlockingDeque();
     public final ThreadBuilderPack fixedBuffers;
@@ -77,15 +76,18 @@ public class TaskDispatcher {
     }
 
     private void runTaskThread(ThreadBuilderPack builderPack) {
+        int highPriorityStreak = 0;
+
         while(!this.stopThreads) {
-            ChunkTask task = this.pollTask();
+            boolean preferHighPriority = highPriorityStreak < HIGH_PRIORITY_QUOTA;
+            ChunkTask task = this.pollTask(preferHighPriority);
 
             if(task == null) {
                 synchronized (this) {
                     // Recheck while holding the same monitor used by schedule(). This
                     // closes the poll-before-wait race where a notification could be
                     // delivered before the worker actually began waiting.
-                    task = this.pollTask();
+                    task = this.pollTask(preferHighPriority);
                     if(task == null && !this.stopThreads) {
                         this.idleThreads++;
                         try {
@@ -102,6 +104,12 @@ public class TaskDispatcher {
 
             if(task == null)
                 continue;
+
+            if(task.highPriority) {
+                highPriorityStreak++;
+            } else {
+                highPriorityStreak = 0;
+            }
 
             Long scheduledNanos = this.scheduledAt.remove(task);
             long startNanos = System.nanoTime();
@@ -141,11 +149,17 @@ public class TaskDispatcher {
     }
 
     @Nullable
-    private ChunkTask pollTask() {
-        ChunkTask task = this.highPriorityTasks.poll();
-
-        if(task == null)
+    private ChunkTask pollTask(boolean preferHighPriority) {
+        ChunkTask task;
+        if(preferHighPriority) {
+            task = this.highPriorityTasks.poll();
+            if(task == null)
+                task = this.lowPriorityTasks.poll();
+        } else {
             task = this.lowPriorityTasks.poll();
+            if(task == null)
+                task = this.highPriorityTasks.poll();
+        }
 
         return task;
     }
@@ -310,12 +324,13 @@ public class TaskDispatcher {
     }
 
     public String getStats() {
-        int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
+        int highQueued = this.highPriorityTasks.size();
+        int lowQueued = this.lowPriorityTasks.size();
         int buildSamples = this.completedBuilds.get();
         int publishSamples = this.publishedBuilds.get();
         return String.format(Locale.ROOT,
-                "iT:%d aT:%d qT:%d uQ:%d okR:%d dropR:%d lat(q/b/h):%.1f/%.1f/%.1fms",
-                this.idleThreads, this.activeTasks.get(), queuedTasks, this.toUpload.size(),
+                "iT:%d aT:%d qH:%d qL:%d uQ:%d okR:%d dropR:%d lat(q/b/h):%.1f/%.1f/%.1fms",
+                this.idleThreads, this.activeTasks.get(), highQueued, lowQueued, this.toUpload.size(),
                 this.acceptedResults.get(), this.droppedResults.get(),
                 averageMillis(this.buildQueueNanos.get(), buildSamples),
                 averageMillis(this.buildNanos.get(), buildSamples),
