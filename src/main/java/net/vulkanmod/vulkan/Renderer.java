@@ -307,9 +307,25 @@ public class Renderer {
             VkSubmitInfo submitInfo = VkSubmitInfo.calloc(stack);
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
 
-            submitInfo.waitSemaphoreCount(1);
-            submitInfo.pWaitSemaphores(stackGet().longs(imageAvailableSemaphores.get(currentFrame)));
-            submitInfo.pWaitDstStageMask(stack.ints(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT));
+            int helperWaitSemaphoreCount = Synchronization.INSTANCE.getWaitSemaphoreCount();
+            int totalWaitSemaphoreCount = helperWaitSemaphoreCount + 1;
+
+            LongBuffer waitSemaphores = stack.mallocLong(totalWaitSemaphoreCount);
+            IntBuffer waitDstStageMask = stack.mallocInt(totalWaitSemaphoreCount);
+
+            Synchronization.INSTANCE.getWaitSemaphores(waitSemaphores);
+
+            for(int i = 0; i < helperWaitSemaphoreCount; ++i) {
+                waitDstStageMask.put(i, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+            }
+
+            waitSemaphores.put(totalWaitSemaphoreCount - 1, imageAvailableSemaphores.get(currentFrame));
+            waitDstStageMask.put(totalWaitSemaphoreCount - 1, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+            waitSemaphores.position(0);
+
+            submitInfo.waitSemaphoreCount(totalWaitSemaphoreCount);
+            submitInfo.pWaitSemaphores(waitSemaphores);
+            submitInfo.pWaitDstStageMask(waitDstStageMask);
 
             submitInfo.pSignalSemaphores(stackGet().longs(renderFinishedSemaphores.get(currentFrame)));
 
@@ -317,12 +333,16 @@ public class Renderer {
 
             vkResetFences(device, stackGet().longs(inFlightFences.get(currentFrame)));
 
+            // Preserve correctness for any legacy producer that still registers a fence.
+            // Converted helper uploads take the semaphore path above and return immediately here.
             Synchronization.INSTANCE.waitFences();
 
             if((vkResult = vkQueueSubmit(Device.getGraphicsQueue().queue(), submitInfo, inFlightFences.get(currentFrame))) != VK_SUCCESS) {
                 vkResetFences(device, stackGet().longs(inFlightFences.get(currentFrame)));
                 throw new RuntimeException("Failed to submit draw command buffer: " + vkResult);
             }
+
+            Synchronization.INSTANCE.scheduleCbReset();
 
             VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack);
             presentInfo.sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
