@@ -2,7 +2,6 @@ package net.vulkanmod.vulkan.memory;
 
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import jdk.jfr.StackTrace;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
@@ -265,11 +264,11 @@ public class MemoryManager {
         if(DEBUG)
             stackTraces[frame].clear();
 
-        this.freeImages();
+        this.freeImages(frame);
     }
 
-    private void freeImages() {
-        List<VulkanImage> bufferList = freeableImages[currentFrame];
+    private void freeImages(int frame) {
+        List<VulkanImage> bufferList = freeableImages[frame];
         for(VulkanImage image : bufferList) {
 
             image.doFree();
