@@ -62,6 +62,19 @@ public class Synchronization {
         }
     }
 
+    public synchronized void addSameQueueCommandBuffer(CommandPool.CommandBuffer commandBuffer) {
+        // Same-queue helper submissions execute before the later main graphics
+        // submission by queue order alone. They need no semaphore wait, but their
+        // command buffers must stay alive until the main frame fence retires.
+        if(Device.getGraphicsQueue().isRecording(commandBuffer))
+            return;
+
+        if(this.fenceCommandBuffers.contains(commandBuffer) || this.semaphoreCommandBuffers.contains(commandBuffer))
+            return;
+
+        this.semaphoreCommandBuffers.add(commandBuffer);
+    }
+
     public synchronized void addFence(long fence) {
         if(idx == ALLOCATION_SIZE)
             waitFences();
@@ -131,8 +144,7 @@ public class Synchronization {
     }
 
     public static boolean checkFenceStatus(long fence) {
-        VkDevice device = Vulkan.getDevice();
-        return vkGetFenceStatus(device, fence) == VK_SUCCESS;
+        return vkGetFenceStatus(Vulkan.getDevice(), fence) == VK_SUCCESS;
     }
 
 }
