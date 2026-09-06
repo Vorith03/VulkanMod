@@ -211,11 +211,12 @@ public class MemoryManager {
     }
 
     private static void freeBuffer(Buffer.BufferInfo bufferInfo) {
-        vmaDestroyBuffer(allocator, bufferInfo.id(), bufferInfo.allocation());
-
         if(bufferInfo.data() != null) {
+            vmaUnmapMemory(allocator, bufferInfo.allocation());
             MemoryUtil.memFree(bufferInfo.data());
         }
+
+        vmaDestroyBuffer(allocator, bufferInfo.id(), bufferInfo.allocation());
 
         if(bufferInfo.type() == MemoryType.Type.DEVICE_LOCAL) {
             deviceMemory -= bufferInfo.bufferSize();
