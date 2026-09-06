@@ -90,14 +90,15 @@ public class MinecraftMixin {
         Initializer.LOGGER.info("Vulkan renderer active: {}", deviceInfo != null ? deviceInfo.deviceName : "device info unavailable");
 
         // CI can request a deterministic startup smoke test. Before exiting,
-        // force-load a representative late model target so its Mixin is applied.
-        // This catches constructor-injection failures that occur during normal
-        // resource/model loading after Minecraft's own constructor has returned.
+        // force-load representative late render targets so their Mixins apply.
+        // This catches failures that otherwise appear only during resource/model
+        // loading or the first chunk build after Minecraft construction returns.
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
             try {
                 Class.forName("net.minecraft.client.model.geom.ModelPart$Cube");
+                Class.forName("net.minecraft.client.renderer.block.LiquidBlockRenderer");
             } catch (ClassNotFoundException e) {
-                throw new IllegalStateException("Could not load ModelPart.Cube during Vulkan smoke test", e);
+                throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
