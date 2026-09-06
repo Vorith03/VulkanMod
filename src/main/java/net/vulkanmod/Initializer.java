@@ -16,7 +16,7 @@ public class Initializer {
     public static final Logger LOGGER = LogManager.getLogger("VulkanMod");
 
     private static String VERSION = "unknown";
-    private static volatile boolean VULKAN_WINDOW_ACTIVE;
+    private static volatile long FORGE_EARLY_WINDOW;
     public static Config CONFIG;
 
     public Initializer() {
@@ -49,12 +49,14 @@ public class Initializer {
         return CONFIG;
     }
 
-    public static void markVulkanWindowActive() {
-        VULKAN_WINDOW_ACTIVE = true;
+    public static void retainForgeEarlyWindow(long window) {
+        FORGE_EARLY_WINDOW = window;
     }
 
-    public static boolean isVulkanWindowActive() {
-        return VULKAN_WINDOW_ACTIVE;
+    public static long takeForgeEarlyWindow() {
+        long window = FORGE_EARLY_WINDOW;
+        FORGE_EARLY_WINDOW = 0L;
+        return window;
     }
 
     private static Config loadConfig(Path path) {
