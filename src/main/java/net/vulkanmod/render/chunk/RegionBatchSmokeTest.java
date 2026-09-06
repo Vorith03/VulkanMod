@@ -17,6 +17,9 @@ public final class RegionBatchSmokeTest {
         try {
             require(!TerrainShaderManager.useRegionBatching(RenderType.translucent()), "Water must retain its renderer");
             require(!TerrainShaderManager.useRegionBatching(RenderType.tripwire()), "Tripwire must retain its renderer");
+            require(new ChunkAreaManager(1, 24, -64).ySize == 3, "Overworld area rows must match section count");
+            require(new ChunkAreaManager(1, 16, 0).ySize == 2, "Zero-based area rows must match section count");
+
             RenderSection section = new RenderSection(0, -16, -96, 176);
             var parameters = section.getDrawParameters(TerrainRenderType.CUTOUT_MIPPED);
             parameters.indexCount = 6;
@@ -30,6 +33,12 @@ public final class RegionBatchSmokeTest {
             require(first.drawCount == 1 && !first.pendingUploads, "Ready geometry must draw");
             require(first.commands.getByteBuffer().getInt(16) == (7 | (2 << 3) | (3 << 6)), "GPU section coordinates");
             require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Unchanged cache must not upload");
+
+            area.resetQueue();
+            area.addSection(section);
+            require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED),
+                    "Equivalent visibility rebuild must preserve cached commands");
+
             second.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED);
             require(first.commands.getId() != second.commands.getId(), "Frames must own distinct buffers");
             parameters.indexCount = 12;
@@ -37,12 +46,17 @@ public final class RegionBatchSmokeTest {
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Mesh edit invalidation");
             require(first.commands.getByteBuffer().getInt(0) == 12, "Edited count");
             require(second.commands.getByteBuffer().getInt(0) == 6, "Other frame must remain untouched");
+
             area.resetQueue();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
                     "Visibility removal must clear draws");
+            area.resetQueue();
             area.addSection(section);
-            first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED);
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 1,
+                    "Visibility restoration must rebuild draws");
+
             parameters.reset(area);
+            require(!parameters.ready, "Reset parameters must not retain upload readiness");
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
                     "Section reset must invalidate cached geometry");
             Initializer.LOGGER.info("Terrain region cache smoke test passed");
