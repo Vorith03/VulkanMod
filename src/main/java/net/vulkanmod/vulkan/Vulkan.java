@@ -158,7 +158,7 @@ public class Vulkan {
 
     static void createStagingBuffers() {
         if(stagingBuffers != null) {
-            Arrays.stream(stagingBuffers).forEach(Buffer::freeBuffer);
+            freeStagingBuffers();
         }
 
         stagingBuffers = new StagingBuffer[getSwapChainImages().size()];
@@ -178,6 +178,10 @@ public class Vulkan {
         int newFramesNum = swapChain.recreateSwapChain();
 
         if (FramesNum != newFramesNum) {
+            // The device is idle when Renderer invokes this path. Retire all objects
+            // owned by the old frame slots before replacing their MemoryManager.
+            freeStagingBuffers();
+            MemoryManager.getInstance().freeAllBuffers();
             MemoryManager.createInstance(newFramesNum);
             createStagingBuffers();
         }
@@ -215,9 +219,13 @@ public class Vulkan {
     }
 
     private static void freeStagingBuffers() {
+        if(stagingBuffers == null)
+            return;
+
         for(StagingBuffer buffer : stagingBuffers) {
-            MemoryManager.freeBuffer(buffer.getId(), buffer.getAllocation());
+            buffer.freeBuffer();
         }
+        stagingBuffers = null;
     }
 
     private static void createInstance() {
