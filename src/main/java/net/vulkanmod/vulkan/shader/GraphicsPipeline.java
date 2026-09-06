@@ -81,7 +81,7 @@ public class GraphicsPipeline extends Pipeline {
 
             VkPipelineVertexInputStateCreateInfo vertexInputInfo = VkPipelineVertexInputStateCreateInfo.calloc(stack);
             vertexInputInfo.sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
-            vertexInputInfo.pVertexBindingDescriptions(getBindingDescription(vertexFormat));
+            vertexInputInfo.pVertexBindingDescriptions(getBindingDescription(vertexFormat, stack));
             vertexInputInfo.pVertexAttributeDescriptions(getAttributeDescriptions(vertexFormat));
 
             // ===> ASSEMBLY STAGE <===
@@ -209,10 +209,10 @@ public class GraphicsPipeline extends Pipeline {
         this.fragShaderModule = createShaderModule(fragSpirv.bytecode());
     }
 
-    private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat) {
+    private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat, MemoryStack stack) {
 
         VkVertexInputBindingDescription.Buffer bindingDescription =
-                VkVertexInputBindingDescription.calloc(1);
+                VkVertexInputBindingDescription.calloc(1, stack);
 
         bindingDescription.binding(0);
         bindingDescription.stride(vertexFormat.getVertexSize());
