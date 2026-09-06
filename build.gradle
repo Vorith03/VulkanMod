@@ -134,6 +134,17 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
+// jarJar builds the distributable "-all" archive from the project's normal
+// outputs plus nested libraries; it does not automatically inherit custom
+// `from` inputs added to the plain jar task. Preserve VMA, shaderc, and their
+// natives in the Jar-in-Jar artifact while keeping lwjgl-vulkan nested.
+tasks.named('jarJar').configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.shade.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 17
