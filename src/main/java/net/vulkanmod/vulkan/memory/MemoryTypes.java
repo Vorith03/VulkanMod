@@ -19,15 +19,19 @@ public class MemoryTypes {
 
         for(int i = 0; i < Device.memoryProperties.memoryTypeCount(); ++i) {
             VkMemoryType memoryType = Device.memoryProperties.memoryTypes(i);
+            int flags = memoryType.propertyFlags();
 
-            //GPU only Memory
-            if(memoryType.propertyFlags() == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+            // GPU-capable memory may expose additional properties as well.
+            if((flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
                 GPU_MEM = new DeviceLocalMemory();
                 //TODO type inside own class
                 GPU_MEM.type = MemoryType.Type.DEVICE_LOCAL;
             }
 
-            if(memoryType.propertyFlags() == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT)) {
+            int hostFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                    | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                    | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            if((flags & hostFlags) == hostFlags) {
                 HOST_MEM = new HostLocalCachedMemory();
             }
         }
@@ -44,7 +48,8 @@ public class MemoryTypes {
             VkMemoryType memoryType = Device.memoryProperties.memoryTypes(i);
 
             //gpu-cpu shared memory
-            if((memoryType.propertyFlags() & (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) != 0) {
+            int sharedFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            if((memoryType.propertyFlags() & sharedFlags) == sharedFlags) {
                 GPU_MEM = new HostDeviceSharedMemory();
                 return;
             }
@@ -60,7 +65,7 @@ public class MemoryTypes {
         void createBuffer(Buffer buffer, int size) {
             MemoryManager.getInstance().createBuffer(buffer, size,
                     VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | buffer.usage,
-                    VK_MEMORY_HEAP_DEVICE_LOCAL_BIT);
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         }
 
         @Override
