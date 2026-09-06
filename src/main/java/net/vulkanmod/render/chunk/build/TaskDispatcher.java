@@ -227,7 +227,7 @@ public class TaskDispatcher {
             return 0;
 
         int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
-        int outstandingTasks = this.activeTasks.get() + queuedTasks;
+        int outstandingTasks = this.activeTasks.get() + queuedTasks + this.toUpload.size();
         return Math.max(0, workerCount * 2 - outstandingTasks);
     }
 
