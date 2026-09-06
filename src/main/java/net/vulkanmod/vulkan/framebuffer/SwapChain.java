@@ -338,7 +338,7 @@ public class SwapChain extends Framebuffer {
 
         VkSurfaceFormatKHR format = list.get(0);
 
-        for (VkSurfaceFormatKHR availableFormat : availableFormats) {
+        for (VkSurfaceFormatKHR availableFormat : list) {
             if (availableFormat.format() == VK_FORMAT_R8G8B8A8_UNORM && availableFormat.colorSpace() == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 return availableFormat;
 
