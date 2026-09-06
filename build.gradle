@@ -55,6 +55,10 @@ configurations {
     implementation.extendsFrom shade
 }
 
+// Capture this outside Jar task closures so Groovy does not resolve `shade`
+// against ForgeGradle's jarJar configuration/task delegate.
+def shadeConfiguration = configurations.shade
+
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
 
@@ -129,20 +133,150 @@ tasks.named('jar', Jar).configure {
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
-        configurations.shade.collect { it.isDirectory() ? it : zipTree(it) }
+        shadeConfiguration.collect { it.isDirectory() ? it : zipTree(it) }
     }
     finalizedBy 'reobfJar'
 }
 
-// jarJar builds the distributable "-all" archive from the project's normal
-// outputs plus nested libraries; it does not automatically inherit custom
-// `from` inputs added to the plain jar task. Preserve VMA, shaderc, and their
-// natives in the Jar-in-Jar artifact while keeping lwjgl-vulkan nested.
+// ForgeGradle 6's jarJar task does not inherit custom `from` inputs added to
+// the plain jar task. Preserve VMA, shaderc, and their native resources in the
+// distributable Jar-in-Jar archive while keeping lwjgl-vulkan nested.
 tasks.named('jarJar').configure {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
-        configurations.shade.collect { it.isDirectory() ? it : zipTree(it) }
+        shadeConfiguration.collect { it.isDirectory() ? it : zipTree(it) }
     }
+}
+
+// A green build must validate the file that is actually distributed, not just
+// that Java compiled. This catches the exact classes of packaging failures that
+// previously only appeared after installing the mod in Prism.
+tasks.register('verifyDistribution') {
+    group = 'verification'
+    description = 'Verifies the Forge runtime JAR, JarJar metadata, native payload, and LWJGL module linkage.'
+    dependsOn 'reobfJarJar'
+
+    doLast {
+        File dist = tasks.named('jarJar').get().archiveFile.get().asFile
+        if (!dist.isFile()) {
+            throw new GradleException("Distributable JarJar artifact was not produced: ${dist}")
+        }
+
+        File nestedVulkan
+        java.util.jar.JarFile outer = new java.util.jar.JarFile(dist)
+        try {
+            Set<String> entries = outer.entries().collect { it.name } as Set<String>
+            List<String> requiredEntries = [
+                    'META-INF/MANIFEST.MF',
+                    'META-INF/mods.toml',
+                    'META-INF/accesstransformer.cfg',
+                    'META-INF/jarjar/metadata.json',
+                    "META-INF/jarjar/lwjgl-vulkan-${project.lwjgl_version}.jar",
+                    'vulkanmod.mixins.json',
+                    'vulkanmod.refmap.json',
+                    'net/vulkanmod/Initializer.class',
+                    'net/vulkanmod/mixin/MixinPlugin.class',
+                    'net/vulkanmod/mixin/WindowMixin.class',
+                    'net/vulkanmod/mixin/render/RenderSystemMixin.class',
+                    'org/lwjgl/util/vma/Vma.class',
+                    'org/lwjgl/util/shaderc/Shaderc.class',
+                    'linux/x64/org/lwjgl/vma/liblwjgl_vma.so',
+                    'linux/x64/org/lwjgl/shaderc/libshaderc.so',
+                    'windows/x64/org/lwjgl/vma/lwjgl_vma.dll',
+                    'windows/x64/org/lwjgl/shaderc/shaderc.dll'
+            ]
+
+            requiredEntries.each { String entry ->
+                if (!entries.contains(entry)) {
+                    throw new GradleException("Distributable is missing required runtime entry: ${entry}")
+                }
+            }
+
+            if (entries.any { it.startsWith('org/lwjgl/vulkan/') }) {
+                throw new GradleException('lwjgl-vulkan classes were flattened into the outer mod JAR; they must remain a nested module')
+            }
+
+            String mixinConfigs = outer.manifest?.mainAttributes?.getValue('MixinConfigs')
+            if (mixinConfigs != 'vulkanmod.mixins.json') {
+                throw new GradleException("Missing/incorrect MixinConfigs manifest attribute: ${mixinConfigs}")
+            }
+
+            String modsToml = outer.getInputStream(outer.getJarEntry('META-INF/mods.toml')).getText('UTF-8')
+            if (!modsToml.contains('modId="vulkanmod"') || !modsToml.contains("version=\"${project.mod_version}\"")) {
+                throw new GradleException('mods.toml was not expanded with the expected VulkanMod id/version')
+            }
+            if (modsToml.contains('${')) {
+                throw new GradleException('mods.toml still contains unexpanded Gradle placeholders')
+            }
+
+            String jarJarMetadata = outer.getInputStream(outer.getJarEntry('META-INF/jarjar/metadata.json')).getText('UTF-8')
+            if (!jarJarMetadata.contains('"artifact": "lwjgl-vulkan"') ||
+                    !jarJarMetadata.contains("\"artifactVersion\": \"${project.lwjgl_version}\"")) {
+                throw new GradleException('JarJar metadata does not describe the pinned lwjgl-vulkan runtime dependency')
+            }
+
+            def nestedEntry = outer.getJarEntry("META-INF/jarjar/lwjgl-vulkan-${project.lwjgl_version}.jar")
+            nestedVulkan = new File(temporaryDir, "lwjgl-vulkan-${project.lwjgl_version}.jar")
+            nestedVulkan.bytes = outer.getInputStream(nestedEntry).bytes
+        } finally {
+            outer.close()
+        }
+
+        java.util.jar.JarFile nested = new java.util.jar.JarFile(nestedVulkan)
+        try {
+            if (nested.getJarEntry('org/lwjgl/vulkan/VkInstance.class') == null) {
+                throw new GradleException('Nested lwjgl-vulkan JAR does not contain VkInstance')
+            }
+            if (nested.getJarEntry('META-INF/versions/9/module-info.class') == null) {
+                throw new GradleException('Nested lwjgl-vulkan JAR is missing its Java 9 module descriptor')
+            }
+        } finally {
+            nested.close()
+        }
+
+        def vulkanModule = java.lang.module.ModuleFinder.of(nestedVulkan.toPath()).find('org.lwjgl.vulkan')
+        if (!vulkanModule.isPresent()) {
+            throw new GradleException('Nested lwjgl-vulkan JAR is not discoverable as module org.lwjgl.vulkan')
+        }
+
+        // Recreate the critical JPMS link that previously crashed at runtime:
+        // org.lwjgl.glfw.GLFWVulkan must be able to resolve VkInstance from the
+        // standalone org.lwjgl.vulkan module.
+        Set<File> runtimeFiles = configurations.runtimeClasspath.files
+        File lwjglCore = runtimeFiles.find { it.name == "lwjgl-${project.lwjgl_version}.jar" }
+        File lwjglGlfw = runtimeFiles.find { it.name == "lwjgl-glfw-${project.lwjgl_version}.jar" }
+        if (lwjglCore == null || lwjglGlfw == null) {
+            throw new GradleException('Could not locate Minecraft LWJGL core/GLFW jars for module linkage verification')
+        }
+
+        def finder = java.lang.module.ModuleFinder.of(lwjglCore.toPath(), lwjglGlfw.toPath(), nestedVulkan.toPath())
+        Set<String> roots = ['org.lwjgl', 'org.lwjgl.glfw', 'org.lwjgl.vulkan'] as Set<String>
+        def configuration = java.lang.ModuleLayer.boot().configuration().resolve(
+                finder,
+                java.lang.module.ModuleFinder.of(),
+                roots
+        )
+        def layer = java.lang.ModuleLayer.boot().defineModulesWithOneLoader(configuration, ClassLoader.getSystemClassLoader())
+        Class<?> glfwVulkan = Class.forName('org.lwjgl.glfw.GLFWVulkan', false, layer.findLoader('org.lwjgl.glfw'))
+        Class<?> vkInstance = Class.forName('org.lwjgl.vulkan.VkInstance', false, layer.findLoader('org.lwjgl.vulkan'))
+
+        // Force JVM resolution of method signature types without calling GLFW or
+        // touching a native Vulkan driver.
+        glfwVulkan.declaredMethods.each { method ->
+            method.parameterTypes
+            method.returnType
+        }
+        if (!glfwVulkan.module.canRead(vkInstance.module)) {
+            throw new GradleException('org.lwjgl.glfw cannot read org.lwjgl.vulkan in the verified module layer')
+        }
+
+        logger.lifecycle("Verified distributable: ${dist.name}")
+        logger.lifecycle('Verified nested LWJGL module linkage: org.lwjgl.glfw -> org.lwjgl.vulkan')
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn 'verifyDistribution'
 }
 
 tasks.withType(JavaCompile).configureEach {
