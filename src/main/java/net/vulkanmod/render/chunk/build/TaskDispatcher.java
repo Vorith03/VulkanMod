@@ -328,13 +328,17 @@ public class TaskDispatcher {
         int lowQueued = this.lowPriorityTasks.size();
         int buildSamples = this.completedBuilds.get();
         int publishSamples = this.publishedBuilds.get();
-        return String.format(Locale.ROOT,
+        String stats = String.format(Locale.ROOT,
                 "iT:%d aT:%d qH:%d qL:%d uQ:%d okR:%d dropR:%d lat(q/b/h):%.1f/%.1f/%.1fms",
                 this.idleThreads, this.activeTasks.get(), highQueued, lowQueued, this.toUpload.size(),
                 this.acceptedResults.get(), this.droppedResults.get(),
                 averageMillis(this.buildQueueNanos.get(), buildSamples),
                 averageMillis(this.buildNanos.get(), buildSamples),
                 averageMillis(this.handoffNanos.get(), publishSamples));
+
+        if(AreaUploadManager.INSTANCE != null)
+            stats += " " + AreaUploadManager.INSTANCE.getStats();
+        return stats;
     }
 
 }
