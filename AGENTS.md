@@ -685,12 +685,12 @@ The project's success criterion is always an actual functioning VulkanMod Forge 
 
 Long-running development conversations must follow:
 
-`docs/CHAT_ROLLOVER_PROTOCOL.md`
+`docs/CHAT_HANDOFF_PROTOCOL.md`
 
 Agents must periodically evaluate whether the current conversation still has enough context quality to continue safely. The normal review point is after a substantial milestone or roughly **2–4 hours of active repository work**, but context quality takes precedence over elapsed time.
 
 When the rollover criteria in that document are met, the agent should explicitly recommend starting a new chat rather than silently continuing with degraded context.
 
-Before recommending the rollover, finish the current atomic fix/build/test cycle when practical, commit coherent work, and leave the repository and handoff information in the state required by `docs/CHAT_ROLLOVER_PROTOCOL.md` and Section 28 above.
+Before recommending the rollover, finish the current atomic fix/build/test cycle when practical, commit coherent work, and leave the repository and handoff information in the state required by `docs/CHAT_HANDOFF_PROTOCOL.md` and Section 28 above.
 
 The user should not be required to reconstruct the project history manually when Git, CI, repository documentation, and the handoff can preserve it.

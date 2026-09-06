@@ -24,24 +24,20 @@ This document records the current state of the Forge port after the first succes
 - Minecraft reached the title/resource-loading path, created an integrated server, entered a single-player world, rendered a playable session, saved, disconnected, and exited with code 0.
 - Therefore the Forge loader/build/Mixin port is no longer failing during basic startup or a minimal world session.
 
-## Important unproven state
+## Current checkpoint — 2026-09-06
 
-### Vulkan renderer activation is not yet proven
+- User confirmed real Vulkan gameplay on AMD Radeon RX 6900 XT (RADV NAVI21), with good performance and successful world load/save/exit. Vulkan activation is now proven; the earlier `radeonsi` investigation is superseded.
+- Highest verified milestone: playable minimal-Forge Vulkan world (milestone 6), with a reported fluid rendering defect still awaiting post-fix visual confirmation. This does not establish full rendering correctness or Create Chronicles compatibility.
+- `019747cc` fixes Forge's `LiquidBlockRenderer.vertex` semantic float order: red, green, blue, **alpha, U, V**. A wrong permutation still has the same JVM descriptor, so Mixin application alone cannot catch it.
+- `bff88648` adds liquid target loading to startup smoke coverage. CI #60 / run `34026156239` passed distribution verification and Vulkan startup with early splash enabled and disabled.
+- `0076a41c` extends the smoke test to invoke the transformed Forge liquid method with distinct alpha/U/V values and check the full emitted vertex, including packed light and cancellation. It checks translucent and opaque alpha. CI #61 / run `34026506701` passed the production build/distribution checks and both Vulkan startup probes, including the new semantic assertions. Runtime artifact: `VulkanMod-Forge-build` from that run.
+- These are development `runClient` probes. They do not replace testing the production JAR on the user's GPU or visually checking water.
 
-The successful runtime session is not sufficient proof that Vulkan owned the final renderer.
+### Next unresolved gate
 
-The user reported that F3 showed `radeonsi`. That is a Mesa OpenGL renderer string and is inconsistent with the intended VulkanMod debug override, which should report VulkanMod's selected physical-device information when that mixin and Vulkan device setup are active.
+Test the latest green runtime JAR in the same minimal Forge 47.3.0 instance, preserving `earlyWindowControl=false`. Check still and flowing water, water sides, underwater view, and lava. Then exercise resource reload (F3+T), window resizing, and world re-entry. Report any remaining defect and provide the instance's `.minecraft/logs/latest.log` (plus screenshot for visual issues).
 
-Until direct runtime evidence shows otherwise, treat the following as separate questions:
-
-1. Did the Vulkan replacement mixins apply to the production Minecraft classes?
-2. Did Forge's window handoff produce the GLFW window semantics VulkanMod expects?
-3. Did `RenderSystem.initRenderer(...)` actually dispatch to VulkanMod's overwrite?
-4. Did `VRenderSystem.initRenderer()` call `Vulkan.initVulkan(window)` with a valid window handle?
-5. Did `Vulkan.initVulkan(...)` create a Vulkan instance, surface, physical/logical device, allocator, swapchain, staging buffers, and renderer?
-6. Is F3 obtaining renderer information through the VulkanMod `GlUtil` mixin or another Forge/vanilla path?
-
-Do not advance the project milestone from "minimal Forge runtime works" to "Vulkan renderer works" until these are answered with logs or another direct probe.
+Do not begin renderer optimization or infer full modpack compatibility from the successful minimal session. If this check passes, continue the existing Phase 3 minimal-rendering matrix, then Phase 4 compatibility triage. The Fabric compile-only annotation bridge remains documented mechanical cleanup.
 
 ## Architecture review
 
@@ -333,7 +329,7 @@ The log should let us prove the exact renderer activation stage without requirin
 
 ## Current priority summary
 
-P0: Prove Vulkan takeover end-to-end.
+P0: Confirm the water fix visually on the RX 6900 XT; Vulkan takeover is proven.
 
 P1: Remove Fabric compile-only bridge and normalize Forge targeting/config debt.
 
