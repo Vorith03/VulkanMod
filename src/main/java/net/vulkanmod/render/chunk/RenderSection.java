@@ -16,7 +16,6 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -158,6 +157,11 @@ public class RenderSection {
         return flag;
     }
 
+    void release() {
+        this.cancelTasks();
+        this.clearGlobalBlockEntities();
+    }
+
     public void setNotDirty() {
         this.dirty = false;
         this.playerChanged = false;
@@ -236,24 +240,32 @@ public class RenderSection {
     }
 
     public void updateGlobalBlockEntities(Collection<BlockEntity> fullSet) {
-        Set<BlockEntity> set = Sets.newHashSet(fullSet);
-        Set<BlockEntity> set1;
-        Set<BlockEntity> sectionSet;
+        Set<BlockEntity> newSet = Sets.newHashSet(fullSet);
+        Set<BlockEntity> oldSet;
+
         synchronized(globalBlockEntitiesMap) {
-            sectionSet = globalBlockEntitiesMap.computeIfAbsent(this,
-                    (section) -> new HashSet<>());
+            oldSet = globalBlockEntitiesMap.get(this);
+            if(oldSet == null) {
+                oldSet = Collections.emptySet();
+            }
+
+            if(oldSet.size() == newSet.size() && oldSet.containsAll(newSet)) {
+                return;
+            }
+
+            if(newSet.isEmpty()) {
+                globalBlockEntitiesMap.remove(this);
+            } else {
+                globalBlockEntitiesMap.put(this, newSet);
+            }
         }
 
-        if(sectionSet.size() != fullSet.size() || !sectionSet.containsAll(fullSet)) {
-            set1 = Sets.newHashSet(sectionSet);
-            set.removeAll(sectionSet);
-            set1.removeAll(fullSet);
+        Set<BlockEntity> removed = Sets.newHashSet(oldSet);
+        removed.removeAll(newSet);
+        Set<BlockEntity> added = Sets.newHashSet(newSet);
+        added.removeAll(oldSet);
 
-            sectionSet.clear();
-            sectionSet.addAll(fullSet);
-
-            Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(set1, set);
-        }
+        Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(removed, added);
     }
 
     private void clearGlobalBlockEntities() {
