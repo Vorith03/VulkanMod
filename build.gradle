@@ -70,12 +70,16 @@ dependencies {
     // production refmap used to remap Mojmap-named mixin targets after reobf.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // Keep the Vulkan binding on the compile/dev runtime classpath. Packaging is
-    // handled independently by Jar-in-Jar below, so this does not flatten its
-    // classes into VulkanMod's outer JAR.
-    implementation("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}") {
-        transitive = false
-    }
+    // ForgeGradle does not load ordinary implementation libraries into a game
+    // development run. minecraftLibrary makes the same LWJGL pieces available to
+    // runClient that the built mod supplies through JarJar/shading in production.
+    minecraftLibrary("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-vma:${project.lwjgl_version}") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-windows") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-vma:${project.lwjgl_version}:natives-linux") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-windows") { transitive = false }
+    minecraftLibrary("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}:natives-linux") { transitive = false }
 
     // GLFWVulkan is part of Minecraft's org.lwjgl.glfw module and directly
     // references org.lwjgl.vulkan types. Flattening lwjgl-vulkan into the mod
