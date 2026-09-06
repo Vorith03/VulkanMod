@@ -56,7 +56,7 @@ public class SectionGrid {
 
     public void releaseAllBuffers() {
         for(RenderSection section : this.chunks) {
-            section.cancelTasks();
+            section.release();
         }
         this.chunkAreaManager.releaseAllBuffers();
     }
@@ -240,7 +240,7 @@ public class SectionGrid {
 //            int x1 = (xAbsChunkIndex << 4);
 //
 //            zIterator.restart();
-//            zAbsChunkIndex = (j >> 4) - (this.chunkGridSizeZ >> 1);
+//            zAbsChunkIndex = (j >> 4) - (this.gridWidth >> 1);
 //
 //            for(int zRelativeIndex; zIterator.hasNext(); zAbsChunkIndex++) {
 //                zRelativeIndex = zIterator.next();
