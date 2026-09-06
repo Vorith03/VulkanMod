@@ -22,6 +22,11 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+// Forge loads production mods and libraries as named Java modules. Keep the
+// LWJGL Vulkan binding as its own nested library module so LWJGL's GLFW module
+// can resolve org.lwjgl.vulkan.VkInstance from the module it expects.
+jarJar.enable()
+
 minecraft {
     mappings channel: 'official', version: project.minecraft_version
     accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
@@ -61,10 +66,18 @@ dependencies {
     // production refmap used to remap Mojmap-named mixin targets after reobf.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // Minecraft already supplies LWJGL core/GLFW. Shade only VulkanMod's extra
-    // modules themselves; their transitive lwjgl-core dependency must not be
-    // duplicated inside the mod JAR.
-    shade("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}") { transitive = false }
+    // GLFWVulkan is part of Minecraft's org.lwjgl.glfw module and directly
+    // references org.lwjgl.vulkan types. Flattening lwjgl-vulkan into the mod
+    // JAR hides those classes behind VulkanMod's module, causing VkInstance to
+    // fail class resolution. Jar-in-Jar preserves lwjgl-vulkan as its own module.
+    jarJar(group: 'org.lwjgl', name: 'lwjgl-vulkan', version: "[${project.lwjgl_version},3.3.2)") {
+        jarJar.pin(it, project.lwjgl_version)
+        transitive = false
+    }
+
+    // VMA and shaderc are only called from VulkanMod code, so they can remain
+    // embedded in the mod JAR for now. Keep their transitive lwjgl-core out;
+    // Minecraft already supplies the matching LWJGL 3.3.1 core module.
     shade("org.lwjgl:lwjgl-vma:${project.lwjgl_version}") { transitive = false }
     shade("org.lwjgl:lwjgl-shaderc:${project.lwjgl_version}") { transitive = false }
 
@@ -103,12 +116,7 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title'    : project.name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : 'Vorith03',
-                'MixinConfigs'            : 'vulkanmod.mixins.json',
-                // Forge/SecureJarHandler loads mods as named Java modules. The
-                // Vulkan classes are shaded into this mod rather than present as
-                // a separate LWJGL module, so GLFW's named module must be allowed
-                // to read the mod module when GLFWVulkan links VkInstance.
-                'Add-Reads'               : 'org.lwjgl.glfw=vulkanmod'
+                'MixinConfigs'            : 'vulkanmod.mixins.json'
         ])
     }
 
