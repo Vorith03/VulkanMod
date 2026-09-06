@@ -2,6 +2,7 @@ package net.vulkanmod.mixin;
 
 import com.mojang.blaze3d.platform.*;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.loading.ImmediateWindowHandler;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.config.Config;
@@ -79,10 +80,67 @@ public abstract class WindowMixin {
                     remap = false
             )
     )
-    private long vulkanHint(IntSupplier width, IntSupplier height, Supplier<String> title, LongSupplier monitor) {
+    private long createVulkanWindow(IntSupplier width, IntSupplier height, Supplier<String> title, LongSupplier monitor) {
         Initializer.initialize();
+
+        // Forge's default early display is an OpenGL window created before any
+        // game mixins can run. Allow Forge to finish its documented handoff so
+        // its render thread and callbacks are stopped, then replace that handle
+        // with the NO_API window Vulkan requires.
+        long forgeWindow = ImmediateWindowHandler.setupMinecraftWindow(width, height, title, monitor);
+        if (forgeWindow == 0L) {
+            // No early Forge window (for example earlyWindowControl=false): this
+            // is equivalent to vanilla's creation point, so just create Vulkan.
+            return createNoApiWindow(width.getAsInt(), height.getAsInt(), title.get(), monitor.getAsLong(), null, null);
+        }
+
+        int[] oldX = new int[1];
+        int[] oldY = new int[1];
+        int[] oldWidth = new int[1];
+        int[] oldHeight = new int[1];
+        GLFW.glfwGetWindowPos(forgeWindow, oldX, oldY);
+        GLFW.glfwGetWindowSize(forgeWindow, oldWidth, oldHeight);
+        boolean maximized = GLFW.glfwGetWindowAttrib(forgeWindow, GLFW_MAXIMIZED) == GLFW_TRUE;
+
+        // Forge stores the early provider's periodic repaint callback here. Once
+        // the OpenGL handle is destroyed that callback must never touch it again.
+        FMLLoader.progressWindowTick = () -> { };
+        GLFW.glfwMakeContextCurrent(0L);
+        GLFW.glfwHideWindow(forgeWindow);
+        GLFW.glfwDestroyWindow(forgeWindow);
+
+        long vulkanWindow = createNoApiWindow(
+                oldWidth[0] > 0 ? oldWidth[0] : width.getAsInt(),
+                oldHeight[0] > 0 ? oldHeight[0] : height.getAsInt(),
+                title.get(),
+                monitor.getAsLong(),
+                oldX,
+                oldY
+        );
+        if (maximized && monitor.getAsLong() == 0L) {
+            GLFW.glfwMaximizeWindow(vulkanWindow);
+        }
+
+        Initializer.LOGGER.info("Replaced Forge early OpenGL window with Vulkan NO_API window");
+        return vulkanWindow;
+    }
+
+    private static long createNoApiWindow(int width, int height, String title, long monitor, int[] x, int[] y) {
+        GLFW.glfwDefaultWindowHints();
         GLFW.glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        return ImmediateWindowHandler.setupMinecraftWindow(width, height, title, monitor);
+        GLFW.glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        GLFW.glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+        long newWindow = GLFW.glfwCreateWindow(width, height, title, monitor, 0L);
+        if (newWindow == 0L) {
+            throw new IllegalStateException("Failed to create Vulkan GLFW_NO_API window");
+        }
+
+        if (monitor == 0L && x != null && y != null) {
+            GLFW.glfwSetWindowPos(newWindow, x[0], y[0]);
+        }
+        GLFW.glfwShowWindow(newWindow);
+        return newWindow;
     }
 
     @Inject(method = "<init>", at = @At(value = "RETURN"))
