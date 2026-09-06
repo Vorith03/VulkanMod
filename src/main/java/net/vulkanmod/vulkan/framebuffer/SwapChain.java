@@ -226,7 +226,7 @@ public class SwapChain extends Framebuffer {
             this.renderPass.beginDynamicRendering(commandBuffer, stack);
         }
         else {
-            this.renderPass.beginRenderPass(commandBuffer, this.framebuffers[Renderer.getCurrentFrame()], stack);
+            this.renderPass.beginRenderPass(commandBuffer, this.framebuffers[Renderer.getCurrentImage()], stack);
         }
 
         Renderer.getInstance().setBoundRenderPass(renderPass);
@@ -328,7 +328,7 @@ public class SwapChain extends Framebuffer {
     }
 
     public VulkanImage getColorAttachment() {
-        return this.swapChainImages.get(Renderer.getCurrentFrame());
+        return this.swapChainImages.get(Renderer.getCurrentImage());
     }
 
     public long getImageView(int i) { return this.swapChainImages.get(i).getImageView(); }
@@ -338,7 +338,7 @@ public class SwapChain extends Framebuffer {
 
         VkSurfaceFormatKHR format = list.get(0);
 
-        for (VkSurfaceFormatKHR availableFormat : list) {
+        for (VkSurfaceFormatKHR availableFormat : availableFormats) {
             if (availableFormat.format() == VK_FORMAT_R8G8B8A8_UNORM && availableFormat.colorSpace() == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 return availableFormat;
 
