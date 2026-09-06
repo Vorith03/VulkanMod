@@ -74,7 +74,7 @@ public class SwapChain extends Framebuffer {
     }
 
     public void createSwapChain() {
-        int requestedFrames = Initializer.CONFIG.frameQueueSize;
+        int configuredFrames = Initializer.CONFIG.frameQueueSize;
 
         try(MemoryStack stack = stackPush()) {
             VkDevice device = Vulkan.getDevice();
@@ -96,13 +96,14 @@ public class SwapChain extends Framebuffer {
                 return;
             }
 
-            //Workaround for Mesa
-            IntBuffer imageCount = stack.ints(requestedFrames);
-//            IntBuffer imageCount = stack.ints(Math.max(surfaceProperties.capabilities.minImageCount(), preferredImageCount));
-
-            if(surfaceProperties.capabilities.maxImageCount() > 0 && imageCount.get(0) > surfaceProperties.capabilities.maxImageCount()) {
-                imageCount.put(0, surfaceProperties.capabilities.maxImageCount());
+            int requestedFrames = Math.max(configuredFrames, surfaceProperties.capabilities.minImageCount());
+            if(surfaceProperties.capabilities.maxImageCount() > 0) {
+                requestedFrames = Math.min(requestedFrames, surfaceProperties.capabilities.maxImageCount());
             }
+
+            // Workaround for Mesa: request the configured frame queue where the
+            // surface permits it, but never violate the surface minimum.
+            IntBuffer imageCount = stack.ints(requestedFrames);
 
             VkSwapchainCreateInfoKHR createInfo = VkSwapchainCreateInfoKHR.callocStack(stack);
 
@@ -297,16 +298,22 @@ public class SwapChain extends Framebuffer {
     public void cleanUp() {
         VkDevice device = Vulkan.getDevice();
 
-//        framebuffers.forEach(framebuffer -> vkDestroyFramebuffer(device, framebuffer, null));
-
-        if(!DYNAMIC_RENDERING) {
+        if(!DYNAMIC_RENDERING && framebuffers != null) {
             Arrays.stream(framebuffers).forEach(id -> vkDestroyFramebuffer(device, id, null));
+            framebuffers = null;
         }
 
-        vkDestroySwapchainKHR(device, this.swapChain, null);
-        swapChainImages.forEach(image -> vkDestroyImageView(device, image.getImageView(), null));
+        // A minimized recreation can already destroy the swapchain and its views.
+        if(this.swapChain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(device, this.swapChain, null);
+            this.swapChain = VK_NULL_HANDLE;
+            swapChainImages.forEach(image -> vkDestroyImageView(device, image.getImageView(), null));
+        }
 
-        this.depthAttachment.free();
+        if(this.depthAttachment != null) {
+            this.depthAttachment.free();
+            this.depthAttachment = null;
+        }
     }
 
     private void createDepthResources() {
@@ -341,6 +348,7 @@ public class SwapChain extends Framebuffer {
         List<VkSurfaceFormatKHR> list = availableFormats.stream().toList();
 
         VkSurfaceFormatKHR format = list.get(0);
+        this.isBGRAformat = false;
 
         for (VkSurfaceFormatKHR availableFormat : list) {
             if (availableFormat.format() == VK_FORMAT_R8G8B8A8_UNORM && availableFormat.colorSpace() == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -351,8 +359,7 @@ public class SwapChain extends Framebuffer {
             }
         }
 
-        if(format.format() == VK_FORMAT_B8G8R8A8_UNORM)
-            isBGRAformat = true;
+        this.isBGRAformat = format.format() == VK_FORMAT_B8G8R8A8_UNORM;
         return format;
     }
 
