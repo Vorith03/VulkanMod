@@ -15,6 +15,7 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -255,8 +256,23 @@ public class RenderSection {
         }
     }
 
+    private void clearGlobalBlockEntities() {
+        Set<BlockEntity> removed;
+        synchronized(globalBlockEntitiesMap) {
+            removed = globalBlockEntitiesMap.remove(this);
+        }
+
+        if(removed != null && !removed.isEmpty()) {
+            Minecraft minecraft = Minecraft.getInstance();
+            if(minecraft.levelRenderer != null) {
+                minecraft.levelRenderer.updateGlobalBlockEntities(removed, Collections.emptySet());
+            }
+        }
+    }
+
     private void reset() {
         this.cancelTasks();
+        this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
         this.dirty = true;
         this.visibility = 0;
