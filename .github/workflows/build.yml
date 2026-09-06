@@ -40,6 +40,7 @@ jobs:
           export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
           timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke.log
           grep -F "Vulkan smoke test passed" vulkan-smoke.log
+          grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke.log
       - name: Smoke-test Forge client Vulkan startup without early splash
         shell: bash
         run: |
@@ -61,6 +62,7 @@ jobs:
           grep -F "ImmediateWindowProvider not loading because splash screen is disabled" vulkan-smoke-no-splash.log
           grep -F "Created Vulkan NO_API window without Forge early splash context" vulkan-smoke-no-splash.log
           grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
+          grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4

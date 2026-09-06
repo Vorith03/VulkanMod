@@ -96,7 +96,8 @@ public class MinecraftMixin {
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
             try {
                 Class.forName("net.minecraft.client.model.geom.ModelPart$Cube");
-                Class.forName("net.minecraft.client.renderer.block.LiquidBlockRenderer");
+                net.vulkanmod.render.LiquidVertexSmokeTest.verify(
+                        Class.forName("net.minecraft.client.renderer.block.LiquidBlockRenderer"));
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }
