@@ -8,7 +8,6 @@ import net.vulkanmod.vulkan.memory.IndirectBuffer;
 import net.vulkanmod.vulkan.memory.MemoryTypes;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
@@ -121,12 +120,6 @@ final class RegionDrawBatch {
     static final class RegionCommands extends IndirectBuffer {
         RegionCommands() {
             super(MAX_SECTIONS * STRIDE, MemoryTypes.HOST_MEM);
-        }
-
-        @Override
-        public void freeBuffer() {
-            super.freeBuffer(); // GPU allocation is retired through the frame fence.
-            MemoryUtil.memFree(this.data); // Only the CPU-side pointer wrapper.
         }
     }
 }
