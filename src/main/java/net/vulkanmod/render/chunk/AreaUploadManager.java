@@ -10,8 +10,6 @@ import org.apache.commons.lang3.Validate;
 
 import java.nio.ByteBuffer;
 
-import static org.lwjgl.vulkan.VK10.vkWaitForFences;
-
 public class AreaUploadManager {
     public static AreaUploadManager INSTANCE;
 
@@ -42,10 +40,11 @@ public class AreaUploadManager {
     public synchronized void submitUploads() {
         Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
 
-        if(this.recordedUploads[this.currentFrame].isEmpty())
+        CommandPool.CommandBuffer commandBuffer = this.commandBuffers[this.currentFrame];
+        if(commandBuffer == null || commandBuffer.isSubmitted())
             return;
 
-        Device.getTransferQueue().submitCommands(this.commandBuffers[currentFrame]);
+        Device.getTransferQueue().submitCommands(commandBuffer);
     }
 
     public void uploadAsync(AreaBuffer.Segment uploadSegment, long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
@@ -105,7 +104,13 @@ public class AreaUploadManager {
         CommandPool.CommandBuffer commandBuffer = commandBuffers[frame];
         if(commandBuffer == null)
             return;
-        Synchronization.waitFence(commandBuffers[frame].getFence());
+
+        // A copy-only command buffer may not have passed through submitUploads().
+        // Never mistake its initially-signaled fence for completed recorded work.
+        if(!commandBuffer.isSubmitted()) {
+            Device.getTransferQueue().submitCommands(commandBuffer);
+        }
+        Synchronization.waitFence(commandBuffer.getFence());
 
         for(AreaBuffer.Segment uploadSegment : this.recordedUploads[frame]) {
             uploadSegment.setReady();
