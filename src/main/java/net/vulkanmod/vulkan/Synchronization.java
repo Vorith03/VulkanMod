@@ -34,6 +34,12 @@ public class Synchronization {
     }
 
     public synchronized void addCommandBuffer(CommandPool.CommandBuffer commandBuffer, boolean useSemaphore) {
+        // Shared texture-upload command buffers are still being recorded and have
+        // not been submitted yet. Registering their fence/semaphore at this point
+        // can make the renderer wait on synchronization that cannot be signaled.
+        if(Device.getGraphicsQueue().isRecording(commandBuffer))
+            return;
+
         // Some legacy callers register a command buffer after queue submission while newer
         // queue helpers already registered it. Never track the same submission twice.
         if(this.fenceCommandBuffers.contains(commandBuffer) || this.semaphoreCommandBuffers.contains(commandBuffer))
