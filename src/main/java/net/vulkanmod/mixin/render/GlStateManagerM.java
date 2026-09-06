@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.gl.GlFramebuffer;
 import net.vulkanmod.gl.GlTexture;
@@ -12,6 +13,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
 import java.nio.IntBuffer;
+import java.util.function.Consumer;
 
 @Mixin(GlStateManager.class)
 public class GlStateManagerM {
@@ -115,6 +117,29 @@ public class GlStateManagerM {
     @Overwrite(remap = false)
     public static void _texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels) {
 
+    }
+
+    /**
+     * Vanilla's Unihex glyph path uploads an IntBuffer directly through
+     * GlStateManager instead of NativeImage. Route that upload to the currently
+     * bound Vulkan texture and preserve vanilla's buffer-release callback.
+     *
+     * @author
+     */
+    @Overwrite(remap = false)
+    public static void upload(int level, int xOffset, int yOffset, int width, int height,
+                              NativeImage.Format format, IntBuffer pixels, Consumer<IntBuffer> cleanup) {
+        if (!RenderSystem.isOnRenderThreadOrInit()) {
+            RenderSystem.recordRenderCall(() -> upload(level, xOffset, yOffset, width, height, format, pixels, cleanup));
+            return;
+        }
+
+        try {
+            GlTexture.texSubImage2D(3553, level, xOffset, yOffset, width, height,
+                    format.glFormat(), 5121, MemoryUtil.memByteBuffer(pixels));
+        } finally {
+            cleanup.accept(pixels);
+        }
     }
 
     /**
