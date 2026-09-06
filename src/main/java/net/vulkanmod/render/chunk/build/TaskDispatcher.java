@@ -28,10 +28,9 @@ public class TaskDispatcher {
     private final Queue<Runnable> toUpload = Queues.newLinkedBlockingDeque();
     public final ThreadBuilderPack fixedBuffers;
 
-    //TODO volatile?
-    private boolean stopThreads;
+    private volatile boolean stopThreads;
     private Thread[] threads;
-    private int idleThreads;
+    private volatile int idleThreads;
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
 
