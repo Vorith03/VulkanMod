@@ -6,8 +6,6 @@ import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
-import java.util.ArrayDeque;
-
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -31,8 +29,8 @@ public class TransferQueue extends Queue {
 
             vkCmdCopyBuffer(commandBuffer.getHandle(), srcBuffer, dstBuffer, copyRegion);
 
-            this.submitCommands(commandBuffer);
-            Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+            this.submitCommands(commandBuffer, true);
+            Synchronization.INSTANCE.addCommandBuffer(commandBuffer, true);
 
             return commandBuffer.fence;
         }
