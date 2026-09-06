@@ -19,6 +19,7 @@ import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskDispatcher {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -31,6 +32,7 @@ public class TaskDispatcher {
     private volatile boolean stopThreads;
     private Thread[] threads;
     private volatile int idleThreads;
+    private final AtomicInteger activeTasks = new AtomicInteger();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
 
@@ -87,7 +89,12 @@ public class TaskDispatcher {
             if(task == null)
                 continue;
 
-            task.doTask(builderPack);
+            this.activeTasks.incrementAndGet();
+            try {
+                task.doTask(builderPack);
+            } finally {
+                this.activeTasks.decrementAndGet();
+            }
         }
     }
 
@@ -220,6 +227,16 @@ public class TaskDispatcher {
         return this.idleThreads;
     }
 
+    public int getBuildSchedulingCapacity() {
+        int workerCount = this.threads == null ? 0 : this.threads.length;
+        if(workerCount == 0)
+            return 0;
+
+        int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
+        int outstandingTasks = this.activeTasks.get() + queuedTasks;
+        return Math.max(0, workerCount * 2 - outstandingTasks);
+    }
+
     public void clearBatchQueue() {
         while(!this.highPriorityTasks.isEmpty()) {
             ChunkTask chunkTask = this.highPriorityTasks.poll();
@@ -239,9 +256,8 @@ public class TaskDispatcher {
     }
 
     public String getStats() {
-//        this.toBatchCount = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
-//        return String.format("tB: %03d, toUp: %02d, FB: %02d", this.toBatchCount, this.toUpload.size(), this.freeBufferCount);
-        return String.format("iT: %d", this.idleThreads);
+        int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
+        return String.format("iT: %d aT: %d qT: %d", this.idleThreads, this.activeTasks.get(), queuedTasks);
     }
 
 }
