@@ -103,7 +103,12 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title'    : project.name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : 'Vorith03',
-                'MixinConfigs'            : 'vulkanmod.mixins.json'
+                'MixinConfigs'            : 'vulkanmod.mixins.json',
+                // Forge/SecureJarHandler loads mods as named Java modules. The
+                // Vulkan classes are shaded into this mod rather than present as
+                // a separate LWJGL module, so GLFW's named module must be allowed
+                // to read the mod module when GLFWVulkan links VkInstance.
+                'Add-Reads'               : 'org.lwjgl.glfw=vulkanmod'
         ])
     }
 
