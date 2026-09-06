@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.memory;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.queue.Queue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
 import org.lwjgl.PointerBuffer;
@@ -103,8 +104,16 @@ public class MemoryManager {
             bufferInfo.sType(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
             bufferInfo.size(size);
             bufferInfo.usage(usage);
-            //bufferInfo.sharingMode(VK_SHARING_MODE_EXCLUSIVE);
-//
+
+            Queue.QueueFamilyIndices queueFamilies = Queue.getQueueFamilies();
+            boolean transferred = (usage & (VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)) != 0;
+            if(transferred && !queueFamilies.graphicsFamily.equals(queueFamilies.transferFamily)) {
+                bufferInfo.sharingMode(VK_SHARING_MODE_CONCURRENT);
+                bufferInfo.pQueueFamilyIndices(stack.ints(queueFamilies.graphicsFamily, queueFamilies.transferFamily));
+            } else {
+                bufferInfo.sharingMode(VK_SHARING_MODE_EXCLUSIVE);
+            }
+
             VmaAllocationCreateInfo allocationInfo  = VmaAllocationCreateInfo.callocStack(stack);
             //allocationInfo.usage(VMA_MEMORY_USAGE_CPU_ONLY);
             allocationInfo.requiredFlags(properties);
