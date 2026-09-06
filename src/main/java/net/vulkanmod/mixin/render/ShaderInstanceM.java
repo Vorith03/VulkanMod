@@ -77,7 +77,10 @@ public class ShaderInstanceM implements ShaderMixed {
         cir.cancel();
     }
 
-    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;glBindAttribLocation(IILjava/lang/CharSequence;)V"))
+    // Forge may transform ShaderInstance's constructor before application. If the
+    // vanilla OpenGL attribute-binding call remains, suppress it; if Forge has
+    // already removed/replaced it there is nothing VulkanMod needs to do here.
+    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;glBindAttribLocation(IILjava/lang/CharSequence;)V"), require = 0)
     private void bindAttr(int program, int index, CharSequence name) {}
 
     /**
@@ -201,4 +204,3 @@ public class ShaderInstanceM implements ShaderMixed {
         }
     }
 }
-
