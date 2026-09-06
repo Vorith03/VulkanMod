@@ -26,6 +26,7 @@ import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
+import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -63,6 +64,19 @@ public class MinecraftMixin {
 
     @Inject(method = "<init>", at = @At(value = "RETURN"))
     private void forceGraphicsMode(GameConfig gameConfig, CallbackInfo ci) {
+        // Forge may keep directly ticking its hidden early OpenGL display while
+        // Minecraft is being constructed. At constructor return that bootstrap
+        // work is complete and the Vulkan-safe vanilla loading overlay has taken
+        // over, so the retained context can finally be destroyed.
+        long forgeEarlyWindow = Initializer.takeForgeEarlyWindow();
+        if (forgeEarlyWindow != 0L) {
+            if (GLFW.glfwGetCurrentContext() == forgeEarlyWindow) {
+                GLFW.glfwMakeContextCurrent(0L);
+            }
+            GLFW.glfwDestroyWindow(forgeEarlyWindow);
+            Initializer.LOGGER.info("Retired hidden Forge early OpenGL window");
+        }
+
         var graphicsModeOption = this.options.graphicsMode();
 
         if(graphicsModeOption.get() == GraphicsStatus.FABULOUS) {
