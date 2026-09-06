@@ -2,7 +2,6 @@ package net.vulkanmod.vulkan.memory;
 
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
-import net.vulkanmod.vulkan.queue.TransferQueue;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.vulkan.VkMemoryType;
@@ -47,8 +46,11 @@ public class MemoryTypes {
         for(int i = 0; i < Device.memoryProperties.memoryTypeCount(); ++i) {
             VkMemoryType memoryType = Device.memoryProperties.memoryTypes(i);
 
-            //gpu-cpu shared memory
-            int sharedFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            // Mappable memory writes in this renderer are not explicitly flushed, so a
+            // shared GPU/CPU fallback is only safe when the memory is host coherent.
+            int sharedFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                    | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             if((memoryType.propertyFlags() & sharedFlags) == sharedFlags) {
                 GPU_MEM = new HostDeviceSharedMemory();
                 return;
@@ -162,7 +164,9 @@ public class MemoryTypes {
         void createBuffer(Buffer buffer, int size) {
             MemoryManager.getInstance().createBuffer(buffer, size,
                     buffer.usage,
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                            | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         }
     }
 }
