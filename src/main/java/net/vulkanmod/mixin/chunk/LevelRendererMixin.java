@@ -174,11 +174,13 @@ public abstract class LevelRendererMixin {
         profiler.pop();
     }
 
-    // Forge 47.3.x adds a Frustum argument to ParticleEngine#render and calls
-    // that overload from LevelRenderer. Target the patched invocation directly.
+    // Forge has changed this particle callsite across 47.x patches. These hooks
+    // are profiling-only; if the exact invocation drifts, rendering must still
+    // launch. Keeping both optional preserves profiler stack balance because
+    // either both match the same callsite or neither contributes anything.
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;)V",
-            shift = At.Shift.BEFORE))
+            shift = At.Shift.BEFORE), require = 0)
     private void pushProfiler3(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("particles");
@@ -186,7 +188,7 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;)V",
-            shift = At.Shift.AFTER))
+            shift = At.Shift.AFTER), require = 0)
     private void popProfiler3(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.pop();
