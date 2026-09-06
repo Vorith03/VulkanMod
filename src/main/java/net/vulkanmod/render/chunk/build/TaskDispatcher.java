@@ -196,7 +196,8 @@ public class TaskDispatcher {
     }
 
     public void scheduleUploadChunkLayer(ChunkTask task, RenderSection section,
-                                         TerrainRenderType renderType, UploadBuffer uploadBuffer) {
+                                         TerrainRenderType renderType, UploadBuffer uploadBuffer,
+                                         Runnable publishResult) {
         this.toUpload.add(() -> {
             if(task.cancelled.get()) {
                 uploadBuffer.release();
@@ -204,6 +205,7 @@ public class TaskDispatcher {
             }
 
             this.doUploadChunkLayer(section, renderType, uploadBuffer);
+            publishResult.run();
         });
     }
 
