@@ -45,11 +45,10 @@ public class AutoIndexBuffer {
 
     public void checkCapacity(int vertexCount) {
         if(vertexCount > this.vertexCount) {
-            int newVertexCount = this.vertexCount * 2;
+            int newVertexCount = Math.max(this.vertexCount * 2, vertexCount);
             System.out.println("Reallocating AutoIndexBuffer from " + this.vertexCount + " to " + newVertexCount);
 
-            //TODO: free old
-            //Can't know when VBO will stop using it
+            // Can't know when the previous VBO will stop using it, so retire it through the frame-safe path.
             indexBuffer.freeBuffer();
             createIndexBuffer(newVertexCount);
         }
@@ -107,18 +106,11 @@ public class AutoIndexBuffer {
     public static ByteBuffer genTriangleStripIdxs(int vertexCount) {
         int indexCount = (vertexCount - 2) * 3;
 
-        //TODO: free buffer
         ByteBuffer buffer = MemoryUtil.memAlloc(indexCount * Short.BYTES);
         ShortBuffer idxs = buffer.asShortBuffer();
 
-        //short[] idxs = byteBuffer.asShortBuffer().array();
-
         int j = 0;
         for (int i = 0; i < vertexCount - 2; ++i) {
-//            idxs[j] = 0;
-//            idxs[j + 1] = (short) (i + 1);
-//            idxs[j + 2] = (short) (i + 2);
-
             idxs.put(j, (short) i);
             idxs.put(j + 1, (short) (i + 1));
             idxs.put(j + 2, (short) (i + 2));
