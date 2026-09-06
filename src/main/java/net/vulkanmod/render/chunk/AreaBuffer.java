@@ -118,7 +118,9 @@ public class AreaBuffer {
         int newSize = (int) requestedSize;
         Buffer buffer = this.allocateBuffer(newSize);
 
-        AreaUploadManager.INSTANCE.submitUploads();
+        // Growth must see every transfer recorded so far before copying the old
+        // allocation. waitAllUploads() submits still-recording batches fence-only,
+        // then waits for completion; do not route this path through frame semaphores.
         AreaUploadManager.INSTANCE.waitAllUploads();
 
         //Sync upload
