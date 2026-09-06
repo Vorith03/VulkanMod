@@ -137,8 +137,9 @@ public class AreaBuffer {
         if(segment == null)
             return;
 
+        int freedSize = segment.size;
         addFreeSegment(segment);
-        this.used -= segment.size;
+        this.used -= freedSize;
     }
 
     private void addFreeSegment(Segment segment) {
