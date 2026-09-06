@@ -105,18 +105,16 @@ public class AreaBuffer {
 
     public Segment reallocate(int uploadSize) {
         int oldSize = this.size;
-        int increment = this.size >> 1;
+        int offset = Util.align(oldSize, elementSize);
 
-        if(increment <= uploadSize) {
-            increment *= 2;
+        long minimumSize = (long) offset + uploadSize;
+        long grownSize = (long) oldSize + Math.max(oldSize >> 1, elementSize);
+        long requestedSize = Math.max(minimumSize, grownSize);
+        if(requestedSize > Integer.MAX_VALUE) {
+            throw new IllegalStateException("AreaBuffer exceeds maximum supported size");
         }
-        //TODO check size
-        if(increment <= uploadSize)
-            throw new RuntimeException();
 
-        int newSize = oldSize + increment;
-
-
+        int newSize = (int) requestedSize;
         Buffer buffer = this.allocateBuffer(newSize);
 
         AreaUploadManager.INSTANCE.submitUploads();
@@ -129,10 +127,7 @@ public class AreaBuffer {
 
         this.size = newSize;
 
-        int offset = Util.align(oldSize, elementSize);
-
-        Segment segment = new Segment(offset, increment);
-        return segment;
+        return new Segment(offset, newSize - offset);
     }
 
     public synchronized void setSegmentFree(Segment uploadSegment) {
