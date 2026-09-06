@@ -63,7 +63,7 @@ public class CommandPool {
                 fenceInfo.flags(VK_FENCE_CREATE_SIGNALED_BIT);
 
                 for(int i = 0; i < size; ++i) {
-                    LongBuffer pFence = stack.mallocLong(size);
+                    LongBuffer pFence = stack.mallocLong(1);
                     vkCreateFence(Vulkan.getDevice(), fenceInfo, null, pFence);
 
                     CommandBuffer commandBuffer = new CommandBuffer(new VkCommandBuffer(pCommandBuffer.get(i), Vulkan.getDevice()), pFence.get(0));
