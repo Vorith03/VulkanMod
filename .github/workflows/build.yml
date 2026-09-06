@@ -66,6 +66,27 @@ jobs:
           grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
+      - name: Smoke-test Flywheel 0.6 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p run/mods
+          curl --fail --location --retry 3 \
+            https://maven.tterrag.com/com/jozufozu/flywheel/flywheel-forge-1.20.1/0.6.11-13/flywheel-forge-1.20.1-0.6.11-13.jar \
+            --output run/mods/flywheel-forge-1.20.1-0.6.11-13.jar
+
+          LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          if [[ -z "$LVP_ICD" ]]; then
+            echo "Lavapipe Vulkan ICD was not installed" >&2
+            exit 1
+          fi
+          echo "Using software Vulkan ICD: $LVP_ICD"
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
+          timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke-flywheel.log
+          grep -F "Vulkan smoke test passed" vulkan-smoke-flywheel.log
+          grep -F "flywheel" vulkan-smoke-flywheel.log
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,6 +95,7 @@ jobs:
           path: |
             vulkan-smoke.log
             vulkan-smoke-no-splash.log
+            vulkan-smoke-flywheel.log
           if-no-files-found: ignore
       - name: Upload artifacts
         if: always()
