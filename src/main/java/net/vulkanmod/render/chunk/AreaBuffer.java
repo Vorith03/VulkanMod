@@ -7,7 +7,8 @@ import net.vulkanmod.vulkan.memory.*;
 import net.vulkanmod.vulkan.queue.TransferQueue;
 
 import java.nio.ByteBuffer;
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
@@ -15,7 +16,7 @@ public class AreaBuffer {
     private final MemoryType memoryType;
     private final int usage;
 
-    private final LinkedList<Segment> freeSegments = new LinkedList<>();
+    private final List<Segment> freeSegments = new ArrayList<>();
     private final Reference2ReferenceOpenHashMap<Segment, Segment> usedSegments = new Reference2ReferenceOpenHashMap<>();
 
     private final int elementSize;
@@ -63,7 +64,7 @@ public class AreaBuffer {
         Segment segment = findSegment(size);
 
         if(segment.size - size > 0) {
-            freeSegments.add(new Segment(segment.offset + size, segment.size - size));
+            addFreeSegment(new Segment(segment.offset + size, segment.size - size));
         }
 
         usedSegments.put(uploadSegment, new Segment(segment.offset, size));
@@ -136,8 +137,37 @@ public class AreaBuffer {
         if(segment == null)
             return;
 
-        this.freeSegments.add(segment);
+        addFreeSegment(segment);
         this.used -= segment.size;
+    }
+
+    private void addFreeSegment(Segment segment) {
+        int insertIndex = 0;
+        while(insertIndex < freeSegments.size() && freeSegments.get(insertIndex).offset < segment.offset) {
+            insertIndex++;
+        }
+
+        freeSegments.add(insertIndex, segment);
+
+        if(insertIndex > 0) {
+            Segment previous = freeSegments.get(insertIndex - 1);
+            if((long) previous.offset + previous.size >= segment.offset) {
+                long mergedEnd = Math.max((long) previous.offset + previous.size, (long) segment.offset + segment.size);
+                previous.size = (int) (mergedEnd - previous.offset);
+                freeSegments.remove(insertIndex);
+                segment = previous;
+                insertIndex--;
+            }
+        }
+
+        if(insertIndex + 1 < freeSegments.size()) {
+            Segment next = freeSegments.get(insertIndex + 1);
+            if((long) segment.offset + segment.size >= next.offset) {
+                long mergedEnd = Math.max((long) segment.offset + segment.size, (long) next.offset + next.size);
+                segment.size = (int) (mergedEnd - segment.offset);
+                freeSegments.remove(insertIndex + 1);
+            }
+        }
     }
 
     public long getId() {
