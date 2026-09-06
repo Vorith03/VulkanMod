@@ -174,17 +174,19 @@ public abstract class LevelRendererMixin {
         profiler.pop();
     }
 
+    // Forge 47.3.x adds a Frustum argument to ParticleEngine#render and calls
+    // that overload from LevelRenderer. Target the patched invocation directly.
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V"
-            , shift = At.Shift.BEFORE))
+            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;)V",
+            shift = At.Shift.BEFORE))
     private void pushProfiler3(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("particles");
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V"
-            , shift = At.Shift.AFTER))
+            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;)V",
+            shift = At.Shift.AFTER))
     private void popProfiler3(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.pop();
@@ -241,7 +243,7 @@ public abstract class LevelRendererMixin {
         }
     }
 
-//    @Redirect(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;entitiesForRendering()Ljava/lang/Iterable;"))
+//    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;entitiesForRendering()Ljava/lang/Iterable;"))
 //    private Iterable<Entity> replaceIterator(ClientLevel instance) {
 //
 //        return () -> new Iterator<Entity>() {
@@ -257,7 +259,7 @@ public abstract class LevelRendererMixin {
 //        };
 //    }
 //
-//    @Inject(method = "renderLevel", at = @At(value = "INVOKE",
+//    @Inject(method = "runTick", at = @At(value = "INVOKE",
 //            target = "Lnet/minecraft/client/multiplayer/ClientLevel;entitiesForRendering()Ljava/lang/Iterable;",
 //            shift = At.Shift.AFTER),
 //            locals = LocalCapture.CAPTURE_FAILHARD
