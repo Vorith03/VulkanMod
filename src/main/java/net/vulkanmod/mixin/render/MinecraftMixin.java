@@ -68,6 +68,15 @@ public class MinecraftMixin {
 
         var deviceInfo = Vulkan.getDeviceInfo();
         Initializer.LOGGER.info("Vulkan renderer active: {}", deviceInfo != null ? deviceInfo.deviceName : "device info unavailable");
+
+        // CI can request a deterministic startup smoke test. Reaching this point
+        // proves Forge launched, all constructor-time mixins applied, the Vulkan
+        // renderer initialized a device/surface/swapchain, and Minecraft finished
+        // construction. Ordinary launches never set this JVM property.
+        if (Boolean.getBoolean("vulkanmod.smokeTest")) {
+            Initializer.LOGGER.info("Vulkan smoke test passed");
+            System.exit(0);
+        }
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
