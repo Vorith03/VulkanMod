@@ -60,6 +60,8 @@ public class ChunkAreaManager {
 
         int deltaX = Mth.clamp(xS - this.prevX, -this.xzSize, this.xzSize);
         int deltaZ = Mth.clamp(zS - this.prevZ, -this.xzSize, this.xzSize);
+        if(deltaX == 0 && deltaZ == 0)
+            return;
 
         int xAbsChunkIndex = xS - this.xzSize / 2;
         int xStart = Math.floorMod(xAbsChunkIndex, this.xzSize); // needs positive modulo
@@ -136,8 +138,7 @@ public class ChunkAreaManager {
                 zRelativeIndex = zRangeIterator.next();
                 int z1 = (zAbsChunkIndex << s);
 
-                for(int yRel = 0;
-                    yRel < this.ySize; ++yRel) {
+                for(int yRel = 0; yRel < this.ySize; ++yRel) {
                     int y1 = this.minHeight + (yRel << s);
                     ChunkArea chunkArea = this.chunkAreasArr[this.getAreaIndex(xRelativeIndex, yRel, zRelativeIndex)];
 
