@@ -20,7 +20,7 @@ public class IndirectBuffer extends Buffer {
         int size = byteBuffer.remaining();
 
         if(size > this.bufferSize - this.usedBytes) {
-            resizeBuffer();
+            resizeBuffer(size);
         }
 
         if(this.type.mappable()) {
@@ -40,9 +40,9 @@ public class IndirectBuffer extends Buffer {
         usedBytes += size;
     }
 
-    private void resizeBuffer() {
+    private void resizeBuffer(int requiredSize) {
         MemoryManager.getInstance().addToFreeable(this);
-        int newSize = this.bufferSize + (this.bufferSize >> 1);
+        int newSize = Math.max(this.bufferSize + (this.bufferSize >> 1), requiredSize);
         this.createBuffer(newSize);
         this.usedBytes = 0;
     }
