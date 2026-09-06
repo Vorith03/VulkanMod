@@ -54,9 +54,8 @@ public abstract class RenderSystemMixin {
             TextureManager texturemanager = Minecraft.getInstance().getTextureManager();
             AbstractTexture abstracttexture = texturemanager.getTexture(location);
             //abstracttexture.bindTexture();
+            shaderTextures[i] = abstracttexture.getId();
             VTextureSelector.bindTexture(i, ((VAbstractTextureI)abstracttexture).getVulkanImage());
-
-            //shaderTextures[i] = abstracttexture.getId();
         }
 
     }
