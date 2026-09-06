@@ -195,9 +195,10 @@ public class AreaUploadManager {
         }
 
         return String.format(Locale.ROOT,
-                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stg:%.1f/%.1fMiB r:%d",
+                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stg:%.1f/%.1fMiB r:%d %s",
                 lastReadyMs, lastKiB, averageReadyMs,
-                stagingHighWater / 1048576.0D, stagingCapacity / 1048576.0D, stagingResizes);
+                stagingHighWater / 1048576.0D, stagingCapacity / 1048576.0D, stagingResizes,
+                Synchronization.INSTANCE.getStats());
     }
 
 }
