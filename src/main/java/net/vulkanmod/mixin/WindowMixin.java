@@ -102,6 +102,30 @@ public abstract class WindowMixin {
         GLFW.glfwGetWindowSize(forgeWindow, oldWidth, oldHeight);
         boolean maximized = GLFW.glfwGetWindowAttrib(forgeWindow, GLFW_MAXIMIZED) == GLFW_TRUE;
 
+        // With Forge's early splash disabled, DummyProvider/NoVizFallback creates
+        // a normal OpenGL window but does not make its context current. There is
+        // no early renderer to preserve in that mode, so discard the temporary GL
+        // window and replace it directly with the Vulkan NO_API window. Calling
+        // GL.createCapabilities() here would fail because no context is current.
+        if (GLFW.glfwGetCurrentContext() != forgeWindow) {
+            GLFW.glfwDestroyWindow(forgeWindow);
+
+            long vulkanWindow = createNoApiWindow(
+                    oldWidth[0] > 0 ? oldWidth[0] : width.getAsInt(),
+                    oldHeight[0] > 0 ? oldHeight[0] : height.getAsInt(),
+                    title.get(),
+                    monitor.getAsLong(),
+                    oldX,
+                    oldY
+            );
+            if (maximized && monitor.getAsLong() == 0L) {
+                GLFW.glfwMaximizeWindow(vulkanWindow);
+            }
+
+            Initializer.LOGGER.info("Created Vulkan NO_API window without Forge early splash context");
+            return vulkanWindow;
+        }
+
         // Forge handed this OpenGL context to Minecraft on the render thread and
         // normally relies on Window's GL.createCapabilities() immediately after
         // setupMinecraftWindow(). VulkanMod suppresses that vanilla call because
