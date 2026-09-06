@@ -14,7 +14,6 @@ public class UploadBuffer {
     private final ByteBuffer vertexBuffer;
     private final ByteBuffer indexBuffer;
 
-    //debug
     private boolean released = false;
 
     public UploadBuffer(TerrainBufferBuilder.RenderedBuffer renderedBuffer) {
@@ -41,10 +40,13 @@ public class UploadBuffer {
     public ByteBuffer getIndexBuffer() { return indexBuffer; }
 
     public void release() {
+        if(this.released)
+            return;
+
+        this.released = true;
         if(vertexBuffer != null)
             MemoryUtil.memFree(vertexBuffer);
         if(indexBuffer != null)
             MemoryUtil.memFree(indexBuffer);
-        this.released = true;
     }
 }
