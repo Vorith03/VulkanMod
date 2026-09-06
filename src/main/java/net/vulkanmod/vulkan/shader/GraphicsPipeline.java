@@ -144,10 +144,10 @@ public class GraphicsPipeline extends Pipeline {
                 colorBlendAttachment.blendEnable(true);
                 colorBlendAttachment.srcColorBlendFactor(state.blendState.srcRgbFactor);
                 colorBlendAttachment.dstColorBlendFactor(state.blendState.dstRgbFactor);
-                colorBlendAttachment.colorBlendOp(VK_BLEND_OP_ADD);
+                colorBlendAttachment.colorBlendOp(state.blendState.blendOp);
                 colorBlendAttachment.srcAlphaBlendFactor(state.blendState.srcAlphaFactor);
                 colorBlendAttachment.dstAlphaBlendFactor(state.blendState.dstAlphaFactor);
-                colorBlendAttachment.alphaBlendOp(VK_BLEND_OP_ADD);
+                colorBlendAttachment.alphaBlendOp(state.blendState.blendOp);
             }
             else {
                 colorBlendAttachment.blendEnable(false);
@@ -206,7 +206,16 @@ public class GraphicsPipeline extends Pipeline {
 
     private void createShaderModules(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv) {
         this.vertShaderModule = createShaderModule(vertSpirv.bytecode());
+        this.fragShaderModule = createShaderModule(vertSpirv, fragSpirv);
+    }
+
+    private void createShaderModules(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv, boolean ignored) {
+        this.vertShaderModule = createShaderModule(vertSpirv.bytecode());
         this.fragShaderModule = createShaderModule(fragSpirv.bytecode());
+    }
+
+    private static long createShaderModule(SPIRVUtils.SPIRV vertSpirv, SPIRVUtils.SPIRV fragSpirv) {
+        return createShaderModule(fragSpirv.bytecode());
     }
 
     private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat, MemoryStack stack) {
