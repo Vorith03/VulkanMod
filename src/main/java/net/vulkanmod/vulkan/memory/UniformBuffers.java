@@ -47,7 +47,7 @@ public class UniformBuffers {
         int size = buffer.remaining();
         int alignedSize = align(size, minOffset);
         if (alignedSize > this.bufferSize - this.usedBytes) {
-            resizeBuffer((this.bufferSize + alignedSize) * 2);
+            resizeBuffer(Math.max(this.bufferSize * 2, this.usedBytes + alignedSize));
         }
 
         uniformBuffers.get(frame).uploadUBO(buffer, offset);
@@ -60,7 +60,7 @@ public class UniformBuffers {
 
     public void checkCapacity(int size) {
         if (size > this.bufferSize - this.usedBytes) {
-            resizeBuffer((this.bufferSize + size) * 2);
+            resizeBuffer(Math.max(this.bufferSize * 2, this.usedBytes + size));
         }
     }
 
