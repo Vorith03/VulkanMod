@@ -144,7 +144,8 @@ public class Synchronization {
     }
 
     public static boolean checkFenceStatus(long fence) {
-        return vkGetFenceStatus(Vulkan.getDevice(), fence) == VK_SUCCESS;
+        VkDevice device = Vulkan.getDevice();
+        return vkGetFenceStatus(device, fence) == VK_SUCCESS;
     }
 
 }
