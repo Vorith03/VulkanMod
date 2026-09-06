@@ -28,11 +28,12 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.toSet;
 import static net.vulkanmod.vulkan.queue.Queue.getQueueFamilies;
 import static net.vulkanmod.vulkan.util.VUtil.asPointerBuffer;
-import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
+import static org.lwjgl.glfw.GLFWVulkan.nglfwCreateWindowSurface;
 import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
+import static org.lwjgl.system.MemoryUtil.memAddress;
 import static org.lwjgl.util.vma.Vma.vmaCreateAllocator;
 import static org.lwjgl.util.vma.Vma.vmaDestroyAllocator;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
@@ -323,7 +324,14 @@ public class Vulkan {
 
             LongBuffer pSurface = stack.longs(VK_NULL_HANDLE);
 
-            if(glfwCreateWindowSurface(instance, window, null, pSurface) != VK_SUCCESS) {
+            // Forge/ModLauncher loads Minecraft's org.lwjgl.glfw module before
+            // JarJar discovers org.lwjgl.vulkan. Calling GLFWVulkan's typed
+            // VkInstance overload therefore makes GLFW's parent classloader try
+            // to resolve VkInstance from a later child layer and fails in a
+            // production Prism launch. The raw-handle overload is the same GLFW
+            // native call but its JVM descriptor contains only primitive longs,
+            // so the module boundary is never crossed through GLFW.
+            if(nglfwCreateWindowSurface(instance.address(), window, NULL, memAddress(pSurface)) != VK_SUCCESS) {
                 throw new RuntimeException("Failed to create window surface");
             }
 
@@ -473,4 +481,3 @@ public class Vulkan {
 
     public static DeviceInfo getDeviceInfo() { return Device.deviceInfo; }
 }
-
