@@ -13,6 +13,7 @@ import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWVidMode;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GLCapabilities;
 import org.slf4j.Logger;
 import org.spongepowered.asm.mixin.Final;
@@ -101,9 +102,14 @@ public abstract class WindowMixin {
         GLFW.glfwGetWindowSize(forgeWindow, oldWidth, oldHeight);
         boolean maximized = GLFW.glfwGetWindowAttrib(forgeWindow, GLFW_MAXIMIZED) == GLFW_TRUE;
 
-        // Stop the public progress callback. Direct ImmediateWindowHandler ticks
-        // can still occur, so hide and retain the valid GL window instead of
-        // destroying the context underneath Forge.
+        // Forge handed this OpenGL context to Minecraft on the render thread and
+        // normally relies on Window's GL.createCapabilities() immediately after
+        // setupMinecraftWindow(). VulkanMod suppresses that vanilla call because
+        // the real game window is NO_API, so initialize capabilities explicitly
+        // for the retained splash context before detaching it. Later direct Forge
+        // splash ticks can then safely make this context current and issue GL calls.
+        GL.createCapabilities();
+
         FMLLoader.progressWindowTick = () -> { };
         GLFW.glfwMakeContextCurrent(0L);
         GLFW.glfwHideWindow(forgeWindow);
