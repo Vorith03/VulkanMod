@@ -77,6 +77,14 @@ public class TaskDispatcher {
     }
 
     private void runTaskThread(ThreadBuilderPack builderPack) {
+        try {
+            this.runTaskLoop(builderPack);
+        } finally {
+            builderPack.freeAll();
+        }
+    }
+
+    private void runTaskLoop(ThreadBuilderPack builderPack) {
         while(!this.stopThreads) {
             ChunkTask task = this.pollTask();
 
