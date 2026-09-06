@@ -110,7 +110,7 @@ public class DrawBuffers {
 ////            Vec3 cameraPos = WorldRenderer.getCameraPos();
 //            BlockPos pos = new BlockPos(Minecraft.getInstance().getCameraEntity().blockPosition());
 //            if(o.getX() <= pos.getX() && o.getY() <= pos.getY() && o.getZ() <= pos.getZ() &&
-//                    o.getX() + 16 >= pos.getX() && o.getY() + 16 >= pos.getZ() && o.getZ() + 16 >= pos.getZ()) {
+//                    o.getX() + 16 >= pos.getX() && o.getY() + 16 >= pos.getY() && o.getZ() + 16 >= pos.getZ()) {
 //                System.nanoTime();
 //
 //                }
