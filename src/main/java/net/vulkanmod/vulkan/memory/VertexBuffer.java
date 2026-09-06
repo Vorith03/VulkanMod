@@ -21,7 +21,7 @@ public class VertexBuffer extends Buffer {
 //        long bufferSize = byteBuffer.limit();
 
         if(bufferSize > this.bufferSize - this.usedBytes) {
-            resizeBuffer((this.bufferSize + bufferSize) * 2);
+            resizeBuffer(Math.max(this.bufferSize * 2, this.usedBytes + bufferSize));
         }
 
         this.type.copyToBuffer(this, bufferSize, byteBuffer);
