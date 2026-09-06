@@ -27,6 +27,7 @@ import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.opengl.GL;
 import org.slf4j.Logger;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -73,6 +74,7 @@ public class MinecraftMixin {
             if (GLFW.glfwGetCurrentContext() == forgeEarlyWindow) {
                 GLFW.glfwMakeContextCurrent(0L);
             }
+            GL.setCapabilities(null);
             GLFW.glfwDestroyWindow(forgeEarlyWindow);
             Initializer.LOGGER.info("Retired hidden Forge early OpenGL window");
         }
