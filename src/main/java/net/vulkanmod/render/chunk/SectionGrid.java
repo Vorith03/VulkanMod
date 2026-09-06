@@ -55,6 +55,9 @@ public class SectionGrid {
     }
 
     public void releaseAllBuffers() {
+        for(RenderSection section : this.chunks) {
+            section.cancelTasks();
+        }
         this.chunkAreaManager.releaseAllBuffers();
     }
 
@@ -137,7 +140,7 @@ public class SectionGrid {
         } else {
             xRangeStart = 0;
             xRangeEnd = - deltaX - 1;
-            xComplStart = xRangeEnd;
+            xComplStart = xRangeEnd + 1;
             xComplEnd = this.gridWidth - 1;
         }
 
