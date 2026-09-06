@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -28,6 +29,28 @@ public class SPIRVUtils {
             e.printStackTrace();
         }
         return null;
+    }
+
+    /**
+     * Compile a shader stored in the mod's classpath resources.
+     *
+     * Forge/SecureJarHandler exposes mod resources through a union: filesystem.
+     * Treating getResource(...).toExternalForm() as a normal java.nio Path fails
+     * there even though the resource exists. Reading through the class loader is
+     * portable across exploded dev resources, ordinary JARs, and SecureJar union
+     * filesystems.
+     */
+    public static SPIRV compileShaderResource(String resourcePath, ShaderKind shaderKind) {
+        try (InputStream stream = SPIRVUtils.class.getResourceAsStream(resourcePath)) {
+            if (stream == null) {
+                throw new IllegalArgumentException("Shader resource not found: " + resourcePath);
+            }
+
+            String source = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            return compileShader(resourcePath, source, shaderKind);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read shader resource: " + resourcePath, e);
+        }
     }
 
     public static SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
