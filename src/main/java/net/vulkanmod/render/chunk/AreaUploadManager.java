@@ -183,8 +183,21 @@ public class AreaUploadManager {
                 ? 0.0D
                 : (this.totalReadyNanos / 1_000_000.0D) / this.completedUploadBatches;
         double lastKiB = this.lastReadyBytes / 1024.0D;
-        return String.format(Locale.ROOT, "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms",
-                lastReadyMs, lastKiB, averageReadyMs);
+
+        int stagingHighWater = 0;
+        int stagingCapacity = 0;
+        int stagingResizes = 0;
+        for(int i = 0; i < Renderer.getFramesNum(); ++i) {
+            StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(i);
+            stagingHighWater = Math.max(stagingHighWater, stagingBuffer.getHighWaterMark());
+            stagingCapacity = Math.max(stagingCapacity, stagingBuffer.getBufferSize());
+            stagingResizes += stagingBuffer.getResizeCount();
+        }
+
+        return String.format(Locale.ROOT,
+                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stg:%.1f/%.1fMiB r:%d",
+                lastReadyMs, lastKiB, averageReadyMs,
+                stagingHighWater / 1048576.0D, stagingCapacity / 1048576.0D, stagingResizes);
     }
 
 }
