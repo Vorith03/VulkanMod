@@ -28,8 +28,7 @@ public class ChunkAreaManager {
 
         int t = (width >> BASE_SH_XZ) + 2;
 
-        int relativeHeight = height - (minHeight >> 4);
-        this.ySize = (relativeHeight & 0x5) == 0 ? (relativeHeight >> BASE_SH_Y) : (relativeHeight >> BASE_SH_Y) + 1;
+        this.ySize = (height + HEIGHT - 1) >> BASE_SH_Y;
 
         //check if width is even
         if((t & 1) == 0)
@@ -84,7 +83,7 @@ public class ChunkAreaManager {
         } else {
             xRangeStart = 0;
             xRangeEnd = - deltaX - 1;
-            xComplStart = xRangeEnd;
+            xComplStart = xRangeEnd + 1;
             xComplEnd = this.xzSize - 1;
         }
 
@@ -137,7 +136,8 @@ public class ChunkAreaManager {
                 zRelativeIndex = zRangeIterator.next();
                 int z1 = (zAbsChunkIndex << s);
 
-                for(int yRel = 0; yRel < this.ySize; ++yRel) {
+                for(int yRel = 0;
+                    yRel < this.ySize; ++yRel) {
                     int y1 = this.minHeight + (yRel << s);
                     ChunkArea chunkArea = this.chunkAreasArr[this.getAreaIndex(xRelativeIndex, yRel, zRelativeIndex)];
 
