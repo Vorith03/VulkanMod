@@ -465,6 +465,19 @@ public class TerrainBufferBuilder implements VertexConsumer {
 		this.reset();
 	}
 
+	public void free() {
+		if(this.buffer == null)
+			return;
+
+		if(this.renderedBufferCount > 0) {
+			LOGGER.warn("Freeing BufferBuilder with unused batches");
+		}
+		this.discard();
+		MemoryUtil.memFree(this.buffer);
+		this.buffer = null;
+		this.bufferPtr = 0L;
+	}
+
 	public VertexFormatElement currentElement() {
 		if (this.currentElement == null) {
 			throw new IllegalStateException("BufferBuilder not started");
