@@ -56,7 +56,10 @@ public class CommandPool {
                 allocInfo.commandBufferCount(size);
 
                 PointerBuffer pCommandBuffer = stack.mallocPointer(size);
-                vkAllocateCommandBuffers(Vulkan.getDevice(), allocInfo, pCommandBuffer);
+                int result = vkAllocateCommandBuffers(Vulkan.getDevice(), allocInfo, pCommandBuffer);
+                if(result != VK_SUCCESS) {
+                    throw new RuntimeException("Failed to allocate command buffers: " + result);
+                }
 
                 VkFenceCreateInfo fenceInfo = VkFenceCreateInfo.callocStack(stack);
                 fenceInfo.sType(VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
@@ -73,6 +76,7 @@ public class CommandPool {
 
                     LongBuffer pSemaphore = stack.mallocLong(1);
                     if(vkCreateSemaphore(Vulkan.getDevice(), semaphoreInfo, null, pSemaphore) != VK_SUCCESS) {
+                        vkDestroyFence(Vulkan.getDevice(), pFence.get(0), null);
                         throw new RuntimeException("Failed to create command buffer semaphore");
                     }
 
@@ -92,7 +96,11 @@ public class CommandPool {
             beginInfo.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
             beginInfo.flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-            vkBeginCommandBuffer(commandBuffer.handle, beginInfo);
+            int result = vkBeginCommandBuffer(commandBuffer.handle, beginInfo);
+            if(result != VK_SUCCESS) {
+                availableCmdBuffers.add(commandBuffer);
+                throw new RuntimeException("Failed to begin command buffer: " + result);
+            }
             commandBuffer.recording = true;
 
             return commandBuffer;
@@ -108,9 +116,15 @@ public class CommandPool {
         try(MemoryStack stack = stackPush()) {
             long fence = commandBuffer.fence;
 
-            vkEndCommandBuffer(commandBuffer.handle);
+            int result = vkEndCommandBuffer(commandBuffer.handle);
+            if(result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to end command buffer: " + result);
+            }
 
-            vkResetFences(Vulkan.getDevice(), commandBuffer.fence);
+            result = vkResetFences(Vulkan.getDevice(), commandBuffer.fence);
+            if(result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to reset command buffer fence: " + result);
+            }
 
             VkSubmitInfo submitInfo = VkSubmitInfo.callocStack(stack);
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
@@ -120,7 +134,10 @@ public class CommandPool {
                 submitInfo.pSignalSemaphores(stack.longs(commandBuffer.semaphore));
             }
 
-            vkQueueSubmit(queue, submitInfo, fence);
+            result = vkQueueSubmit(queue, submitInfo, fence);
+            if(result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to submit command buffer: " + result);
+            }
 
             commandBuffer.recording = false;
             commandBuffer.submitted = true;
