@@ -102,9 +102,11 @@ public abstract class WindowMixin {
         GLFW.glfwGetWindowSize(forgeWindow, oldWidth, oldHeight);
         boolean maximized = GLFW.glfwGetWindowAttrib(forgeWindow, GLFW_MAXIMIZED) == GLFW_TRUE;
 
-        // Forge stores the early provider's periodic repaint callback here. Once
-        // the OpenGL handle is destroyed that callback must never touch it again.
+        // Forge has two early-display tick paths during bootstrap: the public
+        // progressWindowTick callback and direct ImmediateWindowHandler.renderTick
+        // calls. Disable both before the OpenGL window is destroyed.
         FMLLoader.progressWindowTick = () -> { };
+        ForgeImmediateWindowHandlerMixin.vulkanmod$disableEarlyDisplayTicks();
         GLFW.glfwMakeContextCurrent(0L);
         GLFW.glfwHideWindow(forgeWindow);
         GLFW.glfwDestroyWindow(forgeWindow);
