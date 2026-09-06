@@ -294,11 +294,7 @@ public class WorldRenderer {
 
 //        this.initUpdate();
 
-        int rebuildLimit = taskDispatcher.getIdleThreadsCount();
-//        int rebuildLimit = 32;
-
-        if(rebuildLimit == 0)
-            this.needsUpdate = true;
+        int rebuildLimit = taskDispatcher.getBuildSchedulingCapacity();
 
         while(this.chunkQueue.hasNext()) {
             RenderSection renderSection = this.chunkQueue.poll();
@@ -310,8 +306,11 @@ public class WorldRenderer {
                 this.nonEmptyChunks++;
             }
 
-            if(this.scheduleUpdate(renderSection, rebuildLimit))
+            if(renderSection.isDirty() && rebuildLimit <= 0) {
+                this.needsUpdate = true;
+            } else if(this.scheduleUpdate(renderSection, rebuildLimit)) {
                 rebuildLimit--;
+            }
 
             if(renderSection.directionChanges > maxDirectionsChanges)
                 continue;
@@ -336,10 +335,7 @@ public class WorldRenderer {
     private void updateRenderChunksSpectator() {
         int maxDirectionsChanges = Initializer.CONFIG.advCulling;
 
-        int rebuildLimit = taskDispatcher.getIdleThreadsCount();
-
-        if(rebuildLimit == 0)
-            this.needsUpdate = true;
+        int rebuildLimit = taskDispatcher.getBuildSchedulingCapacity();
 
         while(this.chunkQueue.hasNext()) {
             RenderSection renderSection = this.chunkQueue.poll();
@@ -351,8 +347,11 @@ public class WorldRenderer {
                 this.nonEmptyChunks++;
             }
 
-            if(this.scheduleUpdate(renderSection, rebuildLimit))
+            if(renderSection.isDirty() && rebuildLimit <= 0) {
+                this.needsUpdate = true;
+            } else if(this.scheduleUpdate(renderSection, rebuildLimit)) {
                 rebuildLimit--;
+            }
 
             for(Direction direction : Util.DIRECTIONS) {
                 RenderSection relativeChunk = renderSection.getNeighbour(direction);
