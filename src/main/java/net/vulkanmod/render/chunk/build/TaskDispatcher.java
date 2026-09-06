@@ -156,6 +156,24 @@ public class TaskDispatcher {
         );
     }
 
+    public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
+                                      EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
+                                      Runnable publishResult) {
+        this.toUpload.add(() -> {
+            if(task.cancelled.get()) {
+                releaseUploads(uploadBuffers);
+                return;
+            }
+
+            this.doSectionUpdate(section, uploadBuffers);
+            publishResult.run();
+        });
+    }
+
+    private static void releaseUploads(EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers) {
+        uploadBuffers.values().forEach(UploadBuffer::release);
+    }
+
     private void doSectionUpdate(RenderSection section, EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers) {
         ChunkArea renderArea = section.getChunkArea();
         DrawBuffers drawBuffers = renderArea.getDrawBuffers();
@@ -175,6 +193,18 @@ public class TaskDispatcher {
         this.toUpload.add(
                 () -> this.doUploadChunkLayer(section, renderType, uploadBuffer)
         );
+    }
+
+    public void scheduleUploadChunkLayer(ChunkTask task, RenderSection section,
+                                         TerrainRenderType renderType, UploadBuffer uploadBuffer) {
+        this.toUpload.add(() -> {
+            if(task.cancelled.get()) {
+                uploadBuffer.release();
+                return;
+            }
+
+            this.doUploadChunkLayer(section, renderType, uploadBuffer);
+        });
     }
 
     private void doUploadChunkLayer(RenderSection section, TerrainRenderType renderType, UploadBuffer uploadBuffer) {
