@@ -1,9 +1,9 @@
 package net.vulkanmod.vulkan;
 
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.queue.CommandPool;
-import net.vulkanmod.vulkan.queue.GraphicsQueue;
-import net.vulkanmod.vulkan.queue.TransferQueue;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkDevice;
@@ -20,15 +20,27 @@ public class Synchronization {
     private final LongBuffer fences;
     private int idx = 0;
 
-    private ObjectArrayList<CommandPool.CommandBuffer> commandBuffers = new ObjectArrayList<>();
+    private final ObjectArrayList<CommandPool.CommandBuffer> fenceCommandBuffers = new ObjectArrayList<>();
+
+    private final LongArrayList semaphores = new LongArrayList();
+    private final ObjectArrayList<CommandPool.CommandBuffer> semaphoreCommandBuffers = new ObjectArrayList<>();
 
     Synchronization(int allocSize) {
         this.fences = MemoryUtil.memAllocLong(allocSize);
     }
 
-    public synchronized void addCommandBuffer(CommandPool.CommandBuffer commandBuffer) {
-        this.addFence(commandBuffer.getFence());
-        this.commandBuffers.add(commandBuffer);
+    public void addCommandBuffer(CommandPool.CommandBuffer commandBuffer) {
+        addCommandBuffer(commandBuffer, false);
+    }
+
+    public synchronized void addCommandBuffer(CommandPool.CommandBuffer commandBuffer, boolean useSemaphore) {
+        if(useSemaphore) {
+            this.semaphores.add(commandBuffer.getSemaphore());
+            this.semaphoreCommandBuffers.add(commandBuffer);
+        } else {
+            this.addFence(commandBuffer.getFence());
+            this.fenceCommandBuffers.add(commandBuffer);
+        }
     }
 
     public synchronized void addFence(long fence) {
@@ -48,11 +60,34 @@ public class Synchronization {
         fences.limit(idx);
         vkWaitForFences(device, fences, true, VUtil.UINT64_MAX);
 
-        this.commandBuffers.forEach(CommandPool.CommandBuffer::reset);
-        this.commandBuffers.clear();
+        this.fenceCommandBuffers.forEach(CommandPool.CommandBuffer::reset);
+        this.fenceCommandBuffers.clear();
 
         fences.limit(ALLOCATION_SIZE);
         idx = 0;
+    }
+
+    public synchronized void addWaitSemaphore(long semaphore) {
+        this.semaphores.add(semaphore);
+    }
+
+    public synchronized int getWaitSemaphoreCount() {
+        return this.semaphores.size();
+    }
+
+    public synchronized void getWaitSemaphores(LongBuffer buffer) {
+        buffer.put(this.semaphores.elements(), 0, this.semaphores.size());
+        this.semaphores.clear();
+    }
+
+    public synchronized void scheduleCbReset() {
+        if(this.semaphoreCommandBuffers.isEmpty()) return;
+
+        final ObjectArrayList<CommandPool.CommandBuffer> frameCommandBuffers = this.semaphoreCommandBuffers.clone();
+        MemoryManager.getInstance().addFrameOp(
+                () -> frameCommandBuffers.forEach(CommandPool.CommandBuffer::reset)
+        );
+        this.semaphoreCommandBuffers.clear();
     }
 
     public static void waitFence(long fence) {
