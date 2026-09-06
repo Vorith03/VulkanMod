@@ -18,27 +18,35 @@ import static org.lwjgl.util.shaderc.Shaderc.*;
 public class SPIRVUtils {
     private static final boolean DEBUG = true;
     private static final boolean OPTIMIZATIONS = false;
+    private static final String MOD_RESOURCE_ROOT = "/assets/vulkanmod/";
 
     private static long compiler;
 
     public static SPIRV compileShaderAbsoluteFile(String shaderFile, ShaderKind shaderKind) {
+        // Pipeline historically turns a classpath shader URL into a String and
+        // passes it here. Forge/SecureJarHandler represents that URL with its
+        // union: filesystem, which cannot reliably be reopened via Paths.get().
+        // Recover the classpath-relative path instead; true external file URLs
+        // still use the original filesystem path below.
+        int resourceStart = shaderFile.indexOf(MOD_RESOURCE_ROOT);
+        if (resourceStart >= 0) {
+            return compileShaderResource(shaderFile.substring(resourceStart), shaderKind);
+        }
+
         try {
-            String source = new String(Files.readAllBytes(Paths.get(new URI(shaderFile))));
+            String source = Files.readString(Paths.get(new URI(shaderFile)), StandardCharsets.UTF_8);
             return compileShader(shaderFile, source, shaderKind);
         } catch (IOException | URISyntaxException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to read shader file: " + shaderFile, e);
         }
-        return null;
     }
 
     /**
      * Compile a shader stored in the mod's classpath resources.
      *
      * Forge/SecureJarHandler exposes mod resources through a union: filesystem.
-     * Treating getResource(...).toExternalForm() as a normal java.nio Path fails
-     * there even though the resource exists. Reading through the class loader is
-     * portable across exploded dev resources, ordinary JARs, and SecureJar union
-     * filesystems.
+     * Reading through the class loader is portable across exploded dev resources,
+     * ordinary JARs, and SecureJar union filesystems.
      */
     public static SPIRV compileShaderResource(String resourcePath, ShaderKind shaderKind) {
         try (InputStream stream = SPIRVUtils.class.getResourceAsStream(resourcePath)) {
