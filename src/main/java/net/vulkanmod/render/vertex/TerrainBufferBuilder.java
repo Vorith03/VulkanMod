@@ -178,13 +178,9 @@ public class TerrainBufferBuilder implements VertexConsumer {
 				short x1 = MemoryUtil.memGetShort(ptr + 0);
 				short y1 = MemoryUtil.memGetShort(ptr + 2);
 				short z1 = MemoryUtil.memGetShort(ptr + 4);
-//				short x2 = MemoryUtil.memGetShort(ptr + j * 2 + 0);
-//				short y2 = MemoryUtil.memGetShort(ptr + j * 2 + 2);
-//				short z2 = MemoryUtil.memGetShort(ptr + j * 2 + 4);
-				//Am I wrong?
-				short x2 = MemoryUtil.memGetShort(ptr + j * 3 + 0);
-				short y2 = MemoryUtil.memGetShort(ptr + j * 3 + 2);
-				short z2 = MemoryUtil.memGetShort(ptr + j * 3 + 4);
+				short x2 = MemoryUtil.memGetShort(ptr + j * 2 + 0);
+				short y2 = MemoryUtil.memGetShort(ptr + j * 2 + 2);
+				short z2 = MemoryUtil.memGetShort(ptr + j * 2 + 4);
 
 				float q = ((x1 * invConv) + (x2 * invConv)) * 0.5f;
 				float r = ((y1 * invConv) + (y2 * invConv)) * 0.5f;
@@ -466,6 +462,7 @@ public class TerrainBufferBuilder implements VertexConsumer {
 		this.renderedBufferCount = 0;
 		this.renderedBufferPointer = 0;
 		this.nextElementByte = 0;
+		this.reset();
 	}
 
 	public VertexFormatElement currentElement() {
