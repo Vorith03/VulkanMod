@@ -40,12 +40,35 @@ jobs:
           export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
           timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke.log
           grep -F "Vulkan smoke test passed" vulkan-smoke.log
-      - name: Upload smoke-test log
+      - name: Smoke-test Forge client Vulkan startup without early splash
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f run/config/fml.toml
+          sed -i 's/^earlyWindowControl = true$/earlyWindowControl = false/' run/config/fml.toml
+          grep -F 'earlyWindowControl = false' run/config/fml.toml
+
+          LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          if [[ -z "$LVP_ICD" ]]; then
+            echo "Lavapipe Vulkan ICD was not installed" >&2
+            exit 1
+          fi
+          echo "Using software Vulkan ICD: $LVP_ICD"
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
+          timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke-no-splash.log
+          grep -F "ImmediateWindowProvider not loading because splash screen is disabled" vulkan-smoke-no-splash.log
+          grep -F "Created Vulkan NO_API window without Forge early splash context" vulkan-smoke-no-splash.log
+          grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
+      - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: VulkanMod-Forge-smoke-log
-          path: vulkan-smoke.log
+          path: |
+            vulkan-smoke.log
+            vulkan-smoke-no-splash.log
           if-no-files-found: ignore
       - name: Upload artifacts
         if: always()
