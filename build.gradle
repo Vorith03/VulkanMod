@@ -66,6 +66,13 @@ dependencies {
     // production refmap used to remap Mojmap-named mixin targets after reobf.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
+    // Keep the Vulkan binding on the compile/dev runtime classpath. Packaging is
+    // handled independently by Jar-in-Jar below, so this does not flatten its
+    // classes into VulkanMod's outer JAR.
+    implementation("org.lwjgl:lwjgl-vulkan:${project.lwjgl_version}") {
+        transitive = false
+    }
+
     // GLFWVulkan is part of Minecraft's org.lwjgl.glfw module and directly
     // references org.lwjgl.vulkan types. Flattening lwjgl-vulkan into the mod
     // JAR hides those classes behind VulkanMod's module, causing VkInstance to
