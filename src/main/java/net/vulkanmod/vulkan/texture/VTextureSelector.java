@@ -103,6 +103,11 @@ public abstract class VTextureSelector {
                     MAX_SINGLE_TEXTURE_STAGING / (1024 * 1024)));
         }
 
+        // Catch aggregate native/heap pressure even when no single VulkanMod
+        // allocator has crossed its own local budget. This is throttled internally
+        // to avoid turning /proc reads into per-sprite overhead.
+        MemoryDiagnostics.enforceSystemMemorySafety("texture staging");
+
         // Old VulkanMod copied buffer.limit() for every sub-rectangle. Animated
         // sprites and mip levels therefore re-copied the entire backing NativeImage
         // even when Vulkan consumed only one frame. Slice to exactly the contiguous
