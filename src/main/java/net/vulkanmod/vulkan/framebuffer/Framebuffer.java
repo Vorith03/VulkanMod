@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.Reference2LongArrayMap;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
@@ -179,8 +180,15 @@ public class Framebuffer {
 
         final VkDevice device = Vulkan.getDevice();
 
+        // A RenderTarget can be resized or closed while the current primary
+        // command buffer already contains a render pass using this framebuffer.
+        // Keep the native framebuffer alive until that frame slot's fence proves
+        // every submitted use has retired, matching the deferred attachment images.
         framebufferIds.forEach((renderPass, id) -> {
-            vkDestroyFramebuffer(device, id, null);
+            final long framebufferId = id;
+            MemoryManager.getInstance().addFrameOp(
+                    () -> vkDestroyFramebuffer(device, framebufferId, null)
+            );
         });
 
         framebufferIds.clear();
