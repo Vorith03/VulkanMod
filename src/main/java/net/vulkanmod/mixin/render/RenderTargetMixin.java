@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
@@ -16,6 +17,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
+import static org.lwjgl.opengl.GL11.GL_LINEAR;
+import static org.lwjgl.opengl.GL11.GL_NEAREST;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_LOAD_OP_LOAD;
 
 @Mixin(RenderTarget.class)
@@ -28,6 +31,8 @@ public class RenderTargetMixin {
     @Shadow public int colorTextureId;
     @Shadow public int depthBufferId;
     @Shadow @Final protected boolean useDepth;
+    @Shadow @Final private float[] clearChannels;
+    @Shadow private int filterMode;
 
     private Framebuffer framebuffer;
     private RenderPass vulkanmod$renderPass;
@@ -35,12 +40,18 @@ public class RenderTargetMixin {
     /**
      * @author
      * @reason Clear the Vulkan attachments backing this off-screen target while
-     * preserving RenderTarget's bind/clear/unbind contract.
+     * preserving RenderTarget's bind/clear/unbind contract and per-target clear
+     * color rather than whatever global clear color the previous pass left set.
      */
     @Overwrite
     public void clear(boolean getError) {
         if(this.framebuffer == null || Renderer.getCommandBuffer() == null)
             return;
+
+        RenderSystem.clearColor(this.clearChannels[0], this.clearChannels[1],
+                this.clearChannels[2], this.clearChannels[3]);
+        if(this.useDepth)
+            VRenderSystem.clearDepth = 1.0f;
 
         this.bindWrite(true);
         Renderer.clearAttachments(this.useDepth ? 0x4100 : 0x4000);
@@ -54,6 +65,17 @@ public class RenderTargetMixin {
      */
     @Overwrite
     public void resize(int width, int height, boolean getError) {
+        // MainTarget is owned by the swapchain. Window resize already schedules
+        // swapchain recreation, so do not allocate an unused generic framebuffer
+        // merely because MainTarget inherits RenderTarget.resize.
+        if((Object)this instanceof MainTarget) {
+            this.viewWidth = width;
+            this.viewHeight = height;
+            this.width = width;
+            this.height = height;
+            return;
+        }
+
         this.vulkanmod$destroyBacking();
 
         this.viewWidth = width;
@@ -65,7 +87,7 @@ public class RenderTargetMixin {
             return;
 
         this.framebuffer = new Framebuffer.Builder(width, height, 1, this.useDepth)
-                .setLinearFiltering(false)
+                .setLinearFiltering(this.filterMode == GL_LINEAR)
                 .build();
         this.vulkanmod$renderPass = new RenderPass.Builder(this.framebuffer)
                 .setLoadOp(VK_ATTACHMENT_LOAD_OP_LOAD)
@@ -79,6 +101,24 @@ public class RenderTargetMixin {
             if(this.depthBufferId <= 0)
                 this.depthBufferId = GlTexture.genTextureId();
             GlTexture.setVulkanImage(this.depthBufferId, this.framebuffer.getDepthAttachment());
+        }
+    }
+
+    /**
+     * @author
+     * @reason RenderTarget filter changes normally become glTexParameter calls,
+     * which VulkanMod intentionally does not emulate globally. Apply the supported
+     * framebuffer NEAREST/LINEAR choice directly to the Vulkan color sampler.
+     */
+    @Overwrite
+    public void setFilterMode(int filterMode) {
+        if(filterMode != GL_NEAREST && filterMode != GL_LINEAR)
+            throw new IllegalArgumentException("Unsupported RenderTarget filter mode: " + filterMode);
+
+        this.filterMode = filterMode;
+        if(this.framebuffer != null && this.framebuffer.getColorAttachment() != null) {
+            this.framebuffer.getColorAttachment().updateTextureSampler(
+                    filterMode == GL_LINEAR, true, false);
         }
     }
 
