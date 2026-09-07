@@ -33,6 +33,7 @@ public class Synchronization {
     private long fenceWaitCalls;
     private long fenceWaitedCount;
     private long fenceWaitNanos;
+    private long mainFrameSubmissions;
 
     Synchronization(int allocSize) {
         this.fences = MemoryUtil.memAllocLong(allocSize);
@@ -129,6 +130,11 @@ public class Synchronization {
     }
 
     public synchronized void scheduleCbReset() {
+        // Renderer invokes this only after the main graphics vkQueueSubmit has
+        // succeeded. Expose that boundary to upload paths which need to distinguish
+        // outstanding helper work from submissions already ordered behind a frame fence.
+        this.mainFrameSubmissions++;
+
         if(this.semaphoreCommandBuffers.isEmpty() && this.sameQueueCommandBuffers.isEmpty()) return;
 
         final ObjectArrayList<CommandPool.CommandBuffer> frameCommandBuffers = new ObjectArrayList<>(
@@ -141,6 +147,10 @@ public class Synchronization {
         );
         this.semaphoreCommandBuffers.clear();
         this.sameQueueCommandBuffers.clear();
+    }
+
+    public synchronized long getMainFrameSubmissionCount() {
+        return this.mainFrameSubmissions;
     }
 
     /**
