@@ -521,13 +521,13 @@ public class VulkanImage {
         if(this.freed)
             return;
 
-        MemoryManager.freeImage(this.id, this.allocation);
-
-        vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
-
         for (long sampler : samplers.values()) {
             vkDestroySampler(Vulkan.getDevice(), sampler, null);
         }
+        samplers.clear();
+
+        vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
+        MemoryManager.freeImage(this.id, this.allocation);
 
         this.freed = true;
     }
