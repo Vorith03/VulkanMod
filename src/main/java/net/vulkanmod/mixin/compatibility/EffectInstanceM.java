@@ -24,7 +24,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,21 +42,32 @@ public class EffectInstanceM {
     @Shadow @Final private List<Uniform> uniforms;
 
     private Pipeline pipeline;
+    private String vulkanmod$vertexShader;
+    private String vulkanmod$fragmentShader;
 
-    @Inject(method = "<init>",
-            at = @At(value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/EffectInstance;updateLocations()V",
-                    shift = At.Shift.AFTER),
-            locals = LocalCapture.CAPTURE_FAILHARD
-    )
-    private void inj(ResourceManager resourceManager, String string, CallbackInfo ci,
-                     ResourceLocation resourceLocation, Resource resource, Reader reader, JsonObject jsonObject, String string2, String string3) {
-        createShaders(resourceManager, string2, string3);
+    /**
+     * Mixin 0.8.5 only permits callback injection at a constructor's safe return
+     * point. Capture the shader names in the existing getOrCreate redirect, then
+     * build the Vulkan pipeline once EffectInstance construction has completed.
+     */
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void vulkanmod$createShadersAfterInit(ResourceManager resourceManager, String string, CallbackInfo ci) {
+        if(this.vulkanmod$vertexShader == null || this.vulkanmod$fragmentShader == null) {
+            throw new IllegalStateException("EffectInstance shader names were not captured during construction");
+        }
+
+        createShaders(resourceManager, this.vulkanmod$vertexShader, this.vulkanmod$fragmentShader);
     }
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/EffectInstance;getOrCreate(Lnet/minecraft/server/packs/resources/ResourceManager;Lcom/mojang/blaze3d/shaders/Program$Type;Ljava/lang/String;)Lcom/mojang/blaze3d/shaders/EffectProgram;"))
     private EffectProgram redirectShader(ResourceManager resourceManager, Program.Type type, String string) {
+        if(type == Program.Type.VERTEX) {
+            this.vulkanmod$vertexShader = string;
+        } else if(type == Program.Type.FRAGMENT) {
+            this.vulkanmod$fragmentShader = string;
+        }
+
         return null;
     }
 
