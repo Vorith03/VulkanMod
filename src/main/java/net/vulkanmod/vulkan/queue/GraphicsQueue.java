@@ -57,6 +57,10 @@ public class GraphicsQueue extends Queue {
         }
     }
 
+    public boolean hasActiveUploadBatch() {
+        return currentCmdBuffer != null;
+    }
+
     public boolean isRecording(CommandPool.CommandBuffer commandBuffer) {
         // Lock-free on purpose: Synchronization calls this while holding its own
         // monitor, while queue submission holds the queue monitor before entering
