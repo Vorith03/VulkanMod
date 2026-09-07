@@ -17,28 +17,19 @@ public class ProgramM {
 
     /**
      * @author
-     * @reason
+     * @reason Compile the same preprocessed GLSL source vanilla would submit to
+     * OpenGL. In particular, #moj_import expansion must not be discarded before
+     * handing the program to shaderc.
      */
     @Overwrite
     public static int compileShaderInternal(Program.Type type, String string, InputStream inputStream, String string2, GlslPreprocessor glslPreprocessor) throws IOException {
-        String string3 = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-        if (string3 == null) {
+        String source = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+        if (source == null) {
             throw new IOException("Could not load program " + type.getName());
-        } else {
-//            int i = GlStateManager.glCreateShader(type.getGlType());
-//            GlStateManager.glShaderSource(i, glslPreprocessor.process(string3));
-//            GlStateManager.glCompileShader(i);
-//            if (GlStateManager.glGetShaderi(i, 35713) == 0) {
-//                String string4 = StringUtils.trim(GlStateManager.glGetShaderInfoLog(i, 32768));
-//                throw new IOException("Couldn't compile " + type.getName() + " program (" + string2 + ", " + string + ") : " + string4);
-//            } else {
-//                return i;
-//            }
-
-            //TODO
-            glslPreprocessor.process(string3);
-            SPIRVUtils.compileShader(string2 + ":" + string, string3, Util.extToShaderKind(type.getExtension()));
         }
+
+        String processedSource = String.join("", glslPreprocessor.process(source));
+        SPIRVUtils.compileShader(string2 + ":" + string, processedSource, Util.extToShaderKind(type.getExtension()));
         return 0;
     }
 }
