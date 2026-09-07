@@ -80,6 +80,40 @@ jobs:
           grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
+      - name: Smoke-test Crash Assistant 1.9.7 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Positive compatibility gate for the exact legacy Crash Assistant
+          # release used by the Create Chronicles pack. Its GPU detector probes
+          # OpenGL at the end of Minecraft initialization, which must be skipped
+          # when VulkanMod owns a GLFW NO_API window.
+          cat >> build.gradle <<'EOF'
+
+          repositories {
+              maven { url = 'https://www.cursemaven.com' }
+          }
+          dependencies {
+              runtimeOnly fg.deobf('curse.maven:crash-assistant-1154099:6714041')
+          }
+          EOF
+
+          LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          if [[ -z "$LVP_ICD" ]]; then
+            echo "Lavapipe Vulkan ICD was not installed" >&2
+            exit 1
+          fi
+          echo "Using software Vulkan ICD: $LVP_ICD"
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
+          timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke-crash-assistant.log
+          grep -F "Vulkan smoke test passed" vulkan-smoke-crash-assistant.log
+          if grep -F "No context is current or a function that is not available in the current context was called" vulkan-smoke-crash-assistant.log; then
+            echo "Crash Assistant attempted an OpenGL probe without a current context" >&2
+            exit 1
+          fi
       - name: Smoke-test Flywheel 0.6 compatibility
         shell: bash
         run: |
@@ -121,6 +155,7 @@ jobs:
           path: |
             vulkan-smoke.log
             vulkan-smoke-no-splash.log
+            vulkan-smoke-crash-assistant.log
             vulkan-smoke-flywheel.log
           if-no-files-found: ignore
       - name: Upload artifacts
