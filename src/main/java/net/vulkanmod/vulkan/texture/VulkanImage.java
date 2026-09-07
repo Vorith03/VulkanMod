@@ -268,7 +268,7 @@ public class VulkanImage {
             barrier.subresourceRange().baseArrayLayer(0);
             barrier.subresourceRange().layerCount(1);
 
-            barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
+            barrier.subresourceRange().aspectMask(aspectMaskForFormat(this.format));
 
             int sourceStage;
             int destinationStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -281,6 +281,12 @@ public class VulkanImage {
                 case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> {
                     barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
                     sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                }
+                case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL -> {
+                    barrier.srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+                    sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
                 }
                 default -> throw new IllegalStateException("Unexpected texture layout before shader read: " + this.currentLayout);
             }
@@ -433,12 +439,7 @@ public class VulkanImage {
         barrier.subresourceRange().levelCount(mipLevels);
         barrier.subresourceRange().baseArrayLayer(0);
         barrier.subresourceRange().layerCount(1);
-
-        if(format == VK_FORMAT_D32_SFLOAT) {
-            barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
-        } else {
-            barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-        }
+        barrier.subresourceRange().aspectMask(aspectMaskForFormat(format));
 
         int sourceStage;
         int destinationStage;
@@ -447,6 +448,10 @@ public class VulkanImage {
             case VK_IMAGE_LAYOUT_UNDEFINED -> {
                 barrier.srcAccessMask(0);
                 sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            }
+            case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL -> {
+                barrier.srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+                sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             }
             case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> {
                 barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -462,12 +467,16 @@ public class VulkanImage {
             }
             case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL -> {
                 barrier.srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-                sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             }
             default -> throw new RuntimeException("Unexpected value");
         }
 
         switch (newLayout) {
+            case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL -> {
+                barrier.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+                destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            }
             case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> {
                 barrier.dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
                 destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -482,7 +491,7 @@ public class VulkanImage {
             }
             case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL -> {
                 barrier.dstAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-                destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             }
             default -> throw new RuntimeException("Unexpected value");
         }
@@ -493,6 +502,14 @@ public class VulkanImage {
                 null,
                 null,
                 barrier);
+    }
+
+    private static int aspectMaskForFormat(int format) {
+        if(format == VK_FORMAT_D32_SFLOAT)
+            return VK_IMAGE_ASPECT_DEPTH_BIT;
+        if(hasStencilComponent(format))
+            return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 
     private static boolean hasStencilComponent(int format) {
