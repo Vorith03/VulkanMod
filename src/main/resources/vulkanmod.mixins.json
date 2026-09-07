@@ -46,6 +46,7 @@
     "render.BufferUploaderM",
     "render.RenderTargetMixin",
     "render.GameRendererMixin",
+    "render.GameRendererPostChainSmokeMixin",
     "render.GlProgramManagerMixin",
     "render.GlStateManagerM",
     "render.vertex.IndexTypeMixin",
