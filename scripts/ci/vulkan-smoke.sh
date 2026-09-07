@@ -85,10 +85,10 @@ case "$mode" in
     # runClient uses Mojmap-named development classes, while the published
     # Flywheel JAR is reobfuscated. Add its dev-runtime dependency only for this
     # CI invocation, and mark the block so repeated local runs do not append it.
-    if ! grep -Fq '# VULKANMOD_CI_FLYWHEEL_RUNTIME' build.gradle; then
+    if ! grep -Fq '// VULKANMOD_CI_FLYWHEEL_RUNTIME' build.gradle; then
       cat >> build.gradle <<'EOF'
 
-# VULKANMOD_CI_FLYWHEEL_RUNTIME
+// VULKANMOD_CI_FLYWHEEL_RUNTIME
 repositories {
     maven { url = 'https://modmaven.dev/' }
 }
