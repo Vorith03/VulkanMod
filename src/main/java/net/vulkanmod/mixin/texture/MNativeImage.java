@@ -25,7 +25,7 @@ public abstract class MNativeImage {
     private static final long vulkanmod$MIB = 1024L * 1024L;
     @Unique
     private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB = Math.max(
-            1024L, Long.getLong("vulkanmod.nativeImageSafetyLimitMiB", 8192L));
+            1024L, Long.getLong("vulkanmod.nativeImageSafetyLimitMiB", 4096L));
     @Unique
     private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES =
             vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB * vulkanmod$MIB;
