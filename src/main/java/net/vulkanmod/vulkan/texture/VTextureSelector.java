@@ -7,6 +7,7 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
@@ -15,6 +16,7 @@ import java.nio.ByteBuffer;
 
 public abstract class VTextureSelector {
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
+    private static final int MAX_SINGLE_TEXTURE_STAGING = 512 * 1024 * 1024;
 
     static {
         if(Boolean.getBoolean("vulkanmod.smokeTest")) {
@@ -35,6 +37,7 @@ public abstract class VTextureSelector {
     private static int activeTexture = 0;
     private static long stagingReuseCount;
     private static long stagingBatchSourceBytes;
+    private static long stagingBatchStagedBytes;
     private static long stagingBatchLogicalBytes;
 
     public static void bindTexture(VulkanImage texture) {
@@ -71,54 +74,104 @@ public abstract class VTextureSelector {
         else if(activeTexture == 1) texture = lightTexture;
         else texture = overlayTexture;
 
-        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
-        boolean canRecycleStaging = !graphicsQueue.hasActiveUploadBatch();
-        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
+        if(width <= 0 || height <= 0)
+            return;
 
-        if(canRecycleStaging && stagingBuffer.wouldExceedUsageLimit(buffer.limit(), texture.formatSize, TEXTURE_STAGING_BATCH_LIMIT)) {
-            // Terrain and texture uploads share this frame's staging allocation.
-            // Submit/wait any outstanding transfer work before reusing its bytes.
+        int rowLength = unpackRowLength > 0 ? unpackRowLength : width;
+        if(rowLength < width || unpackSkipRows < 0 || unpackSkipPixels < 0 || unpackSkipPixels + width > rowLength) {
+            throw new IllegalArgumentException("Invalid texture upload row/skip geometry");
+        }
+
+        long formatSize = texture.formatSize;
+        long sourceOffset = ((long)rowLength * unpackSkipRows + unpackSkipPixels) * formatSize;
+        long stagedBytes = ((long)(height - 1) * rowLength + width) * formatSize;
+        long logicalBytes = (long)width * height * formatSize;
+        long availableBytes = buffer.remaining();
+        long sourceEnd = sourceOffset + stagedBytes;
+
+        if(sourceOffset < 0L || stagedBytes <= 0L || sourceEnd < sourceOffset || sourceEnd > availableBytes) {
+            throw new IllegalArgumentException(String.format(
+                    "Texture upload exceeds source image: source=%d offset=%d span=%d row=%d size=%dx%d",
+                    availableBytes, sourceOffset, stagedBytes, rowLength, width, height));
+        }
+        if(stagedBytes > MAX_SINGLE_TEXTURE_STAGING) {
+            throw new OutOfMemoryError(String.format(
+                    "Refusing %d MiB single texture staging upload (%dx%d row=%d); safety limit is %d MiB",
+                    stagedBytes / (1024L * 1024L), width, height, rowLength,
+                    MAX_SINGLE_TEXTURE_STAGING / (1024 * 1024)));
+        }
+
+        // Old VulkanMod copied buffer.limit() for every sub-rectangle. Animated
+        // sprites and mip levels therefore re-copied the entire backing NativeImage
+        // even when Vulkan consumed only one frame. Slice to exactly the contiguous
+        // source span referenced by VkBufferImageCopy and normalize the skips to 0.
+        ByteBuffer uploadBuffer = buffer.duplicate();
+        int basePosition = buffer.position();
+        uploadBuffer.position(basePosition + (int)sourceOffset);
+        uploadBuffer.limit(basePosition + (int)sourceEnd);
+        uploadBuffer = uploadBuffer.slice();
+
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
+        int uploadSize = (int)stagedBytes;
+
+        if(stagingBuffer.wouldExceedUsageLimit(uploadSize, texture.formatSize, TEXTURE_STAGING_BATCH_LIMIT)) {
+            // The old resource-reload guard disabled recycling while the animated
+            // texture queue owned a shared command buffer. That made the 128 MiB
+            // limit ineffective exactly when a long upload batch could grow the
+            // mapped host buffer without bound. Close the batch, make every queue
+            // idle, drain deferred old staging allocations, then transparently
+            // resume batching with a fresh command buffer.
+            boolean restartUploadBatch = graphicsQueue.hasActiveUploadBatch();
+            if(restartUploadBatch) {
+                graphicsQueue.endRecordingAndSubmit();
+            }
+
             if(AreaUploadManager.INSTANCE != null) {
                 AreaUploadManager.INSTANCE.waitAllUploads();
             }
-            Device.getTransferQueue().waitIdle();
-            graphicsQueue.waitIdle();
-
-            // Every same-queue texture helper is complete after queue idle. Recycle
-            // those command buffers now instead of retaining a large resource
-            // reload's worth of completed helpers until a later frame fence.
+            Vulkan.waitIdle();
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+
+            // StagingBuffer resize schedules the previous mapped buffer for frame
+            // retirement. Startup/resource reload may not advance another frame
+            // before memory pressure becomes catastrophic, so collect all already-
+            // retired resources now that device idleness makes that unambiguous.
+            MemoryManager.getInstance().freeAllBuffers();
 
             long usedMiB = stagingBuffer.getUsedBytes() / (1024L * 1024L);
             long sourceMiB = stagingBatchSourceBytes / (1024L * 1024L);
+            long stagedMiB = stagingBatchStagedBytes / (1024L * 1024L);
             long logicalMiB = stagingBatchLogicalBytes / (1024L * 1024L);
             stagingBuffer.reset();
             stagingReuseCount++;
             Initializer.LOGGER.info(
-                    "Reused texture staging buffer after {} MiB batch (flush #{}, source/logical={}/{} MiB)",
-                    usedMiB, stagingReuseCount, sourceMiB, logicalMiB);
+                    "Reused texture staging buffer after {} MiB batch (flush #{}, source/staged/logical={}/{}/{} MiB, restartedBatch={})",
+                    usedMiB, stagingReuseCount, sourceMiB, stagedMiB, logicalMiB, restartUploadBatch);
             MemoryDiagnostics.logSnapshot("texture staging flush #" + stagingReuseCount);
             stagingBatchSourceBytes = 0L;
+            stagingBatchStagedBytes = 0L;
             stagingBatchLogicalBytes = 0L;
+
+            if(restartUploadBatch) {
+                graphicsQueue.startRecording();
+            }
         }
 
-        if(canRecycleStaging) {
-            // Prevent a threshold-crossing copy from geometrically doubling the
-            // persistent host allocation beyond the resource-reload budget.
-            stagingBuffer.setGrowthLimit(TEXTURE_STAGING_BATCH_LIMIT);
-        }
+        // Always bound geometric growth, including while a shared graphics upload
+        // batch is active. One upload may exceed the normal batch budget, but it
+        // grows only to its exact requirement and is separately safety-limited.
+        stagingBuffer.setGrowthLimit(TEXTURE_STAGING_BATCH_LIMIT);
 
-        long sourceBytes = buffer.limit();
-        long logicalBytes = (long)width * height * texture.formatSize;
-        stagingBatchSourceBytes += sourceBytes;
+        stagingBatchSourceBytes += availableBytes;
+        stagingBatchStagedBytes += stagedBytes;
         stagingBatchLogicalBytes += logicalBytes;
 
         try {
-            texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, unpackRowLength, buffer);
+            texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset,
+                    0, 0, rowLength, uploadBuffer);
         } finally {
-            if(canRecycleStaging) {
-                stagingBuffer.setGrowthLimit(Integer.MAX_VALUE);
-            }
+            stagingBuffer.setGrowthLimit(Integer.MAX_VALUE);
         }
     }
 
