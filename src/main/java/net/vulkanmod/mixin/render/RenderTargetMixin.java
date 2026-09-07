@@ -48,7 +48,14 @@ public class RenderTargetMixin {
      */
     @Overwrite
     public void bindWrite(boolean updateViewport) {
-        Renderer.getInstance().beginRendering(framebuffer);
+        // Generic/off-screen RenderTargets do not have Vulkan framebuffer backing
+        // yet. Passing that null through Renderer.beginRendering() tears down the
+        // valid swapchain render pass and starts nothing in its place, so the next
+        // Forge RenderLevelStageEvent VBO draw sees a null RenderPass. Until these
+        // targets have real Vulkan backing, leave the current pass intact.
+        if (this.framebuffer != null) {
+            Renderer.getInstance().beginRendering(this.framebuffer);
+        }
     }
 
     /**
