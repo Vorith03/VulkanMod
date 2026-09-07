@@ -166,7 +166,19 @@ public class MemoryManager {
             imageInfo.format(format);
             imageInfo.tiling(tiling);
             imageInfo.initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-            imageInfo.usage(usage);
+
+            // RenderTarget.copyDepthFrom is a framebuffer-level operation in
+            // OpenGL, but Vulkan requires the underlying depth images to opt into
+            // transfer usage when they are created. Make every depth attachment
+            // eligible so both the swapchain depth buffer and generic off-screen
+            // targets can participate without a separate allocation path.
+            int imageUsage = usage;
+            if(format == VK_FORMAT_D32_SFLOAT
+                    || format == VK_FORMAT_D32_SFLOAT_S8_UINT
+                    || format == VK_FORMAT_D24_UNORM_S8_UINT) {
+                imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            }
+            imageInfo.usage(imageUsage);
             imageInfo.samples(VK_SAMPLE_COUNT_1_BIT);
 //            imageInfo.sharingMode(VK_SHARING_MODE_CONCURRENT);
             //TODO
