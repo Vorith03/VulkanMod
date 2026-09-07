@@ -84,7 +84,6 @@ public class WorldRenderer {
     IndirectBuffer[] indirectBuffers;
 //    UniformBuffers uniformBuffers;
 
-    public RenderRegionCache renderRegionCache;
     int nonEmptyChunks;
 
     private final List<Runnable> onAllChangedCallbacks = new ObjectArrayList<>();
@@ -210,12 +209,15 @@ public class WorldRenderer {
                 this.initUpdate();
                 this.initializeQueueForFullUpdate(camera);
 
-                this.renderRegionCache = new RenderRegionCache();
+                // RenderRegionCache stores LevelChunk-backed entries keyed only by chunk
+                // position. Reuse it across this scheduling traversal, but do not retain
+                // it on the renderer after tasks have captured their RenderChunkRegion.
+                RenderRegionCache renderRegionCache = new RenderRegionCache();
 
                 if(flag)
-                    this.updateRenderChunks();
+                    this.updateRenderChunks(renderRegionCache);
                 else
-                    this.updateRenderChunksSpectator();
+                    this.updateRenderChunksSpectator(renderRegionCache);
 
                 this.minecraft.getProfiler().pop();
 
@@ -289,7 +291,7 @@ public class WorldRenderer {
         this.sectionGrid.chunkAreaManager.resetQueues();
     }
 
-    private void updateRenderChunks() {
+    private void updateRenderChunks(RenderRegionCache renderRegionCache) {
         int maxDirectionsChanges = Initializer.CONFIG.advCulling;
 
 //        this.initUpdate();
@@ -308,7 +310,7 @@ public class WorldRenderer {
 
             if(renderSection.isDirty() && rebuildLimit <= 0) {
                 this.needsUpdate = true;
-            } else if(this.scheduleUpdate(renderSection, rebuildLimit)) {
+            } else if(this.scheduleUpdate(renderSection, rebuildLimit, renderRegionCache)) {
                 rebuildLimit--;
             }
 
@@ -332,7 +334,7 @@ public class WorldRenderer {
 
     }
 
-    private void updateRenderChunksSpectator() {
+    private void updateRenderChunksSpectator(RenderRegionCache renderRegionCache) {
         int maxDirectionsChanges = Initializer.CONFIG.advCulling;
 
         int rebuildLimit = taskDispatcher.getBuildSchedulingCapacity();
@@ -349,7 +351,7 @@ public class WorldRenderer {
 
             if(renderSection.isDirty() && rebuildLimit <= 0) {
                 this.needsUpdate = true;
-            } else if(this.scheduleUpdate(renderSection, rebuildLimit)) {
+            } else if(this.scheduleUpdate(renderSection, rebuildLimit, renderRegionCache)) {
                 rebuildLimit--;
             }
 
@@ -411,14 +413,14 @@ public class WorldRenderer {
         }
     }
 
-    public boolean scheduleUpdate(RenderSection section, int limit) {
+    private boolean scheduleUpdate(RenderSection section, int limit, RenderRegionCache renderRegionCache) {
         if(!section.isDirty())
             return false;
 
         if(limit <= 0)
             return false;
 
-        section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache);
+        section.rebuildChunkAsync(this.taskDispatcher, renderRegionCache);
         section.setNotDirty();
         return true;
     }
