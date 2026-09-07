@@ -42,6 +42,8 @@ public class VulkanImage {
     private int usage;
 
     private int currentLayout;
+    private boolean freeScheduled;
+    private boolean freed;
 
     public VulkanImage(long id, int format, int mipLevels, int width, int height, int formatSize, int usage, long imageView) {
         this.id = id;
@@ -497,11 +499,28 @@ public class VulkanImage {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    public void free() {
+    /**
+     * Schedule this image for retirement once the current frame slot is safe to
+     * recycle. Multiple release paths may converge on the same texture during a
+     * resource reload, so make scheduling idempotent.
+     */
+    public synchronized void free() {
+        if(this.freeScheduled || this.freed)
+            return;
+
+        this.freeScheduled = true;
         MemoryManager.getInstance().addToFreeable(this);
     }
 
-    public void doFree() {
+    /**
+     * Free the Vulkan image now. Callers that bypass frame-deferred retirement must
+     * first establish GPU idleness. This method is idempotent so an already queued
+     * frame retirement cannot double-destroy the resource later.
+     */
+    public synchronized void doFree() {
+        if(this.freed)
+            return;
+
         MemoryManager.freeImage(this.id, this.allocation);
 
         vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
@@ -509,6 +528,29 @@ public class VulkanImage {
         for (long sampler : samplers.values()) {
             vkDestroySampler(Vulkan.getDevice(), sampler, null);
         }
+
+        this.freed = true;
+    }
+
+    public long getEstimatedSizeBytes() {
+        return estimateSizeBytes(this.width, this.height, this.mipLevels, this.formatSize);
+    }
+
+    static long estimateSizeBytes(int width, int height, int mipLevels, int formatSize) {
+        if(width <= 0 || height <= 0 || mipLevels <= 0 || formatSize <= 0)
+            return 0L;
+
+        long total = 0L;
+        int mipWidth = width;
+        int mipHeight = height;
+
+        for(int level = 0; level < mipLevels; ++level) {
+            total += (long)mipWidth * mipHeight * formatSize;
+            mipWidth = Math.max(1, mipWidth >> 1);
+            mipHeight = Math.max(1, mipHeight >> 1);
+        }
+
+        return total;
     }
 
     public int getCurrentLayout() {
