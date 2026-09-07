@@ -1,12 +1,15 @@
 package net.vulkanmod.mixin.render;
 
+import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
+import net.vulkanmod.vulkan.texture.VulkanImage;
 import net.vulkanmod.vulkan.util.DrawUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -100,6 +103,19 @@ public class RenderTargetMixin {
 
     /**
      * @author
+     * @reason Implement Minecraft's framebuffer depth blit directly on the
+     * Vulkan images. The legacy GL framebuffer shim does not emulate separate
+     * READ_FRAMEBUFFER/DRAW_FRAMEBUFFER bindings used by vanilla copyDepthFrom.
+     */
+    @Overwrite
+    public void copyDepthFrom(RenderTarget otherTarget) {
+        VulkanImage sourceDepth = vulkanmod$getDepthAttachment(otherTarget);
+        VulkanImage destinationDepth = vulkanmod$getDepthAttachment((RenderTarget)(Object)this);
+        RenderTargetManager.copyDepth(sourceDepth, destinationDepth);
+    }
+
+    /**
+     * @author
      * @reason Switch the primary command buffer to this target's Vulkan render
      * pass, preserving its existing color/depth contents across rebinds.
      */
@@ -163,6 +179,16 @@ public class RenderTargetMixin {
 
         RenderSystem.depthMask(true);
         RenderSystem.colorMask(true, true, true, true);
+    }
+
+    private static VulkanImage vulkanmod$getDepthAttachment(RenderTarget target) {
+        // VulkanMod renders MainTarget directly into the swapchain rather than
+        // allocating the synthetic off-screen backing used by generic targets.
+        if(target instanceof MainTarget)
+            return Vulkan.getSwapChain().getDepthAttachment();
+
+        int textureId = target.getDepthTextureId();
+        return textureId > 0 ? GlTexture.getVulkanImage(textureId) : null;
     }
 
     private void vulkanmod$destroyBacking() {
