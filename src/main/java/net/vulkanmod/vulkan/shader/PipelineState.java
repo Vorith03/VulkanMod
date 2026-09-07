@@ -1,6 +1,7 @@
 package net.vulkanmod.vulkan.shader;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.VRenderSystem;
 
@@ -29,6 +30,15 @@ public class PipelineState {
             currentBlendState = currentState.blendState;
             currentDepthState = currentState.depthState;
             currentColorMask = currentState.colorMask;
+
+            // Graphics pipelines are valid with any compatible render pass. Keep
+            // the cache key compatible across extent-only RenderTarget rebuilds,
+            // but refresh the representative object so a newly-created pipeline
+            // never tries to use a retired VkRenderPass handle from an older target.
+            if(currentState.renderPass != renderPass) {
+                currentState = new PipelineState(currentState.blendState, currentState.depthState,
+                        currentState.logicOpState, currentState.colorMask, renderPass);
+            }
             return currentState;
         }
 
@@ -56,12 +66,48 @@ public class PipelineState {
     }
 
     private boolean matchesCurrentState(RenderPass renderPass, int colorMask) {
-        return this.renderPass == renderPass
+        return renderPassesCompatible(this.renderPass, renderPass)
                 && this.cullState == VRenderSystem.cull
                 && this.colorMask.colorMask == colorMask
                 && this.blendState.matches(blendInfo)
                 && this.depthState.matches(VRenderSystem.depthTest, VRenderSystem.depthMask, VRenderSystem.depthFun)
                 && this.logicOpState.equals(currentLogicOpState);
+    }
+
+    private static boolean renderPassesCompatible(RenderPass first, RenderPass second) {
+        if(first == second)
+            return true;
+        if(first == null || second == null)
+            return false;
+
+        Framebuffer firstFramebuffer = first.getFramebuffer();
+        Framebuffer secondFramebuffer = second.getFramebuffer();
+
+        boolean firstHasColor = firstFramebuffer.getColorAttachment() != null;
+        boolean secondHasColor = secondFramebuffer.getColorAttachment() != null;
+        if(firstHasColor != secondHasColor)
+            return false;
+        if(firstHasColor && firstFramebuffer.getFormat() != secondFramebuffer.getFormat())
+            return false;
+
+        boolean firstHasDepth = firstFramebuffer.getDepthAttachment() != null;
+        boolean secondHasDepth = secondFramebuffer.getDepthAttachment() != null;
+        if(firstHasDepth != secondHasDepth)
+            return false;
+
+        return !firstHasDepth || firstFramebuffer.getDepthFormat() == secondFramebuffer.getDepthFormat();
+    }
+
+    private static int renderPassCompatibilityHash(RenderPass renderPass) {
+        if(renderPass == null)
+            return 0;
+
+        Framebuffer framebuffer = renderPass.getFramebuffer();
+        int colorFormat = framebuffer.getColorAttachment() != null
+                ? framebuffer.getFormat() : VK_FORMAT_UNDEFINED;
+        int depthFormat = framebuffer.getDepthAttachment() != null
+                ? framebuffer.getDepthFormat() : VK_FORMAT_UNDEFINED;
+        return Objects.hash(colorFormat, depthFormat);
     }
 
     @Override
@@ -70,13 +116,14 @@ public class PipelineState {
         if (o == null || getClass() != o.getClass()) return false;
         PipelineState that = (PipelineState) o;
         return blendState.equals(that.blendState) && depthState.equals(that.depthState)
-                && this.renderPass == that.renderPass
+                && renderPassesCompatible(this.renderPass, that.renderPass)
                 && logicOpState.equals(that.logicOpState) && (cullState == that.cullState) && colorMask.equals(that.colorMask);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState, depthState, logicOpState, cullState, renderPass, colorMask.colorMask);
+        return Objects.hash(blendState, depthState, logicOpState, cullState,
+                renderPassCompatibilityHash(renderPass), colorMask.colorMask);
     }
 
     public static BlendInfo defaultBlendInfo() {
