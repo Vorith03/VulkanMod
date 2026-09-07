@@ -49,7 +49,7 @@ public class GlTexture {
         if(width == 0 || height == 0)
             return;
 
-        if(width != boundTexture.vulkanImage.width || height != boundTexture.vulkanImage.height || vulkanFormat(format, type) != boundTexture.vulkanImage.format) {
+        if(boundTexture.vulkanImage == null || width != boundTexture.vulkanImage.width || height != boundTexture.vulkanImage.height || vulkanFormat(format, type) != boundTexture.vulkanImage.format) {
             boundTexture.allocateVulkanImage(width, height);
         }
 
