@@ -9,6 +9,7 @@ This is the current-state companion to `PERFORMANCE_AUDIT.md`. The audit preserv
 - Vulkan rendering is locally playable on an AMD RX 6900 XT.
 - The Forge 1.20.1 water/liquid UV/alpha regression is fixed and covered by CI.
 - CI exercises Gradle build plus normal and no-early-splash Forge/Lavapipe startup smoke tests.
+- CI also runs a positive Flywheel 0.6 compatibility smoke test in a ForgeGradle-deobfuscated development runtime.
 - The terrain path now has instrumentation suitable for a real RX 6900 XT loading/churn comparison.
 
 ## Synchronization and submission
@@ -24,16 +25,17 @@ This is the current-state companion to `PERFORMANCE_AUDIT.md`. The audit preserv
 - Area-buffer reallocation retains a separate synchronous fence-only flush path so binary semaphores cannot be recycled while signaled but unconsumed.
 - `Renderer.resetBuffers()` waits the current frame fence before early run-tick texture/resource work can reuse staging/drawer frame resources.
 - Swapchain image acquisition occurs in `beginFrame()` before the main render pass is recorded; `currentFrame` and acquired `imageIndex` are separate values.
+- Cumulative helper synchronization counters are exposed in the F3 terrain statistics: semaphore-backed registrations, same-graphics-queue helper registrations, legacy fence registrations, and actual fallback fence wait calls/count/time.
 
 ### Still retained deliberately
 
-- `Synchronization.waitFences()` remains in `Renderer.submitFrame()` as a legacy safety fallback. Most known graphics/transfer helper producers are semaphore-backed and duplicate registration is suppressed, but branch-wide code search has not been reliable enough to prove there are zero legitimate fence producers.
+- `Synchronization.waitFences()` remains in `Renderer.submitFrame()` as a legacy safety fallback. Most known graphics/transfer helper producers are semaphore-backed and duplicate registration is suppressed. The new F3 counters are intended to prove whether any legitimate fence producer still reaches this fallback during real gameplay before it is deleted.
 - `beginFrame()` still waits the current frame fence even though `resetBuffers()` now waits it earlier. This duplicate wait is intentionally kept until local validation confirms the earlier resource-retirement point is stable.
 
 ### Open
 
-- Batch/stream additional image-transition work where practical. `GraphicsQueue` already uses semaphore-backed helper submission, so this is now mostly about reducing submission count rather than removing a global CPU drain.
-- Instrument helper submit counts/fence fallback usage before deleting any remaining legacy synchronization path.
+- Batch/stream additional image-transition work where practical. `GraphicsQueue` already uses same-queue ordering for helper submission, so this is now mostly about reducing submission count rather than removing a global CPU drain.
+- Use the new synchronization counters during real gameplay before deleting any remaining legacy synchronization path.
 
 ## Terrain scheduling and publication
 
@@ -48,6 +50,7 @@ This is the current-state companion to `PERFORMANCE_AUDIT.md`. The audit preserv
 - Unexpected worker exceptions discard partial builders and are surfaced through Minecraft crash handling instead of silently reducing the worker pool.
 - Worker-local native terrain builder packs are freed when worker threads exit.
 - Section/global-block-entity state is released when sections are reset and when a section grid is discarded.
+- `RenderRegionCache` is scoped to one visibility/scheduling traversal. Sections scheduled during that traversal still share the cache, while the renderer no longer retains its LevelChunk-backed cache entries after tasks have captured their `RenderChunkRegion` snapshots.
 
 ### Mesh hot-path cleanup
 
@@ -104,8 +107,14 @@ The chunk statistics line now exposes:
 - `lat(q/b/h)`: average queue wait / mesh build / render-thread handoff latency in milliseconds
 - `up(rdy/size/avg)`: last terrain transfer record-to-ready latency / batch KiB / average ready latency
 - `stg:<high>/<cap>MiB r:<count>`: peak staging usage / current maximum staging capacity / total staging resizes
+- `sync sem:<n>`: cumulative semaphore-backed helper/wait registrations
+- `same:<n>`: cumulative same-graphics-queue helper submissions retained until the frame fence
+- `fence:<n>`: cumulative legacy fence registrations
+- `waits:<calls>/<fences> <ms>`: actual legacy fallback fence wait calls, total fences waited, and cumulative CPU wait time
 
 Under the new semaphore path, `up(rdy)` is the CPU handoff point at which a terrain range is safe to include in the current frame because the graphics queue will wait its transfer semaphore. It is not a CPU fence-completion time.
+
+The synchronization counters are cumulative for the process. Take an F3 capture before a movement/loading test and another after it; the delta is what matters. If `fence` and `waits` do not increase during representative gameplay, the legacy `Synchronization.waitFences()` path becomes a strong deletion candidate.
 
 ## Next RX 6900 XT validation
 
@@ -118,7 +127,7 @@ Use a build only after its full CI run is green. Then exercise:
 5. render-distance change / renderer rebuild;
 6. water and other translucent terrain while moving.
 
-Capture the F3 terrain-stat line during the loading/churn portions.
+Capture the F3 terrain-stat line before the loading/churn test and during/after the loading/churn portions.
 
 ### Interpreting the counters
 
@@ -127,12 +136,14 @@ Capture the F3 terrain-stat line during the loading/churn portions.
 - High `h` or persistent `uQ`: render-thread publication/upload processing is the bottleneck.
 - Frequent `dropR`: movement/invalidation is causing wasted builds; improve cancellation/scheduling locality.
 - `stg` close to capacity or nonzero resize growth: staging pressure deserves tuning.
+- Rising `fence`/`waits`: identify the remaining fence-only producer before removing the fallback.
+- Flat `fence`/`waits` with rising `sem`/`same`: the legacy per-frame fence fallback is likely redundant in steady state.
 - Low queue/build/handoff times but terrain still appears late: inspect GPU transfer/draw dependency and visibility invalidation rather than adding workers.
 
 ## Next code priorities after measurement
 
 1. Use the real F3 measurements to choose scheduler vs mesh-build vs publication/upload work.
-2. Count semaphore helper submits and legacy fence-fallback registrations; remove the fallback CPU drain only after proving it is unused in steady state.
+2. Use synchronization counter deltas to decide whether the legacy `Synchronization.waitFences()` call can be removed safely.
 3. If build time dominates, profile the per-block meshing loop before larger architecture changes.
 4. If publication dominates, phase/budget render-thread result application and reduce per-result upload bookkeeping.
 5. Continue image-transition batching if texture-heavy gameplay still shows helper-submit churn.
