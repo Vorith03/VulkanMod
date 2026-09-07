@@ -47,7 +47,7 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh startup
       - name: Smoke-test Forge client Vulkan startup without early splash
         run: bash scripts/ci/vulkan-smoke.sh no-splash
-      - name: Smoke-test vanilla Vulkan post-chain construction
+      - name: Smoke-test vanilla Vulkan post-chain execution
         run: bash scripts/ci/vulkan-smoke.sh post-chain
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant

@@ -60,7 +60,7 @@ case "$mode" in
   post-chain)
     rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
     run_client "-Dvulkanmod.ciPostChainSmoke=true" vulkan-post-chain-smoke.log
-    grep -F "Vulkan vanilla post-chain construction smoke passed" vulkan-post-chain-smoke.log
+    grep -F "Vulkan vanilla post-chain execution smoke passed" vulkan-post-chain-smoke.log
     ;;
 
   crash-assistant)
