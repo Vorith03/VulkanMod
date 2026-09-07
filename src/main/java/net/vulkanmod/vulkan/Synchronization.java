@@ -25,6 +25,7 @@ public class Synchronization {
 
     private final LongArrayList semaphores = new LongArrayList();
     private final ObjectArrayList<CommandPool.CommandBuffer> semaphoreCommandBuffers = new ObjectArrayList<>();
+    private final ObjectArrayList<CommandPool.CommandBuffer> sameQueueCommandBuffers = new ObjectArrayList<>();
 
     private long semaphoreRegistrations;
     private long sameQueueRegistrations;
@@ -50,7 +51,9 @@ public class Synchronization {
 
         // Some legacy callers register a command buffer after queue submission while newer
         // queue helpers already registered it. Never track the same submission twice.
-        if(this.fenceCommandBuffers.contains(commandBuffer) || this.semaphoreCommandBuffers.contains(commandBuffer))
+        if(this.fenceCommandBuffers.contains(commandBuffer)
+                || this.semaphoreCommandBuffers.contains(commandBuffer)
+                || this.sameQueueCommandBuffers.contains(commandBuffer))
             return;
 
         if(useSemaphore) {
@@ -66,14 +69,17 @@ public class Synchronization {
     public synchronized void addSameQueueCommandBuffer(CommandPool.CommandBuffer commandBuffer) {
         // Same-queue helper submissions execute before the later main graphics
         // submission by queue order alone. They need no semaphore wait, but their
-        // command buffers must stay alive until the main frame fence retires.
+        // command buffers must stay alive until the main frame fence retires or an
+        // explicit graphics-queue idle point proves they are already complete.
         if(Device.getGraphicsQueue().isRecording(commandBuffer))
             return;
 
-        if(this.fenceCommandBuffers.contains(commandBuffer) || this.semaphoreCommandBuffers.contains(commandBuffer))
+        if(this.fenceCommandBuffers.contains(commandBuffer)
+                || this.semaphoreCommandBuffers.contains(commandBuffer)
+                || this.sameQueueCommandBuffers.contains(commandBuffer))
             return;
 
-        this.semaphoreCommandBuffers.add(commandBuffer);
+        this.sameQueueCommandBuffers.add(commandBuffer);
         this.sameQueueRegistrations++;
     }
 
@@ -123,13 +129,29 @@ public class Synchronization {
     }
 
     public synchronized void scheduleCbReset() {
-        if(this.semaphoreCommandBuffers.isEmpty()) return;
+        if(this.semaphoreCommandBuffers.isEmpty() && this.sameQueueCommandBuffers.isEmpty()) return;
 
-        final ObjectArrayList<CommandPool.CommandBuffer> frameCommandBuffers = this.semaphoreCommandBuffers.clone();
+        final ObjectArrayList<CommandPool.CommandBuffer> frameCommandBuffers = new ObjectArrayList<>(
+                this.semaphoreCommandBuffers.size() + this.sameQueueCommandBuffers.size());
+        frameCommandBuffers.addAll(this.semaphoreCommandBuffers);
+        frameCommandBuffers.addAll(this.sameQueueCommandBuffers);
+
         MemoryManager.getInstance().addFrameOp(
                 () -> frameCommandBuffers.forEach(CommandPool.CommandBuffer::reset)
         );
         this.semaphoreCommandBuffers.clear();
+        this.sameQueueCommandBuffers.clear();
+    }
+
+    /**
+     * The caller has already waited for the graphics queue to become idle, so
+     * same-queue helper command buffers can be recycled immediately instead of
+     * being retained until a later main-frame fence. Semaphore-backed transfer
+     * submissions remain tracked separately and are not touched here.
+     */
+    public synchronized void retireSameQueueCommandBuffersAfterQueueIdle() {
+        this.sameQueueCommandBuffers.forEach(CommandPool.CommandBuffer::reset);
+        this.sameQueueCommandBuffers.clear();
     }
 
     public synchronized String getStats() {
