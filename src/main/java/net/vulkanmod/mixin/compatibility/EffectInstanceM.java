@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
@@ -96,8 +97,13 @@ public class EffectInstanceM {
         EffectRenderState.clear(this.pipeline);
 
         if(this.pipeline != null) {
-            this.pipeline.cleanUp();
+            // Post chains can be rebuilt or closed after this pipeline has already
+            // been recorded into the current primary command buffer. Mirror the
+            // core ShaderInstance reload path and retire its Vulkan handles only
+            // after this frame slot's fence has completed.
+            GraphicsPipeline retiredPipeline = this.pipeline;
             this.pipeline = null;
+            MemoryManager.getInstance().addFrameOp(retiredPipeline::cleanUp);
         }
 
         this.vulkanmod$uniformBindings.close();
