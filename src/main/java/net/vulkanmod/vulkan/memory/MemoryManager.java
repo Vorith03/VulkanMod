@@ -184,8 +184,11 @@ public class MemoryManager {
         }
     }
 
-    public static void addImage(VulkanImage image) {
-        images.putIfAbsent(image.getId(), image);
+    public static synchronized void addImage(VulkanImage image) {
+        if(!images.containsKey(image.getId())) {
+            images.put(image.getId(), image);
+            MemoryDiagnostics.onVulkanImageAllocated(image.getEstimatedSizeBytes());
+        }
     }
 
     public void MapAndCopy(long allocation, long bufferSize, Consumer<PointerBuffer> consumer){
@@ -231,10 +234,13 @@ public class MemoryManager {
         buffers.remove(bufferInfo.id());
     }
 
-    public static void freeImage(long image, long allocation) {
+    public static synchronized void freeImage(long image, long allocation) {
         vmaDestroyImage(allocator, image, allocation);
 
-        images.remove(image);
+        VulkanImage tracked = images.remove(image);
+        if(tracked != null) {
+            MemoryDiagnostics.onVulkanImageFreed(tracked.getEstimatedSizeBytes());
+        }
     }
 
     public synchronized void addToFreeable(Buffer buffer) {
