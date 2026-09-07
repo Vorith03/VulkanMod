@@ -20,6 +20,9 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.function.Consumer;
 
@@ -46,18 +49,18 @@ public abstract class RenderSystemMixin {
     @Shadow private static @Nullable Thread renderThread;
 
     /**
-     * @author
+     * Keep vanilla's method body intact so compatibility mixins such as
+     * Flywheel's RenderTexturesMixin can inject at its TextureManager lookup.
+     * Vulkan only needs to mirror the resolved texture into its selector after
+     * vanilla/Flywheel have finished their bookkeeping.
      */
-    @Overwrite
-    public static void _setShaderTexture(int i, ResourceLocation location) {
+    @Inject(method = "_setShaderTexture(ILnet/minecraft/resources/ResourceLocation;)V", at = @At("TAIL"))
+    private static void vulkanmod$bindShaderTexture(int i, ResourceLocation location, CallbackInfo ci) {
         if (i >= 0 && i < shaderTextures.length) {
             TextureManager texturemanager = Minecraft.getInstance().getTextureManager();
             AbstractTexture abstracttexture = texturemanager.getTexture(location);
-            //abstracttexture.bindTexture();
-            shaderTextures[i] = abstracttexture.getId();
             VTextureSelector.bindTexture(i, ((VAbstractTextureI)abstracttexture).getVulkanImage());
         }
-
     }
 
     /**
