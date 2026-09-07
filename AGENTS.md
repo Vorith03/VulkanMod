@@ -335,6 +335,18 @@ Do not predict hypothetical compiler failures while an actual CI failure is avai
 
 A green CI build is a milestone, not final success.
 
+### CI polling cadence
+
+Do not repeatedly poll a newly pushed workflow while it is still too early for the result to be informative.
+
+- Derive the first useful poll time from recent runs of the same workflow, especially the observed time-to-relevant-gate rather than a hard-coded delay.
+- Spend the initial wait doing adjacent code review, log analysis, or other useful repository work.
+- As of September 2026, recent Forge runs have typically reached the interesting renderer smoke gates roughly **2 minutes 20 seconds to 2 minutes 30 seconds** after job start; treat that only as a current observation and recalculate when timings change.
+- Once the workflow is plausibly at or beyond the relevant gate, polling about every **25–30 seconds** is reasonable.
+- If the active step is known to have a longer runtime or timeout, wait according to that step's observed duration instead of polling every 25 seconds throughout it.
+- Avoid status checks that have negligible chance of producing new evidence.
+- When multiple pushes are intentionally made close together, rely on the workflow's `cancel-in-progress` concurrency behavior and follow the newest run.
+
 ---
 
 # 17. Build Success Criteria
