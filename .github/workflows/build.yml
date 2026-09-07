@@ -70,10 +70,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p run/mods
-          curl --fail --location --retry 3 \
-            https://modmaven.dev/com/jozufozu/flywheel/flywheel-forge-1.20.1/0.6.11-13/flywheel-forge-1.20.1-0.6.11-13.jar \
-            --output run/mods/flywheel-forge-1.20.1-0.6.11-13.jar
+          rm -f run/mods/flywheel-*.jar
+
+          # runClient uses Mojmap-named development classes, while a published
+          # Flywheel JAR is reobfuscated for production. Feed Flywheel through
+          # ForgeGradle's deobfuscation transform so this positive gate tests
+          # actual Vulkan/Flywheel compatibility instead of failing on Flywheel's
+          # own SRG-named @Shadow fields before VulkanMod is involved.
+          cat >> build.gradle <<'EOF'
+
+          repositories {
+              maven { url = 'https://modmaven.dev/' }
+          }
+          dependencies {
+              runtimeOnly fg.deobf('com.jozufozu.flywheel:flywheel-forge-1.20.1:0.6.11-13')
+          }
+          EOF
 
           LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
           if [[ -z "$LVP_ICD" ]]; then
