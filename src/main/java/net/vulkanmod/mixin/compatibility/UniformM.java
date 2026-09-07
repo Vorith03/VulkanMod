@@ -42,6 +42,19 @@ public class UniformM {
     public static void glBindAttribLocation(int program, int index, CharSequence name) {
     }
 
+    /**
+     * EffectInstance.apply uploads each sampler's texture-unit index through this
+     * static OpenGL helper before it uploads the ordinary Uniform instances. The
+     * Vulkan effect path binds samplers through EffectRenderState instead and has
+     * no OpenGL program/context, so the vanilla sampler upload must be a no-op too.
+     *
+     * @author
+     * @reason Vulkan descriptor bindings replace OpenGL sampler uniforms.
+     */
+    @Overwrite
+    public static void uploadInteger(int location, int value) {
+    }
+
     @Inject(method = "upload", at = @At("HEAD"), cancellable = true)
     public void cancelUpload(CallbackInfo ci) {
         ci.cancel();
