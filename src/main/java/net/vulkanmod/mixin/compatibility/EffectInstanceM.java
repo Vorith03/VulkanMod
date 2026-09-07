@@ -12,9 +12,7 @@ import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.parser.GlslConverter;
-import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
-import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -25,13 +23,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
 @Mixin(EffectInstance.class)
 public class EffectInstanceM {
@@ -42,7 +37,7 @@ public class EffectInstanceM {
     private Pipeline pipeline;
     private String vulkanmod$vertexShader;
     private String vulkanmod$fragmentShader;
-    private final List<ByteBuffer> vulkanmod$fallbackUniformBuffers = new ArrayList<>();
+    private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
 
     /**
      * Mixin 0.8.5 only permits callback injection at a constructor's safe return
@@ -82,7 +77,7 @@ public class EffectInstanceM {
             this.pipeline = null;
         }
 
-        this.vulkanmod$releaseFallbackUniformBuffers();
+        this.vulkanmod$uniformBindings.close();
 
         for (Uniform uniform : this.uniforms) {
             uniform.close();
@@ -121,14 +116,14 @@ public class EffectInstanceM {
             }
 
             UBO ubo = converter.getUBO();
-            this.setUniformSuppliers(ubo);
+            this.vulkanmod$uniformBindings.bind(ubo, this.uniformMap);
 
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
 
             this.pipeline = builder.createGraphicsPipeline();
         } catch (Throwable throwable) {
-            this.vulkanmod$releaseFallbackUniformBuffers();
+            this.vulkanmod$uniformBindings.close();
 
             if(throwable instanceof RuntimeException runtimeException) {
                 throw runtimeException;
@@ -138,42 +133,6 @@ public class EffectInstanceM {
             }
             throw new RuntimeException(throwable);
         }
-    }
-
-    private void setUniformSuppliers(UBO ubo) {
-        for(Field field : ubo.getFields()) {
-            Uniform uniform = this.uniformMap.get(field.getName());
-            ByteBuffer byteBuffer;
-
-            if(uniform == null) {
-                // EffectInstance only creates Uniform objects for entries declared
-                // in the program JSON. Keep the GLSL field in the Vulkan UBO so
-                // layout stays source-compatible, but give it OpenGL's linked-
-                // program default value: all zeroes.
-                byteBuffer = MemoryUtil.memCalloc(field.getSize() * Integer.BYTES);
-                this.vulkanmod$fallbackUniformBuffers.add(byteBuffer);
-            }
-            else if (uniform.getType() <= 3) {
-                byteBuffer = MemoryUtil.memByteBuffer(uniform.getIntBuffer());
-            }
-            else if (uniform.getType() <= 10) {
-                byteBuffer = MemoryUtil.memByteBuffer(uniform.getFloatBuffer());
-            }
-            else {
-                throw new RuntimeException("out of bounds value for uniform " + uniform);
-            }
-
-            MappedBuffer mappedBuffer = MappedBuffer.createFromBuffer(byteBuffer);
-            Supplier<MappedBuffer> supplier = () -> mappedBuffer;
-            field.setSupplier(supplier);
-        }
-    }
-
-    private void vulkanmod$releaseFallbackUniformBuffers() {
-        for(ByteBuffer buffer : this.vulkanmod$fallbackUniformBuffers) {
-            MemoryUtil.memFree(buffer);
-        }
-        this.vulkanmod$fallbackUniformBuffers.clear();
     }
 
     private String[] decompose(String string, char c) {

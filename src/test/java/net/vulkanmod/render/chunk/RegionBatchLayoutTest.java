@@ -1,5 +1,7 @@
 package net.vulkanmod.render.chunk;
 
+import net.vulkanmod.mixin.compatibility.EffectUniformBindingsTest;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashSet;
@@ -37,6 +39,8 @@ public final class RegionBatchLayoutTest {
         require(RegionBatchLayout.drawLimit(-1) == 512, "Unsigned Vulkan limit");
         require(RegionBatchLayout.drawLimit(128) == 128, "Device batch limit");
         require(RegionBatchLayout.drawLimit(1) == 1, "Single draw limit");
+
+        EffectUniformBindingsTest.run();
         System.out.println("Terrain region layout tests passed");
     }
 
