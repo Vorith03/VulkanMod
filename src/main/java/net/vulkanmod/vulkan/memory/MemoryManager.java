@@ -10,6 +10,7 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaAllocationCreateInfo;
+import org.lwjgl.util.vma.VmaAllocationInfo;
 import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
@@ -177,8 +178,15 @@ public class MemoryManager {
 
             int result = vmaCreateImage(allocator, imageInfo, allocationInfo, pTextureImage, pTextureImageMemory, null);
             if(result != VK_SUCCESS) {
-                throw new RuntimeException("Failed to create Vulkan image " + width + "x" + height +
-                        " mips=" + mipLevels + " format=" + format + ": " + result);
+                String message = "Failed to create Vulkan image " + width + "x" + height +
+                        " mips=" + mipLevels + " format=" + format + ": " + result;
+                // VulkanImage's legacy create path catches Exception. Propagate the
+                // two actual Vulkan allocation failures as Errors so it cannot
+                // continue with null handles after memory exhaustion.
+                if(result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+                    throw new OutOfMemoryError(message);
+                }
+                throw new RuntimeException(message);
             }
 
         }
@@ -187,7 +195,8 @@ public class MemoryManager {
     public static synchronized void addImage(VulkanImage image) {
         if(!images.containsKey(image.getId())) {
             images.put(image.getId(), image);
-            MemoryDiagnostics.onVulkanImageAllocated(image.getEstimatedSizeBytes());
+            MemoryDiagnostics.onVulkanImageAllocated(
+                    image.getEstimatedSizeBytes(), getAllocationSize(image.getAllocation()));
         }
     }
 
@@ -235,11 +244,25 @@ public class MemoryManager {
     }
 
     public static synchronized void freeImage(long image, long allocation) {
+        VulkanImage tracked = images.get(image);
+        long allocationBytes = tracked != null ? getAllocationSize(allocation) : 0L;
+
         vmaDestroyImage(allocator, image, allocation);
 
-        VulkanImage tracked = images.remove(image);
+        tracked = images.remove(image);
         if(tracked != null) {
-            MemoryDiagnostics.onVulkanImageFreed(tracked.getEstimatedSizeBytes());
+            MemoryDiagnostics.onVulkanImageFreed(tracked.getEstimatedSizeBytes(), allocationBytes);
+        }
+    }
+
+    private static long getAllocationSize(long allocation) {
+        if(allocation == VK_NULL_HANDLE)
+            return 0L;
+
+        try(MemoryStack stack = stackPush()) {
+            VmaAllocationInfo allocationInfo = VmaAllocationInfo.malloc(stack);
+            vmaGetAllocationInfo(allocator, allocation, allocationInfo);
+            return allocationInfo.size();
         }
     }
 
