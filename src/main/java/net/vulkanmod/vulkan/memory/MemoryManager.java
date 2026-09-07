@@ -175,7 +175,11 @@ public class MemoryManager {
             //allocationInfo.usage(VMA_MEMORY_USAGE_CPU_ONLY);
             allocationInfo.requiredFlags(memProperties);
 
-            vmaCreateImage(allocator, imageInfo, allocationInfo, pTextureImage, pTextureImageMemory, null);
+            int result = vmaCreateImage(allocator, imageInfo, allocationInfo, pTextureImage, pTextureImageMemory, null);
+            if(result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to create Vulkan image " + width + "x" + height +
+                        " mips=" + mipLevels + " format=" + format + ": " + result);
+            }
 
         }
     }
