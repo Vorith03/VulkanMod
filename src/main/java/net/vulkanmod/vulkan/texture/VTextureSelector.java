@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.texture;
 
+import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
@@ -148,11 +149,15 @@ public abstract class VTextureSelector {
             Vulkan.waitIdle();
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
 
-            // StagingBuffer resize schedules the previous mapped buffer for frame
-            // retirement. Startup/resource reload may not advance another frame
-            // before memory pressure becomes catastrophic, so collect all already-
-            // retired resources now that device idleness makes that unambiguous.
-            MemoryManager.getInstance().freeAllBuffers();
+            // Startup/resource reload may not advance frame retirement, so drain
+            // deferred resources aggressively there. During gameplay, however,
+            // texture animation runs while the main graphics command buffer may
+            // already reference resources scheduled in the current frame slot.
+            // Device-idle does not make that not-yet-submitted command buffer safe;
+            // let normal frame-fence retirement reclaim those resources instead.
+            if(Minecraft.getInstance().level == null) {
+                MemoryManager.getInstance().freeAllBuffers();
+            }
 
             long usedMiB = stagingBuffer.getUsedBytes() / (1024L * 1024L);
             long sourceMiB = stagingBatchSourceBytes / (1024L * 1024L);
