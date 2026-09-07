@@ -19,6 +19,20 @@ jobs:
           cache: gradle
       - name: Make Gradle executable
         run: chmod +x ./gradlew
+      - name: Stamp CI build version
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_version="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          if [[ -z "$base_version" ]]; then
+            echo "Could not read mod_version from gradle.properties" >&2
+            exit 1
+          fi
+          short_sha="${GITHUB_SHA::8}"
+          ci_version="${base_version}-build.${GITHUB_RUN_NUMBER}-g${short_sha}"
+          sed -i "s/^mod_version=.*/mod_version=${ci_version}/" gradle.properties
+          echo "CI mod version: ${ci_version}"
+          echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
       - name: Install software Vulkan smoke-test dependencies
@@ -103,7 +117,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: VulkanMod-Forge-smoke-log
+          name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
           path: |
             vulkan-smoke.log
             vulkan-smoke-no-splash.log
@@ -113,6 +127,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: VulkanMod-Forge-build
+          name: VulkanMod-Forge-build-${{ github.run_number }}
           path: build/libs/*-all.jar
           if-no-files-found: ignore
