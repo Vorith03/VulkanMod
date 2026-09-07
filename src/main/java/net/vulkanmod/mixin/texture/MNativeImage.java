@@ -10,9 +10,9 @@ import net.vulkanmod.vulkan.util.ColorUtil;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -21,12 +21,19 @@ import java.nio.ByteBuffer;
 
 @Mixin(NativeImage.class)
 public abstract class MNativeImage {
+    @Unique
+    private static final long vulkanmod$MIB = 1024L * 1024L;
+    @Unique
+    private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB = Math.max(
+            1024L, Long.getLong("vulkanmod.nativeImageSafetyLimitMiB", 8192L));
+    @Unique
+    private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES =
+            vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB * vulkanmod$MIB;
 
     @Shadow private long pixels;
     @Shadow private long size;
 
     @Shadow public abstract void close();
-
 
     @Shadow @Final private NativeImage.Format format;
 
@@ -47,6 +54,37 @@ public abstract class MNativeImage {
     private long vulkanmod$trackedNativeBytes;
     @Unique
     private boolean vulkanmod$nativeMemoryReleased;
+
+    @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("HEAD"))
+    private void vulkanmod$guardNativeAllocation(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
+        vulkanmod$checkNativeImageBudget(width, height);
+    }
+
+    @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZJ)V", at = @At("HEAD"))
+    private void vulkanmod$guardNativeAllocation(NativeImage.Format format, int width, int height, boolean useStb, long pixels, CallbackInfo ci) {
+        vulkanmod$checkNativeImageBudget(width, height);
+    }
+
+    @Unique
+    private static void vulkanmod$checkNativeImageBudget(int width, int height) {
+        if(width <= 0 || height <= 0)
+            return;
+
+        // Four bytes per pixel is a conservative upper bound for NativeImage's
+        // supported color formats. Check before the native allocation so a failed
+        // resource reload cannot strand the allocation that crossed the threshold.
+        long requestedUpperBound = (long)width * height * 4L;
+        long live = MemoryDiagnostics.getNativeImageLiveBytes();
+        if(requestedUpperBound < 0L || live > vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES - requestedUpperBound) {
+            MemoryDiagnostics.logSnapshot("NativeImage safety limit before allocation");
+            throw new OutOfMemoryError(String.format(
+                    "VulkanMod stopped resource loading before NativeImage memory could exhaust the system: " +
+                            "tracked=%d MiB request<=%d MiB limit=%d MiB (%dx%d). " +
+                            "Override with -Dvulkanmod.nativeImageSafetyLimitMiB=<MiB> only for diagnosis.",
+                    live / vulkanmod$MIB, requestedUpperBound / vulkanmod$MIB,
+                    vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB, width, height));
+        }
+    }
 
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
