@@ -289,6 +289,13 @@ public class RenderPass {
                 colorAttachmentInfo = new AttachmentInfo(AttachmentInfo.Type.COLOR, framebuffer.format);
             if(framebuffer.hasDepthAttachment)
                 depthAttachmentInfo = new AttachmentInfo(AttachmentInfo.Type.DEPTH, framebuffer.depthFormat);
+
+            // The swapchain can be left and re-entered by Minecraft RenderTarget
+            // operations in the middle of one command buffer. Preserve its existing
+            // color/depth contents on every begin; DefaultMainPass still performs
+            // the explicit frame-start clear immediately after the first begin.
+            if(framebuffer instanceof SwapChain)
+                this.setLoadOp(VK_ATTACHMENT_LOAD_OP_LOAD);
         }
 
         public RenderPass build() {
