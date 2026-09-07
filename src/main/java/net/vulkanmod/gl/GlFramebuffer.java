@@ -10,7 +10,9 @@ import org.lwjgl.opengl.GL30C;
 
 public class GlFramebuffer {
 
-    private static int ID_COUNT = 0;
+    // OpenGL object name 0 denotes the default framebuffer/renderbuffer and is
+    // never returned by glGen*. Keep synthetic names disjoint from that sentinel.
+    private static int ID_COUNT = 1;
     private static final Int2ReferenceOpenHashMap<GlFramebuffer> map = new Int2ReferenceOpenHashMap<>();
     private static int boundId = 0;
     private static GlFramebuffer boundFramebuffer;
@@ -33,6 +35,14 @@ public class GlFramebuffer {
         }
 
         boundId = id;
+        if(id == 0) {
+            // 0 means the default framebuffer. VulkanMod's swapchain pass is
+            // managed by Renderer/MainPass rather than by this GL object table,
+            // so never alias object 0 to a generated off-screen framebuffer.
+            boundFramebuffer = null;
+            return;
+        }
+
         boundFramebuffer = map.get(id);
 
         if(boundFramebuffer == null)
@@ -52,6 +62,8 @@ public class GlFramebuffer {
         // texTarget
         // 3553 texture2D
 
+        if(boundFramebuffer == null)
+            throw new IllegalStateException("No generated framebuffer bound");
         if(attachment != GL30C.GL_COLOR_ATTACHMENT0 && attachment != GL30C.GL_DEPTH_ATTACHMENT) {
             throw new UnsupportedOperationException();
         }
@@ -86,6 +98,11 @@ public class GlFramebuffer {
 
         if(target != GL30C.GL_RENDERBUFFER) {
             throw new IllegalArgumentException("target is not GL_RENDERBUFFER");
+        }
+
+        if(id == 0) {
+            boundRenderbuffer = null;
+            return;
         }
 
         boundRenderbuffer = map.get(id);
