@@ -55,45 +55,16 @@ public abstract class MNativeImage {
     @Unique
     private boolean vulkanmod$nativeMemoryReleased;
 
-    @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("HEAD"))
-    private void vulkanmod$guardNativeAllocation(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
-        vulkanmod$checkNativeImageBudget(width, height);
-    }
-
-    @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZJ)V", at = @At("HEAD"))
-    private void vulkanmod$guardNativeAllocation(NativeImage.Format format, int width, int height, boolean useStb, long pixels, CallbackInfo ci) {
-        vulkanmod$checkNativeImageBudget(width, height);
-    }
-
-    @Unique
-    private static void vulkanmod$checkNativeImageBudget(int width, int height) {
-        if(width <= 0 || height <= 0)
-            return;
-
-        // Four bytes per pixel is a conservative upper bound for NativeImage's
-        // supported color formats. Check before the native allocation so a failed
-        // resource reload cannot strand the allocation that crossed the threshold.
-        long requestedUpperBound = (long)width * height * 4L;
-        long live = MemoryDiagnostics.getNativeImageLiveBytes();
-        if(requestedUpperBound < 0L || live > vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES - requestedUpperBound) {
-            MemoryDiagnostics.logSnapshot("NativeImage safety limit before allocation");
-            throw new OutOfMemoryError(String.format(
-                    "VulkanMod stopped resource loading before NativeImage memory could exhaust the system: " +
-                            "tracked=%d MiB request<=%d MiB limit=%d MiB (%dx%d). " +
-                            "Override with -Dvulkanmod.nativeImageSafetyLimitMiB=<MiB> only for diagnosis.",
-                    live / vulkanmod$MIB, requestedUpperBound / vulkanmod$MIB,
-                    vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB, width, height));
-        }
-    }
-
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
         this.vulkanmod$initializeNativeTracking();
+        this.vulkanmod$enforceNativeImageBudget();
     }
 
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZJ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, long pixels, CallbackInfo ci) {
         this.vulkanmod$initializeNativeTracking();
+        this.vulkanmod$enforceNativeImageBudget();
     }
 
     @Unique
@@ -108,6 +79,26 @@ public abstract class MNativeImage {
             this.vulkanmod$trackedNativeBytes = this.size;
             MemoryDiagnostics.onNativeImageAllocated(this.size);
         }
+    }
+
+    @Unique
+    private void vulkanmod$enforceNativeImageBudget() {
+        long live = MemoryDiagnostics.getNativeImageLiveBytes();
+        if(live <= vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES)
+            return;
+
+        // Mixin 0.8.5 does not permit a constructor HEAD injector. Check at RETURN
+        // instead, but explicitly release the just-created image before propagating
+        // the failure so the circuit breaker itself cannot strand native memory.
+        long triggeringBytes = this.vulkanmod$trackedNativeBytes;
+        MemoryDiagnostics.logSnapshot("NativeImage safety limit after allocation");
+        this.close();
+        throw new OutOfMemoryError(String.format(
+                "VulkanMod stopped resource loading before NativeImage memory could exhaust the system: " +
+                        "tracked=%d MiB trigger=%d MiB limit=%d MiB (%dx%d). " +
+                        "Override with -Dvulkanmod.nativeImageSafetyLimitMiB=<MiB> only for diagnosis.",
+                live / vulkanmod$MIB, triggeringBytes / vulkanmod$MIB,
+                vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB, this.width, this.height));
     }
 
     @Inject(method = "close", at = @At("HEAD"))
