@@ -10,17 +10,15 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.util.GsonHelper;
-import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.ShaderMixed;
+import net.vulkanmod.mixin.compatibility.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
-import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
+import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.parser.GlslConverter;
-import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -33,23 +31,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.io.InputStream;
 import java.io.Reader;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
-import java.util.function.Supplier;
 
 @Mixin(ShaderInstance.class)
 public class ShaderInstanceM implements ShaderMixed {
 
     @Shadow @Final private Map<String, Uniform> uniformMap;
-    @Shadow @Final private String name;
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
     @Shadow @Final @Nullable public Uniform PROJECTION_MATRIX;
     @Shadow @Final @Nullable public Uniform COLOR_MODULATOR;
     @Shadow @Final @Nullable public Uniform LINE_WIDTH;
     private GraphicsPipeline pipeline;
+    private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
     boolean isLegacy = false;
 
 
@@ -88,7 +84,11 @@ public class ShaderInstanceM implements ShaderMixed {
      */
     @Overwrite
     public void close() {
-        pipeline.cleanUp();
+        if(this.pipeline != null) {
+            this.pipeline.cleanUp();
+            this.pipeline = null;
+        }
+        this.vulkanmod$uniformBindings.close();
     }
 
     /**
@@ -128,70 +128,37 @@ public class ShaderInstanceM implements ShaderMixed {
     @Overwrite
     public void clear() {}
 
-    private void setUniformSuppliers(UBO ubo) {
-
-        for(Field field : ubo.getFields()) {
-            Uniform uniform = this.uniformMap.get(field.getName());
-
-            if(uniform == null) {
-                throw new NullPointerException(String.format("Field: %s not present in map: %s", field.getName(), this.uniformMap));
-            }
-
-            Supplier<MappedBuffer> supplier;
-            ByteBuffer byteBuffer;
-
-            if(uniform != null) {
-                if (uniform.getType() <= 3) {
-                    byteBuffer = MemoryUtil.memByteBuffer(uniform.getIntBuffer());
-                }
-                else if (uniform.getType() <= 10) {
-                    byteBuffer = MemoryUtil.memByteBuffer(uniform.getFloatBuffer());
-                }
-                else {
-                    throw new RuntimeException("out of bounds value for uniform " + uniform);
-                }
-            } else {
-                Initializer.LOGGER.warn(String.format("Shader: %s field: %s not present in uniform map", this.name, field.getName()));
-
-                //TODO
-                byteBuffer = null;
-            }
-
-
-            MappedBuffer mappedBuffer = MappedBuffer.createFromBuffer(byteBuffer);
-            supplier = () -> mappedBuffer;
-            //TODO vec1
-
-            field.setSupplier(supplier);
-        }
-
-    }
-
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
-        try {
-            Reader reader = resourceProvider.openAsReader(location);
-
+        try (Reader reader = resourceProvider.openAsReader(location)) {
             JsonObject jsonObject = GsonHelper.parse(reader);
 
-            String string2 = GsonHelper.getAsString(jsonObject, "vertex");
-            String string3 = GsonHelper.getAsString(jsonObject, "fragment");
+            String vertexName = GsonHelper.getAsString(jsonObject, "vertex");
+            String fragmentName = GsonHelper.getAsString(jsonObject, "fragment");
 
-            String vertPath = "shaders/core/" + string2 + ".vsh";
-            Resource resource = resourceProvider.getResourceOrThrow(new ResourceLocation(vertPath));
-            InputStream inputStream = resource.open();
-            String vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            String vshSrc;
+            Resource vertexResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + vertexName + ".vsh"));
+            try (InputStream inputStream = vertexResource.open()) {
+                vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            }
 
-            String fragPath = "shaders/core/" + string3 + ".fsh";
-            resource = resourceProvider.getResourceOrThrow(new ResourceLocation(fragPath));
-            inputStream = resource.open();
-            String fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            String fshSrc;
+            Resource fragmentResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + fragmentName + ".fsh"));
+            try (InputStream inputStream = fragmentResource.open()) {
+                fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            }
 
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(format);
 
-            converter.process(format, vshSrc, fshSrc);
+            // Legacy/mod core shaders can contain source uniforms that have no
+            // JSON-managed Uniform object (for example because OpenGL would link
+            // them away). Defer global binding during conversion and then use the
+            // same zero-backed fallback semantics as EffectInstance.
+            try (Field.DefaultSupplierBindingScope ignored = Field.deferDefaultSupplierBinding()) {
+                converter.process(format, vshSrc, fshSrc);
+            }
             UBO ubo = converter.getUBO();
-            this.setUniformSuppliers(ubo);
+            this.vulkanmod$uniformBindings.bind(ubo, this.uniformMap);
 
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
@@ -200,6 +167,7 @@ public class ShaderInstanceM implements ShaderMixed {
             this.isLegacy = true;
 
         } catch (Throwable throwable) {
+            this.vulkanmod$uniformBindings.close();
             throwable.printStackTrace();
         }
     }
