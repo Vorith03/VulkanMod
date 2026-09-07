@@ -24,6 +24,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class MemoryDiagnostics {
     private static final long MIB = 1024L * 1024L;
     private static final long NATIVE_IMAGE_REPORT_STEP = 512L * MIB;
+    private static final long SYSTEM_MEMORY_CHECK_INTERVAL_NANOS = 250_000_000L;
+    private static final long SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB = Math.max(
+            1024L, Long.getLong("vulkanmod.systemAvailableSafetyLimitMiB", 4096L));
+    private static final long PROCESS_RSS_SAFETY_LIMIT_MIB = Math.max(
+            4096L, Long.getLong("vulkanmod.processRssSafetyLimitMiB", 12288L));
 
     private static final AtomicLong NATIVE_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong NATIVE_IMAGE_PEAK = new AtomicLong();
@@ -34,6 +39,7 @@ public final class MemoryDiagnostics {
     private static final AtomicLong VULKAN_IMAGE_VMA_PEAK = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT_PEAK = new AtomicLong();
+    private static final AtomicLong NEXT_SYSTEM_MEMORY_CHECK_NANOS = new AtomicLong();
     private static final AtomicBoolean DIAGNOSTIC_FAILURE_LOGGED = new AtomicBoolean();
 
     private MemoryDiagnostics() {
@@ -85,6 +91,49 @@ public final class MemoryDiagnostics {
 
     public static long getVulkanImageLiveBytes() {
         return VULKAN_IMAGE_LIVE.get();
+    }
+
+    /**
+     * Resource reload can accumulate memory outside the Java heap: decoded
+     * NativeImages, mapped staging buffers, VMA allocations and driver/GTT
+     * bookkeeping all contribute to process RSS. A JVM heap limit therefore does
+     * not protect the desktop from global OOM. Sample Linux /proc at a low cadence
+     * and fail the reload before the kernel has to invoke the OOM killer.
+     */
+    public static void enforceSystemMemorySafety(String reason) {
+        long now = System.nanoTime();
+        long next = NEXT_SYSTEM_MEMORY_CHECK_NANOS.get();
+        if(now < next)
+            return;
+        if(!NEXT_SYSTEM_MEMORY_CHECK_NANOS.compareAndSet(next, now + SYSTEM_MEMORY_CHECK_INTERVAL_NANOS))
+            return;
+
+        try {
+            Map<String, Long> process = readKbValues(Path.of("/proc/self/status"));
+            Map<String, Long> system = readKbValues(Path.of("/proc/meminfo"));
+
+            long rssMiB = kbToMiB(process.get("VmRSS"));
+            long availableMiB = kbToMiB(system.get("MemAvailable"));
+            boolean rssTooHigh = rssMiB >= 0L && rssMiB > PROCESS_RSS_SAFETY_LIMIT_MIB;
+            boolean systemTooLow = availableMiB >= 0L && availableMiB < SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB;
+            if(!rssTooHigh && !systemTooLow)
+                return;
+
+            logSnapshot("system memory safety trip: " + reason);
+            throw new OutOfMemoryError(String.format(
+                    "VulkanMod stopped resource loading before global OOM: process RSS=%d MiB " +
+                            "(limit=%d MiB), system MemAvailable=%d MiB (minimum=%d MiB). " +
+                            "Override with -Dvulkanmod.processRssSafetyLimitMiB=<MiB> or " +
+                            "-Dvulkanmod.systemAvailableSafetyLimitMiB=<MiB> only for diagnosis.",
+                    rssMiB, PROCESS_RSS_SAFETY_LIMIT_MIB,
+                    availableMiB, SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB));
+        } catch (OutOfMemoryError error) {
+            throw error;
+        } catch (Throwable throwable) {
+            if(DIAGNOSTIC_FAILURE_LOGGED.compareAndSet(false, true)) {
+                Initializer.LOGGER.warn("System memory safety diagnostics are unavailable: {}", throwable.toString());
+            }
+        }
     }
 
     public static void logSnapshot(String reason) {
