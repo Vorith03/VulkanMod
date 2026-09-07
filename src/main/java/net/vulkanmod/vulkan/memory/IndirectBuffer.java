@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.memory;
 import net.vulkanmod.vulkan.*;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.TransferQueue;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
@@ -41,10 +42,28 @@ public class IndirectBuffer extends Buffer {
     }
 
     private void resizeBuffer(int requiredSize) {
+        int oldUsedBytes = this.usedBytes;
+        long requiredCapacity = (long) oldUsedBytes + requiredSize;
+        long grownCapacity = (long) this.bufferSize + (this.bufferSize >> 1);
+        long newCapacity = Math.max(grownCapacity, requiredCapacity);
+
+        if(newCapacity > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Indirect buffer exceeds maximum supported size: " + newCapacity);
+        }
+
+        if(oldUsedBytes > 0 && !this.type.mappable()) {
+            throw new IllegalStateException("Cannot grow a non-mappable indirect buffer after commands have been recorded");
+        }
+
+        long oldDataAddress = oldUsedBytes > 0 ? this.data.get(0) : 0L;
         MemoryManager.getInstance().addToFreeable(this);
-        int newSize = Math.max(this.bufferSize + (this.bufferSize >> 1), requiredSize);
-        this.createBuffer(newSize);
-        this.usedBytes = 0;
+        this.createBuffer((int) newCapacity);
+
+        if(oldUsedBytes > 0) {
+            MemoryUtil.memCopy(oldDataAddress, this.data.get(0), oldUsedBytes);
+        }
+
+        this.usedBytes = oldUsedBytes;
     }
 
     public void submitUploads() {
