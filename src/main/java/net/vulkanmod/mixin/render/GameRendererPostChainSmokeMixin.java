@@ -30,7 +30,7 @@ public abstract class GameRendererPostChainSmokeMixin {
 
     @Shadow @Final private Minecraft minecraft;
 
-    @Inject(method = "reloadShaders", at = @At("HEAD"))
+    @Inject(method = "reloadShaders", at = @At("HEAD"), order = 900)
     private void vulkanmod$constructVanillaPostChain(ResourceProvider provider, CallbackInfo ci) {
         if (!Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)) {
             return;
