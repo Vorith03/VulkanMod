@@ -7,12 +7,19 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
+import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 
 import java.nio.ByteBuffer;
 
 public abstract class VTextureSelector {
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
+
+    static {
+        if(Boolean.getBoolean("vulkanmod.smokeTest")) {
+            StagingBufferSmokeTest.verify();
+        }
+    }
 
     private static VulkanImage boundTexture;
     private static VulkanImage boundTexture2;
