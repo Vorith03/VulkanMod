@@ -22,28 +22,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>The ordinary Vulkan smoke already proves constructor-return is a fast,
  * deterministic point where the Vulkan renderer and MainTarget exist. Keep the
- * post-chain probe there as a separate mode, but fail immediately if vanilla's
+ * post-chain probes there as separate modes, but fail immediately if vanilla's
  * built-in assets are not mounted yet instead of waiting indefinitely for a
  * later asynchronous resource-reload callback.</p>
  */
 @Mixin(value = Minecraft.class, priority = 900)
 public abstract class GameRendererPostChainSmokeMixin {
     private static final String POST_CHAIN_SMOKE_PROPERTY = "vulkanmod.ciPostChainSmoke";
+    private static final String DEPTH_POST_CHAIN_SMOKE_PROPERTY = "vulkanmod.ciDepthPostChainSmoke";
     private static final ResourceLocation CREEPER_POST_CHAIN = new ResourceLocation("shaders/post/creeper.json");
+    private static final ResourceLocation TRANSPARENCY_POST_CHAIN = new ResourceLocation("shaders/post/transparency.json");
 
     @Shadow @Final private ReloadableResourceManager resourceManager;
     @Shadow @Final private TextureManager textureManager;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void vulkanmod$executeVanillaPostChain(GameConfig gameConfig, CallbackInfo ci) {
-        if (!Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)) {
+        boolean depthSmoke = Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY);
+        boolean colorSmoke = Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY);
+        if (!depthSmoke && !colorSmoke) {
             return;
         }
 
-        if (this.resourceManager.getResource(CREEPER_POST_CHAIN).isEmpty()) {
+        ResourceLocation postChain = depthSmoke ? TRANSPARENCY_POST_CHAIN : CREEPER_POST_CHAIN;
+        String smokeName = depthSmoke ? "depth post-chain" : "post-chain";
+
+        if (this.resourceManager.getResource(postChain).isEmpty()) {
             Initializer.LOGGER.error(
-                    "Vulkan vanilla post-chain execution smoke cannot run: {} is not mounted at Minecraft constructor return",
-                    CREEPER_POST_CHAIN);
+                    "Vulkan vanilla {} execution smoke cannot run: {} is not mounted at Minecraft constructor return",
+                    smokeName, postChain);
             System.exit(1);
             return;
         }
@@ -55,7 +62,7 @@ public abstract class GameRendererPostChainSmokeMixin {
                 this.textureManager,
                 this.resourceManager,
                 mainTarget,
-                CREEPER_POST_CHAIN)) {
+                postChain)) {
             chain.resize(mainTarget.width, mainTarget.height);
 
             Renderer renderer = Renderer.getInstance();
@@ -65,9 +72,9 @@ public abstract class GameRendererPostChainSmokeMixin {
             renderer.endFrame();
             Vulkan.waitIdle();
 
-            Initializer.LOGGER.info("Vulkan vanilla post-chain execution smoke passed: {}", chain.getName());
+            Initializer.LOGGER.info("Vulkan vanilla {} execution smoke passed: {}", smokeName, chain.getName());
         } catch (Throwable throwable) {
-            Initializer.LOGGER.error("Vulkan vanilla post-chain execution smoke failed", throwable);
+            Initializer.LOGGER.error("Vulkan vanilla {} execution smoke failed", smokeName, throwable);
             System.exit(1);
             return;
         }

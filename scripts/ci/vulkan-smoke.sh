@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|post-chain|crash-assistant|flywheel}" >&2
+  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|crash-assistant|flywheel}" >&2
   exit 2
 }
 
@@ -61,6 +61,12 @@ case "$mode" in
     rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
     run_client "-Dvulkanmod.ciPostChainSmoke=true" vulkan-post-chain-smoke.log
     grep -F "Vulkan vanilla post-chain execution smoke passed" vulkan-post-chain-smoke.log
+    ;;
+
+  depth-post-chain)
+    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    run_client "-Dvulkanmod.ciDepthPostChainSmoke=true" vulkan-depth-post-chain-smoke.log
+    grep -F "Vulkan vanilla depth post-chain execution smoke passed" vulkan-depth-post-chain-smoke.log
     ;;
 
   crash-assistant)
