@@ -45,6 +45,7 @@ public abstract class VTextureSelector {
     private static long stagingBatchStagedBytes;
     private static long stagingBatchLogicalBytes;
     private static int unbatchedTextureSubmissions;
+    private static long observedMainFrameSubmissions;
 
     public static void bindTexture(VulkanImage texture) {
         boundTexture = texture;
@@ -82,6 +83,17 @@ public abstract class VTextureSelector {
 
         if(width <= 0 || height <= 0)
             return;
+
+        // Same-queue texture helper submissions are ordered before the next main
+        // graphics submission, and their command buffers are then retired behind
+        // that frame fence. Count only helpers still outstanding since the last
+        // successful main submit; otherwise a healthy gameplay session eventually
+        // hits the 256-submission emergency device-idle path just from elapsed time.
+        long mainFrameSubmissions = Synchronization.INSTANCE.getMainFrameSubmissionCount();
+        if(mainFrameSubmissions != observedMainFrameSubmissions) {
+            resetStagingSubmissionWindow();
+            observedMainFrameSubmissions = mainFrameSubmissions;
+        }
 
         int rowLength = unpackRowLength > 0 ? unpackRowLength : width;
         if(rowLength < width || unpackSkipRows < 0 || unpackSkipPixels < 0 || unpackSkipPixels + width > rowLength) {
@@ -172,10 +184,7 @@ public abstract class VTextureSelector {
                     retiredSubmissions, restartUploadBatch,
                     stagingBudgetReached ? "bytes" : "submission-count");
             MemoryDiagnostics.logSnapshot("texture staging flush #" + stagingReuseCount);
-            stagingBatchSourceBytes = 0L;
-            stagingBatchStagedBytes = 0L;
-            stagingBatchLogicalBytes = 0L;
-            unbatchedTextureSubmissions = 0;
+            resetStagingSubmissionWindow();
 
             if(restartUploadBatch) {
                 graphicsQueue.startRecording();
@@ -200,6 +209,13 @@ public abstract class VTextureSelector {
         } finally {
             stagingBuffer.setGrowthLimit(Integer.MAX_VALUE);
         }
+    }
+
+    private static void resetStagingSubmissionWindow() {
+        stagingBatchSourceBytes = 0L;
+        stagingBatchStagedBytes = 0L;
+        stagingBatchLogicalBytes = 0L;
+        unbatchedTextureSubmissions = 0;
     }
 
     public static VulkanImage getTexture(String name) {
