@@ -13,6 +13,8 @@ import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 
 import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.Set;
 
 public abstract class VTextureSelector {
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
@@ -34,6 +36,7 @@ public abstract class VTextureSelector {
     private static VulkanImage framebufferTexture2;
 
     private static final VulkanImage whiteTexture = VulkanImage.createWhiteTexture();
+    private static final Set<String> missingSamplerWarnings = new HashSet<>();
 
     private static int activeTexture = 0;
     private static long stagingReuseCount;
@@ -195,7 +198,7 @@ public abstract class VTextureSelector {
     }
 
     public static VulkanImage getTexture(String name) {
-        return switch (name) {
+        VulkanImage texture = switch (name) {
             case "Sampler0" -> getBoundTexture();
             case "Sampler1" -> getOverlayTexture();
             case "Sampler2" -> getLightTexture();
@@ -205,6 +208,15 @@ public abstract class VTextureSelector {
             case "Framebuffer1" -> framebufferTexture2;
             default -> throw new RuntimeException("unknown sampler name: " + name);
         };
+
+        if(texture == null) {
+            if(missingSamplerWarnings.add(name)) {
+                Initializer.LOGGER.warn("Sampler {} has no bound Vulkan texture; using white fallback", name);
+            }
+            return whiteTexture;
+        }
+
+        return texture;
     }
 
     public static void setLightTexture(VulkanImage texture) {
