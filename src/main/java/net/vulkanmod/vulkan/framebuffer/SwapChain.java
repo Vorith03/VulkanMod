@@ -41,6 +41,8 @@ public class SwapChain extends Framebuffer {
     private VkExtent2D extent2D;
     public boolean isBGRAformat;
     private boolean vsync = false;
+    private boolean colorSamplingSupported;
+    private boolean colorSamplingWarningLogged;
 
     private int[] currentLayout;
 
@@ -85,9 +87,16 @@ public class SwapChain extends Framebuffer {
             int presentMode = getPresentMode(surfaceProperties.presentModes);
             VkExtent2D extent = getExtent(surfaceProperties.capabilities);
 
+            this.colorSamplingSupported = (surfaceProperties.capabilities.supportedUsageFlags()
+                    & VK_IMAGE_USAGE_SAMPLED_BIT) != 0;
+            if(!this.colorSamplingSupported && !this.colorSamplingWarningLogged) {
+                this.colorSamplingWarningLogged = true;
+                Initializer.LOGGER.warn("Surface does not support sampling swapchain images; main-target post effects will be unavailable");
+            }
+
             if(extent.width() == 0 && extent.height() == 0) {
                 if(swapChain != VK_NULL_HANDLE) {
-                    this.swapChainImages.forEach(image -> vkDestroyImageView(device, image.getImageView(), null));
+                    destroySwapChainImages(device);
                     vkDestroySwapchainKHR(device, swapChain, null);
                     swapChain = VK_NULL_HANDLE;
                 }
@@ -120,7 +129,10 @@ public class SwapChain extends Framebuffer {
             createInfo.imageColorSpace(surfaceFormat.colorSpace());
             createInfo.imageExtent(extent);
             createInfo.imageArrayLayers(1);
-            createInfo.imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+            int imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            if(this.colorSamplingSupported)
+                imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            createInfo.imageUsage(imageUsage);
 
             Queue.QueueFamilyIndices indices = Queue.getQueueFamilies();
 
@@ -145,7 +157,7 @@ public class SwapChain extends Framebuffer {
             }
 
             if(swapChain != VK_NULL_HANDLE) {
-                this.swapChainImages.forEach(iamge -> vkDestroyImageView(device, iamge.getImageView(), null));
+                destroySwapChainImages(device);
                 vkDestroySwapchainKHR(device, swapChain, null);
             }
 
@@ -166,7 +178,11 @@ public class SwapChain extends Framebuffer {
                 long imageId = pSwapchainImages.get(i);
                 long imageView = VulkanImage.createImageView(imageId, this.format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-                swapChainImages.add(new VulkanImage(imageId, this.format, 1, this.width, this.height, 4, 0, imageView));
+                VulkanImage image = new VulkanImage(imageId, this.format, 1,
+                        this.width, this.height, 4, imageUsage, imageView);
+                if(this.colorSamplingSupported)
+                    image.updateTextureSampler(false, true, false);
+                swapChainImages.add(image);
             }
             currentLayout = new int[this.swapChainImages.size()];
 
@@ -312,9 +328,9 @@ public class SwapChain extends Framebuffer {
 
         // A minimized recreation can already destroy the swapchain and its views.
         if(this.swapChain != VK_NULL_HANDLE) {
+            destroySwapChainImages(device);
             vkDestroySwapchainKHR(device, this.swapChain, null);
             this.swapChain = VK_NULL_HANDLE;
-            swapChainImages.forEach(image -> vkDestroyImageView(device, image.getImageView(), null));
         }
 
         if(this.depthAttachment != null) {
@@ -323,9 +339,23 @@ public class SwapChain extends Framebuffer {
         }
     }
 
+    private void destroySwapChainImages(VkDevice device) {
+        if(this.swapChainImages == null)
+            return;
+
+        for(VulkanImage image : this.swapChainImages) {
+            VulkanImage.Sampler sampler = image.getTextureSampler();
+            if(sampler != null)
+                vkDestroySampler(device, sampler.sampler(), null);
+            vkDestroyImageView(device, image.getImageView(), null);
+        }
+        this.swapChainImages = null;
+    }
+
     private void createDepthResources() {
         this.depthAttachment = VulkanImage.createDepthImage(depthFormat, this.width, this.height,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                        | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 false, false);
     }
 
@@ -349,7 +379,11 @@ public class SwapChain extends Framebuffer {
         return this.swapChainImages.get(Renderer.getCurrentImage());
     }
 
-    public long getImageView(int i) { return this.swapChainImages.get(i).getImageView(); }
+    public long getImageView(int i) { return swapChainImages.get(i).getImageView(); }
+
+    public boolean supportsColorSampling() {
+        return this.colorSamplingSupported;
+    }
 
     private VkSurfaceFormatKHR getFormat(VkSurfaceFormatKHR.Buffer availableFormats) {
         List<VkSurfaceFormatKHR> list = availableFormats.stream().toList();
