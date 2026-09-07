@@ -83,6 +83,18 @@ public abstract class MNativeImage {
 
     @Unique
     private void vulkanmod$enforceNativeImageBudget() {
+        try {
+            MemoryDiagnostics.enforceSystemMemorySafety("NativeImage allocation");
+        } catch (OutOfMemoryError error) {
+            // Constructor RETURN injection runs after native allocation. Release this
+            // image before propagating the fail-fast signal so the safety mechanism
+            // itself cannot strand the allocation that crossed the system threshold.
+            if(!this.vulkanmod$nativeMemoryReleased && this.vulkanmod$trackedNativeBytes > 0L) {
+                this.close();
+            }
+            throw error;
+        }
+
         long live = MemoryDiagnostics.getNativeImageLiveBytes();
         if(live <= vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES)
             return;
