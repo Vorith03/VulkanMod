@@ -11,10 +11,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-final class EffectUniformBindings implements AutoCloseable {
+/**
+ * Binds Minecraft Uniform storage to fields produced by VulkanMod's GLSL-to-UBO
+ * conversion. Source-level conversion may retain uniforms that an OpenGL linker
+ * would optimize away and that therefore have no JSON-managed Uniform object;
+ * those fields receive zero-initialized backing storage instead of an invalid
+ * native pointer.
+ */
+public final class EffectUniformBindings implements AutoCloseable {
     private final List<ByteBuffer> fallbackUniformBuffers = new ArrayList<>();
 
-    void bind(UBO ubo, Map<String, Uniform> uniformMap) {
+    public void bind(UBO ubo, Map<String, Uniform> uniformMap) {
         this.close();
 
         try {
@@ -23,10 +30,10 @@ final class EffectUniformBindings implements AutoCloseable {
                 ByteBuffer byteBuffer;
 
                 if(uniform == null) {
-                    // EffectInstance only creates Uniform objects for entries declared
-                    // in the program JSON. Keep the GLSL field in the Vulkan UBO so
-                    // layout stays source-compatible, but give it OpenGL's linked-
-                    // program default value: all zeroes.
+                    // Minecraft creates Uniform objects for entries declared in
+                    // shader/program JSON. Keep additional GLSL fields in the Vulkan
+                    // UBO so source layout stays compatible, but give them OpenGL's
+                    // linked-program default value: all zeroes.
                     byteBuffer = MemoryUtil.memCalloc(field.getSize() * Integer.BYTES);
                     this.fallbackUniformBuffers.add(byteBuffer);
                 }
@@ -49,7 +56,7 @@ final class EffectUniformBindings implements AutoCloseable {
         }
     }
 
-    int fallbackBufferCount() {
+    public int fallbackBufferCount() {
         return this.fallbackUniformBuffers.size();
     }
 
