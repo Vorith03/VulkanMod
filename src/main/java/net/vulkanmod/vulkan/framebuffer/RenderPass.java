@@ -141,10 +141,17 @@ public class RenderPass {
         renderArea.extent(VkExtent2D.calloc(stack).set(framebuffer.getWidth(), framebuffer.getHeight()));
         renderPassInfo.renderArea(renderArea);
 
-        VkClearValue.Buffer clearValues;
-        clearValues = VkClearValue.calloc(2, stack);
-        clearValues.get(0).color().float32(VRenderSystem.clearColor);
-        clearValues.get(1).depthStencil().set(1.0f, 0);
+        // VkRenderPassBeginInfo clear values are indexed by attachment number,
+        // not by attachment type. Build them in the same order as createRenderPass
+        // so color-only, depth-only and color+depth framebuffers all line up.
+        VkClearValue.Buffer clearValues = VkClearValue.calloc(attachmentCount, stack);
+        int clearIndex = 0;
+        if(colorAttachmentInfo != null) {
+            clearValues.get(clearIndex++).color().float32(VRenderSystem.clearColor);
+        }
+        if(depthAttachmentInfo != null) {
+            clearValues.get(clearIndex).depthStencil().set(VRenderSystem.clearDepth, 0);
+        }
 
         renderPassInfo.pClearValues(clearValues);
 
