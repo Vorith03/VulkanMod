@@ -22,6 +22,7 @@ import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.server.packs.resources.ReloadInstance;
 import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Renderer;
@@ -113,6 +114,19 @@ public class MinecraftMixin {
                     0, 0, 0, 0, 0,
                     com.mojang.blaze3d.platform.NativeImage.Format.RGBA,
                     glyphUploadSmoke, org.lwjgl.system.MemoryUtil::memFree);
+
+            // MainTarget owns one stable synthetic texture name while the actual
+            // swapchain image rotates between frames. Verify the MainTarget mixin
+            // refreshes that mapping to the image acquired for this frame before an
+            // EffectInstance sampler resolves it. Surfaces without sampled-image
+            // support intentionally skip this feature while remaining launchable.
+            if(Vulkan.getSwapChain().supportsColorSampling()) {
+                RenderTarget mainTarget = ((Minecraft)(Object)this).getMainRenderTarget();
+                int mainColorTextureId = mainTarget.getColorTextureId();
+                if(GlTexture.getVulkanImage(mainColorTextureId) != Vulkan.getSwapChain().getColorAttachment()) {
+                    throw new IllegalStateException("MainTarget color texture did not resolve to the current swapchain image");
+                }
+            }
 
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
