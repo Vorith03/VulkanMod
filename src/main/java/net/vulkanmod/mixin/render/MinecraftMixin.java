@@ -96,6 +96,7 @@ public class MinecraftMixin {
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
             try {
                 Class.forName("net.minecraft.client.model.geom.ModelPart$Cube");
+                Class.forName("net.minecraft.client.renderer.EffectInstance");
                 net.vulkanmod.render.LiquidVertexSmokeTest.verify(
                         Class.forName("net.minecraft.client.renderer.block.LiquidBlockRenderer"));
             } catch (ClassNotFoundException e) {
