@@ -61,6 +61,7 @@ public class Renderer {
     private ArrayList<Long> imageAvailableSemaphores;
     private ArrayList<Long> renderFinishedSemaphores;
     private ArrayList<Long> inFlightFences;
+    private boolean[] frameSlotSubmitted;
 
     private Framebuffer boundFramebuffer;
     private RenderPass boundRenderPass;
@@ -123,6 +124,7 @@ public class Renderer {
         imageAvailableSemaphores = new ArrayList<>(framesNum);
         renderFinishedSemaphores = new ArrayList<>(framesNum);
         inFlightFences = new ArrayList<>(framesNum);
+        frameSlotSubmitted = new boolean[framesNum];
 
         try(MemoryStack stack = stackPush()) {
 
@@ -149,6 +151,9 @@ public class Renderer {
                 imageAvailableSemaphores.add(pImageAvailableSemaphore.get(0));
                 renderFinishedSemaphores.add(pRenderFinishedSemaphore.get(0));
                 inFlightFences.add(pFence.get(0));
+                // Sync fences are created signaled, so every fresh slot is safe to
+                // initialize once before it has ever submitted a frame.
+                frameSlotSubmitted[i] = true;
 
             }
 
@@ -208,13 +213,10 @@ public class Renderer {
 
         AreaUploadManager.INSTANCE.updateFrame(currentFrame);
 
-        MemoryManager.getInstance().initFrame(currentFrame);
         drawer.setCurrentFrame(currentFrame);
 
-        //Moved before texture updates
-//        this.vertexBuffers[currentFrame].reset();
-//        this.uniformBuffers.reset();
-//        Vulkan.getStagingBuffer(currentFrame).reset();
+        // Frame-slot memory retirement now happens at runTick HEAD in resetBuffers(),
+        // before texture/resource uploads can allocate or resize staging memory.
 
         resetDescriptors();
 
@@ -293,16 +295,20 @@ public class Renderer {
     }
 
     public void resetBuffers() {
-        // runTick resets these resources before texture/resource work, which is
-        // earlier than beginFrame's normal frame-slot fence wait. Retire the slot
-        // here first so staging/drawer memory cannot be reused while the previous
-        // graphics frame (and any semaphore-ordered helper transfer) still uses it.
-        if(!skipRendering) {
-            vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
-        }
+        // runTick resets these resources before texture/resource work. A frame slot
+        // is recyclable only when a main graphics submit has fenced every earlier
+        // same-queue helper submission that may reference its staging/deferred data.
+        // If acquire aborted last tick, keep appending to the same slot instead of
+        // reusing memory behind an old, already-signaled frame fence.
+        if(!frameSlotSubmitted[currentFrame])
+            return;
 
+        vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
+
+        MemoryManager.getInstance().initFrame(currentFrame);
         drawer.resetBuffers(currentFrame);
         Vulkan.getStagingBuffer(currentFrame).reset();
+        frameSlotSubmitted[currentFrame] = false;
     }
 
     public void addUsedPipeline(Pipeline pipeline) {
@@ -361,6 +367,11 @@ public class Renderer {
                 throw new RuntimeException("Failed to submit draw command buffer: " + vkResult);
             }
 
+            // Queue order plus this frame fence now covers all same-graphics-queue
+            // helper uploads accumulated since this slot was last recycled. Mark it
+            // reusable even if presentation below reports OUT_OF_DATE/SUBOPTIMAL and
+            // currentFrame therefore does not advance.
+            frameSlotSubmitted[currentFrame] = true;
             Synchronization.INSTANCE.scheduleCbReset();
 
             VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack);
@@ -446,6 +457,11 @@ public class Renderer {
         currentFrame = 0;
         imageIndex = 0;
         this.recordingFrame = false;
+
+        // Recreation established full device idleness and replaced the frame sync
+        // objects with signaled fences. Realign MemoryManager and per-frame buffers
+        // to the new slot 0 before this same runTick continues rendering.
+        this.resetBuffers();
     }
 
     public void cleanUpResources() {
