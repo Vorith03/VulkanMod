@@ -23,9 +23,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class MemoryDiagnostics {
     private static final long MIB = 1024L * 1024L;
+    private static final long NATIVE_IMAGE_REPORT_STEP = 512L * MIB;
 
     private static final AtomicLong NATIVE_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong NATIVE_IMAGE_PEAK = new AtomicLong();
+    private static final AtomicLong NEXT_NATIVE_IMAGE_REPORT = new AtomicLong(NATIVE_IMAGE_REPORT_STEP);
     private static final AtomicLong VULKAN_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_PEAK = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT = new AtomicLong();
@@ -41,6 +43,7 @@ public final class MemoryDiagnostics {
 
         long live = NATIVE_IMAGE_LIVE.addAndGet(bytes);
         updatePeak(NATIVE_IMAGE_PEAK, live);
+        maybeReportNativeImageGrowth(live);
     }
 
     public static void onNativeImageFreed(long bytes) {
@@ -112,6 +115,19 @@ public final class MemoryDiagnostics {
         } catch (Throwable throwable) {
             if(DIAGNOSTIC_FAILURE_LOGGED.compareAndSet(false, true)) {
                 Initializer.LOGGER.warn("Memory diagnostics are unavailable on this system: {}", throwable.toString());
+            }
+        }
+    }
+
+    private static void maybeReportNativeImageGrowth(long live) {
+        while(true) {
+            long threshold = NEXT_NATIVE_IMAGE_REPORT.get();
+            if(live < threshold)
+                return;
+
+            if(NEXT_NATIVE_IMAGE_REPORT.compareAndSet(threshold, threshold + NATIVE_IMAGE_REPORT_STEP)) {
+                logSnapshot("NativeImage live crossed " + (threshold / MIB) + " MiB");
+                return;
             }
         }
     }
