@@ -1,4 +1,4 @@
-package net.vulkanmod.mixin.compatibility;
+package net.vulkanmod.vulkan.shader;
 
 import com.mojang.blaze3d.shaders.Uniform;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;

@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin.compatibility;
 
+import net.vulkanmod.vulkan.shader.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.AlignedStruct;
 import net.vulkanmod.vulkan.shader.layout.Field;
