@@ -17,6 +17,7 @@
     "compatibility.EffectInstanceM",
     "compatibility.FlywheelBackendMixin",
     "compatibility.CrashAssistantCurrentGPUDetectorMixin",
+    "compatibility.WatutRenderHelperMixin",
     "compatibility.ProgramM",
     "compatibility.UniformM",
 

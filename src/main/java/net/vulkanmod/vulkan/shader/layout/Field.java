@@ -6,6 +6,8 @@ import org.lwjgl.system.MemoryUtil;
 import java.util.function.Supplier;
 
 public abstract class Field {
+    private static final ThreadLocal<Boolean> DEFER_DEFAULT_SUPPLIER_BINDING = ThreadLocal.withInitial(() -> false);
+
     protected Supplier<MappedBuffer> values;
 
     FieldInfo fieldInfo;
@@ -16,7 +18,9 @@ public abstract class Field {
         this.fieldInfo = fieldInfo;
         this.offset = fieldInfo.offset * 4L;
         this.size = fieldInfo.size * 4;
-        this.setSupplier();
+        if(!DEFER_DEFAULT_SUPPLIER_BINDING.get()) {
+            this.setSupplier();
+        }
     }
 
     abstract void setSupplier();
@@ -30,9 +34,50 @@ public abstract class Field {
     }
 
     void update(long ptr) {
+        if(this.values == null) {
+            throw new IllegalStateException("No supplier bound for uniform field: " + this.fieldInfo.name);
+        }
+
         MappedBuffer src = values.get();
 
         MemoryUtil.memCopy(src.ptr, ptr + this.offset, this.size);
+    }
+
+    /**
+     * EffectInstance uniforms are owned by Minecraft's EffectInstance and are
+     * wired to VulkanMod after GLSL conversion. Defer the normal global-uniform
+     * lookup while that UBO is being constructed so mod-defined post-effect
+     * uniforms (InSize, OutSize, Time, custom fields, etc.) do not fail before
+     * EffectInstance has a chance to bind their backing buffers.
+     */
+    public static DefaultSupplierBindingScope deferDefaultSupplierBinding() {
+        boolean previous = DEFER_DEFAULT_SUPPLIER_BINDING.get();
+        DEFER_DEFAULT_SUPPLIER_BINDING.set(true);
+        return new DefaultSupplierBindingScope(previous);
+    }
+
+    public static final class DefaultSupplierBindingScope implements AutoCloseable {
+        private final boolean previous;
+        private boolean closed;
+
+        private DefaultSupplierBindingScope(boolean previous) {
+            this.previous = previous;
+        }
+
+        @Override
+        public void close() {
+            if(this.closed) {
+                return;
+            }
+
+            if(this.previous) {
+                DEFER_DEFAULT_SUPPLIER_BINDING.set(true);
+            }
+            else {
+                DEFER_DEFAULT_SUPPLIER_BINDING.remove();
+            }
+            this.closed = true;
+        }
     }
 
     public static Field createField(FieldInfo info) {

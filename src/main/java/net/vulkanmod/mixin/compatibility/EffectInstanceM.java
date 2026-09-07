@@ -101,11 +101,16 @@ public class EffectInstanceM {
             inputStream = resource.open();
             String fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
 
-            //TODO
+            // EffectInstance owns these uniforms and fills them dynamically for
+            // each post-processing pass. Do not require VulkanMod's global
+            // built-in uniform table while merely constructing the converted UBO.
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION_TEX_COLOR);
 
-            converter.process(DefaultVertexFormat.POSITION_TEX_COLOR, vshSrc, fshSrc);
+            try (Field.DefaultSupplierBindingScope ignored = Field.deferDefaultSupplierBinding()) {
+                converter.process(DefaultVertexFormat.POSITION_TEX_COLOR, vshSrc, fshSrc);
+            }
+
             UBO ubo = converter.getUBO();
             this.setUniformSuppliers(ubo);
 
@@ -124,6 +129,9 @@ public class EffectInstanceM {
 
         for(Field field : ubo.getFields()) {
             Uniform uniform = this.uniformMap.get(field.getName());
+            if(uniform == null) {
+                throw new IllegalStateException("Effect shader uniform not declared in EffectInstance: " + field.getName());
+            }
 
             Supplier<MappedBuffer> supplier;
             ByteBuffer byteBuffer;
@@ -192,7 +200,7 @@ public class EffectInstanceM {
 //        Iterator var5 = this.uniforms.iterator();
 //
 //        while(var5.hasNext()) {
-//            Uniform uniform = (Uniform)var5.next();
+//            Uniform uniform = (Uniform)this.uniforms.iterator().next();
 //            uniform.upload();
 //        }
 //
