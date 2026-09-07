@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.ChunkBufferBuilderPack;
 import net.minecraft.util.thread.ProcessorMailbox;
 import net.vulkanmod.render.chunk.*;
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.vulkan.Synchronization;
 import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
@@ -354,6 +355,7 @@ public class TaskDispatcher {
 
         if(AreaUploadManager.INSTANCE != null)
             stats += " " + AreaUploadManager.INSTANCE.getStats();
+        stats += " " + Synchronization.INSTANCE.getStats();
         return stats;
     }
 
