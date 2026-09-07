@@ -80,6 +80,23 @@ jobs:
           grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
           grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
+      - name: Smoke-test vanilla Vulkan post-chain construction
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+
+          LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          if [[ -z "$LVP_ICD" ]]; then
+            echo "Lavapipe Vulkan ICD was not installed" >&2
+            exit 1
+          fi
+          echo "Using software Vulkan ICD: $LVP_ICD"
+          export VK_ICD_FILENAMES="$LVP_ICD"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.ciPostChainSmoke=true"
+          timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-post-chain-smoke.log
+          grep -F "Vulkan vanilla post-chain construction smoke passed" vulkan-post-chain-smoke.log
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         shell: bash
         run: |
@@ -153,6 +170,7 @@ jobs:
           path: |
             vulkan-smoke.log
             vulkan-smoke-no-splash.log
+            vulkan-post-chain-smoke.log
             vulkan-smoke-crash-assistant.log
             vulkan-smoke-flywheel.log
           if-no-files-found: ignore
