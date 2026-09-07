@@ -3,14 +3,16 @@ package net.vulkanmod.mixin.texture;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import net.vulkanmod.vulkan.util.ColorUtil;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -39,19 +41,42 @@ public abstract class MNativeImage {
 
     @Shadow public abstract int getPixelRGBA(int i, int j);
 
-    private ByteBuffer buffer;
+    @Unique
+    private ByteBuffer vulkanmod$buffer;
+    @Unique
+    private long vulkanmod$trackedNativeBytes;
+    @Unique
+    private boolean vulkanmod$nativeMemoryReleased;
 
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
-        if(this.pixels != 0) {
-            buffer = MemoryUtil.memByteBuffer(this.pixels, (int)this.size);
-        }
+        this.vulkanmod$initializeNativeTracking();
     }
 
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZJ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, long pixels, CallbackInfo ci) {
+        this.vulkanmod$initializeNativeTracking();
+    }
+
+    @Unique
+    private void vulkanmod$initializeNativeTracking() {
         if(this.pixels != 0) {
-            buffer = MemoryUtil.memByteBuffer(this.pixels, (int)this.size);
+            this.vulkanmod$buffer = MemoryUtil.memByteBuffer(this.pixels, (int)this.size);
+        }
+
+        // NativeImage constructors can delegate to one another. Guard the instance
+        // counter so a chained constructor only contributes its native allocation once.
+        if(this.vulkanmod$trackedNativeBytes == 0L && this.pixels != 0L && this.size > 0L) {
+            this.vulkanmod$trackedNativeBytes = this.size;
+            MemoryDiagnostics.onNativeImageAllocated(this.size);
+        }
+    }
+
+    @Inject(method = "close", at = @At("HEAD"))
+    private void vulkanmod$trackNativeClose(CallbackInfo ci) {
+        if(!this.vulkanmod$nativeMemoryReleased && this.vulkanmod$trackedNativeBytes > 0L) {
+            this.vulkanmod$nativeMemoryReleased = true;
+            MemoryDiagnostics.onNativeImageFreed(this.vulkanmod$trackedNativeBytes);
         }
     }
 
@@ -62,7 +87,7 @@ public abstract class MNativeImage {
     private void _upload(int level, int xOffset, int yOffset, int unpackSkipPixels, int unpackSkipRows, int widthIn, int heightIn, boolean blur, boolean clamp, boolean mipmap, boolean autoClose) {
         RenderSystem.assertOnRenderThreadOrInit();
 
-        VTextureSelector.uploadSubTexture(level, widthIn, heightIn, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, this.getWidth(), this.buffer);
+        VTextureSelector.uploadSubTexture(level, widthIn, heightIn, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, this.getWidth(), this.vulkanmod$buffer);
 
         if (autoClose) {
             this.close();
@@ -76,7 +101,7 @@ public abstract class MNativeImage {
     public void downloadTexture(int level, boolean removeAlpha) {
         RenderSystem.assertOnRenderThread();
 
-        VulkanImage.downloadTexture(this.width, this.height, 4, this.buffer, Vulkan.getSwapChain().getColorAttachment().getId());
+        VulkanImage.downloadTexture(this.width, this.height, 4, this.vulkanmod$buffer, Vulkan.getSwapChain().getColorAttachment().getId());
 
         if (removeAlpha && this.format.hasAlpha()) {
             for (int i = 0; i < this.height; ++i) {
@@ -92,5 +117,4 @@ public abstract class MNativeImage {
         }
 
     }
-
 }
