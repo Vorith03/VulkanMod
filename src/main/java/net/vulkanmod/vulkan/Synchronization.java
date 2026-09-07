@@ -27,6 +27,7 @@ public class Synchronization {
     private final ObjectArrayList<CommandPool.CommandBuffer> semaphoreCommandBuffers = new ObjectArrayList<>();
 
     private long semaphoreRegistrations;
+    private long sameQueueRegistrations;
     private long fenceRegistrations;
     private long fenceWaitCalls;
     private long fenceWaitedCount;
@@ -73,6 +74,7 @@ public class Synchronization {
             return;
 
         this.semaphoreCommandBuffers.add(commandBuffer);
+        this.sameQueueRegistrations++;
     }
 
     public synchronized void addFence(long fence) {
@@ -132,9 +134,9 @@ public class Synchronization {
 
     public synchronized String getStats() {
         double waitMs = this.fenceWaitNanos / 1_000_000.0D;
-        return String.format(Locale.ROOT, "sync(s/f/w):%d/%d/%d(%.1fms)",
-                this.semaphoreRegistrations, this.fenceRegistrations,
-                this.fenceWaitedCount, waitMs);
+        return String.format(Locale.ROOT, "sync sem:%d same:%d fence:%d waits:%d/%d %.1fms",
+                this.semaphoreRegistrations, this.sameQueueRegistrations, this.fenceRegistrations,
+                this.fenceWaitCalls, this.fenceWaitedCount, waitMs);
     }
 
     public static void waitFence(long fence) {
