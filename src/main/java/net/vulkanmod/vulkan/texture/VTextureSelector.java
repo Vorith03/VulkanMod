@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 public abstract class VTextureSelector {
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
     private static final int MAX_SINGLE_TEXTURE_STAGING = 512 * 1024 * 1024;
+    private static final int MAX_UNBATCHED_TEXTURE_SUBMISSIONS = 256;
 
     static {
         if(Boolean.getBoolean("vulkanmod.smokeTest")) {
@@ -39,6 +40,7 @@ public abstract class VTextureSelector {
     private static long stagingBatchSourceBytes;
     private static long stagingBatchStagedBytes;
     private static long stagingBatchLogicalBytes;
+    private static int unbatchedTextureSubmissions;
 
     public static void bindTexture(VulkanImage texture) {
         boundTexture = texture;
@@ -114,15 +116,20 @@ public abstract class VTextureSelector {
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
         int uploadSize = (int)stagedBytes;
+        boolean activeUploadBatch = graphicsQueue.hasActiveUploadBatch();
+        boolean stagingBudgetReached = stagingBuffer.wouldExceedUsageLimit(
+                uploadSize, texture.formatSize, TEXTURE_STAGING_BATCH_LIMIT);
+        boolean submissionBudgetReached = !activeUploadBatch
+                && unbatchedTextureSubmissions >= MAX_UNBATCHED_TEXTURE_SUBMISSIONS;
 
-        if(stagingBuffer.wouldExceedUsageLimit(uploadSize, texture.formatSize, TEXTURE_STAGING_BATCH_LIMIT)) {
+        if(stagingBudgetReached || submissionBudgetReached) {
             // The old resource-reload guard disabled recycling while the animated
             // texture queue owned a shared command buffer. That made the 128 MiB
             // limit ineffective exactly when a long upload batch could grow the
             // mapped host buffer without bound. Close the batch, make every queue
             // idle, drain deferred old staging allocations, then transparently
             // resume batching with a fresh command buffer.
-            boolean restartUploadBatch = graphicsQueue.hasActiveUploadBatch();
+            boolean restartUploadBatch = activeUploadBatch;
             if(restartUploadBatch) {
                 graphicsQueue.endRecordingAndSubmit();
             }
@@ -143,15 +150,19 @@ public abstract class VTextureSelector {
             long sourceMiB = stagingBatchSourceBytes / (1024L * 1024L);
             long stagedMiB = stagingBatchStagedBytes / (1024L * 1024L);
             long logicalMiB = stagingBatchLogicalBytes / (1024L * 1024L);
+            int retiredSubmissions = unbatchedTextureSubmissions;
             stagingBuffer.reset();
             stagingReuseCount++;
             Initializer.LOGGER.info(
-                    "Reused texture staging buffer after {} MiB batch (flush #{}, source/staged/logical={}/{}/{} MiB, restartedBatch={})",
-                    usedMiB, stagingReuseCount, sourceMiB, stagedMiB, logicalMiB, restartUploadBatch);
+                    "Reused texture staging buffer after {} MiB batch (flush #{}, source/staged/logical={}/{}/{} MiB, submissions={}, restartedBatch={}, reason={})",
+                    usedMiB, stagingReuseCount, sourceMiB, stagedMiB, logicalMiB,
+                    retiredSubmissions, restartUploadBatch,
+                    stagingBudgetReached ? "bytes" : "submission-count");
             MemoryDiagnostics.logSnapshot("texture staging flush #" + stagingReuseCount);
             stagingBatchSourceBytes = 0L;
             stagingBatchStagedBytes = 0L;
             stagingBatchLogicalBytes = 0L;
+            unbatchedTextureSubmissions = 0;
 
             if(restartUploadBatch) {
                 graphicsQueue.startRecording();
@@ -166,6 +177,9 @@ public abstract class VTextureSelector {
         stagingBatchSourceBytes += availableBytes;
         stagingBatchStagedBytes += stagedBytes;
         stagingBatchLogicalBytes += logicalBytes;
+        if(!graphicsQueue.hasActiveUploadBatch()) {
+            unbatchedTextureSubmissions++;
+        }
 
         try {
             texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset,
