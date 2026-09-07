@@ -1,6 +1,5 @@
 package net.vulkanmod.mixin.compatibility;
 
-import com.google.gson.JsonObject;
 import com.mojang.blaze3d.shaders.EffectProgram;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.shaders.Uniform;
@@ -10,8 +9,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.vulkanmod.vulkan.shader.Pipeline;
-import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
+import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.parser.GlslConverter;
 import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
@@ -25,11 +24,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.Reader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +42,7 @@ public class EffectInstanceM {
     private Pipeline pipeline;
     private String vulkanmod$vertexShader;
     private String vulkanmod$fragmentShader;
+    private final List<ByteBuffer> vulkanmod$fallbackUniformBuffers = new ArrayList<>();
 
     /**
      * Mixin 0.8.5 only permits callback injection at a constructor's safe return
@@ -73,37 +72,47 @@ public class EffectInstanceM {
 
     /**
      * @author
-     * @reason
+     * @reason VulkanMod owns a Vulkan pipeline and fallback uniform storage for
+     * post-processing effects instead of an OpenGL program object.
      */
     @Overwrite
     public void close() {
+        if(this.pipeline != null) {
+            this.pipeline.cleanUp();
+            this.pipeline = null;
+        }
+
+        this.vulkanmod$releaseFallbackUniformBuffers();
 
         for (Uniform uniform : this.uniforms) {
             uniform.close();
         }
-
-        //TODO
-//        ProgramManager.releaseProgram(this);
     }
 
     private void createShaders(ResourceManager resourceManager, String vertexShader, String fragShader) {
-
         try {
             String[] vshPathInfo = this.decompose(vertexShader, ':');
             ResourceLocation vshLocation = new ResourceLocation(vshPathInfo[0], "shaders/program/" + vshPathInfo[1] + ".vsh");
-            Resource resource = resourceManager.getResourceOrThrow(vshLocation);
-            InputStream inputStream = resource.open();
-            String vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            Resource vshResource = resourceManager.getResourceOrThrow(vshLocation);
+            String vshSrc;
+            try (InputStream inputStream = vshResource.open()) {
+                vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            }
 
             String[] fshPathInfo = this.decompose(fragShader, ':');
             ResourceLocation fshLocation = new ResourceLocation(fshPathInfo[0], "shaders/program/" + fshPathInfo[1] + ".fsh");
-            resource = resourceManager.getResourceOrThrow(fshLocation);
-            inputStream = resource.open();
-            String fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            Resource fshResource = resourceManager.getResourceOrThrow(fshLocation);
+            String fshSrc;
+            try (InputStream inputStream = fshResource.open()) {
+                fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+            }
 
-            // EffectInstance owns these uniforms and fills them dynamically for
-            // each post-processing pass. Do not require VulkanMod's global
-            // built-in uniform table while merely constructing the converted UBO.
+            // EffectInstance owns the uniforms declared by the effect JSON and
+            // fills them dynamically for each post-processing pass. GLSL source
+            // may also contain uniforms that are absent from that JSON. OpenGL
+            // initializes those unmanaged uniforms to zero (and can optimize them
+            // away entirely), so source-level Vulkan UBO construction must not
+            // require every declaration to have an EffectInstance Uniform object.
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION_TEX_COLOR);
 
@@ -118,25 +127,33 @@ public class EffectInstanceM {
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
 
             this.pipeline = builder.createGraphicsPipeline();
+        } catch (Throwable throwable) {
+            this.vulkanmod$releaseFallbackUniformBuffers();
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            if(throwable instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if(throwable instanceof Error error) {
+                throw error;
+            }
+            throw new RuntimeException(throwable);
         }
-
     }
 
     private void setUniformSuppliers(UBO ubo) {
-
         for(Field field : ubo.getFields()) {
             Uniform uniform = this.uniformMap.get(field.getName());
-            if(uniform == null) {
-                throw new IllegalStateException("Effect shader uniform not declared in EffectInstance: " + field.getName());
-            }
-
-            Supplier<MappedBuffer> supplier;
             ByteBuffer byteBuffer;
 
-            if (uniform.getType() <= 3) {
+            if(uniform == null) {
+                // EffectInstance only creates Uniform objects for entries declared
+                // in the program JSON. Keep the GLSL field in the Vulkan UBO so
+                // layout stays source-compatible, but give it OpenGL's linked-
+                // program default value: all zeroes.
+                byteBuffer = MemoryUtil.memCalloc(field.getSize() * Integer.BYTES);
+                this.vulkanmod$fallbackUniformBuffers.add(byteBuffer);
+            }
+            else if (uniform.getType() <= 3) {
                 byteBuffer = MemoryUtil.memByteBuffer(uniform.getIntBuffer());
             }
             else if (uniform.getType() <= 10) {
@@ -147,12 +164,16 @@ public class EffectInstanceM {
             }
 
             MappedBuffer mappedBuffer = MappedBuffer.createFromBuffer(byteBuffer);
-            supplier = () -> mappedBuffer;
-            //TODO vec1
-
+            Supplier<MappedBuffer> supplier = () -> mappedBuffer;
             field.setSupplier(supplier);
         }
+    }
 
+    private void vulkanmod$releaseFallbackUniformBuffers() {
+        for(ByteBuffer buffer : this.vulkanmod$fallbackUniformBuffers) {
+            MemoryUtil.memFree(buffer);
+        }
+        this.vulkanmod$fallbackUniformBuffers.clear();
     }
 
     private String[] decompose(String string, char c) {
