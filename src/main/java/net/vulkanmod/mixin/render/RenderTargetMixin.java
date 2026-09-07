@@ -143,15 +143,26 @@ public class RenderTargetMixin {
 
     /**
      * @author
+     * @reason Match RenderTarget's screen-blit state contract while drawing the
+     * sampled Vulkan color attachment through the Vulkan blit shader.
      */
     @Overwrite
     private void _blitToScreen(int width, int height, boolean disableBlend) {
         if(this.framebuffer == null)
             return;
 
+        RenderSystem.assertOnRenderThread();
+        RenderSystem.colorMask(true, true, true, false);
+        RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
+        RenderSystem.viewport(0, 0, width, height);
+        if(disableBlend)
+            RenderSystem.disableBlend();
+
         DrawUtil.drawFramebuffer(this.framebuffer);
+
         RenderSystem.depthMask(true);
+        RenderSystem.colorMask(true, true, true, true);
     }
 
     private void vulkanmod$destroyBacking() {
