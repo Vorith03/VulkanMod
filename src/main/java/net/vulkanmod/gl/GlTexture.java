@@ -4,16 +4,17 @@ import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_R8G8B8A8_UNORM;
 
 public class GlTexture {
-    private static int ID_COUNT = 0;
+    // OpenGL reserves object name 0 as the default/unbound texture. Synthetic
+    // texture names therefore start at 1 and binding 0 must clear VulkanMod's
+    // emulated binding instead of aliasing the first allocated texture.
+    private static int ID_COUNT = 1;
     private static final Int2ReferenceOpenHashMap<GlTexture> map = new Int2ReferenceOpenHashMap<>();
     private static int boundTextureId = 0;
     private static GlTexture boundTexture;
@@ -27,6 +28,13 @@ public class GlTexture {
 
     public static void bindTexture(int i) {
         boundTextureId = i;
+
+        if(i == 0) {
+            boundTexture = null;
+            VTextureSelector.bindTexture(null);
+            return;
+        }
+
         boundTexture = map.get(i);
 
         if(boundTexture == null)
@@ -39,6 +47,11 @@ public class GlTexture {
 
     public static void glDeleteTextures(int i) {
         map.remove(i);
+        if(boundTextureId == i) {
+            boundTextureId = 0;
+            boundTexture = null;
+            VTextureSelector.bindTexture(null);
+        }
     }
 
     public static GlTexture getTexture(int id) {
@@ -48,6 +61,9 @@ public class GlTexture {
     public static void texImage2D(int target, int level, int internalFormat, int width, int height, int border, int format, int type, @Nullable ByteBuffer pixels) {
         if(width == 0 || height == 0)
             return;
+
+        if(boundTexture == null)
+            throw new IllegalStateException("No texture bound for glTexImage2D");
 
         if(boundTexture.vulkanImage == null || width != boundTexture.vulkanImage.width || height != boundTexture.vulkanImage.height || vulkanFormat(format, type) != boundTexture.vulkanImage.format) {
             boundTexture.allocateVulkanImage(width, height);
@@ -61,11 +77,16 @@ public class GlTexture {
         if(width == 0 || height == 0)
             return;
 
+        if(boundTexture == null)
+            throw new IllegalStateException("No texture bound for glTexSubImage2D");
+
         VTextureSelector.uploadSubTexture(level, width, height, xOffset, yOffset,0, 0, width, pixels);
     }
 
     public static void setVulkanImage(int id, VulkanImage vulkanImage) {
         GlTexture texture = map.get(id);
+        if(texture == null)
+            throw new IllegalArgumentException("Unknown texture id: " + id);
 
         texture.vulkanImage = vulkanImage;
     }
