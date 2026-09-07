@@ -11,6 +11,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public class StagingBuffer extends Buffer {
     private int highWaterMark;
     private int resizeCount;
+    private int growthLimit = Integer.MAX_VALUE;
 
     public StagingBuffer(int bufferSize) {
         super(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, MemoryTypes.HOST_MEM);
@@ -23,7 +24,7 @@ public class StagingBuffer extends Buffer {
     }
 
     public void copyBuffer(int size, ByteBuffer byteBuffer) {
-        copyBuffer(size, byteBuffer, Integer.MAX_VALUE);
+        copyBuffer(size, byteBuffer, this.growthLimit);
     }
 
     /**
@@ -49,6 +50,17 @@ public class StagingBuffer extends Buffer {
         offset = usedBytes;
         usedBytes += size;
         this.highWaterMark = Math.max(this.highWaterMark, this.usedBytes);
+    }
+
+    /**
+     * Temporarily cap geometric growth for a caller that owns the synchronous
+     * staging copy. Restore Integer.MAX_VALUE after that copy when normal growth
+     * policy should resume.
+     */
+    public void setGrowthLimit(int growthLimit) {
+        if(growthLimit <= 0)
+            throw new IllegalArgumentException("Staging growth limit must be positive");
+        this.growthLimit = growthLimit;
     }
 
     /**
