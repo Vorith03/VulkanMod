@@ -65,29 +65,34 @@ public class VBO {
                 case QUADS -> {
                     autoIndexBuffer = Renderer.getDrawer().getQuadsIndexBuffer();
                 }
-                case TRIANGLES -> {
+                case TRIANGLES, DEBUG_LINES, DEBUG_LINE_STRIP -> {
                     autoIndexBuffer = null;
+                    this.indexCount = vertexCount;
                 }
                 default -> throw new IllegalStateException("Unexpected draw mode:" + this.mode);
             }
 
             if(indexBuffer != null && !this.autoIndexed)
-                indexBuffer.freeBuffer();
+                this.indexBuffer.freeBuffer();
 
             if(autoIndexBuffer != null) {
                 autoIndexBuffer.checkCapacity(vertexCount);
                 indexBuffer = autoIndexBuffer.getIndexBuffer();
+            }
+            else {
+                indexBuffer = null;
             }
 
             this.autoIndexed = true;
 
         }
         else {
-            if(indexBuffer != null)
+            if(indexBuffer != null && !this.autoIndexed)
                 this.indexBuffer.freeBuffer();
             this.indexBuffer = new IndexBuffer(data.remaining(), MemoryTypes.GPU_MEM);
 //            this.indexBuffer = new AsyncIndexBuffer(data.remaining());
             indexBuffer.copyBuffer(data);
+            this.autoIndexed = false;
         }
 
     }
@@ -110,6 +115,7 @@ public class VBO {
             VRenderSystem.applyMVP(MV, P);
 
             Renderer renderer = Renderer.getInstance();
+            GraphicsPipeline.requestPrimitiveMode(this.mode);
             renderer.bindGraphicsPipeline(pipeline);
             renderer.uploadAndBindUBOs(pipeline);
 
@@ -135,7 +141,7 @@ public class VBO {
         if(vertexCount <= 0) return;
         vertexBuffer.freeBuffer();
         vertexBuffer = null;
-        if(!autoIndexed) {
+        if(!autoIndexed && indexBuffer != null) {
             indexBuffer.freeBuffer();
             indexBuffer = null;
         }

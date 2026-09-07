@@ -24,11 +24,24 @@ import static org.lwjgl.vulkan.VK10.vkDestroyPipelineLayout;
 
 public class GraphicsPipeline extends Pipeline {
 
-    private final Map<PipelineState, Long> graphicsPipelines = new HashMap<>();
+    private record PipelineKey(PipelineState state, int topology) {}
+
+    private static final ThreadLocal<Integer> REQUESTED_TOPOLOGY =
+            ThreadLocal.withInitial(() -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    private final Map<PipelineKey, Long> graphicsPipelines = new HashMap<>();
     private final VertexFormat vertexFormat;
 
     private long vertShaderModule = 0;
     private long fragShaderModule = 0;
+
+    static {
+        if (topologyForMode(VertexFormat.Mode.DEBUG_LINES) != VK_PRIMITIVE_TOPOLOGY_LINE_LIST
+                || topologyForMode(VertexFormat.Mode.DEBUG_LINE_STRIP) != VK_PRIMITIVE_TOPOLOGY_LINE_STRIP
+                || topologyForMode(VertexFormat.Mode.LINES) != VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) {
+            throw new IllegalStateException("Invalid Minecraft-to-Vulkan primitive topology mapping");
+        }
+    }
 
     GraphicsPipeline(Builder builder) {
         super(builder.shaderPath);
@@ -42,20 +55,36 @@ public class GraphicsPipeline extends Pipeline {
         createPipelineLayout();
         createShaderModules(builder.vertShaderSPIRV, builder.fragShaderSPIRV);
 
-        if(builder.renderPass != null)
-            graphicsPipelines.computeIfAbsent(new PipelineState(DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE, DEFAULT_COLORMASK, builder.renderPass),
-                    this::createGraphicsPipeline);
+        if(builder.renderPass != null) {
+            PipelineState defaultState = new PipelineState(DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE, DEFAULT_COLORMASK, builder.renderPass);
+            graphicsPipelines.computeIfAbsent(new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST), this::createGraphicsPipeline);
+        }
 
         createDescriptorSets(Vulkan.getSwapChainImages().size());
 
         PIPELINES.add(this);
     }
 
-    public long getHandle(PipelineState state) {
-        return graphicsPipelines.computeIfAbsent(state, this::createGraphicsPipeline);
+    public static void requestPrimitiveMode(VertexFormat.Mode mode) {
+        REQUESTED_TOPOLOGY.set(topologyForMode(mode));
     }
 
-    private long createGraphicsPipeline(PipelineState state) {
+    public static int topologyForMode(VertexFormat.Mode mode) {
+        return switch (mode) {
+            case DEBUG_LINES -> VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+            case DEBUG_LINE_STRIP -> VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+            default -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        };
+    }
+
+    public long getHandle(PipelineState state) {
+        int topology = REQUESTED_TOPOLOGY.get();
+        REQUESTED_TOPOLOGY.set(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        return graphicsPipelines.computeIfAbsent(new PipelineKey(state, topology), this::createGraphicsPipeline);
+    }
+
+    private long createGraphicsPipeline(PipelineKey key) {
+        PipelineState state = key.state();
 
         try(MemoryStack stack = stackPush()) {
 
@@ -88,7 +117,7 @@ public class GraphicsPipeline extends Pipeline {
 
             VkPipelineInputAssemblyStateCreateInfo inputAssembly = VkPipelineInputAssemblyStateCreateInfo.calloc(stack);
             inputAssembly.sType(VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO);
-            inputAssembly.topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+            inputAssembly.topology(key.topology());
             inputAssembly.primitiveRestartEnable(false);
 
             // ===> VIEWPORT & SCISSOR
@@ -320,7 +349,7 @@ public class GraphicsPipeline extends Pipeline {
 
         destroyDescriptorSets();
 
-        graphicsPipelines.forEach((state, pipeline) -> {
+        graphicsPipelines.forEach((key, pipeline) -> {
             vkDestroyPipeline(Device.device, pipeline, null);
         });
         graphicsPipelines.clear();

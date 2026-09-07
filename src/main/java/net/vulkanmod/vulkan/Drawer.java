@@ -87,7 +87,7 @@ public class Drawer {
                 autoIndexBuffer = this.triangleStripIndexBuffer;
                 indexCount = (vertexCount - 2) * 3;
             }
-            case TRIANGLES -> {
+            case TRIANGLES, DEBUG_LINES, DEBUG_LINE_STRIP -> {
                 draw(vertexBuffer, vertexCount);
                 return;
             }

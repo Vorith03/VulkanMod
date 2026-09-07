@@ -35,6 +35,7 @@ public class BufferUploaderM {
             return;
 
         GraphicsPipeline pipeline = ((ShaderMixed)(RenderSystem.getShader())).getPipeline();
+        GraphicsPipeline.requestPrimitiveMode(parameters.mode());
         renderer.bindGraphicsPipeline(pipeline);
         renderer.uploadAndBindUBOs(pipeline);
         Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
