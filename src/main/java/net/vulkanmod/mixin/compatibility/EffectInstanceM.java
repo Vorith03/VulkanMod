@@ -8,7 +8,9 @@ import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.EffectUniformBindings;
+import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.Field;
@@ -28,14 +30,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntSupplier;
 
 @Mixin(EffectInstance.class)
 public class EffectInstanceM {
 
+    @Shadow @Final private Map<String, IntSupplier> samplerMap;
     @Shadow @Final private Map<String, Uniform> uniformMap;
     @Shadow @Final private List<Uniform> uniforms;
 
-    private Pipeline pipeline;
+    private GraphicsPipeline pipeline;
     private String vulkanmod$vertexShader;
     private String vulkanmod$fragmentShader;
     private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
@@ -67,12 +71,30 @@ public class EffectInstanceM {
     }
 
     /**
+     * Vanilla EffectInstance.apply still owns blend/state bookkeeping and sampler
+     * supplier setup. Once it completes, expose this instance's Vulkan pipeline
+     * and sampler map to BufferUploader.draw for the fullscreen post pass.
+     */
+    @Inject(method = "apply", at = @At("RETURN"))
+    private void vulkanmod$activateEffectPipeline(CallbackInfo ci) {
+        EffectRenderState.activate(this.pipeline, this.samplerMap);
+    }
+
+    /** Clear the manual Vulkan effect context after PostPass finishes drawing. */
+    @Inject(method = "clear", at = @At("RETURN"))
+    private void vulkanmod$clearEffectPipeline(CallbackInfo ci) {
+        EffectRenderState.clear(this.pipeline);
+    }
+
+    /**
      * @author
      * @reason VulkanMod owns a Vulkan pipeline and fallback uniform storage for
      * post-processing effects instead of an OpenGL program object.
      */
     @Overwrite
     public void close() {
+        EffectRenderState.clear(this.pipeline);
+
         if(this.pipeline != null) {
             this.pipeline.cleanUp();
             this.pipeline = null;
@@ -148,42 +170,4 @@ public class EffectInstanceM {
 
         return strings;
     }
-
-//    /**
-//     * @author
-//     * @reason
-//     */
-//    @Overwrite
-//    public void apply() {
-//        RenderSystem.assertOnGameThread();
-//        this.dirty = false;
-//        lastAppliedEffect = this;
-//        this.blend.apply();
-//        if (this.programId != lastProgramId) {
-//            ProgramManager.glUseProgram(this.programId);
-//            lastProgramId = this.programId;
-//        }
-//
-//        for(int i = 0; i < this.samplerLocations.size(); ++i) {
-//            String string = (String)this.samplerNames.get(i);
-//            IntSupplier intSupplier = (IntSupplier)this.samplerMap.get(string);
-//            if (intSupplier != null) {
-//                RenderSystem.activeTexture('蓀' + i);
-//                RenderSystem.enableTexture();
-//                int j = intSupplier.getAsInt();
-//                if (j != -1) {
-//                    RenderSystem.bindTexture(j);
-//                    Uniform.uploadInteger((Integer)this.samplerLocations.get(i), i);
-//                }
-//            }
-//        }
-//
-//        Iterator var5 = this.uniforms.iterator();
-//
-//        while(var5.hasNext()) {
-//            Uniform uniform = (Uniform)this.uniforms.iterator().next();
-//            uniform.upload();
-//        }
-//
-//    }
 }

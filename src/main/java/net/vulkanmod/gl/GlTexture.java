@@ -58,6 +58,12 @@ public class GlTexture {
         return map.get(id);
     }
 
+    /** Resolve a synthetic GL texture name without mutating the emulated binding. */
+    public static VulkanImage getVulkanImage(int id) {
+        GlTexture texture = map.get(id);
+        return texture != null ? texture.vulkanImage : null;
+    }
+
     public static void texImage2D(int target, int level, int internalFormat, int width, int height, int border, int format, int type, @Nullable ByteBuffer pixels) {
         if(width == 0 || height == 0)
             return;

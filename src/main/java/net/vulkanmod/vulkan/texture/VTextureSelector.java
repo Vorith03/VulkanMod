@@ -12,6 +12,7 @@ import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
+import net.vulkanmod.vulkan.shader.EffectRenderState;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
@@ -219,6 +220,21 @@ public abstract class VTextureSelector {
     }
 
     public static VulkanImage getTexture(String name) {
+        // EffectInstance post shaders use their declared sampler names (for
+        // example DiffuseSampler and arbitrary aux names) rather than the fixed
+        // core-shader Sampler0/Sampler1 slots. Resolve those suppliers directly
+        // while an EffectInstance owns the manual draw path.
+        if(EffectRenderState.isActive()) {
+            VulkanImage effectTexture = EffectRenderState.resolveTexture(name);
+            if(effectTexture != null)
+                return effectTexture;
+
+            if(missingSamplerWarnings.add("effect:" + name)) {
+                Initializer.LOGGER.warn("Effect sampler {} has no bound Vulkan texture; using white fallback", name);
+            }
+            return whiteTexture;
+        }
+
         VulkanImage texture = switch (name) {
             case "Sampler0" -> getBoundTexture();
             case "Sampler1" -> getOverlayTexture();
