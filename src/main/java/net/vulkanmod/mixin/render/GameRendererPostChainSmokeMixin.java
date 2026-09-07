@@ -1,12 +1,12 @@
 package net.vulkanmod.mixin.render;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.PostChain;
-import net.minecraft.client.renderer.RenderTarget;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceProvider;
-import net.vulkanmod.VulkanMod;
+import net.vulkanmod.Initializer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -30,7 +30,7 @@ public abstract class GameRendererPostChainSmokeMixin {
 
     @Shadow @Final private Minecraft minecraft;
 
-    @Inject(method = "reloadShaders", at = @At("HEAD"), order = 900)
+    @Inject(method = "reloadShaders", at = @At("HEAD"))
     private void vulkanmod$constructVanillaPostChain(ResourceProvider provider, CallbackInfo ci) {
         if (!Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)) {
             return;
@@ -44,9 +44,9 @@ public abstract class GameRendererPostChainSmokeMixin {
                 mainTarget,
                 CREEPER_POST_CHAIN)) {
             chain.resize(mainTarget.width, mainTarget.height);
-            VulkanMod.LOGGER.info("Vulkan vanilla post-chain construction smoke passed: {}", chain.getName());
+            Initializer.LOGGER.info("Vulkan vanilla post-chain construction smoke passed: {}", chain.getName());
         } catch (Throwable throwable) {
-            VulkanMod.LOGGER.error("Vulkan vanilla post-chain construction smoke failed", throwable);
+            Initializer.LOGGER.error("Vulkan vanilla post-chain construction smoke failed", throwable);
             System.exit(1);
             return;
         }
