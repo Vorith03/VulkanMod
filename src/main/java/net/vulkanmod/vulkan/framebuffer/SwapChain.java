@@ -75,6 +75,7 @@ public class SwapChain extends Framebuffer {
 
     public void createSwapChain() {
         int configuredFrames = Initializer.CONFIG.frameQueueSize;
+        int previousFormat = this.format;
 
         try(MemoryStack stack = stackPush()) {
             VkDevice device = Vulkan.getDevice();
@@ -171,9 +172,15 @@ public class SwapChain extends Framebuffer {
 
             createDepthResources();
 
-            //RenderPass
-            if(this.renderPass == null)
+            // The attachment format is part of render-pass/pipeline compatibility.
+            // Replace the RenderPass object when the surface format changes so
+            // PipelineState identity forces compatible graphics pipelines too.
+            if(this.renderPass == null) {
                 createRenderPass();
+            } else if(previousFormat != this.format) {
+                this.renderPass.cleanUp();
+                createRenderPass();
+            }
 
             if(!DYNAMIC_RENDERING)
                 createFramebuffers();
