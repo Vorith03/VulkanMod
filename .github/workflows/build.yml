@@ -85,19 +85,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Positive compatibility gate for the exact legacy Crash Assistant
-          # release used by the Create Chronicles pack. Its GPU detector probes
-          # OpenGL at the end of Minecraft initialization, which must be skipped
-          # when VulkanMod owns a GLFW NO_API window.
-          cat >> build.gradle <<'EOF'
-
-          repositories {
-              maven { url = 'https://www.cursemaven.com' }
-          }
-          dependencies {
-              runtimeOnly fg.deobf('curse.maven:crash-assistant-1154099:6714041')
-          }
-          EOF
+          # Match a real Prism/Forge install: use the exact published production
+          # JAR directly in run/mods. Do not pass Crash Assistant through fg.deobf;
+          # its transformation-service/JarJar layout otherwise appears twice as
+          # Java modules and fails before Minecraft starts, which is a CI artifact
+          # rather than a VulkanMod compatibility result.
+          mkdir -p run/mods
+          rm -f run/mods/CrashAssistant-*.jar
+          curl -fL --retry 3 \
+            'https://cdn.modrinth.com/data/ix1qq8Ux/versions/mcLRynoF/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar' \
+            -o 'run/mods/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar'
 
           LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
           if [[ -z "$LVP_ICD" ]]; then
@@ -110,6 +107,7 @@ jobs:
           export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true"
           timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee vulkan-smoke-crash-assistant.log
           grep -F "Vulkan smoke test passed" vulkan-smoke-crash-assistant.log
+          grep -F "CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar" vulkan-smoke-crash-assistant.log
           if grep -F "No context is current or a function that is not available in the current context was called" vulkan-smoke-crash-assistant.log; then
             echo "Crash Assistant attempted an OpenGL probe without a current context" >&2
             exit 1
@@ -118,7 +116,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f run/mods/flywheel-*.jar
+          rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
 
           # runClient uses Mojmap-named development classes, while a published
           # Flywheel JAR is reobfuscated for production. Feed Flywheel through
