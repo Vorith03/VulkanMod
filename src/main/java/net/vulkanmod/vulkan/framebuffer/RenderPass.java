@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.framebuffer;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -225,10 +226,17 @@ public class RenderPass {
     }
 
     public void cleanUp() {
-        //TODO
-
-        if(!Vulkan.DYNAMIC_RENDERING)
-            vkDestroyRenderPass(Vulkan.getDevice(), this.id, null);
+        if(!Vulkan.DYNAMIC_RENDERING && this.id != VK_NULL_HANDLE) {
+            // A RenderTarget may be closed after recording commands against this
+            // pass but before that frame is submitted/retired. Destroying the pass
+            // immediately invalidates those recorded commands, so retire it behind
+            // the same frame fence as its framebuffer and attachment images.
+            final long renderPassId = this.id;
+            this.id = VK_NULL_HANDLE;
+            MemoryManager.getInstance().addFrameOp(
+                    () -> vkDestroyRenderPass(Vulkan.getDevice(), renderPassId, null)
+            );
+        }
     }
 
     public long getId() {
