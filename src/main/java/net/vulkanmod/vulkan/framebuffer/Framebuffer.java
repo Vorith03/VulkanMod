@@ -146,7 +146,7 @@ public class Framebuffer {
     }
 
     public void bindAsTexture(VkCommandBuffer commandBuffer, MemoryStack stack) {
-        this.colorAttachment.transitionImageLayout(stack, commandBuffer, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        this.colorAttachment.transitionImageLayout(stack, commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         VTextureSelector.bindFramebufferTexture(this.colorAttachment);
     }
 
