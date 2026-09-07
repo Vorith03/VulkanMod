@@ -6,6 +6,7 @@ import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
@@ -33,6 +34,8 @@ public abstract class VTextureSelector {
 
     private static int activeTexture = 0;
     private static long stagingReuseCount;
+    private static long stagingBatchSourceBytes;
+    private static long stagingBatchLogicalBytes;
 
     public static void bindTexture(VulkanImage texture) {
         boundTexture = texture;
@@ -87,9 +90,16 @@ public abstract class VTextureSelector {
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
 
             long usedMiB = stagingBuffer.getUsedBytes() / (1024L * 1024L);
+            long sourceMiB = stagingBatchSourceBytes / (1024L * 1024L);
+            long logicalMiB = stagingBatchLogicalBytes / (1024L * 1024L);
             stagingBuffer.reset();
             stagingReuseCount++;
-            Initializer.LOGGER.info("Reused texture staging buffer after {} MiB batch (flush #{})", usedMiB, stagingReuseCount);
+            Initializer.LOGGER.info(
+                    "Reused texture staging buffer after {} MiB batch (flush #{}, source/logical={}/{} MiB)",
+                    usedMiB, stagingReuseCount, sourceMiB, logicalMiB);
+            MemoryDiagnostics.logSnapshot("texture staging flush #" + stagingReuseCount);
+            stagingBatchSourceBytes = 0L;
+            stagingBatchLogicalBytes = 0L;
         }
 
         if(canRecycleStaging) {
@@ -97,6 +107,11 @@ public abstract class VTextureSelector {
             // persistent host allocation beyond the resource-reload budget.
             stagingBuffer.setGrowthLimit(TEXTURE_STAGING_BATCH_LIMIT);
         }
+
+        long sourceBytes = buffer.limit();
+        long logicalBytes = (long)width * height * texture.formatSize;
+        stagingBatchSourceBytes += sourceBytes;
+        stagingBatchLogicalBytes += logicalBytes;
 
         try {
             texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, unpackRowLength, buffer);
