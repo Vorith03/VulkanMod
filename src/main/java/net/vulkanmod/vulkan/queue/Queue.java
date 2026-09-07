@@ -9,6 +9,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.IntBuffer;
 import java.util.stream.IntStream;
 
+import static net.vulkanmod.vulkan.Vulkan.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR;
 import static org.lwjgl.vulkan.VK10.*;
@@ -130,15 +131,16 @@ public abstract class Queue {
                         if(fallback == -1)
                             fallback = i;
 
-                        if ((queueFlags & (VK_QUEUE_GRAPHICS_BIT)) == 0) {
+                        if ((queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
                             indices.transferFamily = i;
 
                             if(i != indices.computeFamily)
                                 break;
-                            fallback = i;
                         }
                     }
+                }
 
+                if(indices.transferFamily == null) {
                     if(fallback == -1)
                         throw new RuntimeException("Failed to find queue family with transfer support");
 
