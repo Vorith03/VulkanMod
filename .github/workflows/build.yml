@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           mkdir -p run/mods
           curl --fail --location --retry 3 \
-            https://maven.tterrag.com/com/jozufozu/flywheel/flywheel-forge-1.20.1/0.6.11-13/flywheel-forge-1.20.1-0.6.11-13.jar \
+            https://modmaven.dev/com/jozufozu/flywheel/flywheel-forge-1.20.1/0.6.11-13/flywheel-forge-1.20.1-0.6.11-13.jar \
             --output run/mods/flywheel-forge-1.20.1-0.6.11-13.jar
 
           LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
