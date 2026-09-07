@@ -68,8 +68,8 @@ public class RenderPass {
                 colorAttachment.initialLayout(colorAttachmentInfo.initialLayout);
                 colorAttachment.finalLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-                VkAttachmentReference colorAttachmentRef = attachmentRefs.get(0);
-                colorAttachmentRef.attachment(0);
+                VkAttachmentReference colorAttachmentRef = attachmentRefs.get(i);
+                colorAttachmentRef.attachment(i);
                 colorAttachmentRef.layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
                 subpass.colorAttachmentCount(1);
@@ -91,8 +91,11 @@ public class RenderPass {
                 depthAttachment.initialLayout(depthAttachmentInfo.initialLayout);
                 depthAttachment.finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-                VkAttachmentReference depthAttachmentRef = attachmentRefs.get(1);
-                depthAttachmentRef.attachment(1);
+                // The depth attachment follows however many color attachments were
+                // actually emitted. In a depth-only framebuffer that is slot 0,
+                // while a color+depth framebuffer places it in slot 1.
+                VkAttachmentReference depthAttachmentRef = attachmentRefs.get(i);
+                depthAttachmentRef.attachment(i);
                 depthAttachmentRef.layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
                 subpass.pDepthStencilAttachment(depthAttachmentRef);
