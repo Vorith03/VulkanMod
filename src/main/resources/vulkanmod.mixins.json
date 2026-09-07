@@ -16,7 +16,7 @@
     "compatibility.gl.GL11M",
     "compatibility.EffectInstanceM",
     "compatibility.FlywheelBackendMixin",
-    "compatibility.CrashAssistantCurrentGPUDetectorMixin",
+    "compatibility.CrashAssistantMinecraftMixin",
     "compatibility.ProgramM",
     "compatibility.UniformM",
 
