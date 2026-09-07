@@ -20,6 +20,18 @@ public class Vec1f extends Field {
     }
 
     void update(long ptr) {
+        // EffectInstance uniforms bind their own mapped storage after GLSL
+        // conversion. Scalar fields historically bypassed Field.values and read
+        // only the global Uniforms map, leaving this supplier null for effects.
+        if(this.values != null) {
+            super.update(ptr);
+            return;
+        }
+
+        if(this.floatSupplier == null) {
+            throw new IllegalStateException("No supplier bound for float uniform field: " + this.fieldInfo.name);
+        }
+
         float f = this.floatSupplier.get();
         MemoryUtil.memPutFloat(ptr + this.offset, f);
     }
