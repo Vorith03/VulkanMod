@@ -30,6 +30,8 @@ public final class MemoryDiagnostics {
     private static final AtomicLong NEXT_NATIVE_IMAGE_REPORT = new AtomicLong(NATIVE_IMAGE_REPORT_STEP);
     private static final AtomicLong VULKAN_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_PEAK = new AtomicLong();
+    private static final AtomicLong VULKAN_IMAGE_VMA_LIVE = new AtomicLong();
+    private static final AtomicLong VULKAN_IMAGE_VMA_PEAK = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT_PEAK = new AtomicLong();
     private static final AtomicBoolean DIAGNOSTIC_FAILURE_LOGGED = new AtomicBoolean();
@@ -53,19 +55,26 @@ public final class MemoryDiagnostics {
         NATIVE_IMAGE_LIVE.updateAndGet(value -> Math.max(0L, value - bytes));
     }
 
-    public static void onVulkanImageAllocated(long estimatedBytes) {
+    public static void onVulkanImageAllocated(long estimatedBytes, long vmaBytes) {
         if(estimatedBytes > 0L) {
             long live = VULKAN_IMAGE_LIVE.addAndGet(estimatedBytes);
             updatePeak(VULKAN_IMAGE_PEAK, live);
+        }
+        if(vmaBytes > 0L) {
+            long live = VULKAN_IMAGE_VMA_LIVE.addAndGet(vmaBytes);
+            updatePeak(VULKAN_IMAGE_VMA_PEAK, live);
         }
 
         long count = VULKAN_IMAGE_COUNT.incrementAndGet();
         updatePeak(VULKAN_IMAGE_COUNT_PEAK, count);
     }
 
-    public static void onVulkanImageFreed(long estimatedBytes) {
+    public static void onVulkanImageFreed(long estimatedBytes, long vmaBytes) {
         if(estimatedBytes > 0L) {
             VULKAN_IMAGE_LIVE.updateAndGet(value -> Math.max(0L, value - estimatedBytes));
+        }
+        if(vmaBytes > 0L) {
+            VULKAN_IMAGE_VMA_LIVE.updateAndGet(value -> Math.max(0L, value - vmaBytes));
         }
         VULKAN_IMAGE_COUNT.updateAndGet(value -> Math.max(0L, value - 1L));
     }
@@ -96,7 +105,7 @@ public final class MemoryDiagnostics {
             Initializer.LOGGER.info(
                     "Memory snapshot [{}]: heap used/committed/max={}/{}/{} MiB; " +
                             "process rss/anon={}/{} MiB; NativeImage live/peak={}/{} MiB; " +
-                            "VulkanImage est-live/peak={}/{} MiB count={}/{}; " +
+                            "VulkanImage est-live/peak={}/{} MiB VMA-live/peak={}/{} MiB count={}/{}; " +
                             "tracked buffers host/device={}/{} MiB; staging={}; " +
                             "system available={} MiB GPUActive={} MiB GPUReclaim={} MiB SwapFree={} MiB; " +
                             "amdgpu VRAM used/total={}/{} MiB GTT used/total={}/{} MiB",
@@ -105,6 +114,7 @@ public final class MemoryDiagnostics {
                     kbToMiB(process.get("VmRSS")), kbToMiB(process.get("RssAnon")),
                     toMiB(NATIVE_IMAGE_LIVE.get()), toMiB(NATIVE_IMAGE_PEAK.get()),
                     toMiB(VULKAN_IMAGE_LIVE.get()), toMiB(VULKAN_IMAGE_PEAK.get()),
+                    toMiB(VULKAN_IMAGE_VMA_LIVE.get()), toMiB(VULKAN_IMAGE_VMA_PEAK.get()),
                     VULKAN_IMAGE_COUNT.get(), VULKAN_IMAGE_COUNT_PEAK.get(),
                     hostBufferMiB, deviceBufferMiB,
                     Vulkan.describeStagingBuffers(),
