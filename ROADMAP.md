@@ -145,12 +145,12 @@ Mandatory gates:
 - [x] a real vanilla `shaders/post/creeper.json` PostChain constructs successfully in CI;
 - [x] **P3.8 — execute one real `PostChain.process(...)` frame under Lavapipe, submit/present it, and exit cleanly;** (CI #282)
 - [ ] P3.9 — perform one RX 6900 XT visual post-effect check after P3.8 is green;
-- [ ] P3.10 — replace the unsafe post-present screenshot/readback path with a same-frame Vulkan transfer path, or explicitly gate it until safe;
+- [x] P3.10 — same-frame Vulkan screenshot transfers with frame-fence readback; post-present requests defer to the next frame and unsupported synchronous entry points are gated. Pixel/resize/Forge-event smoke and synchronization validation pass (CI #284).
 - [x] P3.11 — characterize and fix MainTarget depth-aux sampling / sampler-filter semantics for vanilla transparency (nearest/clamp depth sampling, valid copies/barriers; CI #282). Broader mod-specific filtering remains unproven.
 
-**Progress: 9/11**
+**Progress: 10/11**
 
-**Next work item: P3.9.** The bounded depth CI task is complete; see `AGENT_STATUS.md` for the root cause and evidence. P3.10 remains open.
+**Next work item: P3.9.** The bounded depth CI and screenshot/readback tasks are complete; see `AGENT_STATUS.md` for root causes, evidence and remaining user-machine checks.
 
 ### Phase 3 exit rule
 
@@ -322,12 +322,13 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after the bounded depth-post-processing fix:
+Verified checkpoint after the bounded screenshot/readback fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green code checkpoint: **`f9b2b3916da4b719a993b5e721eaf29ad5c22bdc`, CI #282**;
+- last verified green code checkpoint: **`ef0c0fc0426a9e058312773bfd529aca9ebb1a12`, CI #284**;
 - active phase: **Phase 3 — Core rendering correctness hardening**;
 - next gate: **P3.9 — RX 6900 XT visual post-effect check**;
-- RX 6900 XT visual post-effect testing is **useful now**; CI depth execution and validation passed. No new visual or performance result is claimed.
+- phase progress: **10/11 mandatory gates**;
+- RX 6900 XT visual post-effect testing is **useful now**; CI depth execution/validation and screenshot pixel readback passed. Include F2 after resize and world-icon checks. No new AMD visual or performance result is claimed.
 
 Future agents must verify live HEAD/CI first rather than assuming this snapshot is still current.

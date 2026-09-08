@@ -15,14 +15,14 @@ Future agents should not silently invent a new major workstream. Start from the 
 ## Last verified green checkpoint
 
 - Branch: `forge-1.20.1`
-- Verified commit: `f9b2b3916da4b719a993b5e721eaf29ad5c22bdc`
-- Verified GitHub Actions run: **#282**
+- Verified commit: `ef0c0fc0426a9e058312773bfd529aca9ebb1a12`
+- Verified GitHub Actions run: **#284**
 - Highest demonstrated milestone: **Milestone 6 — playable world**
 - User RX 6900 XT result: Vulkan gameplay is playable; water rendering fix visually confirmed.
 
 ### CI coverage at this checkpoint
 
-[Run #282](https://github.com/Vorith03/VulkanMod/actions/runs/34200598111) passed:
+[Run #284](https://github.com/Vorith03/VulkanMod/actions/runs/34203493490) passed:
 
 - distributable Forge build / packaging verification;
 - Vulkan startup under Lavapipe;
@@ -32,14 +32,15 @@ Future agents should not silently invent a new major workstream. Start from the 
 - real vanilla `shaders/post/creeper.json` `PostChain.process(...)`, submission and presentation;
 - vanilla `shaders/post/transparency.json` depth PostChain: four processes in two submitted frames, initialized auxiliary inputs, MainTarget/offscreen depth copies, and no fallback samplers;
 - depth smoke with Khronos validation 1.3.204.1 and synchronization validation enabled: no validation errors or synchronization hazards;
+- Vulkan screenshot pixel/readback smoke with synchronization validation: main/offscreen targets, resize, next frame, opaque alpha, orientation, and Forge redirect/cancel/custom feedback;
 - Crash Assistant 1.9.7 compatibility;
 - Flywheel 0.6 compatibility.
 
 ## Roadmap position
 
 - Active phase: **Phase 3 — Core rendering correctness hardening**
-- Phase progress at the last verified checkpoint: **9/11 mandatory gates**
-- Newly demonstrated gates: **P3.8 — real PostChain execution**, **P3.11 — supported vanilla depth-aux / nearest-clamp sampler path**
+- Phase progress at the last verified checkpoint: **10/11 mandatory gates**
+- Newly demonstrated gate: **P3.10 — safe screenshot/readback path**; P3.8 and P3.11 remain green.
 - Next gate: **P3.9 — RX 6900 XT visual post-effect check**
 
 Do not begin the major mesh-shader terrain backend while Phase 3 remains open. The roadmap intentionally places persistent region batching and performance measurement before the optional `VK_EXT_mesh_shader` backend so the project does not debug a new geometry pipeline and a new residency model simultaneously.
@@ -83,7 +84,30 @@ Do not redo these investigations without new evidence.
 
 ### Next recommended action
 
-The bounded CI defect is resolved; stop repository work here. **P3.9 is now useful:** use the green build for an RX 6900 XT visual post-effect check, including depth-sensitive transparency ordering. Keep P3.10 readback safety open; this task did not change the production screenshot path. Resume any further roadmap work only in a separately requested task.
+The bounded CI defect was resolved at #282. The separately requested screenshot task below subsequently closed P3.10. **P3.9 remains useful:** use the latest green build for an RX 6900 XT visual post-effect check, including depth-sensitive transparency ordering.
+
+## Bounded screenshot/readback handoff — 2026-09-08
+
+Incoming HEAD was `725189cae8358cd2d1297f7eafb31d86a378bdf3` (documentation following green depth CI #282). Source change: `0275668687d0664cd0d9e9c668b81b5af3e9906e`; isolated-harness correction: `ef0c0fc0426a9e058312773bfd529aca9ebb1a12`. A following documentation-only commit records the result.
+
+### Root cause and fix
+
+- F2 is polled after `Renderer.endFrame` presents the swapchain image. The old `MNativeImage.downloadTexture` read that image after ownership had passed to presentation, ignored the requested RenderTarget, assumed `TRANSFER_SRC_OPTIMAL` without a transition, and waited on the null fence returned by the now-unfenced same-queue helper submit. Swapchain/color targets also lacked transfer-source usage.
+- `ScreenshotReadback.request` now records on the active primary frame, or queues post-present requests for the next frame. It resolves the target/image/dimensions at recording time. `RenderTargetManager.copyColorToBuffer` ends the active pass, transitions to transfer source, records a tight image-to-buffer copy and transfer-write/host-read barrier, restores layout, and resumes the exact LOAD pass. Main and offscreen color images opt into transfer-source usage; unsupported swapchain surfaces fail explicitly.
+- `Renderer.endFrame` completes requested readbacks using the real submitted frame fence. Host-visible/coherent staging is mapped only after completion and then freed. BGRA/RGBA conversion, top-down rows and opaque alpha are explicit. Ordinary frames perform no screenshot copy or screenshot fence wait; the queue is bounded to eight captures.
+- `ScreenshotRecorderM` defers `Screenshot._grab`, then replays vanilla saving with the completed image, preserving Forge's event, cancellation, redirected destination and custom message. Cancellation closes the image. `GameRendererScreenshotMixin` similarly preserves vanilla world-icon readiness/crop/write logic while recording the image before later GUI rendering. Direct synchronous `Screenshot.takeScreenshot`, `NativeImage.downloadTexture`, and legacy `VulkanImage.downloadTexture` calls outside the completed-capture scope are explicitly unsupported; consumers should use `Screenshot.grab` or `ScreenshotReadback.request`.
+
+### Evidence and limits
+
+- **Full CI #284 is green**, including the new screenshot gate, both PostChain gates, packaging/startup and Crash Assistant/Flywheel compatibility. Exactly two source/test CI runs were used for this task; the checkpoint-only documentation update skips CI.
+- CI #283 built and passed existing startup/color/depth gates, but the new smoke failed its Forge event count. This was a harness lifecycle defect: `MinecraftForge.EVENT_BUS` starts shut down and normally starts in `ClientModLoader.completeModLoading`, after the constructor-return probe. The isolated test now starts/shuts down that bus explicitly and reports callback details. Production readback code did not need a second change.
+- The screenshot smoke validates every PNG pixel and dimensions for main BGRA/offscreen RGBA targets, row orientation, opaque alpha, an offscreen resize after recording its copy, and a second frame's fresh contents. It exercises the production `Screenshot.grab` API, Forge redirect/cancel/custom feedback, and explicit rejection of unsafe synchronous entry points. The shell gate enables Khronos synchronization validation and rejects validation errors/hazards; PNGs are uploaded with smoke artifacts.
+- Local diff and shell checks passed. Local `agent-check.sh` remains blocked by the unavailable Gradle distribution download; CI provides compilation, reobfuscation and runtime validation.
+- No AMD visual result, actual F2 input simulation, world-icon crop runtime result, unsupported-surface run, or new performance measurement is claimed. World-icon mixin application is checked at startup. No Phase 4, terrain, mesh-shader or benchmark work was performed.
+
+### Next recommended action
+
+Stop this repository batch. Phase 3's remaining gate is **P3.9, the RX 6900 XT visual check**. Next three actions: (1) launch the latest green artifact with Minecraft 1.20.1 / Forge 47.3.0 and `earlyWindowControl = false`; (2) inspect ordinary/depth-sensitive post effects, press F2 before/after window resizing, and check the saved PNG plus a new world's icon; (3) return `logs/latest.log` and screenshots, or report the visual result before marking P3.9 complete. Highest milestone remains 6, playable world; no new benchmark evidence or roadmap sequencing change. Start a fresh chat for subsequent work, using the live HEAD/CI and these handoffs.
 
 ## Agent iteration rules
 
@@ -115,6 +139,7 @@ bash scripts/ci/vulkan-smoke.sh startup
 bash scripts/ci/vulkan-smoke.sh no-splash
 bash scripts/ci/vulkan-smoke.sh post-chain
 bash scripts/ci/vulkan-smoke.sh depth-post-chain
+bash scripts/ci/vulkan-smoke.sh screenshot
 bash scripts/ci/vulkan-smoke.sh crash-assistant
 bash scripts/ci/vulkan-smoke.sh flywheel
 ```
