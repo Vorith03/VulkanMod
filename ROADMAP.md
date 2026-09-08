@@ -143,14 +143,14 @@ Mandatory gates:
 - [x] `RenderTarget.copyDepthFrom` has a Vulkan depth-copy path with corrected depth/stencil barriers;
 - [x] MainTarget/swapchain color can be sampled by supported post effects;
 - [x] a real vanilla `shaders/post/creeper.json` PostChain constructs successfully in CI;
-- [ ] **P3.8 — execute one real `PostChain.process(...)` frame under Lavapipe, submit/present it, and exit cleanly;**
+- [x] **P3.8 — execute one real `PostChain.process(...)` frame under Lavapipe, submit/present it, and exit cleanly;** (CI #282)
 - [ ] P3.9 — perform one RX 6900 XT visual post-effect check after P3.8 is green;
 - [ ] P3.10 — replace the unsafe post-present screenshot/readback path with a same-frame Vulkan transfer path, or explicitly gate it until safe;
-- [ ] P3.11 — characterize and fix remaining MainTarget depth-aux sampling / sampler-filter semantics when a real vanilla or mod path requires them.
+- [x] P3.11 — characterize and fix MainTarget depth-aux sampling / sampler-filter semantics for vanilla transparency (nearest/clamp depth sampling, valid copies/barriers; CI #282). Broader mod-specific filtering remains unproven.
 
-**Progress: 7/11**
+**Progress: 9/11**
 
-**Current work item: P3.8.**
+**Next work item: P3.9.** The bounded depth CI task is complete; see `AGENT_STATUS.md` for the root cause and evidence. P3.10 remains open.
 
 ### Phase 3 exit rule
 
@@ -322,12 +322,12 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-At the time this roadmap was introduced:
+Verified checkpoint after the bounded depth-post-processing fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green code checkpoint before this documentation change: **`99256f0711b190788d267b344855e565b2326980`, CI #273**;
+- last verified green code checkpoint: **`f9b2b3916da4b719a993b5e721eaf29ad5c22bdc`, CI #282**;
 - active phase: **Phase 3 — Core rendering correctness hardening**;
-- active gate: **P3.8 — execute a real vanilla PostChain frame under Lavapipe**;
-- new RX 6900 XT testing is **not yet useful** until P3.8 is green enough to justify the visual P3.9 check.
+- next gate: **P3.9 — RX 6900 XT visual post-effect check**;
+- RX 6900 XT visual post-effect testing is **useful now**; CI depth execution and validation passed. No new visual or performance result is claimed.
 
 Future agents must verify live HEAD/CI first rather than assuming this snapshot is still current.
