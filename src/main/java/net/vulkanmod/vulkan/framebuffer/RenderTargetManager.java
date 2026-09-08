@@ -137,6 +137,39 @@ public final class RenderTargetManager {
         resumePass(output, outputPass, commandBuffer);
     }
 
+    /** Record an on-demand screenshot while the image is still owned by this frame. */
+    public static void copyColorToBuffer(VulkanImage image, long buffer) {
+        Renderer renderer = Renderer.getInstance();
+        if(!renderer.isRecordingFrame())
+            throw new IllegalStateException("Readback requires a recording frame, before presentation");
+        VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
+        RenderPass interrupted = renderer.getBoundRenderPass();
+        if(interrupted != null)
+            renderer.endRenderPass();
+        int oldLayout = image.getCurrentLayout();
+
+        try(MemoryStack stack = stackPush()) {
+            if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+                throw new IllegalStateException("Cannot capture an uninitialized RenderTarget");
+            image.transitionImageLayout(stack, commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack);
+            region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
+            region.imageExtent().set(image.width, image.height, 1);
+            vkCmdCopyImageToBuffer(commandBuffer, image.getId(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, region);
+
+            VkBufferMemoryBarrier.Buffer hostBarrier = VkBufferMemoryBarrier.calloc(1, stack);
+            hostBarrier.sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_HOST_READ_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(buffer).offset(0).size(VK_WHOLE_SIZE);
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+                    0, null, hostBarrier, null);
+            image.transitionImageLayout(stack, commandBuffer, oldLayout);
+        } finally {
+            if(interrupted != null)
+                resumePass(interrupted.getFramebuffer(), interrupted, commandBuffer);
+        }
+    }
+
     /**
      * Copy one RenderTarget depth attachment to another without routing through
      * the incomplete OpenGL framebuffer emulation layer. Minecraft's depth-copy

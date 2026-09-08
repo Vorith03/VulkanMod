@@ -14,6 +14,7 @@ import net.vulkanmod.vulkan.passes.MainPass;
 import net.vulkanmod.vulkan.shader.*;
 import net.vulkanmod.vulkan.shader.layout.PushConstants;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
+import net.vulkanmod.vulkan.texture.ScreenshotReadback;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -249,13 +250,25 @@ public class Renderer {
         if(skipRendering || !this.recordingFrame)
             return;
 
-        mainPass.end(currentCmdBuffer);
-
+        long submittedFence = inFlightFences.get(currentFrame);
         try {
+            ScreenshotReadback.recordPending();
+            mainPass.end(currentCmdBuffer);
             submitFrame();
+        } catch(RuntimeException | Error failure) {
+            // Submission may have succeeded before presentation failed. Reclaim
+            // readback buffers only after outstanding GPU use has ended.
+            Vulkan.waitIdle();
+            ScreenshotReadback.cancelAll(failure);
+            throw failure;
         } finally {
             this.recordingFrame = false;
         }
+        ScreenshotReadback.complete(submittedFence);
+    }
+
+    public boolean isRecordingFrame() {
+        return this.recordingFrame && !skipRendering;
     }
 
     public void endRenderPass() {
@@ -465,6 +478,8 @@ public class Renderer {
     }
 
     public void cleanUpResources() {
+        // Vulkan.cleanUp established device idleness before calling this method.
+        ScreenshotReadback.cancelAll(new IllegalStateException("Renderer closed before screenshot capture"));
         destroySyncObjects();
 
         drawer.cleanUpResources();

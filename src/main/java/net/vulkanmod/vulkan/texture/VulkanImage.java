@@ -168,27 +168,14 @@ public class VulkanImage {
             Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
     }
 
+    /** Raw post-present readback cannot satisfy Vulkan image ownership or fence rules. */
+    @Deprecated
     public static void downloadTexture(int width, int height, int formatSize, ByteBuffer buffer, long image) {
-        try(MemoryStack stack = stackPush()) {
-            long imageSize = width * height * formatSize;
+        throw new UnsupportedOperationException("Use ScreenshotReadback.request for frame-owned Vulkan readback");
+    }
 
-            LongBuffer pStagingBuffer = stack.mallocLong(1);
-            PointerBuffer pStagingAllocation = stack.pointers(0L);
-            MemoryManager.getInstance().createBuffer(imageSize,
-                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-                    pStagingBuffer,
-                    pStagingAllocation);
-
-            copyImageToBuffer(pStagingBuffer.get(0), image, 0, width, height, 0, 0, 0, 0, 0);
-
-            MemoryManager.getInstance().MapAndCopy(pStagingAllocation.get(0), imageSize,
-                    (data) -> VUtil.memcpy(data.getByteBuffer(0, (int)imageSize), buffer)
-            );
-
-            MemoryManager.freeBuffer(pStagingBuffer.get(0), pStagingAllocation.get(0));
-        }
-
+    public boolean supportsTransferSource() {
+        return (this.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
     }
 
     private void transferDstLayout(CommandPool.CommandBuffer commandBuffer) {
@@ -388,31 +375,6 @@ public class VulkanImage {
             region.imageExtent(VkExtent3D.callocStack(stack).set(width, height, 1));
 
             vkCmdCopyBufferToImage(commandBuffer.getHandle(), buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region);
-        }
-    }
-
-    private static void copyImageToBuffer(long buffer, long image, int mipLevel, int width, int height, int xOffset, int yOffset, int bufferOffset, int bufferRowLenght, int bufferImageHeight) {
-
-        try(MemoryStack stack = stackPush()) {
-
-            CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
-
-            VkBufferImageCopy.Buffer region = VkBufferImageCopy.callocStack(1, stack);
-            region.bufferOffset(bufferOffset);
-            region.bufferRowLength(bufferRowLenght);   // Tightly packed
-            region.bufferImageHeight(bufferImageHeight);  // Tightly packed
-            region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-            region.imageSubresource().mipLevel(mipLevel);
-            region.imageSubresource().baseArrayLayer(0);
-            region.imageSubresource().layerCount(1);
-            region.imageOffset().set(xOffset, yOffset, 0);
-            region.imageExtent(VkExtent3D.callocStack(stack).set(width, height, 1));
-
-            vkCmdCopyImageToBuffer(commandBuffer.getHandle(), image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, region);
-
-            long fence = Device.getGraphicsQueue().submitCommands(commandBuffer);
-
-            vkWaitForFences(device, fence, true, VUtil.UINT64_MAX);
         }
     }
 

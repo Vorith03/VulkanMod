@@ -141,21 +141,7 @@ public abstract class MNativeImage {
     @Overwrite
     public void downloadTexture(int level, boolean removeAlpha) {
         RenderSystem.assertOnRenderThread();
-
-        VulkanImage.downloadTexture(this.width, this.height, 4, this.vulkanmod$buffer, Vulkan.getSwapChain().getColorAttachment().getId());
-
-        if (removeAlpha && this.format.hasAlpha()) {
-            for (int i = 0; i < this.height; ++i) {
-                for (int j = 0; j < this.getWidth(); ++j) {
-                    int v = this.getPixelRGBA(j, i);
-
-                    if(Vulkan.getSwapChain().isBGRAformat)
-                        v = ColorUtil.BGRAtoRGBA(v);
-
-                    this.setPixelRGBA(j, i, v | 255 << this.format.alphaOffset());
-                }
-            }
-        }
-
+        throw new UnsupportedOperationException(
+                "Synchronous NativeImage texture download is unavailable in Vulkan; use Screenshot.grab or ScreenshotReadback.request");
     }
 }

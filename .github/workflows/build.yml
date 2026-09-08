@@ -51,6 +51,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh post-chain
       - name: Smoke-test vanilla Vulkan depth post-chain execution
         run: bash scripts/ci/vulkan-smoke.sh depth-post-chain
+      - name: Smoke-test Vulkan screenshot readback
+        run: bash scripts/ci/vulkan-smoke.sh screenshot
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
       - name: Smoke-test Flywheel 0.6 compatibility
@@ -65,6 +67,8 @@ jobs:
             vulkan-smoke-no-splash.log
             vulkan-post-chain-smoke.log
             vulkan-depth-post-chain-smoke.log
+            vulkan-screenshot-smoke.log
+            run/screenshot-smoke/screenshots/*.png
             vulkan-smoke-crash-assistant.log
             vulkan-smoke-flywheel.log
           if-no-files-found: ignore

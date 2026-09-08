@@ -42,6 +42,7 @@ public class SwapChain extends Framebuffer {
     public boolean isBGRAformat;
     private boolean vsync = false;
     private boolean colorSamplingSupported;
+    private boolean colorReadbackSupported;
     private boolean colorSamplingWarningLogged;
 
     private int[] currentLayout;
@@ -89,6 +90,8 @@ public class SwapChain extends Framebuffer {
 
             this.colorSamplingSupported = (surfaceProperties.capabilities.supportedUsageFlags()
                     & VK_IMAGE_USAGE_SAMPLED_BIT) != 0;
+            this.colorReadbackSupported = (surfaceProperties.capabilities.supportedUsageFlags()
+                    & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
             if(!this.colorSamplingSupported && !this.colorSamplingWarningLogged) {
                 this.colorSamplingWarningLogged = true;
                 Initializer.LOGGER.warn("Surface does not support sampling swapchain images; main-target post effects will be unavailable");
@@ -132,6 +135,8 @@ public class SwapChain extends Framebuffer {
             int imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
             if(this.colorSamplingSupported)
                 imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            if(this.colorReadbackSupported)
+                imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
             createInfo.imageUsage(imageUsage);
 
             Queue.QueueFamilyIndices indices = Queue.getQueueFamilies();

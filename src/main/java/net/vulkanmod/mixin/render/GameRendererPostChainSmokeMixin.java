@@ -14,6 +14,7 @@ import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
+import net.vulkanmod.vulkan.texture.ScreenshotReadbackSmokeTest;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -43,6 +44,16 @@ public abstract class GameRendererPostChainSmokeMixin {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void vulkanmod$executeVanillaPostChain(GameConfig gameConfig, CallbackInfo ci) {
+        if(Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) {
+            try {
+                ScreenshotReadbackSmokeTest.verify((Minecraft)(Object)this);
+                System.exit(0);
+            } catch(Throwable failure) {
+                Initializer.LOGGER.error("Vulkan screenshot readback smoke failed", failure);
+                System.exit(1);
+            }
+            return;
+        }
         boolean depthSmoke = Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY);
         boolean colorSmoke = Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY);
         if (!depthSmoke && !colorSmoke) {

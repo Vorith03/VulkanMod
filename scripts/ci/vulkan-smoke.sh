@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|crash-assistant|flywheel}" >&2
+  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|screenshot|crash-assistant|flywheel}" >&2
   exit 2
 }
 
@@ -75,6 +75,20 @@ case "$mode" in
     grep -F "Depth inputs initialized and copied; four PostChain processes submitted in two frames" vulkan-depth-post-chain-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD|Effect sampler .*white fallback' vulkan-depth-post-chain-smoke.log; then
       echo "Depth post-chain smoke produced invalid Vulkan or an unbound sampler" >&2
+      exit 1
+    fi
+    rm -f run/vk_layer_settings.txt
+    ;;
+
+  screenshot)
+    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    mkdir -p run
+    export VK_LAYER_SETTINGS_PATH="$repo_root/run"
+    echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
+    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.validation=true" vulkan-screenshot-smoke.log
+    grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
+    if grep -E 'Validation Error|SYNC-HAZARD' vulkan-screenshot-smoke.log; then
+      echo "Screenshot readback smoke produced invalid Vulkan" >&2
       exit 1
     fi
     rm -f run/vk_layer_settings.txt

@@ -35,7 +35,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
         if(POST_CHAIN_SMOKE_MIXIN.equals(mixinClassName)
                 && !Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)
-                && !Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY)) {
+                && !Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY)
+                && !Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) {
             return false;
         }
 
