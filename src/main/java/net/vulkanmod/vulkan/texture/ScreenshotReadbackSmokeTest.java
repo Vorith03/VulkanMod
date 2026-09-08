@@ -16,6 +16,7 @@ import org.lwjgl.vulkan.VkClearRect;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -43,6 +44,11 @@ public final class ScreenshotReadbackSmokeTest {
 
         AtomicInteger events = new AtomicInteger();
         CountDownLatch saved = new CountDownLatch(4);
+        ConcurrentLinkedQueue<String> feedback = new ConcurrentLinkedQueue<>();
+        Consumer<net.minecraft.network.chat.Component> onSaved = message -> {
+            feedback.add(message.getString());
+            saved.countDown();
+        };
         Consumer<ScreenshotEvent> listener = event -> {
             events.incrementAndGet();
             String name = event.getScreenshotFile().getName();
@@ -52,12 +58,15 @@ public final class ScreenshotReadbackSmokeTest {
             }
             if(name.equals("cancel.png")) event.setCanceled(true);
         };
+        // This isolated process exits at constructor return, before Forge's
+        // completeModLoading normally starts the initially shut-down event bus.
+        MinecraftForge.EVENT_BUS.start();
         MinecraftForge.EVENT_BUS.addListener(listener);
         TextureTarget offscreen = new TextureTarget(8, 6, true, Minecraft.ON_OSX);
         try {
             // F2 timing: request between frames. It must not read the previously
             // presented swapchain image or invoke Forge's event before GPU completion.
-            Screenshot.grab(directory, "main.png", main, message -> saved.countDown());
+            Screenshot.grab(directory, "main.png", main, onSaved);
             if(events.get() != 0) throw new AssertionError("Screenshot completed before a frame was recorded");
 
             renderer.resetBuffers();
@@ -65,19 +74,22 @@ public final class ScreenshotReadbackSmokeTest {
             pattern(main, 1, 0, 0, 0, 0, 1); // top red, bottom blue, source alpha zero
 
             pattern(offscreen, 0, 1, 0, 1, 1, 0); // RGBA source, not swapchain BGRA
-            Screenshot.grab(directory, "offscreen.png", offscreen, message -> saved.countDown());
+            Screenshot.grab(directory, "offscreen.png", offscreen, onSaved);
             // Its copy has been recorded; later rendering and resize must not change it.
             pattern(offscreen, 0, 0, 1, 0, 0, 1);
             offscreen.unbindWrite();
             offscreen.resize(12, 10, Minecraft.ON_OSX);
             pattern(offscreen, 1, 0, 1, 0, 1, 1);
-            Screenshot.grab(directory, "resized.png", offscreen, message -> saved.countDown());
-            Screenshot.grab(directory, "cancel.png", offscreen, message -> saved.countDown());
+            Screenshot.grab(directory, "resized.png", offscreen, onSaved);
+            Screenshot.grab(directory, "cancel.png", offscreen, onSaved);
             offscreen.unbindWrite();
             if(events.get() != 0) throw new AssertionError("CPU readback ran before submission");
             renderer.endFrame();
             if(!saved.await(10, TimeUnit.SECONDS)) throw new AssertionError("Screenshot save callbacks timed out");
-            if(events.get() != 4) throw new AssertionError("Forge screenshot events were not preserved");
+            if(events.get() != 4) throw new AssertionError("Expected 4 Forge screenshot events, got "
+                    + events.get() + "; feedback: " + feedback);
+            if(!feedback.contains("readback redirected"))
+                throw new AssertionError("Forge custom success message was lost: " + feedback);
 
             verifyFile(new File(screenshots, "main.png"), main.width, main.height, 0xFF0000FF, 0xFFFF0000);
             verifyFile(new File(screenshots, "offscreen.png"), 8, 6, 0xFF00FF00, 0xFF00FFFF);
@@ -99,6 +111,7 @@ public final class ScreenshotReadbackSmokeTest {
             Initializer.LOGGER.info("Vulkan screenshot readback smoke passed: pixels, orientation, alpha, offscreen resize, next frame, Forge redirect/cancel");
         } finally {
             MinecraftForge.EVENT_BUS.unregister(listener);
+            MinecraftForge.EVENT_BUS.shutdown();
             offscreen.destroyBuffers();
         }
     }
