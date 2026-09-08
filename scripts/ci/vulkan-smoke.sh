@@ -65,8 +65,19 @@ case "$mode" in
 
   depth-post-chain)
     rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
-    run_client "-Dvulkanmod.ciDepthPostChainSmoke=true" vulkan-depth-post-chain-smoke.log
+    mkdir -p run
+    # The smoke must reject invalid Vulkan that happens not to crash Lavapipe.
+    # Layer settings enable synchronization validation on Ubuntu's layer version.
+    export VK_LAYER_SETTINGS_PATH="$repo_root/run"
+    echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
+    run_client "-Dvulkanmod.ciDepthPostChainSmoke=true -Dvulkanmod.validation=true" vulkan-depth-post-chain-smoke.log
     grep -F "Vulkan vanilla depth post-chain execution smoke passed" vulkan-depth-post-chain-smoke.log
+    grep -F "Depth inputs initialized and copied; four PostChain processes submitted in two frames" vulkan-depth-post-chain-smoke.log
+    if grep -E 'Validation Error|SYNC-HAZARD|Effect sampler .*white fallback' vulkan-depth-post-chain-smoke.log; then
+      echo "Depth post-chain smoke produced invalid Vulkan or an unbound sampler" >&2
+      exit 1
+    fi
+    rm -f run/vk_layer_settings.txt
     ;;
 
   crash-assistant)

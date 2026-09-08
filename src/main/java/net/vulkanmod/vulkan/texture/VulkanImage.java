@@ -342,7 +342,9 @@ public class VulkanImage {
                 samplerInfo.minLod(0.0F);
                 samplerInfo.mipLodBias(-0.5F);
             } else {
-                samplerInfo.mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
+                // A single-level depth image need not support linear filtering.
+                // maxLod=0 does not waive Vulkan's mipmapMode format requirement.
+                samplerInfo.mipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
                 samplerInfo.maxLod(0.0F);
                 samplerInfo.minLod(0.0F);
             }
@@ -486,7 +488,7 @@ public class VulkanImage {
                 destinationStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             }
             case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL -> {
-                barrier.dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+                barrier.dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
                 destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             }
             case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL -> {
@@ -504,7 +506,7 @@ public class VulkanImage {
                 barrier);
     }
 
-    private static int aspectMaskForFormat(int format) {
+    public static int aspectMaskForFormat(int format) {
         if(format == VK_FORMAT_D32_SFLOAT)
             return VK_IMAGE_ASPECT_DEPTH_BIT;
         if(hasStencilComponent(format))

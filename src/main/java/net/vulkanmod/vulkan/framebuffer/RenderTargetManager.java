@@ -107,6 +107,37 @@ public final class RenderTargetManager {
     }
 
     /**
+     * Attachment writes and their shader-read barriers must share the primary
+     * frame command buffer. A helper submission would run BEFORE this frame's
+     * writes, even on the same queue. End/resume the LOAD output pass once for
+     * all effect inputs; descriptor updates then see already-readable images.
+     */
+    public static void prepareSampledImages(VulkanImage[] images) {
+        Renderer renderer = Renderer.getInstance();
+        VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
+        RenderPass outputPass = renderer.getBoundRenderPass();
+        if(commandBuffer == null || outputPass == null)
+            throw new IllegalStateException("Effect sampling requires an active output pass");
+        Framebuffer output = outputPass.getFramebuffer();
+
+        boolean transition = false;
+        for(VulkanImage image : images) {
+            if(image == output.getColorAttachment() || image == output.getDepthAttachment())
+                throw new UnsupportedOperationException("Post effect cannot sample its own output attachment");
+            transition |= image.getCurrentLayout() != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        if(!transition)
+            return;
+
+        renderer.endRenderPass();
+        try(MemoryStack stack = stackPush()) {
+            for(VulkanImage image : images)
+                image.transitionImageLayout(stack, commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+        resumePass(output, outputPass, commandBuffer);
+    }
+
+    /**
      * Copy one RenderTarget depth attachment to another without routing through
      * the incomplete OpenGL framebuffer emulation layer. Minecraft's depth-copy
      * targets are normally equal-sized; fail explicitly rather than silently
@@ -222,7 +253,7 @@ public final class RenderTargetManager {
         barrier.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
         barrier.image(image.getId());
         barrier.subresourceRange()
-                .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
+                .aspectMask(VulkanImage.aspectMaskForFormat(image.format))
                 .baseMipLevel(0)
                 .levelCount(image.mipLevels)
                 .baseArrayLayer(0)

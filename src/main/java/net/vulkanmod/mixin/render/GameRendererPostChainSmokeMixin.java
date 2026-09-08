@@ -9,7 +9,12 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.Synchronization;
+import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.vulkan.shader.EffectRenderState;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -66,11 +71,27 @@ public abstract class GameRendererPostChainSmokeMixin {
             chain.resize(mainTarget.width, mainTarget.height);
 
             Renderer renderer = Renderer.getInstance();
-            renderer.resetBuffers();
-            renderer.beginFrame();
-            chain.process(0.0F);
-            renderer.endFrame();
-            Vulkan.waitIdle();
+            long submissions = Synchronization.INSTANCE.getMainFrameSubmissionCount();
+            int frames = depthSmoke ? 2 : 1;
+            for(int frame = 0; frame < frames; frame++) {
+                renderer.resetBuffers();
+                renderer.beginFrame();
+                // Repeat in the same frame as well: descriptor-set reuse must
+                // still transition attachments written again between processes.
+                for(int pass = 0; pass < (depthSmoke ? 2 : 1); pass++) {
+                    if(depthSmoke)
+                        vulkanmod$initializeDepthInputs(chain, mainTarget);
+                    chain.process(0.0F);
+                    if(EffectRenderState.isActive())
+                        throw new AssertionError("PostChain left an effect pipeline active after clear");
+                }
+                renderer.endFrame();
+                Vulkan.waitIdle();
+            }
+            if(Synchronization.INSTANCE.getMainFrameSubmissionCount() != submissions + frames)
+                throw new AssertionError("PostChain smoke did not submit every frame");
+            if(depthSmoke)
+                Initializer.LOGGER.info("Depth inputs initialized and copied; four PostChain processes submitted in two frames");
 
             Initializer.LOGGER.info("Vulkan vanilla {} execution smoke passed: {}", smokeName, chain.getName());
         } catch (Throwable throwable) {
@@ -80,5 +101,30 @@ public abstract class GameRendererPostChainSmokeMixin {
         }
 
         System.exit(0);
+    }
+
+    @Unique
+    private static void vulkanmod$initializeDepthInputs(PostChain chain, RenderTarget mainTarget) {
+        if(GlTexture.getVulkanImage(mainTarget.getDepthTextureId()) != Vulkan.getSwapChain().getDepthAttachment())
+            throw new AssertionError("MainTarget depth supplier did not resolve the live swapchain depth image");
+
+        mainTarget.bindWrite(true);
+        VRenderSystem.clearColor(0.25F, 0.5F, 0.75F, 1.0F);
+        VRenderSystem.clearDepth = 0.625F;
+        Renderer.clearAttachments(0x4100);
+
+        // These targets are normally initialized by LevelRenderer. Constructor-
+        // return CI has no world render, so supply defined color/depth contents.
+        for(String name : new String[]{"translucent", "itemEntity", "particles", "clouds", "weather"}) {
+            RenderTarget target = chain.getTempTarget(name);
+            if(target == null || GlTexture.getVulkanImage(target.getDepthTextureId()) == null)
+                throw new AssertionError("Missing transparency depth target: " + name);
+            target.setClearColor(0.0625F, 0.125F, 0.1875F, 0.25F);
+            target.clear(Minecraft.ON_OSX);
+            target.copyDepthFrom(mainTarget);
+        }
+        // Exercise both MainTarget -> offscreen and offscreen -> offscreen copies.
+        chain.getTempTarget("particles").copyDepthFrom(chain.getTempTarget("translucent"));
+        mainTarget.bindWrite(true);
     }
 }

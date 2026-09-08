@@ -61,6 +61,7 @@ public class BufferUploaderM {
 
         BufferBuilder.DrawState parameters = buffer.drawState();
         if(parameters.vertexCount() > 0) {
+            EffectRenderState.prepareTextures();
             Renderer renderer = Renderer.getInstance();
             GraphicsPipeline.requestPrimitiveMode(parameters.mode());
             renderer.bindGraphicsPipeline(pipeline);

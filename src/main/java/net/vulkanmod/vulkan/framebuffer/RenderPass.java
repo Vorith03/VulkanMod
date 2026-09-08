@@ -107,6 +107,20 @@ public class RenderPass {
             renderPassInfo.pAttachments(attachments);
             renderPassInfo.pSubpasses(subpass);
 
+            // LOAD passes can be interrupted for an aux-image barrier/copy and
+            // resumed with the output attachments still in the SAME layout.
+            // No layout transition then supplies the dependency from the prior
+            // clear/draw to the next attachment load/write (notably depth WAW).
+            int attachmentStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            int attachmentAccess = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                    | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            VkSubpassDependency.Buffer dependency = VkSubpassDependency.calloc(1, stack);
+            dependency.srcSubpass(VK_SUBPASS_EXTERNAL).dstSubpass(0)
+                    .srcStageMask(attachmentStages).dstStageMask(attachmentStages)
+                    .srcAccessMask(attachmentAccess).dstAccessMask(attachmentAccess);
+            renderPassInfo.pDependencies(dependency);
+
             LongBuffer pRenderPass = stack.mallocLong(1);
 
             if(vkCreateRenderPass(Vulkan.getDevice(), renderPassInfo, null, pRenderPass) != VK_SUCCESS) {

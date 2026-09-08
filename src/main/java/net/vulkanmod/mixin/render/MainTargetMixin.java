@@ -52,6 +52,15 @@ public class MainTargetMixin extends RenderTarget {
         return this.colorTextureId;
     }
 
+    /** Depth aux suppliers also need a stable name remapped after recreation. */
+    @Override
+    public int getDepthTextureId() {
+        if(this.depthBufferId <= 0)
+            this.depthBufferId = GlTexture.genTextureId();
+        GlTexture.setVulkanImage(this.depthBufferId, Vulkan.getSwapChain().getDepthAttachment());
+        return this.depthBufferId;
+    }
+
     /** Make explicit MainTarget texture binds obey the same layout/pass rules. */
     @Override
     public void bindRead() {

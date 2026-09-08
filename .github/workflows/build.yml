@@ -42,7 +42,7 @@ jobs:
       - name: Install software Vulkan smoke-test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth mesa-vulkan-drivers
+          sudo apt-get install -y xvfb xauth mesa-vulkan-drivers vulkan-validationlayers
       - name: Smoke-test Forge client Vulkan startup
         run: bash scripts/ci/vulkan-smoke.sh startup
       - name: Smoke-test Forge client Vulkan startup without early splash

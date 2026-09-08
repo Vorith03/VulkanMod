@@ -32,6 +32,7 @@ public class Framebuffer {
 
     private VulkanImage colorAttachment;
     protected VulkanImage depthAttachment;
+    private boolean depthLinearFiltering;
 
     private final ObjectArrayList<RenderPass> renderPasses = new ObjectArrayList<>();
 
@@ -46,8 +47,9 @@ public class Framebuffer {
 
         this.depthFormat = SwapChain.getDefaultDepthFormat();
         this.depthAttachment = VulkanImage.createDepthImage(depthFormat, this.width, this.height,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                false, false);
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                false, true);
     }
 
     //SwapChain
@@ -59,6 +61,7 @@ public class Framebuffer {
         this.width = builder.width;
         this.height = builder.height;
         this.linearFiltering = builder.linearFiltering;
+        this.depthLinearFiltering = builder.depthLinearFiltering;
         this.hasColorAttachment = builder.hasColorAttachment;
         this.hasDepthAttachment = builder.hasDepthAttachment;
 
@@ -78,8 +81,9 @@ public class Framebuffer {
 
         if(this.hasDepthAttachment) {
             this.depthAttachment = VulkanImage.createDepthImage(depthFormat, this.width, this.height,
-                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                    linearFiltering, true);
+                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                    depthLinearFiltering, true);
 
             this.attachmentCount++;
         }

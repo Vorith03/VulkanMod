@@ -4,6 +4,7 @@ import com.mojang.blaze3d.shaders.EffectProgram;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
@@ -85,6 +86,16 @@ public class EffectInstanceM {
     @Inject(method = "clear", at = @At("RETURN"))
     private void vulkanmod$clearEffectPipeline(CallbackInfo ci) {
         EffectRenderState.clear(this.pipeline);
+    }
+
+    // apply() uses RenderSystem.activeTexture, but clear() bypasses it. With
+    // more than one sampler vanilla changes GL's cached unit and calls native
+    // glActiveTexture even though this window has no OpenGL context. Preserve
+    // vanilla's remaining clear/bookkeeping and use the same Vulkan path as apply.
+    @Redirect(method = "clear", at = @At(value = "INVOKE",
+            target = "Lcom/mojang/blaze3d/platform/GlStateManager;_activeTexture(I)V", remap = false))
+    private void vulkanmod$clearSamplerUnit(int texture) {
+        RenderSystem.activeTexture(texture);
     }
 
     /**

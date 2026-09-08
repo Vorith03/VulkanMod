@@ -1,6 +1,8 @@
 package net.vulkanmod.vulkan.shader;
 
 import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 
 import java.util.Collections;
@@ -41,6 +43,14 @@ public final class EffectRenderState {
 
     public static boolean isActive() {
         return activePipeline != null;
+    }
+
+    /** Prepare every declared descriptor, including aux depth, before binding the draw. */
+    public static void prepareTextures() {
+        VulkanImage[] textures = activePipeline.images.stream()
+                .map(image -> VTextureSelector.getTexture(image.name))
+                .toArray(VulkanImage[]::new);
+        RenderTargetManager.prepareSampledImages(textures);
     }
 
     public static VulkanImage resolveTexture(String samplerName) {
