@@ -1,7 +1,6 @@
 package net.vulkanmod.mixin.texture;
 
 import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.renderer.texture.Tickable;
@@ -27,7 +26,10 @@ public abstract class MTextureManager implements VTextureManagerI {
     @Shadow @Final private Set<Tickable> tickableTextures;
     @Shadow @Final private Map<ResourceLocation, AbstractTexture> byPath;
 
-    @Shadow public abstract AbstractTexture getTexture(ResourceLocation resourceLocation, AbstractTexture abstractTexture);
+    @Shadow
+    private void safeClose(ResourceLocation id, AbstractTexture texture) {
+        throw new AssertionError();
+    }
 
     @Override
     public int vulkanmod$retireStaticAtlasCpuDataForReload() {
@@ -73,14 +75,19 @@ public abstract class MTextureManager implements VTextureManagerI {
     }
 
     /**
+     * Restore vanilla/Forge ownership semantics. release() removes the registry
+     * entry and routes through TextureManager.safeClose(), which removes tickable
+     * ownership, invokes texture-specific close(), and releases the texture id.
+     * The previous Vulkan overwrite only called releaseId(), leaving stale map and
+     * CPU/ticker ownership behind.
+     *
      * @author
      */
     @Overwrite
     public void release(ResourceLocation id) {
-        AbstractTexture abstractTexture = this.getTexture(id, MissingTextureAtlasSprite.getTexture());
-        if (abstractTexture != MissingTextureAtlasSprite.getTexture()) {
-            //TODO: delete
-            abstractTexture.releaseId();
+        AbstractTexture texture = this.byPath.remove(id);
+        if(texture != null) {
+            this.safeClose(id, texture);
         }
     }
 }

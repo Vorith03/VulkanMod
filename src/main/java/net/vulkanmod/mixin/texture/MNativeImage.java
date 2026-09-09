@@ -2,11 +2,10 @@ package net.vulkanmod.mixin.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.interfaces.VNativeImageI;
+import net.vulkanmod.render.texture.SpriteMipMemoryTracker;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
-import net.vulkanmod.vulkan.texture.VulkanImage;
-import net.vulkanmod.vulkan.util.ColorUtil;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.nio.ByteBuffer;
 
 @Mixin(NativeImage.class)
-public abstract class MNativeImage {
+public abstract class MNativeImage implements VNativeImageI {
     @Unique
     private static final long vulkanmod$MIB = 1024L * 1024L;
     @Unique
@@ -55,6 +54,11 @@ public abstract class MNativeImage {
     @Unique
     private boolean vulkanmod$nativeMemoryReleased;
 
+    @Override
+    public long vulkanmod$getTrackedNativeBytes() {
+        return this.vulkanmod$nativeMemoryReleased ? 0L : this.vulkanmod$trackedNativeBytes;
+    }
+
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("RETURN"))
     private void constr(NativeImage.Format format, int width, int height, boolean useStb, CallbackInfo ci) {
         this.vulkanmod$initializeNativeTracking();
@@ -86,6 +90,11 @@ public abstract class MNativeImage {
         try {
             MemoryDiagnostics.enforceSystemMemorySafety("NativeImage allocation");
         } catch (OutOfMemoryError error) {
+            // Report how much eager static-mip memory was avoided at the exact
+            // pressure point. This makes the next full-pack test directly measure
+            // whether deferred mip generation is large enough to change the peak.
+            SpriteMipMemoryTracker.logSnapshot("system memory safety trip");
+
             // Constructor RETURN injection runs after native allocation. Release this
             // image before propagating the fail-fast signal so the safety mechanism
             // itself cannot strand the allocation that crossed the system threshold.
@@ -104,6 +113,7 @@ public abstract class MNativeImage {
         // the failure so the circuit breaker itself cannot strand native memory.
         long triggeringBytes = this.vulkanmod$trackedNativeBytes;
         MemoryDiagnostics.logSnapshot("NativeImage safety limit after allocation");
+        SpriteMipMemoryTracker.logSnapshot("NativeImage safety limit");
         this.close();
         throw new OutOfMemoryError(String.format(
                 "VulkanMod stopped resource loading before NativeImage memory could exhaust the system: " +

@@ -38,18 +38,40 @@ public abstract class MAbstractTexture implements VAbstractTextureI {
     }
 
     /**
+     * Release the resource state exactly once and immediately mark this texture as
+     * unassigned. The previous Vulkan overwrite removed the synthetic GL mapping but
+     * left id unchanged, so reusing the same AbstractTexture could bind a stale id.
+     * Capture the resources before scheduling render-thread destruction so a later
+     * reuse of this object cannot make the queued callback free its replacement.
+     *
      * @author
      */
     @Overwrite
     public void releaseId() {
-        if(this.vulkanImage != null) {
-            this.vulkanImage.free();
-            this.vulkanImage = null;
-        }
-//        else
-//            System.out.println("trying to free null image");
+        VulkanImage imageToRelease = this.vulkanImage;
+        int idToRelease = this.id;
 
-        TextureUtil.releaseTextureId(this.id);
+        this.vulkanImage = null;
+        this.id = -1;
+
+        if(imageToRelease == null && idToRelease == -1) {
+            return;
+        }
+
+        Runnable release = () -> {
+            if(imageToRelease != null) {
+                imageToRelease.free();
+            }
+            if(idToRelease != -1) {
+                TextureUtil.releaseTextureId(idToRelease);
+            }
+        };
+
+        if(!RenderSystem.isOnRenderThreadOrInit()) {
+            RenderSystem.recordRenderCall(release::run);
+        } else {
+            release.run();
+        }
     }
 
     public void setId(int i) {

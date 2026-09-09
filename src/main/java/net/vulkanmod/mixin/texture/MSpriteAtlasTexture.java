@@ -3,14 +3,18 @@ package net.vulkanmod.mixin.texture;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VAbstractTextureI;
+import net.vulkanmod.interfaces.VSpriteContentsI;
 import net.vulkanmod.interfaces.VTextureAtlasI;
+import net.vulkanmod.render.texture.SpriteMipMemoryTracker;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,9 +30,13 @@ import java.util.List;
 public class MSpriteAtlasTexture implements VTextureAtlasI {
     @Unique
     private static final long vulkanmod$LARGE_ATLAS_BYTES = 64L * 1024L * 1024L;
+    @Unique
+    private static final long vulkanmod$MIB = 1024L * 1024L;
 
     @Shadow
     private List<SpriteContents> sprites;
+    @Shadow @Final
+    private ResourceLocation location;
 
     @Unique
     private boolean vulkanmod$traceLargeAtlasUpload;
@@ -44,20 +52,47 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
     @Override
     public int vulkanmod$retireStaticSpriteCpuDataForReload() {
         int retired = 0;
+        int staticSprites = 0;
+        int animatedSprites = 0;
+        long staticBytes = 0L;
+        long animatedBytes = 0L;
 
         for(SpriteContents sprite : this.sprites) {
-            // Static sprites no longer need their decoded/mip NativeImages once the
-            // current atlas has been uploaded. At an in-world full resource reload
-            // chunk workers are already stopped and this entire generation is about
-            // to be replaced, so release those pixels before decoding the successor.
-            // Preserve anything with multiple animation frames because its ticker
-            // can still need CPU-side frame data until the replacement atlas applies.
-            if(sprite.getUniqueFrames().limit(2L).count() > 1L) {
+            boolean isStatic;
+            long cpuBytes;
+            if(sprite instanceof VSpriteContentsI vulkanSprite) {
+                isStatic = vulkanSprite.vulkanmod$isStaticSprite();
+                cpuBytes = vulkanSprite.vulkanmod$getCpuBytes();
+            } else {
+                isStatic = sprite.getUniqueFrames().limit(2L).count() <= 1L;
+                cpuBytes = 0L;
+            }
+
+            if(!isStatic) {
+                ++animatedSprites;
+                animatedBytes += cpuBytes;
                 continue;
             }
 
+            ++staticSprites;
+            staticBytes += cpuBytes;
+
+            // Static sprites no longer need their decoded NativeImage once the
+            // current atlas has been uploaded. At an in-world full resource reload
+            // chunk workers are already stopped and this entire generation is about
+            // to be replaced. Animated source sheets remain intact for their ticker.
             sprite.close();
             ++retired;
+        }
+
+        if(staticSprites > 0 || animatedSprites > 0) {
+            Initializer.LOGGER.info(
+                    "Atlas CPU census before reload {}: static={} sprites/{} MiB, " +
+                            "animated={} sprites/{} MiB; retired static={}",
+                    this.location,
+                    staticSprites, staticBytes / vulkanmod$MIB,
+                    animatedSprites, animatedBytes / vulkanmod$MIB,
+                    retired);
         }
 
         return retired;
@@ -74,6 +109,7 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
         this.vulkanmod$traceAtlasHeight = height;
 
         if(largeAtlas) {
+            SpriteMipMemoryTracker.logSnapshot("large atlas apply " + width + "x" + height);
             MemoryDiagnostics.logSnapshot("atlas " + width + "x" + height + " before allocation");
 
             VulkanImage previous = texture.getVulkanImage();
@@ -147,6 +183,8 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
         }
 
         if(this.vulkanmod$traceLargeAtlasUpload) {
+            SpriteMipMemoryTracker.logSnapshot(
+                    "large atlas upload complete " + this.vulkanmod$traceAtlasWidth + "x" + this.vulkanmod$traceAtlasHeight);
             MemoryDiagnostics.logSnapshot(
                     "atlas " + this.vulkanmod$traceAtlasWidth + "x" + this.vulkanmod$traceAtlasHeight + " upload complete");
             this.vulkanmod$traceLargeAtlasUpload = false;
