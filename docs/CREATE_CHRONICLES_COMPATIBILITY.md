@@ -22,6 +22,43 @@ Use the latest green source artifact from CI #289:
 
 Later branch HEAD commits may be documentation-only; the artifact above is the latest CI-verified runtime source at the start of Phase 4.
 
+## Build 289 full-pack launch — 2026-09-09
+
+The first Phase 4 user-machine run establishes the current full-pack launch gate:
+
+- Prism loaded the target ~300-mod Create Chronicles instance on Forge 47.3.0 / Java 17;
+- Forge early splash was disabled and VulkanMod created its `GLFW_NO_API` window;
+- terrain region batching initialized;
+- the client completed its initial resource load and logged `Vulkan renderer active: AMD Radeon RX 6900 XT (RADV NAVI21)`;
+- the normal test world reached in-game and the integrated server began normal save/pause activity.
+
+Therefore the Phase 4 gate **current distributable launches the target Create Chronicles instance with Vulkan active** is **PASS** for build 289.
+
+The run did not reach the remaining gameplay checks. Immediately after first world entry, VulkanMod's existing host-memory safety guard deliberately stopped further texture staging when Linux `MemAvailable` fell just below the configured 4096 MiB no-swap floor. The fatal snapshot reported approximately:
+
+- process RSS: 11823 MiB;
+- live NativeImages: 1436 MiB;
+- estimated live Vulkan images: 1989 MiB;
+- VMA live image allocations: 2257 MiB;
+- system `MemAvailable`: 4080 MiB;
+- swap free: 0 MiB;
+- AMD VRAM used: 9188 / 16368 MiB.
+
+This is **not currently classified as a build-289 VulkanMod memory regression**. The same machine had materially less headroom before this run than during the earlier successful heavy-pack baseline:
+
+| Measurement | Earlier heavy-pack run | Build 289 Phase 4 run | Difference |
+| --- | ---: | ---: | ---: |
+| RAM available before Minecraft launch | 22697 MiB | 16740 MiB | -5957 MiB |
+| 16K atlas, process RSS before allocation | 11982 MiB | 11230 MiB | -752 MiB |
+| 16K atlas, live NativeImages before allocation | 1830 MiB | 1414 MiB | -416 MiB |
+| 16K atlas, estimated Vulkan images before allocation | 543 MiB | 71 MiB | -472 MiB |
+| 16K atlas, system available before allocation | 10426 MiB | 5694 MiB | -4732 MiB |
+| 16K atlas, AMD VRAM already used before allocation | 2433 MiB | 6785 MiB | +4352 MiB |
+
+Build 289 was therefore using less VulkanMod-tracked memory at the comparable 16K-atlas point, while the host started with roughly 6 GiB less available RAM and roughly 4.3 GiB more VRAM already occupied. The current evidence points to external host/GPU memory pressure rather than a newly introduced VulkanMod retention defect.
+
+Do **not** lower the 4096 MiB hard system-memory safety floor merely to make this test pass. This machine has previously suffered system-wide OOMs under the same large resource-pack workload and has no swap. For the next Phase 4 run, first restore approximately the earlier launch headroom (close memory/GPU-heavy applications, or otherwise provide swap/headroom), then rerun the same artifact and test sequence.
+
 ## Historical full-pack evidence
 
 A pre-Phase-4 full Create Chronicles run on build 226 established a useful historical baseline:
@@ -32,15 +69,13 @@ A pre-Phase-4 full Create Chronicles run on build 226 established a useful histo
 - the game exited normally and the integrated server saved cleanly;
 - no `VK_ERROR_DEVICE_LOST`, RADV command-stream rejection, JVM crash, system OOM, or VulkanMod memory-safety abort was observed in that successful run.
 
-This evidence is valuable but does **not** close the current Phase 4 launch/contraption gates because substantial renderer-correctness work landed after build 226. Build 289 must be retested in the actual pack.
-
-An uploaded full-pack log from the same development period also recorded Vulkan activation on the RX 6900 XT and confirms the renderer-mod composition used by the working Vulkan instance.
+This evidence remains useful context, but the current Phase 4 gameplay gates require build 289 (or a later green artifact) to survive the same paths after the substantial renderer-correctness work that followed build 226.
 
 ## Renderer-replacement baseline
 
 | Component | State in known-good Vulkan instance | Evidence status | Phase 4 interpretation |
 | --- | --- | --- | --- |
-| VulkanMod | Enabled | Vulkan renderer reported active on RX 6900 XT | Required |
+| VulkanMod | Enabled | Build 289 Vulkan renderer active on RX 6900 XT | Required; current full-pack launch PASS |
 | Create 0.5.1.j | Enabled | Loaded in full pack | Required target workload |
 | Flywheel 0.6.11-13 | Enabled | Loaded; CI startup gate also exists | Supported baseline; needs current gameplay retest |
 | Crash Assistant 1.9.7 | Enabled | Loaded; CI startup gate exists | Supported baseline |
@@ -55,14 +90,14 @@ Do not re-enable renderer replacements in bulk. If Phase 4 later tests them, add
 
 Run these against build 289 in the real Create Chronicles instance, keeping the known-good renderer-replacement set disabled initially.
 
-1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT.
-2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement.
+1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT. **PASS on 2026-09-09.**
+2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement. **Blocked by host-memory safety trip before useful observation.**
 3. Exercise a visible Create/Flywheel contraption (water wheel is sufficient for the first pass; a moving contraption is better for follow-up coverage).
 4. Press `F3+T` and wait for resource reload to finish; verify rendering remains correct.
 5. Exit to the title screen, re-enter the same world, and continue briefly.
 6. Exit normally.
 
-For the first retest, preserve the existing resource-pack workload if practical; it previously exercised a very large atlas and therefore remains a useful compatibility stress case.
+For the next retest, preserve the existing resource-pack workload if practical because it exercises the 16K block atlas, but restore host-memory headroom before launch.
 
 ## Evidence to retain after each run
 
@@ -72,14 +107,15 @@ Keep:
 - any crash report;
 - screenshots of visible rendering defects;
 - exact enabled/disabled state of renderer-changing mods;
+- host `MemAvailable` before launch for the heavy resource-pack test;
 - whether launch, world entry, Create/Flywheel rendering, `F3+T`, world re-entry and clean exit passed.
 
-## Gate status at Phase 4 start
+## Current gate status
 
 - Flywheel CI startup: **PASS**
 - Crash Assistant CI startup: **PASS**
-- current build-289 full-pack launch: **PENDING USER-MACHINE RETEST**
-- current Create/Flywheel gameplay rendering: **PENDING USER-MACHINE RETEST**
+- current build-289 full-pack launch with Vulkan active: **PASS**
+- current Create/Flywheel gameplay rendering: **PENDING RETEST WITH ADEQUATE HOST MEMORY HEADROOM**
 - world enter/leave/re-enter + resource reload: **PENDING**
 - representative particles/translucency/entities/GUI: **PENDING**
 - minimized incompatible renderer-replacement set: **PARTIAL** — known-good disabled set is recorded, but individual incompatibility is not yet proven
