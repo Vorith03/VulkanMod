@@ -15,23 +15,23 @@ Future agents should not silently invent a new major workstream. Start from the 
 ## Last verified green checkpoint
 
 - Branch: `forge-1.20.1`
-- Verified commit: `ef0c0fc0426a9e058312773bfd529aca9ebb1a12`
-- Verified GitHub Actions run: **#284**
+- Verified source commit: `9917cacf69848f492c72ac06f2eb591633937a58`
+- Verified GitHub Actions run: **#289**
 - Highest demonstrated milestone: **Milestone 6 — playable world**
-- User RX 6900 XT result: Vulkan gameplay is playable; water rendering fix visually confirmed.
+- User RX 6900 XT result: Vulkan gameplay is playable; water rendering fix visually confirmed. Post-effect pixel correctness has not yet been visually confirmed on AMD.
 
 ### CI coverage at this checkpoint
 
-[Run #284](https://github.com/Vorith03/VulkanMod/actions/runs/34203493490) passed:
+[Run #289](https://github.com/Vorith03/VulkanMod/actions/runs/34323274115) passed:
 
 - distributable Forge build / packaging verification;
 - Vulkan startup under Lavapipe;
 - Vulkan startup with Forge early splash disabled;
 - liquid alpha/UV regression smoke;
 - terrain region-cache/batching smoke;
-- real vanilla `shaders/post/creeper.json` `PostChain.process(...)`, submission and presentation;
+- real vanilla `shaders/post/creeper.json` `PostChain.process(...)`, submission and presentation, including the red-input/green-dominant pixel oracle;
 - vanilla `shaders/post/transparency.json` depth PostChain: four processes in two submitted frames, initialized auxiliary inputs, MainTarget/offscreen depth copies, and no fallback samplers;
-- depth smoke with Khronos validation 1.3.204.1 and synchronization validation enabled: no validation errors or synchronization hazards;
+- depth smoke with Khronos validation and synchronization validation enabled: no validation errors or synchronization hazards;
 - Vulkan screenshot pixel/readback smoke with synchronization validation: main/offscreen targets, resize, next frame, opaque alpha, orientation, and Forge redirect/cancel/custom feedback;
 - Crash Assistant 1.9.7 compatibility;
 - Flywheel 0.6 compatibility.
@@ -40,7 +40,7 @@ Future agents should not silently invent a new major workstream. Start from the 
 
 - Active phase: **Phase 3 — Core rendering correctness hardening**
 - Phase progress at the last verified checkpoint: **10/11 mandatory gates**
-- Newly demonstrated gate: **P3.10 — safe screenshot/readback path**; P3.8 and P3.11 remain green.
+- P3.8, P3.10 and P3.11 remain green, now with a real Creeper pixel oracle in addition to execution/submission coverage.
 - Next gate: **P3.9 — RX 6900 XT visual post-effect check**
 
 Do not begin the major mesh-shader terrain backend while Phase 3 remains open. The roadmap intentionally places persistent region batching and performance measurement before the optional `VK_EXT_mesh_shader` backend so the project does not debug a new geometry pipeline and a new residency model simultaneously.
@@ -57,7 +57,9 @@ Important fixes already landed before this checkpoint include:
 - Vulkan depth target copies for `RenderTarget.copyDepthFrom`;
 - render-target clear/filter semantics;
 - MainTarget/swapchain sampled-color mapping for post effects;
-- depth/stencil layout and synchronization corrections.
+- depth/stencil layout and synchronization corrections;
+- std140-correct 8-byte `vec2` uniform alignment for converted shaders;
+- validation-clean upright fullscreen PostPass viewport/scissor state.
 
 Do not redo these investigations without new evidence.
 
@@ -108,6 +110,28 @@ Incoming HEAD was `725189cae8358cd2d1297f7eafb31d86a378bdf3` (documentation foll
 ### Next recommended action
 
 Stop this repository batch. Phase 3's remaining gate is **P3.9, the RX 6900 XT visual check**. Next three actions: (1) launch the latest green artifact with Minecraft 1.20.1 / Forge 47.3.0 and `earlyWindowControl = false`; (2) inspect ordinary/depth-sensitive post effects, press F2 before/after window resizing, and check the saved PNG plus a new world's icon; (3) return `logs/latest.log` and screenshots, or report the visual result before marking P3.9 complete. Highest milestone remains 6, playable world; no new benchmark evidence or roadmap sequencing change. Start a fresh chat for subsequent work, using the live HEAD/CI and these handoffs.
+
+## Bounded PostChain pixel-correctness handoff — 2026-09-09
+
+**Completed.** Incoming live HEAD was `babbc4ad030252cd26efbd22f8dfa5a62ff76891`. The uploaded CI #287 log showed that the new Creeper pixel oracle reached and submitted the vanilla PostChain successfully but read back opaque black (`rgba=0,0,0,255`) instead of the expected green-dominant result.
+
+### Root cause and fix
+
+- The converted effect shader UBO used VulkanMod's `AlignedStruct`/`Field` layout. `vec2` members were incorrectly assigned four-scalar / 16-byte base alignment. Under std140 a `vec2` has two-scalar / 8-byte base alignment. Creeper's post shaders place `ProjMat`, `InSize`, `OutSize` and then color-convolution fields in that block, so the bad `vec2` alignment displaced `OutSize` and every following uniform. The draw remained Vulkan-valid but the shader consumed the wrong values and produced black.
+- Commit `a370b6407cbb3fff8a0deb7af753875da628e221` changes both `vec2` field-construction paths to 8-byte alignment. CI #288 immediately made the previously failing Creeper red-input/green-dominant pixel oracle pass.
+- CI #288 then exposed a directly related validation defect in the newly added upright PostPass viewport workaround. `Renderer.setViewport(..., -height)` turned the viewport upright as intended, but the same negative height was passed to `VkRect2D.extent`, wrapping to a huge unsigned value and triggering `VUID-vkCmdSetScissor-offset-00597`. The depth PostChain itself completed and printed its pass marker; the shell gate correctly rejected the validation errors.
+- Commit `9917cacf69848f492c72ac06f2eb591633937a58` makes `PostPassM` set only its positive-height Vulkan viewport directly, then restores the output target's valid scissor. This preserves the required screen orientation without feeding a negative extent to `vkCmdSetScissor`.
+
+### Validation and limits
+
+- **Full CI #289 is green.** Packaging, startup/no-splash, Creeper pixel PostChain, depth PostChain with synchronization validation, screenshot readback, Crash Assistant and Flywheel all passed.
+- The Creeper gate now checks actual fragment output rather than only construction/submission/presentation. The depth gate confirms the follow-up viewport change is validation-clean under its enabled Khronos synchronization-validation configuration.
+- No new RX 6900 XT visual result or comparable performance measurement is claimed. Lavapipe pixel correctness is stronger evidence than the old execution-only smoke, but P3.9 remains the required user-machine visual gate.
+- No Phase 4, terrain, mesh-shader, benchmark, or unrelated cleanup work was undertaken.
+
+### Next recommended action
+
+Return to **P3.9**. Use the latest green artifact for the RX 6900 XT visual post-effect check, with particular attention to Creeper-style fullscreen effects and depth-sensitive transparency ordering. Do not mark Phase 3 complete until that visual result is observed.
 
 ## Agent iteration rules
 
