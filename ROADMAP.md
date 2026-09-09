@@ -130,7 +130,7 @@ Mandatory gates:
 
 # Phase 3 — Core rendering correctness hardening
 
-**Status: ACTIVE**
+**Status: DONE**
 
 Goal: close remaining architectural correctness holes before treating performance measurements as trustworthy.
 
@@ -144,23 +144,23 @@ Mandatory gates:
 - [x] MainTarget/swapchain color can be sampled by supported post effects;
 - [x] a real vanilla `shaders/post/creeper.json` PostChain constructs successfully in CI;
 - [x] **P3.8 — execute one real `PostChain.process(...)` frame under Lavapipe, submit/present it, and exit cleanly;** (CI #282)
-- [ ] P3.9 — perform one RX 6900 XT visual post-effect check after P3.8 is green;
+- [x] P3.9 — RX 6900 XT visual post-effect check: Creeper and Enderman spectator effects visually confirmed correct on 2026-09-09 after CI #289 fixed pixel output and viewport/scissor validation;
 - [x] P3.10 — same-frame Vulkan screenshot transfers with frame-fence readback; post-present requests defer to the next frame and unsupported synchronous entry points are gated. Pixel/resize/Forge-event smoke and synchronization validation pass (CI #284).
 - [x] P3.11 — characterize and fix MainTarget depth-aux sampling / sampler-filter semantics for vanilla transparency (nearest/clamp depth sampling, valid copies/barriers; CI #282). Broader mod-specific filtering remains unproven.
 
-**Progress: 10/11**
+**Progress: 11/11**
 
-**Next work item: P3.9.** The bounded depth CI and screenshot/readback tasks are complete; see `AGENT_STATUS.md` for root causes, evidence and remaining user-machine checks.
+Phase 3 is complete. Automated Lavapipe pixel/validation coverage and the RX 6900 XT Creeper/Enderman visual check now agree that the supported vanilla PostChain path is rendering correctly.
 
 ### Phase 3 exit rule
 
-Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Small preparatory performance research is fine; invasive implementation waits for this phase to close.
+Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule; the roadmap still requires the Phase 4 compatibility baseline and Phase 5 measurements before major terrain work.
 
 ---
 
 # Phase 4 — Create Chronicles compatibility baseline
 
-**Status: READY AFTER PHASE 3**
+**Status: ACTIVE**
 
 Goal: prove the renderer works in the user's actual target environment and identify the minimum incompatible renderer-replacement set.
 
@@ -176,6 +176,8 @@ Mandatory gates:
 - [ ] a concise compatibility/known-limitations matrix is committed.
 
 **Progress: 2/8**
+
+**Next work item:** launch the current green distributable in the target Create Chronicles instance with Vulkan active, then use the resulting log/runtime behavior to drive the compatibility pass.
 
 ### Shaderpack scope
 
@@ -322,13 +324,15 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after the bounded screenshot/readback fix:
+Verified checkpoint after CI #289 plus the RX 6900 XT visual PostChain check:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green code checkpoint: **`ef0c0fc0426a9e058312773bfd529aca9ebb1a12`, CI #284**;
-- active phase: **Phase 3 — Core rendering correctness hardening**;
-- next gate: **P3.9 — RX 6900 XT visual post-effect check**;
-- phase progress: **10/11 mandatory gates**;
-- RX 6900 XT visual post-effect testing is **useful now**; CI depth execution/validation and screenshot pixel readback passed. Include F2 after resize and world-icon checks. No new AMD visual or performance result is claimed.
+- last verified green source checkpoint: **`9917cacf69848f492c72ac06f2eb591633937a58`, CI #289**;
+- Phase 3 is **DONE, 11/11 mandatory gates**;
+- user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
+- active phase: **Phase 4 — Create Chronicles compatibility baseline**;
+- next gate: current distributable launches the target Create Chronicles instance with Vulkan active;
+- Phase 4 progress: **2/8 mandatory gates**;
+- no new comparable performance measurement is claimed.
 
 Future agents must verify live HEAD/CI first rather than assuming this snapshot is still current.
