@@ -31,10 +31,7 @@ public final class MemoryDiagnostics {
             4096L, Long.getLong("vulkanmod.processRssSafetyLimitMiB", 12288L));
     private static final long PROCESS_RSS_PRESSURE_AVAILABLE_MIB = Math.max(
             SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB,
-            Long.getLong("vulkanmod.processRssPressureAvailableMiB", 5120L));
-    private static final long PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB = Math.max(
-            PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
-            Long.getLong("vulkanmod.processRssPressureWarningAvailableMiB", 8192L));
+            Long.getLong("vulkanmod.processRssPressureAvailableMiB", 8192L));
 
     private static final AtomicLong NATIVE_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong NATIVE_IMAGE_PEAK = new AtomicLong();
@@ -46,14 +43,7 @@ public final class MemoryDiagnostics {
     private static final AtomicLong VULKAN_IMAGE_COUNT = new AtomicLong();
     private static final AtomicLong VULKAN_IMAGE_COUNT_PEAK = new AtomicLong();
     private static final AtomicLong NEXT_SYSTEM_MEMORY_CHECK_NANOS = new AtomicLong();
-    private static final AtomicBoolean RSS_PRESSURE_WARNING_LOGGED = new AtomicBoolean();
     private static final AtomicBoolean DIAGNOSTIC_FAILURE_LOGGED = new AtomicBoolean();
-
-    static {
-        if(Boolean.getBoolean("vulkanmod.smokeTest")) {
-            verifyPressurePolicy();
-        }
-    }
 
     private MemoryDiagnostics() {
     }
@@ -114,12 +104,9 @@ public final class MemoryDiagnostics {
      * and fail the reload before the kernel has to invoke the OOM killer.
      *
      * A high process RSS by itself is not sufficient evidence of system pressure:
-     * large resource packs legitimately push this modpack beyond 12 GiB RSS. The
-     * 8 GiB availability boundary is therefore an early warning, not an abort.
-     * Keep a smaller fatal RSS-pressure reserve above the independent 4 GiB hard
-     * MemAvailable floor so in-world resource reloads can temporarily hold the old
-     * and replacement resource generations at the same time without disabling the
-     * global-OOM circuit breaker.
+     * large resource packs legitimately push this modpack beyond 12 GiB RSS while
+     * Linux can still have many GiB available. Treat the RSS threshold as an early
+     * warning that only becomes fatal when system availability is also declining.
      */
     public static void enforceSystemMemorySafety(String reason) {
         long now = System.nanoTime();
@@ -137,36 +124,19 @@ public final class MemoryDiagnostics {
             long availableMiB = kbToMiB(system.get("MemAvailable"));
             boolean rssTooHigh = rssMiB >= 0L && rssMiB > PROCESS_RSS_SAFETY_LIMIT_MIB;
             boolean systemTooLow = availableMiB >= 0L && availableMiB < SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB;
-            boolean rssUnderSystemPressure = isRssPressureBelow(rssMiB, availableMiB,
-                    PROCESS_RSS_PRESSURE_AVAILABLE_MIB);
-            boolean rssPressureWarning = isRssPressureBelow(rssMiB, availableMiB,
-                    PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB);
-
-            if(rssPressureWarning && !rssUnderSystemPressure && !systemTooLow
-                    && RSS_PRESSURE_WARNING_LOGGED.compareAndSet(false, true)) {
-                logSnapshot("system memory pressure warning: " + reason);
-                Initializer.LOGGER.warn(
-                        "High process RSS under memory pressure: RSS={} MiB, MemAvailable={} MiB. " +
-                                "Continuing resource loading; VulkanMod will stop if availability falls below {} MiB " +
-                                "(RSS-pressure reserve) or {} MiB (hard floor).",
-                        rssMiB, availableMiB, PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
-                        SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB);
-            }
-
+            boolean rssUnderSystemPressure = rssTooHigh && availableMiB >= 0L
+                    && availableMiB < PROCESS_RSS_PRESSURE_AVAILABLE_MIB;
             if(!rssUnderSystemPressure && !systemTooLow)
                 return;
 
             logSnapshot("system memory safety trip: " + reason);
             throw new OutOfMemoryError(String.format(
                     "VulkanMod stopped resource loading before global OOM: process RSS=%d MiB " +
-                            "(soft limit=%d MiB; warning below %d MiB available; fatal below %d MiB available), " +
-                            "system MemAvailable=%d MiB (hard minimum=%d MiB). Override with " +
-                            "-Dvulkanmod.processRssSafetyLimitMiB=<MiB>, " +
-                            "-Dvulkanmod.processRssPressureWarningAvailableMiB=<MiB>, " +
+                            "(soft limit=%d MiB; enforced below %d MiB available), system MemAvailable=%d MiB " +
+                            "(hard minimum=%d MiB). Override with -Dvulkanmod.processRssSafetyLimitMiB=<MiB>, " +
                             "-Dvulkanmod.processRssPressureAvailableMiB=<MiB>, or " +
                             "-Dvulkanmod.systemAvailableSafetyLimitMiB=<MiB> only for diagnosis.",
-                    rssMiB, PROCESS_RSS_SAFETY_LIMIT_MIB,
-                    PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB, PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
+                    rssMiB, PROCESS_RSS_SAFETY_LIMIT_MIB, PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
                     availableMiB, SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB));
         } catch (OutOfMemoryError error) {
             throw error;
@@ -175,38 +145,6 @@ public final class MemoryDiagnostics {
                 Initializer.LOGGER.warn("System memory safety diagnostics are unavailable: {}", throwable.toString());
             }
         }
-    }
-
-    private static boolean isRssPressureBelow(long rssMiB, long availableMiB, long availableThresholdMiB) {
-        return rssMiB >= 0L && rssMiB > PROCESS_RSS_SAFETY_LIMIT_MIB
-                && availableMiB >= 0L && availableMiB < availableThresholdMiB;
-    }
-
-    private static void verifyPressurePolicy() {
-        long highRss = PROCESS_RSS_SAFETY_LIMIT_MIB + 1L;
-        long warningOnlyAvailable = Math.max(PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
-                PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB - 1L);
-
-        if(PROCESS_RSS_PRESSURE_AVAILABLE_MIB < SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB)
-            throw new AssertionError("RSS-pressure fatal reserve fell below hard system-memory floor");
-        if(PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB < PROCESS_RSS_PRESSURE_AVAILABLE_MIB)
-            throw new AssertionError("RSS-pressure warning threshold fell below fatal reserve");
-        if(!isRssPressureBelow(highRss, PROCESS_RSS_PRESSURE_AVAILABLE_MIB - 1L,
-                PROCESS_RSS_PRESSURE_AVAILABLE_MIB))
-            throw new AssertionError("RSS-pressure fatal boundary did not trip below reserve");
-        if(isRssPressureBelow(highRss, PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
-                PROCESS_RSS_PRESSURE_AVAILABLE_MIB))
-            throw new AssertionError("RSS-pressure fatal boundary must be strict below-threshold");
-        if(PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB > PROCESS_RSS_PRESSURE_AVAILABLE_MIB
-                && (!isRssPressureBelow(highRss, warningOnlyAvailable,
-                PROCESS_RSS_PRESSURE_WARNING_AVAILABLE_MIB)
-                || isRssPressureBelow(highRss, warningOnlyAvailable,
-                PROCESS_RSS_PRESSURE_AVAILABLE_MIB)))
-            throw new AssertionError("RSS-pressure warning-only band is not preserved");
-        if(isRssPressureBelow(PROCESS_RSS_SAFETY_LIMIT_MIB,
-                Math.max(0L, PROCESS_RSS_PRESSURE_AVAILABLE_MIB - 1L),
-                PROCESS_RSS_PRESSURE_AVAILABLE_MIB))
-            throw new AssertionError("RSS pressure must not trip at the soft RSS boundary itself");
     }
 
     public static void logSnapshot(String reason) {
