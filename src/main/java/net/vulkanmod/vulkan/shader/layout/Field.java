@@ -105,7 +105,8 @@ public abstract class Field {
             case "float" -> switch (count) {
                 case 4 -> new FieldInfo("vec4", name, 4, 4);
                 case 3 -> new FieldInfo("vec3", name, 4, 3);
-                case 2 -> new FieldInfo("vec2", name, 4, 2);
+                // std140 vec2 members have an 8-byte (two-scalar) base alignment.
+                case 2 -> new FieldInfo("vec2", name, 2, 2);
                 case 1 -> new FieldInfo("float", name, 1, 1);
 
                 default -> throw new IllegalStateException("Unexpected value: " + count);
@@ -122,7 +123,7 @@ public abstract class Field {
 
             case "vec4" -> new FieldInfo(type, name, 4, 4);
             case "vec3" -> new FieldInfo(type, name, 4, 3);
-            case "vec2" -> new FieldInfo(type, name, 4, 2);
+            case "vec2" -> new FieldInfo(type, name, 2, 2);
 
             case "float", "int" -> new FieldInfo(type, name, 1, 1);
 
