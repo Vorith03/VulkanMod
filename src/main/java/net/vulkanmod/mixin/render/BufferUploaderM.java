@@ -3,6 +3,10 @@ package net.vulkanmod.mixin.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.ShaderInstance;
+import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
@@ -15,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(BufferUploader.class)
 public class BufferUploaderM {
+    private static boolean vulkanmod$warnedMissingNewEntityShader;
 
     /**
      * @author
@@ -37,7 +42,31 @@ public class BufferUploaderM {
         if(parameters.vertexCount() <= 0)
             return;
 
-        GraphicsPipeline pipeline = ((ShaderMixed)(RenderSystem.getShader())).getPipeline();
+        ShaderInstance shader = RenderSystem.getShader();
+        if(shader == null && parameters.format() == DefaultVertexFormat.NEW_ENTITY) {
+            // Some Forge mods register custom core shaders through RegisterShadersEvent.
+            // VulkanMod's legacy Forge reload bridge does not yet retain every custom
+            // shader supplier, so a null supplier previously crashed BufferUploader.
+            // NEW_ENTITY is the common item/entity layout and has a compatible
+            // Vulkan-backed vanilla shader. Keep this fallback deliberately narrow:
+            // unknown vertex formats still fail instead of silently using the wrong
+            // pipeline. Create 0.5.1's glowing Worldshaper item exercises this path.
+            shader = GameRenderer.getRendertypeEntityTranslucentShader();
+            if(!vulkanmod$warnedMissingNewEntityShader) {
+                vulkanmod$warnedMissingNewEntityShader = true;
+                Initializer.LOGGER.warn(
+                        "RenderType supplied no ShaderInstance for NEW_ENTITY draw; using Vulkan entity-translucent compatibility shader");
+            }
+        }
+
+        if(shader == null) {
+            throw new IllegalStateException("RenderType supplied no ShaderInstance for Vulkan draw format " + parameters.format());
+        }
+
+        GraphicsPipeline pipeline = ((ShaderMixed)shader).getPipeline();
+        if(pipeline == null) {
+            throw new IllegalStateException("ShaderInstance has no Vulkan pipeline: " + shader.getName());
+        }
         GraphicsPipeline.requestPrimitiveMode(parameters.mode());
         renderer.bindGraphicsPipeline(pipeline);
         renderer.uploadAndBindUBOs(pipeline);

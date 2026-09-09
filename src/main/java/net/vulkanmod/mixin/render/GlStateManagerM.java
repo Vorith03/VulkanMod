@@ -7,7 +7,10 @@ import net.vulkanmod.gl.GlFramebuffer;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
+import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -101,6 +104,39 @@ public class GlStateManagerM {
     @Overwrite(remap = false)
     public static int _getError() {
         return 0;
+    }
+
+    /**
+     * Answer the small subset of glGetTexLevelParameter queries that Minecraft
+     * mods use for texture metadata without touching OpenGL. VulkanMod creates a
+     * GLFW_NO_API window, so allowing this method to fall through to LWJGL aborts
+     * the JVM when no GL context exists. Legendary Tooltips queries width/height
+     * of its already-bound border texture through this path.
+     *
+     * @author
+     */
+    @Overwrite(remap = false)
+    public static int _getTexLevelParameter(int target, int level, int pname) {
+        RenderSystem.assertOnRenderThreadOrInit();
+        if(target != GL11.GL_TEXTURE_2D) {
+            throw new UnsupportedOperationException("Unsupported Vulkan texture query target: " + target);
+        }
+        if(level < 0) {
+            throw new IllegalArgumentException("Negative texture mip level: " + level);
+        }
+
+        VulkanImage image = VTextureSelector.getBoundTexture();
+        if(image == null) {
+            throw new IllegalStateException("No Vulkan texture bound for texture-level query");
+        }
+
+        int dimensionShift = Math.min(level, 31);
+        return switch (pname) {
+            case GL11.GL_TEXTURE_WIDTH -> Math.max(1, image.width >> dimensionShift);
+            case GL11.GL_TEXTURE_HEIGHT -> Math.max(1, image.height >> dimensionShift);
+            default -> throw new UnsupportedOperationException(
+                    "Unsupported Vulkan texture-level parameter query: " + pname);
+        };
     }
 
     /**
