@@ -4,8 +4,10 @@ import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VAbstractTextureI;
+import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
+import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -26,6 +28,10 @@ public class MSpriteAtlasTexture {
     private int vulkanmod$traceAtlasWidth;
     @Unique
     private int vulkanmod$traceAtlasHeight;
+    @Unique
+    private boolean vulkanmod$ownsAtlasUploadBatch;
+    @Unique
+    private long vulkanmod$atlasUploadStartNanos;
 
     @Redirect(method = "upload", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/TextureUtil;prepareImage(IIII)V"))
     private void redirect(int id, int maxLevel, int width, int height) {
@@ -64,10 +70,52 @@ public class MSpriteAtlasTexture {
         if(largeAtlas) {
             MemoryDiagnostics.logSnapshot("atlas " + width + "x" + height + " after Vulkan allocation");
         }
+
+        // NativeImage uploads normally acquire and submit a helper command buffer
+        // per sprite/mip upload. A large modded atlas can contain hundreds of
+        // thousands of those tiny copies; the 16K Create Chronicles atlas was
+        // reaching the 256-submission safety flush 918 times in one upload.
+        //
+        // Use the existing shared graphics-upload command buffer for the lifetime
+        // of this atlas instead. VTextureSelector still enforces the 128 MiB
+        // staging budget and will submit/wait/recycle/restart this batch whenever
+        // that byte cap is reached, so batching does not trade speed for unbounded
+        // host memory. Do not take ownership when another upload scope is active.
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        if(!graphicsQueue.hasActiveUploadBatch()) {
+            graphicsQueue.startRecording();
+            this.vulkanmod$ownsAtlasUploadBatch = true;
+            this.vulkanmod$atlasUploadStartNanos = System.nanoTime();
+        }
     }
 
     @Inject(method = "upload", at = @At("RETURN"))
-    private void vulkanmod$traceAtlasUploadComplete(CallbackInfo ci) {
+    private void vulkanmod$finishAtlasUploadBatch(CallbackInfo ci) {
+        VAbstractTextureI texture = (VAbstractTextureI)(this);
+        VulkanImage image = texture.getVulkanImage();
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+
+        // Make the atlas readable in the same command stream as its final copies.
+        // When this mixin owns the batch, submission below makes the whole upload
+        // visible as one same-queue dependency. If an outer scope owns the batch,
+        // leave submission to that owner after recording the required barrier.
+        if(image != null && graphicsQueue.hasActiveUploadBatch()) {
+            image.readOnlyLayout(graphicsQueue.getCommandBuffer());
+        }
+
+        if(this.vulkanmod$ownsAtlasUploadBatch) {
+            graphicsQueue.endRecordingAndSubmit();
+            this.vulkanmod$ownsAtlasUploadBatch = false;
+
+            if(this.vulkanmod$traceLargeAtlasUpload) {
+                double elapsedMs = (System.nanoTime() - this.vulkanmod$atlasUploadStartNanos) / 1_000_000.0D;
+                Initializer.LOGGER.info(
+                        "Batched Vulkan atlas upload {}x{} completed in {} ms",
+                        this.vulkanmod$traceAtlasWidth, this.vulkanmod$traceAtlasHeight,
+                        String.format(java.util.Locale.ROOT, "%.1f", elapsedMs));
+            }
+        }
+
         if(this.vulkanmod$traceLargeAtlasUpload) {
             MemoryDiagnostics.logSnapshot(
                     "atlas " + this.vulkanmod$traceAtlasWidth + "x" + this.vulkanmod$traceAtlasHeight + " upload complete");
