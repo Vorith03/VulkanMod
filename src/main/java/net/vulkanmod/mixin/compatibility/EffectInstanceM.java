@@ -149,10 +149,15 @@ public class EffectInstanceM {
             // away entirely), so source-level Vulkan UBO construction must not
             // require every declaration to have an EffectInstance Uniform object.
             GlslConverter converter = new GlslConverter();
-            Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION_TEX_COLOR);
+
+            // PostPass uploads a POSITION-only fullscreen quad. The Vulkan vertex
+            // binding stride must match that exact buffer layout; using
+            // POSITION_TEX_COLOR advances past every other position and sends
+            // later vertices out of the uploaded quad.
+            Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION);
 
             try (Field.DefaultSupplierBindingScope ignored = Field.deferDefaultSupplierBinding()) {
-                converter.process(DefaultVertexFormat.POSITION_TEX_COLOR, vshSrc, fshSrc);
+                converter.process(DefaultVertexFormat.POSITION, vshSrc, fshSrc);
             }
 
             UBO ubo = converter.getUBO();
