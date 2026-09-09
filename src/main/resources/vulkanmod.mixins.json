@@ -53,6 +53,7 @@
     "render.GlStateManagerM",
     "render.vertex.IndexTypeMixin",
     "render.MinecraftMixin",
+    "render.ResourceReloadMixin",
     "render.RenderSystemMixin",
     "render.ShaderInstanceM",
     "render.MainTargetMixin",
