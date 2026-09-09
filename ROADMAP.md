@@ -168,16 +168,16 @@ Mandatory gates:
 
 - [x] Flywheel 0.6 has a positive CI startup gate;
 - [x] Crash Assistant 1.9.7 has a positive CI startup gate;
-- [ ] current distributable launches the target Create Chronicles instance with Vulkan active;
+- [x] current distributable launches the target Create Chronicles instance with Vulkan active; build 289 reached the full ~300-mod instance/world with `Vulkan renderer active: AMD Radeon RX 6900 XT (RADV NAVI21)` on 2026-09-09;
 - [ ] Create/Flywheel contraptions render correctly in ordinary gameplay;
 - [ ] world enter/leave/re-enter and resource reload paths survive in the modpack;
 - [ ] representative particles/translucency/entities/GUI paths are checked for visible regressions;
 - [ ] incompatible renderer replacements (for example Embeddium/Rubidium/Oculus if applicable) are evidence-backed and minimized;
 - [ ] a concise compatibility/known-limitations matrix is committed.
 
-**Progress: 2/8**
+**Progress: 3/8**
 
-**Next work item:** launch the current green distributable in the target Create Chronicles instance with Vulkan active, then use the resulting log/runtime behavior to drive the compatibility pass.
+**Next work item:** repeat build 289 with adequate host-memory headroom, then exercise Create/Flywheel, `F3+T`, world exit/re-entry and representative rendering paths. The first Phase 4 run started with only ~16.7 GiB RAM available (versus ~22.7 GiB during the earlier successful heavy-pack baseline) and intentionally tripped VulkanMod's 4096 MiB no-swap system-memory safety floor just after world entry. Comparable 16K-atlas snapshots show build 289 using less VulkanMod-tracked memory than the older run; do not weaken the safety floor without new evidence.
 
 ### Shaderpack scope
 
@@ -324,15 +324,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after CI #289 plus the RX 6900 XT visual PostChain check:
+Verified checkpoint after CI #289, the RX 6900 XT visual PostChain check, and the first Phase 4 full-pack retest:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
 - last verified green source checkpoint: **`9917cacf69848f492c72ac06f2eb591633937a58`, CI #289**;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
-- next gate: current distributable launches the target Create Chronicles instance with Vulkan active;
-- Phase 4 progress: **2/8 mandatory gates**;
+- build 289 full-pack launch gate: **PASS** — the target ~300-mod Create Chronicles instance reached the world with Vulkan active on RX 6900 XT;
+- current blocker: the first deeper Phase 4 gameplay pass started with ~6 GiB less host-memory headroom than the earlier successful heavy-pack run and hit the intentional 4096 MiB no-swap system-memory safety floor just after world entry; comparable memory snapshots do not show a build-289 VulkanMod retention regression;
+- next gate: Create/Flywheel contraptions render correctly in ordinary gameplay;
+- Phase 4 progress: **3/8 mandatory gates**;
 - no new comparable performance measurement is claimed.
 
 Future agents must verify live HEAD/CI first rather than assuming this snapshot is still current.
