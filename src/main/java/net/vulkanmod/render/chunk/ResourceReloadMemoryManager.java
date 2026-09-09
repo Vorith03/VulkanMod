@@ -21,15 +21,65 @@ import net.vulkanmod.vulkan.memory.NativeAllocatorPurger;
  * retain another GiB-plus of decoded CPU sprite pixels. The keyboard reload is
  * requested while GLFW is polling events, after VulkanMod has submitted the current
  * frame. At that boundary no primary frame is still being recorded, so we can
- * quiesce chunk production and the GPU, release terrain, discard static CPU pixels
- * from the old atlas generation, and return allocator-cached pages to Linux before
- * replacement sprites/models begin decoding.
+ * quiesce chunk production and the GPU, release terrain, and discard static CPU
+ * pixels from the old atlas generation before replacement sprites/models begin
+ * decoding. Allocator-cached pages are purged only after the replacement generation
+ * applies successfully, so failed reloads retain their recovery path and do not get
+ * treated as successful reloads.
  */
 public final class ResourceReloadMemoryManager {
     private static final long MIB = 1024L * 1024L;
+    private static final long NO_RESOURCE_RELOAD = 0L;
+    private static final ReloadGenerationGate RELOAD_GENERATIONS = new ReloadGenerationGate();
     private static SectionGrid retiredGrid;
 
     private ResourceReloadMemoryManager() {
+    }
+
+    /**
+     * Starts a generation only when the early retirement work actually took place.
+     * A reload that occurs before a client world exists, during a recording frame, or
+     * while another retired generation is still active receives no completion token.
+     */
+    public static synchronized long beginResourceReload() {
+        return RELOAD_GENERATIONS.begin(prepareForReload());
+    }
+
+    /**
+     * Completes one real resource-reload generation on the client thread.
+     *
+     * A normal completion means all reload listeners, including atlas application,
+     * have successfully run. The allocator purge is deliberately placed in the
+     * success callback before the common terrain-recovery/rebuild callback.
+     */
+    public static void completeResourceReload(long generation, Throwable failure) {
+        boolean accepted = RELOAD_GENERATIONS.complete(
+                generation,
+                failure == null,
+                () -> {
+                    Initializer.LOGGER.info(
+                            "Resource reload generation {} applied successfully; purging native allocator pages before terrain reconstruction",
+                            generation);
+                    MemoryDiagnostics.logSnapshot(
+                            "resource reload generation " + generation + " after apply before allocator purge");
+                    NativeAllocatorPurger.purgeForResourceReload();
+                    MemoryDiagnostics.logSnapshot(
+                            "resource reload generation " + generation + " after allocator purge");
+                },
+                () -> {
+                    if(failure != null) {
+                        Initializer.LOGGER.warn(
+                                "Resource reload generation {} failed; skipping post-apply native allocator purge: {}",
+                                generation, failure);
+                    }
+                    ensureTerrainReadyAfterReload();
+                });
+
+        if(!accepted && generation != NO_RESOURCE_RELOAD) {
+            Initializer.LOGGER.warn(
+                    "Ignoring completion for resource reload generation {}; it is no longer active",
+                    generation);
+        }
     }
 
     /**
@@ -113,13 +163,6 @@ public final class ResourceReloadMemoryManager {
                 retiredStaticSprites, nativeBefore / MIB, nativeAfter / MIB, freed / MIB);
         MemoryDiagnostics.logSnapshot("resource reload after atlas CPU retirement");
 
-        // NativeImage.close() makes the memory logically free, but jemalloc/glibc
-        // can retain those pages in allocator caches. Build 297 demonstrated a
-        // 680 MiB NativeImage drop with only ~22 MiB RSS reduction. At this explicit
-        // reload boundary, ask the allocators to return reusable pages to Linux so
-        // the replacement generation can use real system headroom.
-        NativeAllocatorPurger.purgeForResourceReload();
-        MemoryDiagnostics.logSnapshot("resource reload after native allocator purge");
     }
 
     /**
@@ -145,6 +188,53 @@ public final class ResourceReloadMemoryManager {
             Initializer.LOGGER.warn(
                     "Resource reload completed without replacing retired terrain; forcing LevelRenderer rebuild");
             minecraft.levelRenderer.allChanged();
+        }
+    }
+    /**
+     * Small dependency-free state machine shared by production completion handling
+     * and its regression test. It claims one real generation and guarantees that a
+     * successful-generation action runs before common recovery.
+     */
+    static final class ReloadGenerationGate {
+        private static final long NONE = 0L;
+        private long nextGeneration;
+        private long activeGeneration;
+
+        long begin(boolean realReload) {
+            synchronized(this) {
+                if(!realReload || this.activeGeneration != NONE) {
+                    return NONE;
+                }
+
+                long generation = ++this.nextGeneration;
+                if(generation == NONE) {
+                    generation = ++this.nextGeneration;
+                }
+                this.activeGeneration = generation;
+                return generation;
+            }
+        }
+
+        boolean complete(
+                long generation,
+                boolean successful,
+                Runnable successAction,
+                Runnable completionAction) {
+            synchronized(this) {
+                if(generation == NONE || generation != this.activeGeneration) {
+                    return false;
+                }
+                this.activeGeneration = NONE;
+            }
+
+            try {
+                if(successful) {
+                    successAction.run();
+                }
+            } finally {
+                completionAction.run();
+            }
+            return true;
         }
     }
 }

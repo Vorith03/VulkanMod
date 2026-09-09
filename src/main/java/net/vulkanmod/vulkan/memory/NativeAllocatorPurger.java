@@ -50,7 +50,7 @@ public final class NativeAllocatorPurger {
         long availableAfter = readProcMiB(Path.of("/proc/meminfo"), "MemAvailable");
 
         Initializer.LOGGER.info(
-                "Native allocator purge before resource reload: allocator={}, jemalloc={}, libc={}, " +
+                "Native allocator purge: allocator={}, jemalloc={}, libc={}, " +
                         "process RSS {} -> {} MiB, system available {} -> {} MiB",
                 allocatorName, jemallocResult, libcResult,
                 rssBefore, rssAfter, availableBefore, availableAfter);

@@ -282,12 +282,19 @@ tasks.register('verifyDistribution') {
 tasks.named('check').configure {
     dependsOn 'verifyDistribution'
     dependsOn 'testRegionBatchLayout'
+    dependsOn 'testResourceReloadGeneration'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.chunk.RegionBatchLayoutTest'
+}
+
+tasks.register('testResourceReloadGeneration', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.ResourceReloadGenerationTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

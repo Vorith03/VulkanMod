@@ -39,18 +39,6 @@ jobs:
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
-      - name: Inspect Forge TextureAtlas reload ownership
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapped_jar="$(find build/fg_cache -type f -name 'forge-1.20.1-47.3.0_mapped_official_1.20.1.jar' -print -quit)"
-          if [[ -z "$mapped_jar" ]]; then
-            echo 'Mapped Forge jar not found' >&2
-            find build/fg_cache -type f -name '*.jar' | head -50
-            exit 1
-          fi
-          echo "Mapped jar: $mapped_jar"
-          javap -classpath "$mapped_jar" -c -p net.minecraft.client.renderer.texture.TextureAtlas
       - name: Install software Vulkan smoke-test dependencies
         run: |
           sudo apt-get update
