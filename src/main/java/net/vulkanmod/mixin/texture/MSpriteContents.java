@@ -55,8 +55,11 @@ public abstract class MSpriteContents implements VSpriteContentsI {
         Set<NativeImage> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         long total = 0L;
         for(NativeImage image : images) {
-            if(image != null && seen.add(image) && image instanceof VNativeImageI trackedImage) {
-                total += trackedImage.vulkanmod$getTrackedNativeBytes();
+            if(image != null && seen.add(image)) {
+                // NativeImage is final in Mojang sources, so javac quite correctly
+                // rejects an instanceof check against a mixin-added interface even
+                // though every transformed NativeImage implements it at runtime.
+                total += ((VNativeImageI)(Object)image).vulkanmod$getTrackedNativeBytes();
             }
         }
         return total;
@@ -141,10 +144,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
     @Unique
     private long vulkanmod$estimateDeferredMipBytes(int mipmapLevels) {
-        if(!(this.originalImage instanceof VNativeImageI trackedImage)) {
-            return 0L;
-        }
-
+        VNativeImageI trackedImage = (VNativeImageI)(Object)this.originalImage;
         long baseBytes = trackedImage.vulkanmod$getTrackedNativeBytes();
         long basePixels = (long)this.originalImage.getWidth() * this.originalImage.getHeight();
         if(baseBytes <= 0L || basePixels <= 0L) {
