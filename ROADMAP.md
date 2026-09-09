@@ -324,16 +324,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after CI #289, the RX 6900 XT visual PostChain check, and the first Phase 4 full-pack retest:
+Verified checkpoint after CI #302 and the bounded resource-reload native-memory fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`9917cacf69848f492c72ac06f2eb591633937a58`, CI #289**;
+- last verified green source checkpoint: **`c7d7f355f6fcfc273298ec0e804b18f0aef902e2`, CI #302**;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
 - build 289 full-pack launch gate: **PASS** — the target ~300-mod Create Chronicles instance reached the world with Vulkan active on RX 6900 XT;
-- current blocker: the first deeper Phase 4 gameplay pass started with ~6 GiB less host-memory headroom than the earlier successful heavy-pack run and hit the intentional 4096 MiB no-swap system-memory safety floor just after world entry; comparable memory snapshots do not show a build-289 VulkanMod retention regression;
-- next gate: Create/Flywheel contraptions render correctly in ordinary gameplay;
+- resource-reload code/CI milestone: **PASS** — allocator reclamation is now success-only and ordered after reload apply but before terrain reconstruction; Forge #301 bytecode evidence shows old atlas sprite/ticker ownership is cleared before replacement lists are installed;
+- current runtime blocker: full-pack F3+T and normal gameplay beyond the previous ~82-second animated-upload failure window remain untested on the RX 6900 XT; no current animated images are being closed speculatively;
+- next gate: Create/Flywheel contraptions plus world enter/leave/re-enter and resource reload paths survive in the actual modpack;
 - Phase 4 progress: **3/8 mandatory gates**;
 - no new comparable performance measurement is claimed.
 

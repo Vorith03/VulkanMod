@@ -182,3 +182,70 @@ At the end of a substantial work batch, or when the user asks for progress, use 
 - whether RX 6900 XT testing is now useful;
 - any new comparable performance evidence;
 - any roadmap sequencing change (normally `none`).
+
+
+## Bounded resource-reload native-memory milestone — 2026-09-09
+
+**Implementation verified.** The live source checkpoint for this milestone was
+`c7d7f355f6fcfc273298ec0e804b18f0aef902e2`; CI #302 passed after the change. This batch stayed bounded to
+the resource-reload native-memory issue.
+
+### Forge TextureAtlas ownership evidence
+
+- The live starting HEAD was the temporary probe commit
+  `ac9fb0e5256d8dcb7c6f51bd9854389865e8c559`. Build #301 was green.
+- The #301 probe ran `javap -c -p` against the actual Forge 47.3.0
+  `forge-1.20.1-47.3.0_mapped_official_1.20.1.jar`, not only a vanilla source
+  copy. Its compiled `TextureAtlas.upload(Preparations)` calls
+  `clearTextureData()` before copying the replacement regions and before
+  installing the new `sprites` and `animatedTextures` lists.
+- The compiled `clearTextureData()` walks both currently owned collections
+  (the old sprite contents and old animation tickers), then replaces the
+  sprite list, ticker list, and name map with empty collections. The Forge
+  class also contains `ForgeHooksClient.onTextureStitchedPost`, confirming the
+  probe observed the patched class used by this port.
+- Therefore the approximately 195 MiB of animated block-atlas CPU images seen
+  after a successful F3+T cannot be superseded animated data retained through
+  the completed `TextureAtlas` ownership lists. It is current-generation
+  animation/source data, or data held by an owner outside those completed atlas
+  lists. Current animated `NativeImage` instances remain untouched.
+
+### Implementation and validation
+
+- `ResourceReloadMemoryManager` now creates a generation token only when
+  early terrain/resource retirement actually succeeds.
+- The allocator purge was removed from the pre-decode path. On a matching
+  successful reload completion (`failure == null)), diagnostics are logged
+  before and after the existing `NativeAllocatorPurger` call, and the purge
+  runs before terrain recovery/reconstruction.
+- Failed reloads and stale/non-generation completions skip the purge while
+  preserving the existing terrain recovery callback. The 4096 MiB system-memory
+  floor and all existing RSS gates were unchanged.
+- `ResourceReloadGenerationTest` covers non-reload gating, overlap, failed
+  completion, success ordering, and stale completion. CI #302 reported
+  `Resource reload generation tests passed` and verified
+  `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.302-gc7d7f355-all.jar`.
+- CI #296, #297, #298, #300, #301, and #302 were green; #299 was the known
+  compile-only failure fixed by #300's NativeImage mixin bridge.
+
+### Roadmap report
+
+- **Source HEAD:** `c7d7f355f6fcfc273298ec0e804b18f0aef902e2`
+- **Commits created:** `c7d7f355f6fcfc273298ec0e804b18f0aef902e2`
+  (implementation); this documentation checkpoint follows it.
+- **Latest completed CI:** #302 — green, full build/startup/PostChain/depth/screenshot/
+  Crash Assistant/Flywheel suite.
+- **Highest completed legacy milestone:** Milestone 6 — playable world.
+- **Active phase:** Phase 4 — Create Chronicles compatibility baseline.
+- **Phase progress:** 3/8 mandatory gates; no runtime gate was checked off here.
+- **Active gate:** full-pack world enter/leave/re-entry and resource-reload survival,
+  including F3+T beyond the previous animated-upload failure window.
+- **Next three actions:** (1) install the #302 distributable in the target instance
+  with `earlyWindowControl = false`; (2) run full-pack F3+T and observe RSS,
+  system available memory, NativeImage totals, and animated sprites; (3) continue
+  ordinary gameplay for several minutes beyond 82 seconds and return the log/result.
+- **RX 6900 XT testing:** useful now; CI is green and the artifact is intended for
+  the user's full Create Chronicles test.
+- **Performance evidence:** no new comparable benchmark; #296's atlas upload
+  batching and #298's allocator-reclaim measurements remain the latest evidence.
+- **Roadmap changes:** none.
