@@ -14,6 +14,8 @@ import net.minecraft.client.renderer.PostPass;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VkViewport;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -22,6 +24,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.IntSupplier;
+
+import static org.lwjgl.vulkan.VK10.vkCmdSetViewport;
 
 /**
  * Adapts vanilla's fullscreen PostPass draw to Vulkan's viewport/winding rules.
@@ -88,10 +92,12 @@ public class PostPassM {
         RenderSystem.depthFunc(519);
 
         // PostPass's orthographic projection already has the screen-space
-        // orientation expected by the shader. Undo VulkanMod's normal
-        // negative-height viewport flip for this one fullscreen draw.
-        Renderer.setViewport(0, this.outTarget.height, this.outTarget.width, -this.outTarget.height);
-        Renderer.resetScissor();
+        // orientation expected by the shader. Use a positive Vulkan viewport
+        // directly instead of passing a negative height through Renderer.setViewport:
+        // that helper also applies the supplied height to VkRect2D.extent, where
+        // negative extents are invalid. The output pass already owns the correct
+        // full-target scissor, so restore it after changing only the viewport.
+        vulkanmod$setUprightViewport(this.outTarget.width, this.outTarget.height);
 
         this.effect.apply();
 
@@ -112,5 +118,20 @@ public class PostPassM {
             VRenderSystem.enableCull();
         else
             VRenderSystem.disableCull();
+    }
+
+    private static void vulkanmod$setUprightViewport(int width, int height) {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkViewport.Buffer viewport = VkViewport.calloc(1, stack);
+            viewport.x(0.0f);
+            viewport.y(0.0f);
+            viewport.width((float)width);
+            viewport.height((float)height);
+            viewport.minDepth(0.0f);
+            viewport.maxDepth(1.0f);
+            vkCmdSetViewport(Renderer.getCommandBuffer(), 0, viewport);
+        }
+
+        Renderer.resetScissor();
     }
 }
