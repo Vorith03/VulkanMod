@@ -1,29 +1,29 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureManager;
 import net.vulkanmod.Initializer;
-import net.vulkanmod.interfaces.VTextureAtlasI;
+import net.vulkanmod.interfaces.VTextureManagerI;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.memory.MemoryManager;
+import net.vulkanmod.vulkan.memory.NativeAllocatorPurger;
 
 /**
  * Retires memory that is safe to discard before a full in-world client resource reload.
  *
  * Minecraft keeps the old resource generation usable until replacement resources
  * have been prepared. That is normally desirable, but the Vulkan terrain renderer
- * can add more than a GiB of device-local buffers and a high-resolution block atlas
- * can retain another GiB-plus of decoded CPU sprite pixels. The keyboard reload is
+ * can add more than a GiB of device-local buffers and high-resolution atlases can
+ * retain another GiB-plus of decoded CPU sprite pixels. The keyboard reload is
  * requested while GLFW is polling events, after VulkanMod has submitted the current
  * frame. At that boundary no primary frame is still being recorded, so we can
- * quiesce chunk production and the GPU, release terrain, and discard static CPU
- * pixels from the old block-atlas generation before replacement sprites/models
- * begin decoding.
+ * quiesce chunk production and the GPU, release terrain, discard static CPU pixels
+ * from the old atlas generation, and return allocator-cached pages to Linux before
+ * replacement sprites/models begin decoding.
  */
 public final class ResourceReloadMemoryManager {
     private static final long MIB = 1024L * 1024L;
@@ -90,29 +90,36 @@ public final class ResourceReloadMemoryManager {
                 deviceBeforeMiB, deviceAfterMiB, hostBeforeMiB, hostAfterMiB);
         MemoryDiagnostics.logSnapshot("resource reload after terrain retirement");
 
-        retireOldBlockAtlasCpuPixels(minecraft);
+        retireOldAtlasCpuPixels(minecraft);
         return true;
     }
 
-    private static void retireOldBlockAtlasCpuPixels(Minecraft minecraft) {
-        AbstractTexture texture = minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS);
-        if(!(texture instanceof TextureAtlas atlas) || !(atlas instanceof VTextureAtlasI vulkanAtlas)) {
+    private static void retireOldAtlasCpuPixels(Minecraft minecraft) {
+        TextureManager textureManager = minecraft.getTextureManager();
+        if(!(textureManager instanceof VTextureManagerI vulkanTextureManager)) {
             Initializer.LOGGER.warn(
-                    "Could not retire old block-atlas CPU pixels before resource reload; active texture was {}",
-                    texture == null ? "null" : texture.getClass().getName());
+                    "Could not retire old atlas CPU pixels before resource reload; TextureManager bridge is unavailable");
             return;
         }
 
         long nativeBefore = MemoryDiagnostics.getNativeImageLiveBytes();
-        int retiredStaticSprites = vulkanAtlas.vulkanmod$retireStaticSpriteCpuDataForReload();
+        int retiredStaticSprites = vulkanTextureManager.vulkanmod$retireStaticAtlasCpuDataForReload();
         long nativeAfter = MemoryDiagnostics.getNativeImageLiveBytes();
         long freed = Math.max(0L, nativeBefore - nativeAfter);
 
         Initializer.LOGGER.info(
-                "Retired old block-atlas static CPU sprite pixels before resource reload: " +
+                "Retired old atlas static CPU sprite pixels before resource reload: " +
                         "sprites={}, NativeImage {} -> {} MiB (freed {} MiB); animated sprites preserved",
                 retiredStaticSprites, nativeBefore / MIB, nativeAfter / MIB, freed / MIB);
-        MemoryDiagnostics.logSnapshot("resource reload after block-atlas CPU retirement");
+        MemoryDiagnostics.logSnapshot("resource reload after atlas CPU retirement");
+
+        // NativeImage.close() makes the memory logically free, but jemalloc/glibc
+        // can retain those pages in allocator caches. Build 297 demonstrated a
+        // 680 MiB NativeImage drop with only ~22 MiB RSS reduction. At this explicit
+        // reload boundary, ask the allocators to return reusable pages to Linux so
+        // the replacement generation can use real system headroom.
+        NativeAllocatorPurger.purgeForResourceReload();
+        MemoryDiagnostics.logSnapshot("resource reload after native allocator purge");
     }
 
     /**

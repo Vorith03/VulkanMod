@@ -2,9 +2,12 @@ package net.vulkanmod.mixin.texture;
 
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.renderer.texture.Tickable;
 import net.minecraft.resources.ResourceLocation;
+import net.vulkanmod.interfaces.VTextureAtlasI;
+import net.vulkanmod.interfaces.VTextureManagerI;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -13,16 +16,36 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Set;
 
 @Mixin(TextureManager.class)
-public abstract class MTextureManager {
-
+public abstract class MTextureManager implements VTextureManagerI {
 
     @Shadow @Final private Set<Tickable> tickableTextures;
-
+    @Shadow @Final private Map<ResourceLocation, AbstractTexture> byPath;
 
     @Shadow public abstract AbstractTexture getTexture(ResourceLocation resourceLocation, AbstractTexture abstractTexture);
+
+    @Override
+    public int vulkanmod$retireStaticAtlasCpuDataForReload() {
+        Set<AbstractTexture> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        int retiredStaticSprites = 0;
+
+        for(AbstractTexture texture : this.byPath.values()) {
+            if(texture == null || !seen.add(texture)) {
+                continue;
+            }
+
+            if(texture instanceof TextureAtlas atlas && atlas instanceof VTextureAtlasI vulkanAtlas) {
+                retiredStaticSprites += vulkanAtlas.vulkanmod$retireStaticSpriteCpuDataForReload();
+            }
+        }
+
+        return retiredStaticSprites;
+    }
 
     /**
      * @author
