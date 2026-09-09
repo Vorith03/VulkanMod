@@ -15,6 +15,7 @@
 
     "compatibility.gl.GL11M",
     "compatibility.EffectInstanceM",
+    "compatibility.PostPassM",
     "compatibility.FlywheelBackendMixin",
     "compatibility.CrashAssistantCurrentGPUDetectorMixin",
     "compatibility.WatutRenderHelperMixin",
