@@ -1,9 +1,11 @@
 package net.vulkanmod.mixin.texture;
 
+import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VAbstractTextureI;
+import net.vulkanmod.interfaces.VTextureAtlasI;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
@@ -11,16 +13,22 @@ import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.List;
+
 @Mixin(TextureAtlas.class)
-public class MSpriteAtlasTexture {
+public class MSpriteAtlasTexture implements VTextureAtlasI {
     @Unique
     private static final long vulkanmod$LARGE_ATLAS_BYTES = 64L * 1024L * 1024L;
+
+    @Shadow
+    private List<SpriteContents> sprites;
 
     @Unique
     private boolean vulkanmod$traceLargeAtlasUpload;
@@ -32,6 +40,28 @@ public class MSpriteAtlasTexture {
     private boolean vulkanmod$ownsAtlasUploadBatch;
     @Unique
     private long vulkanmod$atlasUploadStartNanos;
+
+    @Override
+    public int vulkanmod$retireStaticSpriteCpuDataForReload() {
+        int retired = 0;
+
+        for(SpriteContents sprite : this.sprites) {
+            // Static sprites no longer need their decoded/mip NativeImages once the
+            // current atlas has been uploaded. At an in-world full resource reload
+            // chunk workers are already stopped and this entire generation is about
+            // to be replaced, so release those pixels before decoding the successor.
+            // Preserve anything with multiple animation frames because its ticker
+            // can still need CPU-side frame data until the replacement atlas applies.
+            if(sprite.getUniqueFrames().limit(2L).count() > 1L) {
+                continue;
+            }
+
+            sprite.close();
+            ++retired;
+        }
+
+        return retired;
+    }
 
     @Redirect(method = "upload", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/TextureUtil;prepareImage(IIII)V"))
     private void redirect(int id, int maxLevel, int width, int height) {

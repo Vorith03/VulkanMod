@@ -115,6 +115,12 @@ public abstract class MNativeImage {
 
     @Inject(method = "close", at = @At("HEAD"))
     private void vulkanmod$trackNativeClose(CallbackInfo ci) {
+        // The vanilla close path zeros/frees the native pointer after this hook.
+        // Drop VulkanMod's direct ByteBuffer view immediately so a stale/closed
+        // NativeImage can never upload from a freed address through our _upload
+        // overwrite. Repeated close() calls remain safe for accounting.
+        this.vulkanmod$buffer = null;
+
         if(!this.vulkanmod$nativeMemoryReleased && this.vulkanmod$trackedNativeBytes > 0L) {
             this.vulkanmod$nativeMemoryReleased = true;
             MemoryDiagnostics.onNativeImageFreed(this.vulkanmod$trackedNativeBytes);
@@ -128,7 +134,12 @@ public abstract class MNativeImage {
     private void _upload(int level, int xOffset, int yOffset, int unpackSkipPixels, int unpackSkipRows, int widthIn, int heightIn, boolean blur, boolean clamp, boolean mipmap, boolean autoClose) {
         RenderSystem.assertOnRenderThreadOrInit();
 
-        VTextureSelector.uploadSubTexture(level, widthIn, heightIn, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, this.getWidth(), this.vulkanmod$buffer);
+        ByteBuffer buffer = this.vulkanmod$buffer;
+        if(this.pixels == 0L || buffer == null) {
+            throw new IllegalStateException("Cannot upload a closed NativeImage through VulkanMod");
+        }
+
+        VTextureSelector.uploadSubTexture(level, widthIn, heightIn, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, this.getWidth(), buffer);
 
         if (autoClose) {
             this.close();
