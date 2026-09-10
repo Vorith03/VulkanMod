@@ -215,7 +215,7 @@ the resource-reload native-memory issue.
 - `ResourceReloadMemoryManager` now creates a generation token only when
   early terrain/resource retirement actually succeeds.
 - The allocator purge was removed from the pre-decode path. On a matching
-  successful reload completion (`failure == null)), diagnostics are logged
+  successful reload completion (`failure == null), diagnostics are logged
   before and after the existing `NativeAllocatorPurger` call, and the purge
   runs before terrain recovery/reconstruction.
 - Failed reloads and stale/non-generation completions skip the purge while
@@ -249,3 +249,11 @@ the resource-reload native-memory issue.
 - **Performance evidence:** no new comparable benchmark; #296's atlas upload
   batching and #298's allocator-reclaim measurements remain the latest evidence.
 - **Roadmap changes:** none.
+
+
+### RX 6900 XT runtime follow-up — 2026-09-10
+
+- The Build #303 distributable loaded the target full-pack instance with Vulkan active, completed F3+T, and reached the success-only allocator purge. The observed purge reduced process RSS from 12239 MiB to 11704 MiB while NativeImage live bytes remained 1503 MiB, as expected because the purge returns allocator pages rather than closing live images.
+- The launcher then reported a native abort at 22:09:57 with `Process crashed with exitcode 6`. The fatal stack is `GL11C.glGetInteger` -> `GlStateManager.getBoundFramebuffer` -> `fuzs.pickupnotifier.client.util.TransparencyBuffer.prepareExtraFramebuffer` from PickupNotifier 8.0.0 during GUI rendering.
+- Startup also records a Vulkan `GLFW_NO_API` window. PickupNotifier is therefore making an OpenGL framebuffer query where no current OpenGL context exists. The client remained alive after the reload/purge and entered a second world before this abort, so the attached evidence does not implicate the resource-reload allocator ordering. No current animated `NativeImage` instances were closed. An `hs_err` file is not expected for this LWJGL fail-fast abort.
+- The resource-reload runtime gate remains pending. The next pass should disable PickupNotifier 8.0.0 (or its OpenGL framebuffer/transparency path), repeat full-pack F3+T, and continue ordinary gameplay beyond 82 seconds while recording RSS, system available memory, NativeImage totals, and animated texture behavior. The 4096 MiB safety floor and existing RSS gates remain unchanged.

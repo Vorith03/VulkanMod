@@ -324,17 +324,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after CI #302 and the bounded resource-reload native-memory fix:
+Verified checkpoint after CI #303 and the RX 6900 XT runtime follow-up to the bounded resource-reload native-memory fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`c7d7f355f6fcfc273298ec0e804b18f0aef902e2`, CI #302**;
+- last verified green source checkpoint: **`9c16a1ab8463a6872412c5a333ac5a6831e06249`, CI #303**;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
 - build 289 full-pack launch gate: **PASS** — the target ~300-mod Create Chronicles instance reached the world with Vulkan active on RX 6900 XT;
-- resource-reload code/CI milestone: **PASS** — allocator reclamation is now success-only and ordered after reload apply but before terrain reconstruction; Forge #301 bytecode evidence shows old atlas sprite/ticker ownership is cleared before replacement lists are installed;
-- current runtime blocker: full-pack F3+T and normal gameplay beyond the previous ~82-second animated-upload failure window remain untested on the RX 6900 XT; no current animated images are being closed speculatively;
-- next gate: Create/Flywheel contraptions plus world enter/leave/re-enter and resource reload paths survive in the actual modpack;
+- resource-reload code/CI milestone: **PASS** — allocator reclamation is success-only and ordered after reload apply but before terrain reconstruction; Forge #301 bytecode evidence shows old atlas sprite/ticker ownership is cleared before replacement lists are installed;
+- current runtime blocker: Build #303 completed full-pack F3+T and the post-apply purge (RSS 12239 -> 11704 MiB), then the client hit a native LWJGL exit-6 abort in PickupNotifier 8.0.0's OpenGL `TransparencyBuffer` path while VulkanMod was using a `GLFW_NO_API` window; no reload-related crash evidence was observed, and no current animated images are being closed speculatively;
+- next gate: repeat the full-pack resource-reload/world-reentry test with PickupNotifier's OpenGL framebuffer/transparency path disabled, then check Create/Flywheel contraptions and representative gameplay;
 - Phase 4 progress: **3/8 mandatory gates**;
 - no new comparable performance measurement is claimed.
 
