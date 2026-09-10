@@ -324,17 +324,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after CI #303 and the RX 6900 XT runtime follow-up to the bounded resource-reload native-memory fix:
+Verified checkpoint after CI #304 and the RX 6900 XT Build #304 low-headroom retest to the bounded resource-reload native-memory fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`9c16a1ab8463a6872412c5a333ac5a6831e06249`, CI #303**;
+- last verified green source checkpoint: **`864b934182ada63ca7d246dab044f0ab76897d32`, CI #304**;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
 - build 289 full-pack launch gate: **PASS** — the target ~300-mod Create Chronicles instance reached the world with Vulkan active on RX 6900 XT;
 - resource-reload code/CI milestone: **PASS** — allocator reclamation is success-only and ordered after reload apply but before terrain reconstruction; Forge #301 bytecode evidence shows old atlas sprite/ticker ownership is cleared before replacement lists are installed;
-- current runtime blocker: Build #303 completed full-pack F3+T and the post-apply purge (RSS 12239 -> 11704 MiB), then the client hit a native LWJGL exit-6 abort in PickupNotifier 8.0.0's OpenGL `TransparencyBuffer` path while VulkanMod was using a `GLFW_NO_API` window; no reload-related crash evidence was observed, and no current animated images are being closed speculatively;
-- next gate: repeat the full-pack resource-reload/world-reentry test with PickupNotifier's OpenGL framebuffer/transparency path disabled, then check Create/Flywheel contraptions and representative gameplay;
+- current runtime blocker: with PickupNotifier absent, Build #304 reached full-pack F3+T but the replacement decode hit the unchanged RSS safety guard at RSS 12294 MiB and MemAvailable 8144 MiB; the reload failed before apply, so no success-only purge was expected. The live Build #303 -> #304 comparison is documentation-only, making lower available host memory—not a runtime-code change—the demonstrated cause; no current animated images are being closed speculatively;
+- next gate: repeat the full-pack resource-reload/world-reentry test with PickupNotifier absent and at least the prior approximately 13 GiB MemAvailable during reload, without diagnostic safety overrides; then check Create/Flywheel contraptions and representative gameplay;
 - Phase 4 progress: **3/8 mandatory gates**;
 - no new comparable performance measurement is claimed.
 
