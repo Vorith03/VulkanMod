@@ -4,6 +4,9 @@ import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import org.joml.Vector3i;
+import org.lwjgl.system.MemoryStack;
+
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 /** Exercise the real cache and mapped command buffers during opt-in CI startup. */
 public final class RegionBatchSmokeTest {
@@ -14,11 +17,39 @@ public final class RegionBatchSmokeTest {
         DrawBuffers buffers = area.drawBuffers;
         var first = new RegionDrawBatch.FrameBatch();
         var second = new RegionDrawBatch.FrameBatch();
+        AreaBuffer persistentBuffer = null;
         try {
             require(!TerrainShaderManager.useRegionBatching(RenderType.translucent()), "Water must retain its renderer");
             require(!TerrainShaderManager.useRegionBatching(RenderType.tripwire()), "Tripwire must retain its renderer");
             require(new ChunkAreaManager(1, 24, -64).ySize == 3, "Overworld area rows must match section count");
             require(new ChunkAreaManager(1, 16, 0).ySize == 2, "Zero-based area rows must match section count");
+
+            // Exercise the production region suballocator with a real GPU buffer.
+            // A rebuild that still fits its old reservation must keep the same
+            // address instead of returning the slice to the free list. A larger
+            // rebuild still takes the established growth/relocation path.
+            persistentBuffer = new AreaBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 256, Integer.BYTES);
+            AreaBuffer.Segment persistentSegment = new AreaBuffer.Segment();
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                persistentBuffer.upload(stack.malloc(64), persistentSegment);
+                AreaUploadManager.INSTANCE.waitAllUploads();
+                int originalOffset = persistentSegment.getOffset();
+                int reservedBytes = persistentBuffer.getUsedBytes();
+
+                persistentBuffer.upload(stack.malloc(32), persistentSegment);
+                AreaUploadManager.INSTANCE.waitAllUploads();
+                require(persistentSegment.getOffset() == originalOffset,
+                        "Smaller terrain rebuild must reuse its persistent GPU slice");
+                require(persistentBuffer.getUsedBytes() == reservedBytes,
+                        "In-place rebuild must preserve reserved-byte accounting");
+
+                persistentBuffer.upload(stack.malloc(320), persistentSegment);
+                AreaUploadManager.INSTANCE.waitAllUploads();
+                require(persistentSegment.getOffset() != originalOffset,
+                        "Oversized terrain rebuild must relocate to a larger reservation");
+                require(persistentBuffer.getCapacityBytes() > 256,
+                        "Oversized terrain rebuild must retain the buffer growth fallback");
+            }
 
             RenderSection section = new RenderSection(0, -16, -96, 176);
             var parameters = section.getDrawParameters(TerrainRenderType.CUTOUT_MIPPED);
@@ -61,6 +92,7 @@ public final class RegionBatchSmokeTest {
                     "Section reset must invalidate cached geometry");
             Initializer.LOGGER.info("Terrain region cache smoke test passed");
         } finally {
+            if (persistentBuffer != null) persistentBuffer.freeBuffer();
             if (first.commands != null) first.commands.freeBuffer();
             if (second.commands != null) second.commands.freeBuffer();
             RegionBatchStats.reset();
