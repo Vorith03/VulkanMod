@@ -4,11 +4,11 @@ This note narrows the next Phase 7 terrain step after CPU voxel snapshot capture
 
 ## Groundwork now present
 
-Commit `bd29252` adds an explicit `StorageBuffer` backing type and teaches `AreaBuffer` to distinguish vertex, index, and storage-buffer usages. Unknown usages fail fast instead of silently becoming an `IndexBuffer`.
+The current groundwork adds an explicit `StorageBuffer` backing type and teaches `AreaBuffer` to distinguish vertex, index, and storage-buffer usages. Unknown usages fail fast instead of silently becoming an `IndexBuffer`.
 
-`MemoryTypes.GPU_MEM` already adds transfer-source and transfer-destination usage to device-local buffers, so a storage buffer created through this path can be staged and copied without adding extra transfer flags at each call site.
+`StorageBuffer` explicitly requests storage, transfer-source, and transfer-destination usage. This keeps staged upload and readback legal even when `MemoryTypes.GPU_MEM` falls back to a host-visible memory implementation instead of the normal device-local implementation that already adds transfer usage.
 
-No voxel snapshot is uploaded by this commit. Existing CPU fallback and the `vulkanmod.experimentalSectionVoxels` gate are unchanged.
+No voxel snapshot is uploaded by this groundwork. Existing CPU fallback and the `vulkanmod.experimentalSectionVoxels` gate are unchanged.
 
 ## Do not use a growable region SSBO
 
