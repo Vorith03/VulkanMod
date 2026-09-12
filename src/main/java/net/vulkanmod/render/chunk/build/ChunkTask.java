@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
+import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -171,6 +172,8 @@ public class ChunkTask {
                             if (solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
                             if (hasBlockEntity) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
                             if (!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
+                            if (GpuTerrainModelRegistry.isFullCubeGeometry(blockState))
+                                flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                             voxels.add(Block.getId(blockState), flags);
                         }
                         RenderType renderType;
