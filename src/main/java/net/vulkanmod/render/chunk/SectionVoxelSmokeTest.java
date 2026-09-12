@@ -5,6 +5,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
+import net.vulkanmod.render.chunk.voxel.SectionVoxelGpuSmokeTest;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import org.joml.Vector3i;
@@ -89,6 +90,8 @@ public final class SectionVoxelSmokeTest {
             dispatcher.stopThreads();
             dispatcher.uploadAllPendingUploads();
             require(!abandoned.get(), "Shutdown must discard queued voxel publication closures");
+
+            SectionVoxelGpuSmokeTest.verify();
             Initializer.LOGGER.info("Terrain voxel lifecycle smoke passed (capture={})", RegionVoxelStore.ENABLED);
         } finally {
             dispatcher.stopThreads();
