@@ -84,6 +84,16 @@ public class DrawBuffers {
         }
     }
 
+    boolean hasLiveGeometry() {
+        return this.allocated && (this.vertexBuffer.getUsedBytes() != 0L || this.indexBuffer.getUsedBytes() != 0L);
+    }
+
+    void prepareForRegionReuse() {
+        // The physical buffers stay resident, but every frame-local indirect cache
+        // must observe that the region now represents different world coordinates.
+        this.invalidateAllMeshRevisions();
+    }
+
     public void drawRegion(ChunkArea area, Pipeline pipeline, RenderType renderType,
                            double camX, double camY, double camZ) {
         this.regionBatch.draw(this, area, pipeline, renderType, camX, camY, camZ);
@@ -337,7 +347,12 @@ public class DrawBuffers {
         }
 
         public void reset(ChunkArea chunkArea) {
-            if (chunkArea != null) chunkArea.drawBuffers.markMeshChanged(this.renderType);
+            boolean hadGeometry = this.indexCount != 0
+                    || this.vertexBufferSegment.getOffset() != -1
+                    || (this.indexBufferSegment != null && this.indexBufferSegment.getOffset() != -1);
+            if (chunkArea != null && hadGeometry) {
+                chunkArea.drawBuffers.markMeshChanged(this.renderType);
+            }
             this.indexCount = 0;
             this.firstIndex = 0;
             this.vertexOffset = 0;
