@@ -148,8 +148,9 @@ public final class SectionVoxelGpuSmokeTest {
             actual = probe.dispatch(page, residency.byteOffset(), residency.byteLength());
         }
 
-        int[] expected = new int[4];
+        int[] expected = new int[VoxelComputeProbe.RESULT_WORDS];
         int eligibleVoxels = 0;
+        int descriptorCount = 0;
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             int stateId = snapshot.stateId(i);
             int flags = snapshot.flags(i);
@@ -160,18 +161,35 @@ public final class SectionVoxelGpuSmokeTest {
             expected[3] += Integer.bitCount(faceMask);
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
                 eligibleVoxels++;
+
+            int descriptorBase = VoxelComputeProbe.HEADER_WORDS + i * VoxelComputeProbe.FACES_PER_VOXEL;
+            for(int face = 0; face < VoxelComputeProbe.FACES_PER_VOXEL; ++face) {
+                if((faceMask & (1 << face)) != 0) {
+                    expected[descriptorBase + face] = encodeFaceDescriptor(i, face);
+                    descriptorCount++;
+                }
+            }
         }
 
-        for(int i = 0; i < expected.length; ++i)
-            require(actual[i] == expected[i], "GPU voxel compute/face classification mismatch at result word " + i);
+        require(actual.length == expected.length, "GPU voxel compute result size must match the descriptor oracle");
+        for(int i = 0; i < expected.length; ++i) {
+            if(actual[i] != expected[i]) {
+                String kind = i < VoxelComputeProbe.HEADER_WORDS ? "aggregate" : "face descriptor";
+                throw new AssertionError("GPU voxel compute " + kind + " mismatch at result word " + i
+                        + ": expected=0x" + Integer.toHexString(expected[i])
+                        + " actual=0x" + Integer.toHexString(actual[i]));
+            }
+        }
 
         require(eligibleVoxels == SectionVoxelSnapshot.BLOCK_COUNT / 2,
                 "GPU_FULL_CUBE fixture must exercise the fifth flag plane");
         require(expected[3] == 4608,
-                "Alternating-x fixture must expose the expected conservative candidate face count");
+                "Alternating-x fixture must expose the expected diagnostic candidate face count");
+        require(descriptorCount == expected[3],
+                "Every diagnostic candidate face must produce exactly one fixed-slot descriptor");
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, conservative six-neighbor candidate face classification ({} faces), storage descriptors, compute barriers, exact aggregate readback",
-                expected[3]);
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot GPU face descriptors, storage descriptors, compute barriers, full-stream readback",
+                descriptorCount);
     }
 
     private static int candidateFaceMask(SectionVoxelSnapshot snapshot, int index) {
@@ -190,6 +208,10 @@ public final class SectionVoxelGpuSmokeTest {
         if(x == 0 || !isGpuFullCube(snapshot, index - 1)) mask |= 1 << 4;
         if(x == 15 || !isGpuFullCube(snapshot, index + 1)) mask |= 1 << 5;
         return mask;
+    }
+
+    private static int encodeFaceDescriptor(int index, int face) {
+        return 0x80000000 | (face << 12) | index;
     }
 
     private static boolean isGpuFullCube(SectionVoxelSnapshot snapshot, int index) {

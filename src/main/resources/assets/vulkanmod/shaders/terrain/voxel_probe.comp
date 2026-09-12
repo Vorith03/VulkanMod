@@ -22,6 +22,8 @@ const uint PLANE_WORDS = 128u;
 const uint FLAG_PLANES = 5u;
 const uint GPU_FULL_CUBE = 16u;
 const uint GPU_FULL_CUBE_PLANE = 4u;
+const uint HEADER_WORDS = 4u;
+const uint FACES_PER_VOXEL = 6u;
 
 const uint FACE_DOWN = 1u << 0u;
 const uint FACE_UP = 1u << 1u;
@@ -45,7 +47,7 @@ bool isGpuFullCube(uint base, uint flagsOffset, uint index) {
 }
 
 /*
- * This is deliberately a conservative candidate mask, not Minecraft's final
+ * This is deliberately a diagnostic candidate mask, not Minecraft's final
  * shouldRenderFace decision. A face is retained whenever its neighbor is outside
  * this section or is not itself GPU_FULL_CUBE. CPU_REQUIRED remains authoritative.
  */
@@ -71,6 +73,16 @@ uint candidateFaceMask(uint base, uint flagsOffset, uint index) {
     if (x == 15u) mask |= FACE_EAST;
     else if (!isGpuFullCube(base, flagsOffset, index + 1u)) mask |= FACE_EAST;
     return mask;
+}
+
+/*
+ * Fixed-slot descriptors keep this first geometry work product deterministic:
+ * bit 31 marks a live candidate, bits 12..14 hold the face id, and bits 0..11
+ * hold the section-local voxel index. A later pass can compact these descriptors
+ * without changing the classification contract proven here.
+ */
+uint encodeFaceDescriptor(uint index, uint face) {
+    return 0x80000000u | (face << 12u) | index;
 }
 
 void main() {
@@ -104,4 +116,10 @@ void main() {
     atomicAdd(outputData.words[1], flags);
     atomicAdd(outputData.words[2], ((stateId * 33u) ^ flags ^ index) ^ (faceMask * 0x9e3779b9u));
     atomicAdd(outputData.words[3], uint(bitCount(faceMask)));
+
+    uint descriptorBase = HEADER_WORDS + index * FACES_PER_VOXEL;
+    for (uint face = 0u; face < FACES_PER_VOXEL; ++face) {
+        if ((faceMask & (1u << face)) != 0u)
+            outputData.words[descriptorBase + face] = encodeFaceDescriptor(index, face);
+    }
 }
