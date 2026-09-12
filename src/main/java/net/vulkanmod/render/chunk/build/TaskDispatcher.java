@@ -335,6 +335,8 @@ public class TaskDispatcher {
         this.buildNanos.set(0L);
         this.handoffNanos.set(0L);
         UploadBuffer.resetCopyStats();
+        if(AreaUploadManager.INSTANCE != null)
+            AreaUploadManager.INSTANCE.resetCopyStats();
     }
 
     private static double averageMillis(long nanos, int samples) {
