@@ -152,6 +152,29 @@ public class ChunkArea {
         this.position.set(x, y, z);
     }
 
+    /**
+     * Move a coarse ring slot to new world coordinates without throwing away its
+     * Vulkan geometry buffers when the old region has already drained completely.
+     * ChunkAreaManager deliberately has more coverage than the fine SectionGrid, so
+     * the normal wrap path reaches this method after the old region's sections have
+     * left the fine grid and released their suballocations.
+     *
+     * If that invariant is ever false, preserve the old safe behavior: retire the
+     * whole allocation and let the new region lazily allocate fresh storage.
+     */
+    void repositionForReuse(int x, int y, int z) {
+        if(this.drawBuffers.isAllocated()) {
+            if(this.drawBuffers.hasLiveGeometry()) {
+                RegionBatchStats.recordRegionBufferFallback();
+                this.drawBuffers.releaseBuffers();
+            } else {
+                RegionBatchStats.recordRegionBufferReuse();
+                this.drawBuffers.prepareForRegionReuse();
+            }
+        }
+        this.position.set(x, y, z);
+    }
+
     public void releaseBuffers() {
         this.drawBuffers.releaseBuffers();
     }
