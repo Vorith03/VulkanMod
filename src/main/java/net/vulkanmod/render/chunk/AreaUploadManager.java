@@ -60,12 +60,15 @@ public class AreaUploadManager {
         if(commandBuffer == null || commandBuffer.isSubmitted())
             return;
 
-        Device.getTransferQueue().submitCommands(commandBuffer, true);
-        Synchronization.INSTANCE.addCommandBuffer(commandBuffer, true);
+        // Terrain buffers are consumed by the graphics queue and use exclusive
+        // sharing. Record their copies on that same queue: queue order guarantees
+        // an older frame finishes reading an in-place slice before this write, and
+        // the new main frame consumes the write without a cross-queue semaphore or
+        // queue-family ownership transfer.
+        Device.getGraphicsQueue().submitCommands(commandBuffer);
 
-        // Graphics submission waits on the transfer semaphore, so these ranges are
-        // safe to reference while recording this same frame's draw commands. The
-        // command buffer itself is recycled only after that graphics frame retires.
+        // This helper submission is ordered before the later main graphics submit.
+        // The main frame fence therefore owns command-buffer/staging retirement.
         markUploadsReady(frame);
         this.commandBuffers[frame] = null;
     }
@@ -80,8 +83,7 @@ public class AreaUploadManager {
         this.recordedUploadBytes[this.currentFrame] += bufferSize;
 
         if(commandBuffers[currentFrame] == null)
-            this.commandBuffers[currentFrame] = Device.getTransferQueue().beginCommands();
-//            this.commandBuffers[currentFrame] = Device.getGraphicsQueue().beginCommands();
+            this.commandBuffers[currentFrame] = Device.getGraphicsQueue().beginCommands();
 
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(this.currentFrame);
         stagingBuffer.copyBuffer((int) bufferSize, src);
@@ -105,9 +107,26 @@ public class AreaUploadManager {
         }
 
         if(commandBuffers[currentFrame] == null)
-            this.commandBuffers[currentFrame] = Device.getTransferQueue().beginCommands();
+            this.commandBuffers[currentFrame] = Device.getGraphicsQueue().beginCommands();
 
         TransferQueue.uploadBufferCmd(this.commandBuffers[currentFrame], src.getId(), 0, dst.getId(), 0, src.getBufferSize());
+    }
+
+    /**
+     * Synchronous region-buffer growth copy. Keeping this on the graphics queue
+     * orders it after all older terrain draws and earlier terrain helper uploads,
+     * then the explicit fence wait makes it safe to retire the source allocation.
+     */
+    public void copyImmediate(Buffer src, Buffer dst) {
+        if(dst.getBufferSize() < src.getBufferSize()) {
+            throw new IllegalArgumentException("dst buffer is smaller than src buffer.");
+        }
+
+        CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
+        TransferQueue.uploadBufferCmd(commandBuffer, src.getId(), 0, dst.getId(), 0, src.getBufferSize());
+        Device.getGraphicsQueue().submitCommands(commandBuffer);
+        Synchronization.waitFence(commandBuffer.getFence());
+        Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
     }
 
     public void updateFrame(int frame) {
@@ -157,17 +176,16 @@ public class AreaUploadManager {
         if(commandBuffer == null)
             return;
 
-        // A synchronous flush may reach a copy-only or still-recording transfer
-        // command buffer. Submit it fence-only so no binary semaphore is left
-        // signaled without a corresponding graphics wait.
+        // Synchronous callers (notably area-buffer growth) need all recorded
+        // copies complete now. Submit on the graphics queue, wait this helper's
+        // fence, then remove it from normal frame retirement before recycling it.
         if(!commandBuffer.isSubmitted()) {
-            Device.getTransferQueue().submitCommands(commandBuffer);
+            Device.getGraphicsQueue().submitCommands(commandBuffer);
         }
         Synchronization.waitFence(commandBuffer.getFence());
 
         markUploadsReady(frame);
-
-        this.commandBuffers[frame].reset();
+        Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
         this.commandBuffers[frame] = null;
     }
 
