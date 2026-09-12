@@ -53,6 +53,9 @@ public class TaskDispatcher {
     private final AtomicLong buildQueueNanos = new AtomicLong();
     private final AtomicLong buildNanos = new AtomicLong();
     private final AtomicLong handoffNanos = new AtomicLong();
+    private final AtomicLong publicationQueueNanos = new AtomicLong();
+    private final AtomicLong publicationWorkNanos = new AtomicLong();
+    private long earlyPublicationWakeups;
     private final ConcurrentMap<ChunkTask, Long> scheduledAt = new ConcurrentHashMap<>();
     private final Set<UploadBuffer> pendingUploadBuffers = ConcurrentHashMap.newKeySet();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
@@ -252,9 +255,24 @@ public class TaskDispatcher {
 
         Runnable runnable;
         boolean flag = false;
+        boolean wokePublicationWaiters = false;
         while((runnable = this.toUpload.poll()) != null) {
             flag = true;
             runnable.run();
+
+            // The result has released its native UploadBuffers now. Let workers
+            // reuse freed backlog capacity while we publish the remaining results,
+            // rather than keeping them asleep until the entire drain finishes.
+            // Notify at most once early per drain; retain the final wake below.
+            if(!wokePublicationWaiters && this.publicationWaiters > 0) {
+                synchronized(this) {
+                    if(this.publicationWaiters > 0 && this.toUpload.size() < this.getPublicationBacklogLimit()) {
+                        notifyAll();
+                        this.earlyPublicationWakeups++;
+                        wokePublicationWaiters = true;
+                    }
+                }
+            }
         }
 
         if(flag) {
@@ -282,11 +300,15 @@ public class TaskDispatcher {
                     return;
                 }
 
+                long publicationStart = System.nanoTime();
                 this.doSectionUpdate(section, uploadBuffers);
                 publishResult.run();
                 this.acceptedResults.incrementAndGet();
                 this.publishedBuilds.incrementAndGet();
-                this.handoffNanos.addAndGet(Math.max(0L, System.nanoTime() - queuedAt));
+                long publicationEnd = System.nanoTime();
+                this.handoffNanos.addAndGet(Math.max(0L, publicationEnd - queuedAt));
+                this.publicationQueueNanos.addAndGet(Math.max(0L, publicationStart - queuedAt));
+                this.publicationWorkNanos.addAndGet(Math.max(0L, publicationEnd - publicationStart));
             } finally {
                 releaseUploads(uploadBuffers);
                 this.pendingUploadBuffers.removeAll(uploadBuffers.values());
@@ -341,6 +363,8 @@ public class TaskDispatcher {
         drawBuffers.upload(uploadBuffer, section.getDrawParameters(renderType));
     }
 
+    int getPublicationWaitersCount() { return this.publicationWaiters; }
+
     public int getIdleThreadsCount() {
         return this.idleThreads;
     }
@@ -387,6 +411,9 @@ public class TaskDispatcher {
         this.buildQueueNanos.set(0L);
         this.buildNanos.set(0L);
         this.handoffNanos.set(0L);
+        this.publicationQueueNanos.set(0L);
+        this.publicationWorkNanos.set(0L);
+        this.earlyPublicationWakeups = 0L;
         UploadBuffer.resetCopyStats();
         if(AreaUploadManager.INSTANCE != null)
             AreaUploadManager.INSTANCE.resetCopyStats();
@@ -414,6 +441,11 @@ public class TaskDispatcher {
                 averageMillis(this.buildNanos.get(), buildSamples),
                 averageMillis(this.handoffNanos.get(), publishSamples),
                 UploadBuffer.getCopyStats()));
+        lines.add(String.format(Locale.ROOT,
+                "Terrain publish: ms wait/work %.1f/%.1f | early wakes %d",
+                averageMillis(this.publicationQueueNanos.get(), publishSamples),
+                averageMillis(this.publicationWorkNanos.get(), publishSamples),
+                this.earlyPublicationWakeups));
         if(AreaUploadManager.INSTANCE != null)
             lines.add("Terrain upload: " + AreaUploadManager.INSTANCE.getStats());
         if(net.vulkanmod.render.chunk.voxel.RegionVoxelStore.ENABLED)
