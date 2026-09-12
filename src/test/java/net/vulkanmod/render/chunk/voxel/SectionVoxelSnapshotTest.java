@@ -80,8 +80,37 @@ public final class SectionVoxelSnapshotTest {
         require(countStore.put(0, small) && !countStore.put(1, small), "Entry limit independently enforced");
         countStore.clear();
 
+        testPageAllocator();
         StorageBufferUsageTest.verify();
         System.out.println("Terrain voxel snapshot tests passed");
+    }
+
+    private static void testPageAllocator() {
+        var allocator = new RegionVoxelPageAllocator(128, 16);
+        var a = allocator.allocate(17);
+        var b = allocator.allocate(33);
+        var c = allocator.allocate(16);
+        require(a != null && a.offset == 0 && a.byteLength == 17 && a.reservedBytes == 32,
+                "Voxel page allocation aligns without changing payload length");
+        require(b != null && b.offset == 32 && b.reservedBytes == 48,
+                "Voxel page allocation remains contiguous");
+        require(c != null && c.offset == 80 && allocator.usedBytes() == 96,
+                "Voxel page accounting tracks aligned reservations");
+        require(allocator.allocate(48) == null, "Voxel page refuses exhaustion instead of growing");
+
+        allocator.free(b);
+        allocator.free(a);
+        var reused = allocator.allocate(64);
+        require(reused != null && reused.offset == 0,
+                "Coalesced ranges satisfy a larger replacement without page growth");
+        allocator.free(reused);
+        allocator.free(c);
+        require(allocator.isEmpty() && allocator.freeBytes() == 128 && allocator.freeRangeCount() == 1,
+                "Voxel page free ranges fully coalesce");
+        reject(() -> allocator.free(c));
+        require(allocator.allocate(129) == null, "Oversized voxel payload falls back cleanly");
+        reject(() -> new RegionVoxelPageAllocator(127, 16));
+        reject(() -> new RegionVoxelPageAllocator(128, 3));
     }
 
     private static SectionVoxelSnapshot uniform() {
