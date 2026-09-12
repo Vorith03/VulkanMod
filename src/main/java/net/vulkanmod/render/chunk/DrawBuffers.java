@@ -24,7 +24,7 @@ public class DrawBuffers {
     private boolean allocated = false;
     AreaBuffer vertexBuffer;
     AreaBuffer indexBuffer;
-    long meshRevision;
+    private final long[] meshRevisions = new long[TerrainRenderType.VALUES.length];
     private final RegionDrawBatch regionBatch = new RegionDrawBatch();
 
     public void allocateBuffers() {
@@ -35,7 +35,7 @@ public class DrawBuffers {
     }
 
     public DrawParameters upload(UploadBuffer buffer, DrawParameters drawParameters) {
-        this.meshRevision++;
+        this.markMeshChanged(drawParameters.renderType);
         int vertexOffset = drawParameters.vertexOffset;
         int firstIndex = 0;
 
@@ -68,6 +68,20 @@ public class DrawBuffers {
         buffer.release();
 
         return drawParameters;
+    }
+
+    long getMeshRevision(TerrainRenderType renderType) {
+        return this.meshRevisions[renderType.ordinal()];
+    }
+
+    void markMeshChanged(TerrainRenderType renderType) {
+        this.meshRevisions[renderType.ordinal()]++;
+    }
+
+    private void invalidateAllMeshRevisions() {
+        for(int i = 0; i < this.meshRevisions.length; ++i) {
+            this.meshRevisions[i]++;
+        }
     }
 
     public void drawRegion(ChunkArea area, Pipeline pipeline, RenderType renderType,
@@ -290,7 +304,7 @@ public class DrawBuffers {
 
     public void releaseBuffers() {
         this.regionBatch.free();
-        this.meshRevision++;
+        this.invalidateAllMeshRevisions();
         if(!this.allocated)
             return;
 
@@ -307,6 +321,7 @@ public class DrawBuffers {
     }
 
     public static class DrawParameters {
+        final TerrainRenderType renderType;
         int indexCount;
         int firstIndex;
         int vertexOffset;
@@ -314,14 +329,15 @@ public class DrawBuffers {
         AreaBuffer.Segment indexBufferSegment;
         boolean ready = false;
 
-        DrawParameters(boolean translucent) {
-            if(translucent) {
+        DrawParameters(TerrainRenderType renderType) {
+            this.renderType = renderType;
+            if(renderType == TerrainRenderType.TRANSLUCENT) {
                 indexBufferSegment = new AreaBuffer.Segment();
             }
         }
 
         public void reset(ChunkArea chunkArea) {
-            if (chunkArea != null) chunkArea.drawBuffers.meshRevision++;
+            if (chunkArea != null) chunkArea.drawBuffers.markMeshChanged(this.renderType);
             this.indexCount = 0;
             this.firstIndex = 0;
             this.vertexOffset = 0;
