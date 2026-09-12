@@ -1,6 +1,8 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.core.BlockPos;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
+import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
 import org.joml.FrustumIntersection;
 import org.joml.Vector3i;
@@ -14,6 +16,7 @@ public class ChunkArea {
     final Vector3i position;
 
     DrawBuffers drawBuffers;
+    private RegionVoxelStore voxels;
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
@@ -148,7 +151,8 @@ public class ChunkArea {
         this.visibilityRewritePending = false;
     }
 
-    public void setPosition(int x, int y, int z) {
+    public synchronized void setPosition(int x, int y, int z) {
+        this.clearVoxels();
         this.position.set(x, y, z);
     }
 
@@ -162,7 +166,8 @@ public class ChunkArea {
      * If that invariant is ever false, preserve the old safe behavior: retire the
      * whole allocation and let the new region lazily allocate fresh storage.
      */
-    void repositionForReuse(int x, int y, int z) {
+    synchronized void repositionForReuse(int x, int y, int z) {
+        this.clearVoxels();
         if(this.drawBuffers.isAllocated()) {
             if(this.drawBuffers.hasLiveGeometry()) {
                 RegionBatchStats.recordRegionBufferFallback();
@@ -175,7 +180,39 @@ public class ChunkArea {
         this.position.set(x, y, z);
     }
 
-    public void releaseBuffers() {
+    public synchronized void publishVoxels(int x, int y, int z, SectionVoxelSnapshot snapshot) {
+        int slot = voxelSlot(x, y, z);
+        if (slot < 0) return;
+        if (snapshot != null && (snapshot.x() != x || snapshot.y() != y || snapshot.z() != z))
+            throw new IllegalArgumentException("Snapshot origin does not match its section");
+        if (voxels == null && snapshot != null && RegionVoxelStore.ENABLED)
+            voxels = new RegionVoxelStore();
+        if (voxels != null) voxels.put(slot, snapshot);
+    }
+
+    public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
+        int slot = voxelSlot(x, y, z);
+        return voxels == null || slot < 0 ? null : voxels.get(slot);
+    }
+
+    public synchronized long getVoxelRevision() { return voxels == null ? 0L : voxels.revision(); }
+
+    public synchronized void removeVoxels(int x, int y, int z) {
+        int slot = voxelSlot(x, y, z);
+        if (voxels != null && slot >= 0) voxels.remove(slot);
+    }
+
+    private int voxelSlot(int x, int y, int z) {
+        int dx = x - position.x, dy = y - position.y, dz = z - position.z;
+        // A fine section may be releasing its old origin after this coarse slot wrapped.
+        if ((dx | dy | dz) < 0 || dx >= 128 || dy >= 128 || dz >= 128) return -1;
+        return RegionBatchLayout.packSection(dx, dy, dz);
+    }
+
+    private void clearVoxels() { if (voxels != null) voxels.clear(); }
+
+    public synchronized void releaseBuffers() {
+        this.clearVoxels();
         this.drawBuffers.releaseBuffers();
     }
 }

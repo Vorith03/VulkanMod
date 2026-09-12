@@ -282,6 +282,7 @@ tasks.register('verifyDistribution') {
 tasks.named('check').configure {
     dependsOn 'verifyDistribution'
     dependsOn 'testRegionBatchLayout'
+    dependsOn 'testSectionVoxelSnapshot'
     dependsOn 'testResourceReloadGeneration'
     dependsOn 'testTextureUploadLayout'
 }
@@ -319,4 +320,11 @@ publishing {
             artifact jar
         }
     }
+}
+
+// Pointer-free section input ABI and bounded residency; does not require a GPU.
+tasks.register('testSectionVoxelSnapshot', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshotTest'
 }

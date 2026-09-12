@@ -40,6 +40,7 @@ case "$mode" in
     grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke.log
     grep -F "Terrain region batching: enabled" vulkan-smoke.log
+    grep -F "Terrain voxel lifecycle smoke passed (capture=false)" vulkan-smoke.log
     ;;
 
   no-splash)
@@ -49,12 +50,13 @@ case "$mode" in
     fi
     grep -F 'earlyWindowControl = false' run/config/fml.toml
 
-    run_client "-Dvulkanmod.smokeTest=true" vulkan-smoke-no-splash.log
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.experimentalSectionVoxels=true" vulkan-smoke-no-splash.log
     grep -F "ImmediateWindowProvider not loading because splash screen is disabled" vulkan-smoke-no-splash.log
     grep -F "Created Vulkan NO_API window without Forge early splash context" vulkan-smoke-no-splash.log
     grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
+    grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     ;;
 
   post-chain)

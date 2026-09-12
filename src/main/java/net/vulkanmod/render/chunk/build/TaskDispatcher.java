@@ -416,6 +416,8 @@ public class TaskDispatcher {
                 UploadBuffer.getCopyStats()));
         if(AreaUploadManager.INSTANCE != null)
             lines.add("Terrain upload: " + AreaUploadManager.INSTANCE.getStats());
+        if(net.vulkanmod.render.chunk.voxel.RegionVoxelStore.ENABLED)
+            lines.add(net.vulkanmod.render.chunk.voxel.RegionVoxelStore.describe());
         return lines;
     }
 

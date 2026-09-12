@@ -104,6 +104,7 @@ public class MinecraftMixin {
                 throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }
             net.vulkanmod.render.chunk.RegionBatchSmokeTest.verify();
+            net.vulkanmod.render.chunk.SectionVoxelSmokeTest.verify();
             net.vulkanmod.render.FlywheelCompatSmokeTest.verifyIfPresent();
 
             // Vanilla 1.20.1's Unihex glyph provider bypasses NativeImage and calls

@@ -14,6 +14,8 @@ import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.CompiledSection;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -33,6 +35,7 @@ public class RenderSection {
     private final CompileStatus compileStatus = new CompileStatus();
 
     private boolean dirty = true;
+    private long voxelGeneration;
     private boolean playerChanged;
 
     private boolean completelyEmpty = true;
@@ -160,6 +163,7 @@ public class RenderSection {
     }
 
     void release() {
+        this.invalidateVoxels();
         this.cancelTasks();
         this.clearGlobalBlockEntities();
     }
@@ -305,6 +309,7 @@ public class RenderSection {
     }
 
     private void reset() {
+        this.invalidateVoxels();
         this.cancelTasks();
         this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
@@ -323,9 +328,27 @@ public class RenderSection {
     }
 
     public void setDirty(boolean playerChanged) {
+        this.invalidateVoxels();
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
         WorldRenderer.getInstance().setNeedsUpdate();
+    }
+
+    public synchronized long getVoxelGeneration() { return this.voxelGeneration; }
+
+    public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
+        if (!RegionVoxelStore.ENABLED) return;
+        if (generation == this.voxelGeneration && this.chunkArea != null)
+            this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot);
+    }
+
+    private synchronized void invalidateVoxels() {
+        // The missing-neighbor BuildTask path also marks a section dirty from a
+        // worker. Serialize generation + store invalidation with publication.
+        if (!RegionVoxelStore.ENABLED) return;
+        this.voxelGeneration++;
+        if (this.chunkArea != null)
+            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset);
     }
 
     public void setCompiledSection(CompiledSection compiledSection) {

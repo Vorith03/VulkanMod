@@ -15,6 +15,9 @@ import net.minecraft.client.renderer.chunk.VisibilitySet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.Block;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
+import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
@@ -62,6 +65,7 @@ public class ChunkTask {
     public static class BuildTask extends ChunkTask {
         @Nullable
         protected RenderChunkRegion region;
+        private final long voxelGeneration;
 
         //debug
         private float buildTime;
@@ -70,6 +74,7 @@ public class ChunkTask {
         public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, boolean highPriority) {
             super(renderSection);
             this.region = renderChunkRegion;
+            this.voxelGeneration = renderSection.getVoxelGeneration();
             this.highPriority = highPriority;
         }
 
@@ -116,6 +121,7 @@ public class ChunkTask {
                         this.renderSection.setCompiledSection(compiledChunk);
                         this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
                         this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
+                        this.renderSection.publishVoxels(compileResults.voxels, this.voxelGeneration);
                     });
 
                     this.buildTime = (System.nanoTime() - startTime) * 0.000001f;
@@ -136,6 +142,8 @@ public class ChunkTask {
             this.region = null;
             PoseStack poseStack = new PoseStack();
             if (renderChunkRegion != null) {
+                SectionVoxelSnapshot.Builder voxels = RegionVoxelStore.ENABLED
+                        ? new SectionVoxelSnapshot.Builder(blockPos.getX(), blockPos.getY(), blockPos.getZ()) : null;
                 ModelBlockRenderer.enableCaching();
                 try {
                     Set<RenderType> set = new ReferenceArraySet<>(RenderType.chunkBufferLayers().size());
@@ -144,11 +152,13 @@ public class ChunkTask {
 
                     for(BlockPos blockPos3 : BlockPos.betweenClosed(blockPos, blockPos2)) {
                         BlockState blockState = renderChunkRegion.getBlockState(blockPos3);
-                        if (blockState.isSolidRender(renderChunkRegion, blockPos3)) {
+                        boolean solidRender = blockState.isSolidRender(renderChunkRegion, blockPos3);
+                        if (solidRender) {
                             visGraph.setOpaque(blockPos3);
                         }
 
-                        if (blockState.hasBlockEntity()) {
+                        boolean hasBlockEntity = blockState.hasBlockEntity();
+                        if (hasBlockEntity) {
                             BlockEntity blockEntity = renderChunkRegion.getBlockEntity(blockPos3);
                             if (blockEntity != null) {
                                 this.handleBlockEntity(compileResults, blockEntity);
@@ -156,6 +166,13 @@ public class ChunkTask {
                         }
 
                         FluidState fluidState = blockState.getFluidState();
+                        if (voxels != null) {
+                            int flags = SectionVoxelSnapshot.CPU_REQUIRED;
+                            if (solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
+                            if (hasBlockEntity) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
+                            if (!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
+                            voxels.add(Block.getId(blockState), flags);
+                        }
                         RenderType renderType;
                         TerrainBufferBuilder bufferBuilder;
                         if (!fluidState.isEmpty()) {
@@ -189,6 +206,8 @@ public class ChunkTask {
                             poseStack.popPose();
                         }
                     }
+
+                    if (voxels != null) compileResults.voxels = voxels.finish();
 
                     if (set.contains(RenderType.translucent())) {
                         TerrainBufferBuilder bufferBuilder2 = chunkBufferBuilderPack.builder(RenderType.translucent());
@@ -257,6 +276,7 @@ public class ChunkTask {
             public final List<BlockEntity> blockEntities = new ArrayList<>();
             public final EnumMap<TerrainRenderType, UploadBuffer> renderedLayers = new EnumMap<>(TerrainRenderType.class);
             public VisibilitySet visibilitySet = new VisibilitySet();
+            public SectionVoxelSnapshot voxels;
             @org.jetbrains.annotations.Nullable
             public TerrainBufferBuilder.SortState transparencyState;
 
