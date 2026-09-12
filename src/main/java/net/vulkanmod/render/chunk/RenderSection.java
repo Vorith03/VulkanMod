@@ -128,7 +128,7 @@ public class RenderSection {
 
     public void rebuildChunkAsync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
         ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache);
-        dispatcher.schedule(chunkCompileTask);
+        dispatcher.schedule(this.compileStatus.rebuildTask);
     }
 
     public void rebuildChunkSync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
@@ -339,7 +339,7 @@ public class RenderSection {
     public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
         if (!RegionVoxelStore.ENABLED) return;
         if (generation == this.voxelGeneration && this.chunkArea != null)
-            this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot);
+            this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot, generation);
     }
 
     synchronized void invalidateVoxels() {
@@ -348,7 +348,7 @@ public class RenderSection {
         if (!RegionVoxelStore.ENABLED) return;
         this.voxelGeneration++;
         if (this.chunkArea != null)
-            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset);
+            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset, this.voxelGeneration);
     }
 
     public void setCompiledSection(CompiledSection compiledSection) {
