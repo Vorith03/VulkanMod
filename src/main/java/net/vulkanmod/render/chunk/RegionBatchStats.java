@@ -40,12 +40,13 @@ final class RegionBatchStats {
     }
 
     static String describe() {
-        return String.format(
+        String drawStats = String.format(
                 " Region: %d sections/%d calls cmd:%d/%dB mesh:%d/%.1fKiB reuse/new/grow:%d/%d/%d areaReuse/fallback:%d/%d",
                 sections, calls,
                 commandUploads, commandBytes,
                 meshUploads, meshBytes / 1024.0D,
                 reusedSlices, allocatedSlices, bufferGrowths,
                 regionBufferReuses, regionBufferFallbacks);
+        return drawStats + " " + WorldRenderer.getInstance().getChunkAreaManager().getStorageStats();
     }
 }
