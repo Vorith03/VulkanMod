@@ -51,33 +51,46 @@ public class AreaBuffer {
     }
 
     public synchronized void upload(ByteBuffer byteBuffer, Segment uploadSegment) {
-        //free old segment
-        if(uploadSegment.offset != -1) {
-            this.setSegmentFree(uploadSegment);
-        }
+        int uploadSize = byteBuffer.remaining();
 
-        int size = byteBuffer.remaining();
-
-        if(size % elementSize != 0)
+        if(uploadSize % elementSize != 0)
             throw new RuntimeException("unaligned byteBuffer");
 
-        Segment segment = findSegment(size);
+        Segment allocation = this.usedSegments.get(uploadSegment);
+        boolean reused = allocation != null && allocation.size >= uploadSize;
+        int dstOffset;
 
-        if(segment.size - size > 0) {
-            addFreeSegment(new Segment(segment.offset + size, segment.size - size));
+        if(reused) {
+            // Keep the existing reservation stable when a rebuilt mesh still fits.
+            // The logical payload may shrink or grow within that reservation, but
+            // retaining its offset avoids free-list churn and keeps cached indirect
+            // commands stable apart from the mesh revision that already invalidates
+            // their index/vertex metadata.
+            dstOffset = allocation.offset;
+        } else {
+            if(allocation != null) {
+                this.setSegmentFree(uploadSegment);
+            }
+
+            Segment freeSegment = findSegment(uploadSize);
+            dstOffset = freeSegment.offset;
+
+            if(freeSegment.size - uploadSize > 0) {
+                addFreeSegment(new Segment(freeSegment.offset + uploadSize, freeSegment.size - uploadSize));
+            }
+
+            this.usedSegments.put(uploadSegment, new Segment(dstOffset, uploadSize));
+            this.used += uploadSize;
         }
 
-        usedSegments.put(uploadSegment, new Segment(segment.offset, size));
-
         Buffer dst = this.buffer;
-        AreaUploadManager.INSTANCE.uploadAsync(uploadSegment, dst.getId(), segment.offset, size, byteBuffer);
+        AreaUploadManager.INSTANCE.uploadAsync(uploadSegment, dst.getId(), dstOffset, uploadSize, byteBuffer);
 
-        uploadSegment.offset = segment.offset;
-        uploadSegment.size = size;
+        uploadSegment.offset = dstOffset;
+        uploadSegment.size = uploadSize;
         uploadSegment.status = Segment.PENDING_BIT;
 
-        this.used += size;
-
+        RegionBatchStats.recordMeshUpload(uploadSize, reused);
     }
 
     public Segment findSegment(int size) {
@@ -129,6 +142,7 @@ public class AreaBuffer {
         this.buffer = buffer;
 
         this.size = newSize;
+        RegionBatchStats.recordBufferGrowth();
 
         return new Segment(offset, newSize - offset);
     }
@@ -175,6 +189,14 @@ public class AreaBuffer {
 
     public long getId() {
         return this.buffer.getId();
+    }
+
+    int getCapacityBytes() {
+        return this.size;
+    }
+
+    int getUsedBytes() {
+        return this.used;
     }
 
     public void freeBuffer() {
