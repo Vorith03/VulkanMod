@@ -12,6 +12,19 @@ Use these together:
 
 Future agents should not silently invent a new major workstream. Start from the active roadmap gate unless live evidence or the user requires a temporary detour.
 
+## Current continuation checkpoint — 2026-09-12
+
+- Live branch HEAD inspected: `18e9247e5c85fe2151424f7f1b29fd4fbe6fc0b7`; CI **#306 green**. Build job 102786917792 and its logs confirm distributable verification and all configured startup/post-chain/depth/screenshot/Crash Assistant/Flywheel smoke gates passed.
+- Highest demonstrated milestone: **6 — playable world**. Phase 3 is complete, including the RX 6900 XT Creeper/Enderman visual result below. Active phase: **4**, **3/8 gates**.
+- Active work: current Create/Flywheel visual coverage and the prerequisite full-pack resource-reload/world-reentry retest. The #304 memory guard failure remains the latest runtime evidence; #306 changes no runtime code from #304.
+- This continuation reconciles stale retest instructions and adds the confirmed PickupNotifier limitation to `docs/CREATE_CHRONICLES_COMPATIBILITY.md`. No renderer/configuration changes or new runtime success are claimed.
+- Next actions: run the documented full-pack sequence with PickupNotifier absent and adequate headroom; inspect latest/debug logs plus visual results; fix any demonstrated defect before advancing gates. No new performance measurements or roadmap reorder.
+- User-machine action is required because CI cannot establish visual correctness in the actual RX 6900 XT modpack. See the compatibility document for the exact sequence and evidence to retain.
+
+## Historical checkpoints
+
+The sections below preserve earlier evidence; their phase labels and suggested artifacts describe those dates, not the current continuation checkpoint above.
+
 ## Last verified green checkpoint
 
 - Branch: `forge-1.20.1`

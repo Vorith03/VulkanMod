@@ -14,13 +14,24 @@ This document tracks Phase 4 compatibility evidence for the Forge 1.20.1 port. I
 
 ## Current Phase 4 retest artifact
 
-Use the latest green source artifact from CI #289:
+Verified on 2026-09-12: [CI #306](https://github.com/Vorith03/VulkanMod/actions/runs/34451137360) is green at source `18e9247e5c85fe2151424f7f1b29fd4fbe6fc0b7`.
 
-- source commit: `9917cacf69848f492c72ac06f2eb591633937a58`
-- artifact: `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.289-g9917cacf-all.jar`
-- required Forge setting: `config/fml.toml` -> `earlyWindowControl = false`
+- Download the `VulkanMod-Forge-build-306` artifact and install its `-all.jar`.
+- Keep `config/fml.toml` -> `earlyWindowControl = false`.
+- Disable PickupNotifier 8.0.0 for this retest; retain the existing renderer-replacement baseline below.
+- Build #306 has the same runtime source as #304; intervening changes are documentation-only. An already installed build #304 is sufficient for this test.
 
-Later branch HEAD commits may be documentation-only; the artifact above is the latest CI-verified runtime source at the start of Phase 4.
+### Current known limitations
+
+| Path | Evidence | Required action / remaining gate |
+| --- | --- | --- |
+| PickupNotifier 8.0.0 transparency framebuffer | Build #303 launcher stack: `GL30C.glGetInteger` -> `TransparencyBuffer.prepareExtraFramebuffer`; LWJGL aborted because the Vulkan window has no OpenGL context | Disable PickupNotifier for the baseline. No compatible configuration or replacement implementation has been verified. |
+| Full-pack resource reload | Build #303 completed reload and allocator purge, but later aborted in PickupNotifier; #304 without PickupNotifier hit the memory guard before reload apply | Repeat reload and sustained gameplay with sufficient host headroom; not yet a complete pass. |
+| Heavy 16K atlas workload | #304 tripped the unchanged RSS guard at 12294 MiB RSS / 8144 MiB MemAvailable | Close memory-heavy applications before launch; aim for the previous approximately 13 GiB available during reload. This is a comparison target, not a guarantee. Preserve safety limits and resource-pack settings. |
+| Animated atlas images | #303/#304 retirement preserved approximately 195 MiB of animated block-atlas CPU images | Verify animated textures continue after successful reload. |
+| Create/Flywheel gameplay | Historical #226 water wheel rendered; #306 startup smoke passes | Current full-pack contraption visual test remains pending. |
+
+These findings are recorded in the dated #303/#304 runtime sections of `AGENT_STATUS.md`. CI startup coverage does not close full-pack gameplay gates.
 
 ## Build 289 full-pack launch — 2026-09-09
 
@@ -88,13 +99,13 @@ Do not re-enable renderer replacements in bulk. If Phase 4 later tests them, add
 
 ## Mandatory current-artifact test sequence
 
-Run these against build 289 in the real Create Chronicles instance, keeping the known-good renderer-replacement set disabled initially.
+Run these against build #306 (or the runtime-equivalent #304) in the real Create Chronicles instance. Disable PickupNotifier 8.0.0 and keep the known-good renderer-replacement set disabled initially. Record `free -m` before launch; do not use diagnostic memory-safety overrides.
 
 1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT. **PASS on 2026-09-09.**
-2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement. **Blocked by host-memory safety trip before useful observation.**
+2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement. **Current representative visual pass still pending.**
 3. Exercise a visible Create/Flywheel contraption (water wheel is sufficient for the first pass; a moving contraption is better for follow-up coverage).
 4. Press `F3+T` and wait for resource reload to finish; verify rendering remains correct.
-5. Exit to the title screen, re-enter the same world, and continue briefly.
+5. Exit to the title screen, re-enter the same world, and play for at least two minutes, exceeding the previous approximately 82-second post-reload crash window. Check item pickups, animated textures and the same Create contraption again.
 6. Exit normally.
 
 For the next retest, preserve the existing resource-pack workload if practical because it exercises the 16K block atlas, but restore host-memory headroom before launch.

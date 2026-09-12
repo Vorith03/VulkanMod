@@ -177,7 +177,7 @@ Mandatory gates:
 
 **Progress: 3/8**
 
-**Next work item:** repeat build 289 with adequate host-memory headroom, then exercise Create/Flywheel, `F3+T`, world exit/re-entry and representative rendering paths. The first Phase 4 run started with only ~16.7 GiB RAM available (versus ~22.7 GiB during the earlier successful heavy-pack baseline) and intentionally tripped VulkanMod's 4096 MiB no-swap system-memory safety floor just after world entry. Comparable 16K-atlas snapshots show build 289 using less VulkanMod-tracked memory than the older run; do not weaken the safety floor without new evidence.
+**Next work item:** use green build #306 (runtime-equivalent to #304) with PickupNotifier 8.0.0 absent and adequate host-memory headroom. Follow `docs/CREATE_CHRONICLES_COMPATIBILITY.md`: exercise Create/Flywheel, `F3+T`, world exit/re-entry, animated textures and representative gameplay for at least two minutes after re-entry. The last #304 reload failed before apply at the unchanged RSS-pressure guard; do not weaken memory safeguards. CI #306 is verified, but no newer full-pack runtime result is available.
 
 ### Shaderpack scope
 
@@ -327,7 +327,7 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 Verified checkpoint after CI #304 and the RX 6900 XT Build #304 low-headroom retest to the bounded resource-reload native-memory fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`864b934182ada63ca7d246dab044f0ab76897d32`, CI #304**;
+- last verified green source checkpoint: **`18e9247e5c85fe2151424f7f1b29fd4fbe6fc0b7`, CI #306**, verified 2026-09-12; runtime source is unchanged from #304;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
