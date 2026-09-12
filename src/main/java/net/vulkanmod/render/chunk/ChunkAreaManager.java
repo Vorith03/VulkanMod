@@ -119,8 +119,7 @@ public class ChunkAreaManager {
                     int y1 = this.minHeight + (yRel << s);
                     ChunkArea chunkArea = this.chunkAreasArr[this.getAreaIndex(xRelativeIndex, yRel, zRelativeIndex)];
 
-                    chunkArea.setPosition(x1, y1, z1);
-                    chunkArea.releaseBuffers();
+                    chunkArea.repositionForReuse(x1, y1, z1);
 
                 }
             }
@@ -142,8 +141,7 @@ public class ChunkAreaManager {
                     int y1 = this.minHeight + (yRel << s);
                     ChunkArea chunkArea = this.chunkAreasArr[this.getAreaIndex(xRelativeIndex, yRel, zRelativeIndex)];
 
-                    chunkArea.setPosition(x1, y1, z1);
-                    chunkArea.releaseBuffers();
+                    chunkArea.repositionForReuse(x1, y1, z1);
 
                 }
             }
