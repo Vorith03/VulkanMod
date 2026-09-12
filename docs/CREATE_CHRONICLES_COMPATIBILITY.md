@@ -14,12 +14,12 @@ This document tracks Phase 4 compatibility evidence for the Forge 1.20.1 port. I
 
 ## Current Phase 4 retest artifact
 
-Verified on 2026-09-12: [CI #306](https://github.com/Vorith03/VulkanMod/actions/runs/34451137360) is green at source `18e9247e5c85fe2151424f7f1b29fd4fbe6fc0b7`.
+Verified on 2026-09-12: [CI #308](https://github.com/Vorith03/VulkanMod/actions/runs/34676875378) passed build and all smoke-test gates at source `29df210a6d73141e069e7aa90cdddc4a4506b146`.
 
-- Download the `VulkanMod-Forge-build-306` artifact and install its `-all.jar`.
+- Download the `VulkanMod-Forge-build-308` artifact and install its `-all.jar`.
 - Keep `config/fml.toml` -> `earlyWindowControl = false`.
 - Disable PickupNotifier 8.0.0 for this retest; retain the existing renderer-replacement baseline below.
-- Build #306 has the same runtime source as #304; intervening changes are documentation-only. An already installed build #304 is sufficient for this test.
+- Build #308 reduces staging copies to requested pixels instead of retaining gaps between source rows. Use #308 to measure this change; #304 remains the previous full-pack comparison. Safety limits, original sprite images and mipmaps are unchanged.
 
 ### Current known limitations
 
@@ -29,7 +29,7 @@ Verified on 2026-09-12: [CI #306](https://github.com/Vorith03/VulkanMod/actions/
 | Full-pack resource reload | Build #303 completed reload and allocator purge, but later aborted in PickupNotifier; #304 without PickupNotifier hit the memory guard before reload apply | Repeat reload and sustained gameplay with sufficient host headroom; not yet a complete pass. |
 | Heavy 16K atlas workload | #304 tripped the unchanged RSS guard at 12294 MiB RSS / 8144 MiB MemAvailable | Close memory-heavy applications before launch; aim for the previous approximately 13 GiB available during reload. This is a comparison target, not a guarantee. Preserve safety limits and resource-pack settings. |
 | Animated atlas images | #303/#304 retirement preserved approximately 195 MiB of animated block-atlas CPU images | Verify animated textures continue after successful reload. |
-| Create/Flywheel gameplay | Historical #226 water wheel rendered; #306 startup smoke passes | Current full-pack contraption visual test remains pending. |
+| Create/Flywheel gameplay | Historical #226 water wheel rendered; #308 startup smoke passes | Current full-pack contraption visual test remains pending. |
 
 These findings are recorded in the dated #303/#304 runtime sections of `AGENT_STATUS.md`. CI startup coverage does not close full-pack gameplay gates.
 
@@ -99,7 +99,7 @@ Do not re-enable renderer replacements in bulk. If Phase 4 later tests them, add
 
 ## Mandatory current-artifact test sequence
 
-Run these against build #306 (or the runtime-equivalent #304) in the real Create Chronicles instance. Disable PickupNotifier 8.0.0 and keep the known-good renderer-replacement set disabled initially. Record `free -m` before launch; do not use diagnostic memory-safety overrides.
+Run these against build #308 in the real Create Chronicles instance. Disable PickupNotifier 8.0.0 and keep the known-good renderer-replacement set disabled initially. Record `free -m` before launch; do not use diagnostic memory-safety overrides.
 
 1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT. **PASS on 2026-09-09.**
 2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement. **Current representative visual pass still pending.**

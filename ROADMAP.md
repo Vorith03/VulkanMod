@@ -177,11 +177,11 @@ Mandatory gates:
 
 **Progress: 3/8**
 
-**Next work item:** use green build #306 (runtime-equivalent to #304) with PickupNotifier 8.0.0 absent and adequate host-memory headroom. Follow `docs/CREATE_CHRONICLES_COMPATIBILITY.md`: exercise Create/Flywheel, `F3+T`, world exit/re-entry, animated textures and representative gameplay for at least two minutes after re-entry. The last #304 reload failed before apply at the unchanged RSS-pressure guard; do not weaken memory safeguards. CI #306 is verified, but no newer full-pack runtime result is available.
+**Next work item:** use build #308 (packed texture staging; build and smoke gates passed) with PickupNotifier 8.0.0 absent and adequate host-memory headroom. Follow `docs/CREATE_CHRONICLES_COMPATIBILITY.md`: exercise Create/Flywheel, `F3+T`, world exit/re-entry, animated textures and representative gameplay for at least two minutes after re-entry. The last #304 reload failed before apply at the unchanged RSS-pressure guard; do not weaken memory safeguards. CI #308 build and smoke gates are verified, but no newer full-pack runtime result is available.
 
 ### Current bounded source-memory work
 
-On 2026-09-12 the user explicitly requested reducing memory at its source. The immediate repository task is to eliminate source-row gaps from texture staging and validate packed uploads, then return to the full-pack reload gate. This does not close any gameplay gate or advance the major terrain rewrite. See `AGENT_STATUS.md` for measured synthetic allocation savings and the limits of that evidence.
+On 2026-09-12 the user explicitly requested reducing memory at its source. Source-row gaps have been eliminated from texture staging; build #308 passed CPU layout tests and GPU pixel readback under synchronization validation. Return to the full-pack reload gate to measure process RSS and check gameplay. This does not close any gameplay gate or advance the major terrain rewrite. See `AGENT_STATUS.md` for measured synthetic allocation savings and the limits of that evidence.
 
 ### Shaderpack scope
 
@@ -331,7 +331,7 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 Verified checkpoint after CI #304 and the RX 6900 XT Build #304 low-headroom retest to the bounded resource-reload native-memory fix:
 
 - highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`18e9247e5c85fe2151424f7f1b29fd4fbe6fc0b7`, CI #306**, verified 2026-09-12; runtime source is unchanged from #304;
+- last verified green source checkpoint: **`29df210a6d73141e069e7aa90cdddc4a4506b146`, CI #308** build and smoke gates, verified 2026-09-12; packed texture staging is new since #304;
 - Phase 3 is **DONE, 11/11 mandatory gates**;
 - user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
 - active phase: **Phase 4 — Create Chronicles compatibility baseline**;
