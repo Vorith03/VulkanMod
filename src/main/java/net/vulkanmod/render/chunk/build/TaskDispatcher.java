@@ -13,6 +13,7 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,6 +30,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TaskDispatcher {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final int HIGH_PRIORITY_QUOTA = 2;
+    // Queued ChunkTasks are cheap references/snapshots compared with completed
+    // UploadBuffers. Keep a useful ready backlog so workers do not starve between
+    // render-thread publication passes, while bounding the native mesh results
+    // separately below.
+    private static final int QUEUED_TASKS_PER_WORKER = 8;
+    private static final int COMPLETED_RESULTS_PER_WORKER = 2;
 
     private final Queue<Runnable> toUpload = Queues.newLinkedBlockingDeque();
     public final ThreadBuilderPack fixedBuffers;
@@ -36,6 +43,7 @@ public class TaskDispatcher {
     private volatile boolean stopThreads;
     private Thread[] threads;
     private volatile int idleThreads;
+    private volatile int publicationWaiters;
     private int highPriorityQuota = HIGH_PRIORITY_QUOTA;
     private final AtomicInteger activeTasks = new AtomicInteger();
     private final AtomicInteger acceptedResults = new AtomicInteger();
@@ -86,6 +94,12 @@ public class TaskDispatcher {
 
     private void runTaskLoop(ThreadBuilderPack builderPack) {
         while(!this.stopThreads) {
+            // Completed UploadBuffers own native mesh copies and are the expensive
+            // part of outstanding terrain work. If publication falls behind, pause
+            // before starting more builds while leaving the cheap task queue intact.
+            if(!this.waitForPublicationCapacity())
+                return;
+
             ChunkTask task = this.pollTask();
 
             if(task == null) {
@@ -137,6 +151,34 @@ public class TaskDispatcher {
                 this.activeTasks.decrementAndGet();
             }
         }
+    }
+
+    private boolean waitForPublicationCapacity() {
+        synchronized (this) {
+            int limit = this.getPublicationBacklogLimit();
+            if(this.toUpload.size() < limit)
+                return !this.stopThreads;
+
+            this.publicationWaiters++;
+            try {
+                while(!this.stopThreads && this.toUpload.size() >= limit) {
+                    try {
+                        this.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            } finally {
+                this.publicationWaiters--;
+            }
+            return !this.stopThreads;
+        }
+    }
+
+    private int getPublicationBacklogLimit() {
+        int workerCount = this.threads == null ? 0 : this.threads.length;
+        return Math.max(1, workerCount * COMPLETED_RESULTS_PER_WORKER);
     }
 
     public void schedule(ChunkTask chunkTask) {
@@ -213,6 +255,14 @@ public class TaskDispatcher {
         while((runnable = this.toUpload.poll()) != null) {
             flag = true;
             runnable.run();
+        }
+
+        if(flag) {
+            synchronized (this) {
+                // Wake workers paused only because completed native mesh results
+                // were waiting for this render-thread publication pass.
+                notifyAll();
+            }
         }
 
         AreaUploadManager.INSTANCE.submitUploads();
@@ -300,9 +350,13 @@ public class TaskDispatcher {
         if(workerCount == 0)
             return 0;
 
-        int queuedTasks = this.highPriorityTasks.size() + this.lowPriorityTasks.size();
-        int outstandingTasks = this.activeTasks.get() + queuedTasks + this.toUpload.size();
-        return Math.max(0, workerCount * 2 - outstandingTasks);
+        // Do not charge completed publication results against scheduling capacity:
+        // workers independently stop at the native-result backlog limit. Keeping a
+        // deeper cheap task queue prevents the three-worker RX 6900 XT test case
+        // from oscillating between active workers and an empty ready queue.
+        int queuedAndActive = this.activeTasks.get()
+                + this.highPriorityTasks.size() + this.lowPriorityTasks.size();
+        return Math.max(0, workerCount * QUEUED_TASKS_PER_WORKER - queuedAndActive);
     }
 
     public void clearBatchQueue() {
@@ -342,23 +396,31 @@ public class TaskDispatcher {
         return samples == 0 ? 0.0D : (nanos / 1_000_000.0D) / samples;
     }
 
-    public String getStats() {
+    public List<String> getDebugLines() {
         int highQueued = this.highPriorityTasks.size();
         int lowQueued = this.lowPriorityTasks.size();
         int buildSamples = this.completedBuilds.get();
         int publishSamples = this.publishedBuilds.get();
-        String stats = String.format(Locale.ROOT,
-                "iT:%d aT:%d qH:%d qL:%d uQ:%d okR:%d dropR:%d lat(q/b/h):%.1f/%.1f/%.1fms",
-                this.idleThreads, this.activeTasks.get(), highQueued, lowQueued, this.toUpload.size(),
+
+        List<String> lines = new ArrayList<>(3);
+        lines.add(String.format(Locale.ROOT,
+                "Terrain workers: idle %d active %d pubWait %d | queue H/L %d/%d | publish %d/%d",
+                this.idleThreads, this.activeTasks.get(), this.publicationWaiters,
+                highQueued, lowQueued, this.toUpload.size(), this.getPublicationBacklogLimit()));
+        lines.add(String.format(Locale.ROOT,
+                "Terrain build: ok/drop %d/%d | ms queue/build/handoff %.1f/%.1f/%.1f | %s",
                 this.acceptedResults.get(), this.droppedResults.get(),
                 averageMillis(this.buildQueueNanos.get(), buildSamples),
                 averageMillis(this.buildNanos.get(), buildSamples),
-                averageMillis(this.handoffNanos.get(), publishSamples));
-
-        stats += " " + UploadBuffer.getCopyStats();
+                averageMillis(this.handoffNanos.get(), publishSamples),
+                UploadBuffer.getCopyStats()));
         if(AreaUploadManager.INSTANCE != null)
-            stats += " " + AreaUploadManager.INSTANCE.getStats();
-        return stats;
+            lines.add("Terrain upload: " + AreaUploadManager.INSTANCE.getStats());
+        return lines;
+    }
+
+    public String getStats() {
+        return String.join(" | ", this.getDebugLines());
     }
 
 }
