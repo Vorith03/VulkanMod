@@ -1,9 +1,11 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.core.BlockPos;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelGpuStore;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
+import net.vulkanmod.vulkan.memory.StorageBuffer;
 import org.joml.FrustumIntersection;
 import org.joml.Vector3i;
 
@@ -17,6 +19,7 @@ public class ChunkArea {
 
     DrawBuffers drawBuffers;
     private RegionVoxelStore voxels;
+    private RegionVoxelGpuStore gpuVoxels;
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
@@ -180,14 +183,31 @@ public class ChunkArea {
         this.position.set(x, y, z);
     }
 
+    /** Compatibility entry point while callers transition to explicit generations. */
     public synchronized void publishVoxels(int x, int y, int z, SectionVoxelSnapshot snapshot) {
+        this.publishVoxels(x, y, z, snapshot, 0L);
+    }
+
+    public synchronized void publishVoxels(int x, int y, int z,
+                                           SectionVoxelSnapshot snapshot, long generation) {
         int slot = voxelSlot(x, y, z);
         if (slot < 0) return;
         if (snapshot != null && (snapshot.x() != x || snapshot.y() != y || snapshot.z() != z))
             throw new IllegalArgumentException("Snapshot origin does not match its section");
+
         if (voxels == null && snapshot != null && RegionVoxelStore.ENABLED)
             voxels = new RegionVoxelStore();
-        if (voxels != null) voxels.put(slot, snapshot);
+
+        boolean stored = voxels != null && voxels.put(slot, snapshot);
+        if (!stored) {
+            if (gpuVoxels != null)
+                gpuVoxels.invalidate(slot, generation);
+            return;
+        }
+
+        if (gpuVoxels == null)
+            gpuVoxels = new RegionVoxelGpuStore();
+        gpuVoxels.upload(slot, snapshot, generation);
     }
 
     public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
@@ -195,11 +215,32 @@ public class ChunkArea {
         return voxels == null || slot < 0 ? null : voxels.get(slot);
     }
 
+    public synchronized RegionVoxelGpuStore.Residency getGpuVoxelResidency(int x, int y, int z) {
+        int slot = voxelSlot(x, y, z);
+        return gpuVoxels == null || slot < 0 ? null : gpuVoxels.getResidency(slot);
+    }
+
+    public synchronized StorageBuffer getGpuVoxelPage(int pageIndex) {
+        return gpuVoxels == null ? null : gpuVoxels.getPageBuffer(pageIndex);
+    }
+
     public synchronized long getVoxelRevision() { return voxels == null ? 0L : voxels.revision(); }
 
+    /** Compatibility entry point while callers transition to explicit generations. */
     public synchronized void removeVoxels(int x, int y, int z) {
         int slot = voxelSlot(x, y, z);
-        if (voxels != null && slot >= 0) voxels.remove(slot);
+        if(slot < 0) return;
+        long generation = gpuVoxels == null
+                ? 0L
+                : gpuVoxels.getResidency(slot).generation() + 1L;
+        this.removeVoxels(x, y, z, generation);
+    }
+
+    public synchronized void removeVoxels(int x, int y, int z, long generation) {
+        int slot = voxelSlot(x, y, z);
+        if (slot < 0) return;
+        if (voxels != null) voxels.remove(slot);
+        if (gpuVoxels != null) gpuVoxels.invalidate(slot, generation);
     }
 
     private int voxelSlot(int x, int y, int z) {
@@ -209,7 +250,13 @@ public class ChunkArea {
         return RegionBatchLayout.packSection(dx, dy, dz);
     }
 
-    private void clearVoxels() { if (voxels != null) voxels.clear(); }
+    private void clearVoxels() {
+        if (voxels != null) voxels.clear();
+        if (gpuVoxels != null) {
+            gpuVoxels.close();
+            gpuVoxels = null;
+        }
+    }
 
     public synchronized void releaseBuffers() {
         this.clearVoxels();
