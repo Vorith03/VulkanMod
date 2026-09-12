@@ -55,6 +55,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh screenshot
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
+      - name: Smoke-test Chat Heads 0.13.18 compatibility
+        run: bash scripts/ci/vulkan-smoke.sh chat-heads
       - name: Smoke-test Flywheel 0.6 compatibility
         run: bash scripts/ci/vulkan-smoke.sh flywheel
       - name: Upload smoke-test logs
@@ -70,6 +72,7 @@ jobs:
             vulkan-screenshot-smoke.log
             run/screenshot-smoke/screenshots/*.png
             vulkan-smoke-crash-assistant.log
+            vulkan-smoke-chat-heads.log
             vulkan-smoke-flywheel.log
           if-no-files-found: ignore
       - name: Upload artifacts
