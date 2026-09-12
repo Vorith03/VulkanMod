@@ -2,9 +2,7 @@ package net.vulkanmod.render.chunk;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
 import net.vulkanmod.render.chunk.util.Util;
-import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.memory.*;
-import net.vulkanmod.vulkan.queue.TransferQueue;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -131,13 +129,12 @@ public class AreaBuffer {
         int newSize = (int) requestedSize;
         Buffer buffer = this.allocateBuffer(newSize);
 
-        // Growth must see every transfer recorded so far before copying the old
-        // allocation. waitAllUploads() submits still-recording batches fence-only,
-        // then waits for completion; do not route this path through frame semaphores.
+        // Growth must see every terrain copy recorded so far before cloning the old
+        // allocation. Those copies and this copy now share the graphics queue, so
+        // queue order also guarantees all older terrain draws have finished reading
+        // the source before the synchronous growth copy executes.
         AreaUploadManager.INSTANCE.waitAllUploads();
-
-        //Sync upload
-        Device.getTransferQueue().uploadBufferImmediate(this.buffer.getId(), 0, buffer.getId(), 0, this.buffer.getBufferSize());
+        AreaUploadManager.INSTANCE.copyImmediate(this.buffer, buffer);
         this.buffer.freeBuffer();
         this.buffer = buffer;
 
