@@ -25,6 +25,20 @@ public final class RegionBatchSmokeTest {
             require(new ChunkAreaManager(1, 24, -64).ySize == 3, "Overworld area rows must match section count");
             require(new ChunkAreaManager(1, 16, 0).ySize == 2, "Zero-based area rows must match section count");
 
+            // A drained coarse ring slot should keep its physical Vulkan buffers
+            // when it wraps to a new world region. This is the common traversal path.
+            buffers.allocateBuffers();
+            long regionVertexBuffer = buffers.vertexBuffer.getId();
+            long regionIndexBuffer = buffers.indexBuffer.getId();
+            long regionReuseBefore = RegionBatchStats.regionBufferReuses;
+            area.repositionForReuse(256, -128, 128);
+            require(buffers.isAllocated(), "Drained region buffers must remain allocated across ring reuse");
+            require(buffers.vertexBuffer.getId() == regionVertexBuffer
+                            && buffers.indexBuffer.getId() == regionIndexBuffer,
+                    "Drained region reuse must preserve Vulkan buffer handles");
+            require(RegionBatchStats.regionBufferReuses == regionReuseBefore + 1,
+                    "Drained region reuse must be observable in terrain stats");
+
             // Exercise the production region suballocator with a real GPU buffer.
             // A rebuild that still fits its old reservation must keep the same
             // address instead of returning the slice to the free list. A larger
@@ -73,6 +87,12 @@ public final class RegionBatchSmokeTest {
             require(solid.update(buffers, area, TerrainRenderType.SOLID) && solid.drawCount == 1,
                     "Independent terrain layer must build its own cache");
 
+            var emptyParameters = section.getDrawParameters(TerrainRenderType.CUTOUT);
+            long emptyRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT);
+            emptyParameters.reset(area);
+            require(buffers.getMeshRevision(TerrainRenderType.CUTOUT) == emptyRevision,
+                    "Resetting an already-empty terrain layer must not invalidate its cache");
+
             area.resetQueue();
             area.addSection(section);
             require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED),
@@ -100,9 +120,26 @@ public final class RegionBatchSmokeTest {
             require(!parameters.ready, "Reset parameters must not retain upload readiness");
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
                     "Section reset must invalidate cached geometry");
+
+            // If a coarse slot unexpectedly still owns geometry, keep the old safe
+            // behavior instead of reusing storage whose contents may still matter.
+            long fallbackBefore = RegionBatchStats.regionBufferFallbacks;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                AreaBuffer.Segment liveSegment = new AreaBuffer.Segment();
+                buffers.vertexBuffer.upload(
+                        stack.malloc(TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize()), liveSegment);
+                AreaUploadManager.INSTANCE.waitAllUploads();
+            }
+            require(buffers.hasLiveGeometry(), "Fallback probe must create live region geometry");
+            area.repositionForReuse(384, -128, 128);
+            require(!buffers.isAllocated(), "Live region geometry must retain release/reallocate fallback");
+            require(RegionBatchStats.regionBufferFallbacks == fallbackBefore + 1,
+                    "Live-region fallback must be observable in terrain stats");
+
             Initializer.LOGGER.info("Terrain region cache smoke test passed");
         } finally {
             if (persistentBuffer != null) persistentBuffer.freeBuffer();
+            area.releaseBuffers();
             if (first.commands != null) first.commands.freeBuffer();
             if (second.commands != null) second.commands.freeBuffer();
             if (solid.commands != null) solid.commands.freeBuffer();
