@@ -21,11 +21,11 @@ import net.vulkanmod.vulkan.memory.NativeAllocatorPurger;
  * retain another GiB-plus of decoded CPU sprite pixels. The keyboard reload is
  * requested while GLFW is polling events, after VulkanMod has submitted the current
  * frame. At that boundary no primary frame is still being recorded, so we can
- * quiesce chunk production and the GPU, release terrain, and discard static CPU
- * pixels from the old atlas generation before replacement sprites/models begin
- * decoding. Allocator-cached pages are purged only after the replacement generation
- * applies successfully, so failed reloads retain their recovery path and do not get
- * treated as successful reloads.
+ * quiesce chunk production and the GPU, release terrain, discard static CPU pixels
+ * from the old atlas generation, and return allocator-cached pages made free by that
+ * retirement before replacement sprites/models begin decoding. A second allocator
+ * purge after successful apply reclaims temporary replacement-generation allocations
+ * before terrain reconstruction.
  */
 public final class ResourceReloadMemoryManager {
     private static final long MIB = 1024L * 1024L;
@@ -49,8 +49,9 @@ public final class ResourceReloadMemoryManager {
      * Completes one real resource-reload generation on the client thread.
      *
      * A normal completion means all reload listeners, including atlas application,
-     * have successfully run. The allocator purge is deliberately placed in the
-     * success callback before the common terrain-recovery/rebuild callback.
+     * have successfully run. The post-apply allocator purge remains useful after the
+     * pre-decode purge because reload preparation itself creates temporary native
+     * allocations that may become allocator-cached when the new generation applies.
      */
     public static void completeResourceReload(long generation, Throwable failure) {
         boolean accepted = RELOAD_GENERATIONS.complete(
@@ -163,6 +164,17 @@ public final class ResourceReloadMemoryManager {
                 retiredStaticSprites, nativeBefore / MIB, nativeAfter / MIB, freed / MIB);
         MemoryDiagnostics.logSnapshot("resource reload after atlas CPU retirement");
 
+        if(freed > 0L) {
+            // The sprite NativeImages above are already closed. Purging an allocator
+            // cache cannot invalidate the still-live animated sprites or reload
+            // recovery state; it only asks the native allocator/OS to reclaim pages
+            // that are already free. Doing this before replacement decode is the
+            // point at which the reclaimed headroom can reduce the F3+T peak.
+            Initializer.LOGGER.info(
+                    "Purging native allocator pages released by old atlas retirement before replacement resource decode");
+            NativeAllocatorPurger.purgeForResourceReload();
+            MemoryDiagnostics.logSnapshot("resource reload after pre-decode native allocator purge");
+        }
     }
 
     /**
@@ -190,6 +202,7 @@ public final class ResourceReloadMemoryManager {
             minecraft.levelRenderer.allChanged();
         }
     }
+
     /**
      * Small dependency-free state machine shared by production completion handling
      * and its regression test. It claims one real generation and guarantees that a
