@@ -172,7 +172,7 @@ before visibility or closing unmeasured Phase 6 performance gates.
 `testSectionVoxelSnapshot` (part of Gradle check/build) independently decodes the GPU
 ABI, including 4096 unique/high state IDs, word boundaries, negative coordinates,
 caller buffer offsets/order, invalid records, memory/entry limits and failed replacement.
-Startup smoke verifies both gate settings, real registry IDs and Minecraft traversal
+Startup smoke is added to verify both gate settings, real registry IDs and Minecraft traversal
 order, the actual publication/cancellation queue, generation rejection, region wrap,
 release and mesh-revision independence. It does not execute a world build or GPU mesher.
 The full existing Vulkan/compatibility CI suite remains required.
@@ -182,3 +182,17 @@ Record F3 voxel residency/rejections plus queue/build/handoff times and heap use
 leave/reenter the world and change render distance to check residency resets. This is
 an overhead/lifecycle experiment, not a speedup test. Use the baseline contract;
 no F3+T reload test is requested for this checkpoint.
+
+### Local validation / publication status
+
+The pure-Java snapshot/store suite passed locally using the installed Java 17
+compiler module (`java -m jdk.compiler/com.sun.tools.javac.Main`); the `javac`
+launcher itself is absent. Shell syntax and `git diff --check` also passed.
+Full local Gradle could not start: its uncached 8.1.1 distribution download failed
+with `java.net.SocketException: Network is unreachable`.
+
+Source commit `41ed707` and follow-up checkpoint work are local only. Automatic
+approval review rejected the remote push, citing lack of explicit authorization
+to publish the payload to GitHub. Remote HEAD was rechecked as `d41ff7c`. New CI and
+startup results are therefore **pending**, not green. Do not distribute this as a
+verified runtime JAR until push approval and the full build/smoke suite complete.

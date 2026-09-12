@@ -60,7 +60,14 @@ public final class SectionVoxelSmokeTest {
             require(area.getVoxels(-16, -96, 176) == null, "Old generation rejected even at identical coordinates");
             section.publishVoxels(snapshot, section.getVoxelGeneration());
             long beforeDirty = section.getVoxelGeneration();
-            section.setDirty(false);
+            Thread dirtyWorker = new Thread(() -> section.setDirty(false), "voxel-dirty-smoke");
+            dirtyWorker.start();
+            try {
+                dirtyWorker.join();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted worker invalidation smoke", interrupted);
+            }
             section.publishVoxels(snapshot, beforeDirty);
             require(area.getVoxels(-16, -96, 176) == null, "Dirty generation rejects pending snapshot");
             section.publishVoxels(snapshot, section.getVoxelGeneration());
@@ -77,6 +84,12 @@ public final class SectionVoxelSmokeTest {
             area.publishVoxels(-16, -96, 176, snapshot);
             area.releaseBuffers();
             require(area.getVoxels(-16, -96, 176) == null, "World/region release clears voxel residency");
+            var abandoned = new java.util.concurrent.atomic.AtomicBoolean();
+            dispatcher.scheduleSectionUpdate(new ChunkTask.BuildTask(section, null, false), section,
+                    new EnumMap<>(TerrainRenderType.class), () -> abandoned.set(true));
+            dispatcher.stopThreads();
+            dispatcher.uploadAllPendingUploads();
+            require(!abandoned.get(), "Shutdown must discard queued voxel publication closures");
             Initializer.LOGGER.info("Terrain voxel lifecycle smoke passed (capture={})", RegionVoxelStore.ENABLED);
         } finally {
             dispatcher.stopThreads();

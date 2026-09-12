@@ -154,13 +154,13 @@ Phase 3 is complete. Automated Lavapipe pixel/validation coverage and the RX 690
 
 ### Phase 3 exit rule
 
-Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule; the roadmap still requires the Phase 4 compatibility baseline and Phase 5 measurements before major terrain work.
+Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule; the user has since explicitly prioritized bounded GPU-terrain groundwork while Phase 4 remains parked. Phase 5 measurements are still required for performance claims.
 
 ---
 
 # Phase 4 — Create Chronicles compatibility baseline
 
-**Status: ACTIVE**
+**Status: PARKED BY USER PRIORITY OVERRIDE**
 
 Goal: prove the renderer works in the user's actual target environment and identify the minimum incompatible renderer-replacement set.
 
@@ -177,11 +177,9 @@ Mandatory gates:
 
 **Progress: 3/8**
 
-**Next work item:** use build #308 (packed texture staging; build and smoke gates passed) with PickupNotifier 8.0.0 absent and adequate host-memory headroom. Follow `docs/CREATE_CHRONICLES_COMPATIBILITY.md`: exercise Create/Flywheel, `F3+T`, world exit/re-entry, animated textures and representative gameplay for at least two minutes after re-entry. The last #304 reload failed before apply at the unchanged RSS-pressure guard; do not weaken memory safeguards. CI #308 build and smoke gates are verified, but no newer full-pack runtime result is available.
-
-### Current bounded source-memory work
-
-On 2026-09-12 the user explicitly requested reducing memory at its source. Source-row gaps have been eliminated from texture staging; build #308 passed CPU layout tests and GPU pixel readback under synchronization validation. Return to the full-pack reload gate to measure process RSS and check gameplay. This does not close any gameplay gate or advance the major terrain rewrite. See `AGENT_STATUS.md` for measured synthetic allocation savings and the limits of that evidence.
+**Parked work:** full-pack reload/compatibility closure remains open. See
+`docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md`. Do not return to F3+T or lower memory
+safety floors while pursuing the explicitly requested terrain/GPU track.
 
 ### Shaderpack scope
 
@@ -191,7 +189,7 @@ Vanilla Minecraft post effects are core correctness and belong in Phase 3. Full 
 
 # Phase 5 — Performance baseline and measurement discipline
 
-**Status: WAITING ON PHASE 4 BASELINE**
+**Status: MEASUREMENT CONTRACT PRESENT; COMPARABLE RUNS OPEN**
 
 Goal: create apples-to-apples measurements so optimization claims have evidence.
 
@@ -201,11 +199,13 @@ Mandatory gates:
 - [ ] record an OpenGL comparison baseline on the same machine/settings/modpack;
 - [ ] record the Vulkan baseline on the same machine/settings/modpack;
 - [ ] record frame-time behavior in addition to average FPS (at minimum low-percentile or hitch-sensitive evidence);
-- [ ] define a terrain traversal/chunk-visibility stress case;
-- [ ] define a Create-heavy/modded rendering stress case;
-- [ ] commit the benchmark procedure and acceptance rule: no performance claim without comparable before/after evidence.
+- [x] define a terrain traversal/chunk-visibility stress case;
+- [x] define a Create-heavy/modded rendering stress case;
+- [x] commit the benchmark procedure and acceptance rule: no performance claim without comparable before/after evidence.
 
-**Progress: 0/7**
+**Progress: 3/7**
+
+Evidence: `docs/TERRAIN_PERFORMANCE_BASELINE.md`; fixed coordinates and A/B results remain open.
 
 ### Default comparison target
 
@@ -215,7 +215,7 @@ The comparison should answer practical user questions, not win a synthetic bench
 
 # Phase 6 — Terrain renderer v1: persistent region batching
 
-**Status: FOUNDATION PRESENT; MAJOR IMPLEMENTATION WAITS ON PHASE 5**
+**Status: PERSISTENT FOUNDATION VERIFIED; RX VISUAL/PERFORMANCE GATES OPEN**
 
 Goal: outperform the traditional Minecraft submission model using a stable Vulkan terrain backend before adding mesh shaders.
 
@@ -223,16 +223,18 @@ Mandatory gates:
 
 - [x] region batch-layout regression coverage exists;
 - [x] basic terrain region-cache/batching smoke coverage exists and batching can be enabled;
-- [ ] complete RenderRegionCache lifecycle audit for rebuild/unload/world transitions with no stale GPU ownership;
-- [ ] move terrain geometry toward persistent region-scoped GPU allocations;
-- [ ] implement stable suballocation/reuse rather than churn-heavy per-rebuild allocation where practical;
-- [ ] reduce CPU draw submission count with region/layer batching;
+- [x] complete RenderRegionCache lifecycle audit for rebuild/unload/world transitions with no stale GPU ownership;
+- [x] move terrain geometry toward persistent region-scoped GPU allocations;
+- [x] implement stable suballocation/reuse rather than churn-heavy per-rebuild allocation where practical;
+- [x] reduce CPU draw submission count with region/layer batching;
 - [ ] add indirect/multi-draw-style submission where profiling shows it is beneficial;
-- [ ] preserve a known-good fallback path while the new backend matures;
+- [x] preserve a known-good fallback path while the new backend matures;
 - [ ] demonstrate visual correctness under high chunk churn / camera movement;
 - [ ] measure a reproducible improvement (or reject/rework the design if it does not improve the Phase 5 baseline).
 
-**Progress: 2/10**
+**Progress: 7/10**
+
+Evidence: lifecycle audit at #342 and live #351 region-cache/startup logs. No measured speedup is claimed.
 
 ### Design target
 
@@ -240,32 +242,38 @@ This phase should make terrain data **persistent, compact, and batch-friendly**.
 
 ---
 
-# Phase 7 — GPU-driven / mesh-shader terrain backend
+# Phase 7 — GPU-driven terrain and hybrid meshing
 
-**Status: PLANNED**
+**Status: ACTIVE BOUNDED GROUNDWORK BY EXPLICIT USER DIRECTION**
 
-Goal: pursue the Nvidium-like endgame using Vulkan's cross-vendor GPU-driven capabilities, with `VK_EXT_mesh_shader` as an optional accelerated backend rather than a hard dependency.
+Target sequence: persistent regions -> GPU visibility/section selection -> GPU
+indirect commands -> GPU terrain representation -> hybrid meshing -> optional mesh
+shaders. Define input data now without enabling unqualified GPU rendering.
 
 Mandatory gates:
 
-- [ ] detect `VK_EXT_mesh_shader` support and required feature/property limits at runtime;
-- [ ] enable mesh-shader device features only when supported, without breaking the classic Vulkan fallback;
-- [ ] define a terrain meshlet/cluster representation compatible with Phase 6 residency;
-- [ ] render an opaque-terrain prototype using `vkCmdDrawMeshTasksEXT` (or the appropriate EXT path);
-- [ ] move frustum/cluster rejection to GPU-driven work where profiling supports it;
-- [ ] evaluate occlusion/hierarchical culling and keep it only if it produces measurable wins;
-- [ ] integrate chunk rebuild/unload/residency updates without full-buffer rebuilds;
-- [ ] define a safe strategy for cutout and translucent terrain (which may remain on a different path initially);
-- [ ] retain and continuously test a non-mesh-shader Vulkan backend;
-- [ ] benchmark the mesh backend on the RX 6900 XT against both Phase 6 Vulkan and the Phase 5 OpenGL baseline; enable by default only if it is faster and stable.
+- [ ] define and validate compact CPU/GPU section input with conservative exception handling;
+- [ ] add bounded region-scoped voxel/state GPU residency and independent update/invalidation;
+- [ ] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
+- [ ] implement correct GPU visibility/section selection;
+- [ ] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
+- [ ] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
+- [ ] implement hybrid ordinary-cube meshing with halo/light/tint inputs and output-overflow fallback;
+- [ ] integrate rebuild/unload/world/resource-generation transitions without stale GPU data;
+- [ ] preserve arbitrary Forge callbacks, block entities and unsupported models on CPU;
+- [ ] preserve translucent/tripwire rendering until separately supported and validated;
+- [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 0/10**
+**Progress: 0/11 verified gates.** Local input infrastructure exists but full CI is pending.
 
-### Architectural rule
+Current first slice: `docs/GPU_TERRAIN_BOUNDARY.md`. Runtime-state palette and flags
+are staged with the current CPU result; there is no GPU mesher, template qualifier,
+light/tint/halo stream or GPU voxel allocation yet. Local ABI/store tests pass; the
+remote push was rejected by automatic approval review and needs explicit approval.
 
-Do **not** jump directly to mesh shaders before Phase 6 provides stable terrain residency and Phase 5 provides a benchmark. Otherwise the project would be debugging a new geometry pipeline and a new memory/lifecycle model simultaneously.
-
-The goal is Nvidium-inspired architecture, not an NVIDIA/OpenGL-specific transplant.
+Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
+backend remain later work. They must not become a prerequisite for classic compute
+or CPU fallback on the RX 6900 XT. Existing Phase 6 measurement gates remain open.
 
 ---
 
@@ -328,18 +336,15 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-Verified checkpoint after CI #304 and the RX 6900 XT Build #304 low-headroom retest to the bounded resource-reload native-memory fix:
+- Verified remote source: `d41ff7cca9007666d765dc6bc7581c961d084b7c`, **CI #351 green**.
+- Local section-input implementation: `41ed707` plus the following checkpoint commit;
+  **push blocked by automatic approval review; new CI/startup coverage pending**.
+- Highest demonstrated milestone: 6, playable world.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10.
+- Active bounded gate: P7.1, validate compact CPU/GPU section input. Java-only ABI/store
+  tests pass locally; no new runtime build has been verified or produced here.
+- Next: obtain push approval, recheck live HEAD, run/inspect CI, record evidence.
+- No new RX 6900 XT A/B measurement or performance claim.
 
-- highest demonstrated legacy milestone: **Milestone 6 — playable world**;
-- last verified green source checkpoint: **`29df210a6d73141e069e7aa90cdddc4a4506b146`, CI #308** build and smoke gates, verified 2026-09-12; packed texture staging is new since #304;
-- Phase 3 is **DONE, 11/11 mandatory gates**;
-- user RX 6900 XT visual evidence: Creeper and Enderman spectator PostChain effects both rendered correctly on 2026-09-09;
-- active phase: **Phase 4 — Create Chronicles compatibility baseline**;
-- build 289 full-pack launch gate: **PASS** — the target ~300-mod Create Chronicles instance reached the world with Vulkan active on RX 6900 XT;
-- resource-reload code/CI milestone: **PASS** — allocator reclamation is success-only and ordered after reload apply but before terrain reconstruction; Forge #301 bytecode evidence shows old atlas sprite/ticker ownership is cleared before replacement lists are installed;
-- current runtime blocker: with PickupNotifier absent, Build #304 reached full-pack F3+T but the replacement decode hit the unchanged RSS safety guard at RSS 12294 MiB and MemAvailable 8144 MiB; the reload failed before apply, so no success-only purge was expected. The live Build #303 -> #304 comparison is documentation-only, making lower available host memory—not a runtime-code change—the demonstrated cause; no current animated images are being closed speculatively;
-- next gate: repeat the full-pack resource-reload/world-reentry test with PickupNotifier absent and at least the prior approximately 13 GiB MemAvailable during reload, without diagnostic safety overrides; then check Create/Flywheel contraptions and representative gameplay;
-- Phase 4 progress: **3/8 mandatory gates**;
-- no new comparable performance measurement is claimed.
-
-Future agents must verify live HEAD/CI first rather than assuming this snapshot is still current.
+This reconciles stale #308/#342 roadmap/status snapshots with inspected live #351.
+Future agents must recheck live source/CI before proceeding.

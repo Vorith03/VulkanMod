@@ -10,20 +10,57 @@ Use these together:
 - `ROADMAP.md` — canonical phases and gates;
 - `docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md` — explicit user-approved sequencing override;
 - `docs/TERRAIN_PERFORMANCE_BASELINE.md` — benchmark contract;
-- `docs/TERRAIN_LIFECYCLE_AUDIT_2026-09-12.md` — Phase 6 lifecycle audit.
+- `docs/TERRAIN_LIFECYCLE_AUDIT_2026-09-12.md` — Phase 6 lifecycle audit;
+- `docs/GPU_TERRAIN_BOUNDARY.md` — current GPU input architecture and local checkpoint.
 
-## Current verified checkpoint — 2026-09-12
+## Current checkpoint — 2026-09-12
 
 - Branch: `forge-1.20.1`.
-- Last verified source commit: `2f415efba0478be3af0be862574f4a0e6ae550df`.
-- GitHub Actions: **CI #342 — fully green**. Build/distribution, normal and no-early-splash Vulkan startup, vanilla color/depth PostChain, screenshot/readback synchronization validation, Crash Assistant 1.9.7 and Flywheel 0.6 all passed.
-- Highest demonstrated legacy milestone: **6 — playable world**.
-- Phase 3 remains complete, 11/11.
-- Phase 4 Create Chronicles compatibility is **parked at 3/8** by explicit user priority override; it is not complete.
-- Phase 5 measurement discipline is **3/7**: terrain traversal stress case, Create-heavy stress case, and benchmark/acceptance procedure are defined. Exact route plus OpenGL/Vulkan/frame-time baselines remain open.
-- Active implementation phase: **Phase 6 — persistent region batching, 7/10 gates** after the code-level lifecycle audit. High-churn RX visual evidence, measured indirect/multi-draw benefit, and reproducible performance improvement remain open.
+- Verified remote source: `d41ff7cca9007666d765dc6bc7581c961d084b7c`, CI **#351 fully green**
+  (run 34687677511, job 103537424600); actual jobs and logs inspected.
+- Local GPU-terrain input source: `41ed707` plus the following checkpoint commit.
+  **Not pushed / not CI-verified**. Automatic approval review rejected the push,
+  requiring explicit authorization to publish the changes to GitHub.
+- Highest demonstrated legacy milestone remains **6 — playable world**.
+- Phase 3: 11/11. Phase 4: parked 3/8. Phase 5: 3/7. Phase 6: 7/10;
+  high-churn RX visual and comparable performance gates remain open.
+- User explicitly advanced the active implementation direction to bounded GPU-driven
+  terrain groundwork. Mesh shaders remain optional and later. No phase gate is
+  closed by the unverified local source.
 
-Documentation-only commits after `2f415efb` use `[skip ci]`; treat #342 as the verified source checkpoint beneath them.
+### New bounded source slice
+
+Read `docs/GPU_TERRAIN_BOUNDARY.md` for the architecture investigation, CPU/GPU
+responsibility table, exact ABI, template design, limits and next milestones.
+
+- Default-off `-Dvulkanmod.experimentalSectionVoxels=true` captures a compact state
+  palette, packed voxel indices and four CPU-resolved flag planes during the existing
+  CPU compile loop. All voxels remain explicitly CPU_REQUIRED.
+- Immutable numeric snapshots use the existing cancellation-checked publication queue
+  and region-owned staging. They do not retain worlds, models or BlockState objects.
+- Section generations reject stale data on dirty/reset/release. Dirty can originate
+  on a worker; generation/store invalidation is serialized with publication.
+- Region staging is independent of mesh layer revisions, capped globally at 32 MiB
+  payload / 2048 entries. Budget failure invalidates old data and retains CPU rendering.
+- No GPU voxel allocations, compute dispatch, lighting/tint/halo stream, qualified
+  template compiler or GPU meshing exists yet. CPU rendering and all existing memory
+  safety floors / Vulkan synchronization paths are preserved.
+- Local Java 17 ABI/store tests passed through the installed compiler module, plus
+  shell syntax and diff checks. Full Gradle bootstrap failed on a blocked network
+  download. Added enabled/disabled startup coverage has **not run yet**.
+
+## Immediate next action
+
+1. Obtain explicit approval for the blocked remote push, then recheck live HEAD and
+   push these commits without overwriting any intervening work.
+2. Follow the resulting CI run. Inspect actual compilation/smoke failures; both
+   `capture=false` and `capture=true` voxel lifecycle markers are required.
+3. After green CI, update this checkpoint with the exact commit/run and artifact.
+   Next implementation is bounded region SSBO residency/readback for this input ABI,
+   not a complete GPU mesher. See the boundary document before touching AreaBuffer.
+
+No user-machine test is required before CI is green. A later opt-in RX traversal
+can measure capture overhead and residency, not a claimed performance gain.
 
 ## Terrain work verified in CI
 
@@ -80,18 +117,6 @@ Terrain meshing currently performs two CPU copies after geometry is built:
 Keeping the compact handoff copy has a real memory/lifetime advantage: the worker builder can immediately be reused instead of pinning an entire mutable builder backing allocation while the render thread catches up. A zero-copy handoff therefore needs a deliberate ref-counted/pool-backed ownership design, not simply retaining `RenderedBuffer` slices whose backing memory a worker may resize.
 
 Do **not** implement that larger ownership change until `hc`/`sc` and build/handoff latency show which copy is material on the RX 6900 XT workload.
-
-## Immediate next action
-
-Use the #342 artifact in the real Create Chronicles instance for the bounded terrain benchmark from `docs/TERRAIN_PERFORMANCE_BASELINE.md`:
-
-1. same 2560×1440 window/settings/resource packs;
-2. capture F3 after terrain settles at the route start;
-3. fly a recorded ~1024-block straight route through already-generated terrain;
-4. capture F3 again after the traversal and note any stale/missing/corrupt terrain, especially leaves/water and region-boundary crossings;
-5. retain the route coordinates/facing so this becomes the fixed Phase 5 comparison route.
-
-This one run is useful now: it simultaneously supplies the first real copy-cost/residency evidence and exercises the still-open Phase 6 high-churn visual gate. Do not run F3+T for this terrain checkpoint.
 
 ## Parked resource-reload issue
 
