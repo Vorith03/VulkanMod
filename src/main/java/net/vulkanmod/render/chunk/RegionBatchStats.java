@@ -28,13 +28,12 @@ final class RegionBatchStats {
         bufferGrowths++;
     }
 
-    static String describe(ChunkAreaManager.BufferStats buffers) {
+    static String describe() {
         return String.format(
-                " Region: %d sections/%d calls cmd:%d/%dB mesh:%d/%.1fKiB reuse/new/grow:%d/%d/%d resident:%d %.1f/%.1fMiB",
+                " Region: %d sections/%d calls cmd:%d/%dB mesh:%d/%.1fKiB reuse/new/grow:%d/%d/%d",
                 sections, calls,
                 commandUploads, commandBytes,
                 meshUploads, meshBytes / 1024.0D,
-                reusedSlices, allocatedSlices, bufferGrowths,
-                buffers.allocatedAreas(), buffers.usedBytes() / 1048576.0D, buffers.capacityBytes() / 1048576.0D);
+                reusedSlices, allocatedSlices, bufferGrowths);
     }
 }
