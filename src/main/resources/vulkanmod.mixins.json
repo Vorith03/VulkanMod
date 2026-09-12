@@ -25,9 +25,9 @@
     "debug.ChunkBorderRendererM",
     "debug.GlDebugInfoM",
     "debug.KeyboardHandlerM",
+    "debug.TerrainDebugOverlayMixin",
 
     "gui.ChatComponentM",
-    "gui.DebugHudM",
     "gui.GuiM",
 
     "matrix.Matrix4fM",
