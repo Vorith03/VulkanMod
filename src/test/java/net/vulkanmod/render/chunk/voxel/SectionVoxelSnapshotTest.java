@@ -1,5 +1,7 @@
 package net.vulkanmod.render.chunk.voxel;
 
+import net.vulkanmod.vulkan.memory.StorageBufferUsageTest;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -77,6 +79,8 @@ public final class SectionVoxelSnapshotTest {
         var countStore = new RegionVoxelStore(countBudget);
         require(countStore.put(0, small) && !countStore.put(1, small), "Entry limit independently enforced");
         countStore.clear();
+
+        StorageBufferUsageTest.verify();
         System.out.println("Terrain voxel snapshot tests passed");
     }
 
