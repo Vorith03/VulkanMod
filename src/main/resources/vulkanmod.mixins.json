@@ -43,6 +43,7 @@
     "render.vertex.VertexConsumerM",
     "render.vertex.LiquidBlockRendererM",
     "render.vertex.VertexFormatMixin",
+    "render.BlockModelShaperMixin",
     "render.BufferUploaderM",
     "render.RenderTargetMixin",
     "render.GameRendererMixin",
