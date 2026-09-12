@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|screenshot|crash-assistant|flywheel}" >&2
+  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel}" >&2
   exit 2
 }
 
@@ -58,13 +58,13 @@ case "$mode" in
     ;;
 
   post-chain)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
     run_client "-Dvulkanmod.ciPostChainSmoke=true" vulkan-post-chain-smoke.log
     grep -F "Vulkan vanilla post-chain execution smoke passed" vulkan-post-chain-smoke.log
     ;;
 
   depth-post-chain)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
     mkdir -p run
     # The smoke must reject invalid Vulkan that happens not to crash Lavapipe.
     # Layer settings enable synchronization validation on Ubuntu's layer version.
@@ -81,7 +81,7 @@ case "$mode" in
     ;;
 
   screenshot)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
@@ -97,7 +97,7 @@ case "$mode" in
 
   crash-assistant)
     mkdir -p run/mods
-    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
     curl -fL --retry 3 \
       'https://cdn.modrinth.com/data/ix1qq8Ux/versions/mcLRynoF/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar' \
       -o 'run/mods/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar'
@@ -111,8 +111,24 @@ case "$mode" in
     fi
     ;;
 
+  chat-heads)
+    mkdir -p run/mods
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    curl -fL --retry 3 \
+      'https://cdn.modrinth.com/data/Wb5oqrBJ/versions/45EJNtBe/chat_heads-0.13.18-forge-1.20.jar' \
+      -o 'run/mods/chat_heads-0.13.18-forge-1.20.jar'
+
+    run_client "-Dvulkanmod.smokeTest=true" vulkan-smoke-chat-heads.log
+    grep -F "Vulkan smoke test passed" vulkan-smoke-chat-heads.log
+    grep -F "chat_heads-0.13.18-forge-1.20.jar" vulkan-smoke-chat-heads.log
+    if grep -E 'chat_heads\.mixins\.json:ChatComponentMixin.*FAILED|InvalidInjectionException.*chatheads\$captureGuiMessage' vulkan-smoke-chat-heads.log; then
+      echo "Chat Heads mixin compatibility regression detected" >&2
+      exit 1
+    fi
+    ;;
+
   flywheel)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/flywheel-*.jar
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
 
     # runClient uses Mojmap-named development classes, while the published
     # Flywheel JAR is reobfuscated. Add its dev-runtime dependency only for this
