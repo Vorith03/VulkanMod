@@ -17,6 +17,7 @@ public final class RegionBatchSmokeTest {
         DrawBuffers buffers = area.drawBuffers;
         var first = new RegionDrawBatch.FrameBatch();
         var second = new RegionDrawBatch.FrameBatch();
+        var solid = new RegionDrawBatch.FrameBatch();
         AreaBuffer persistentBuffer = null;
         try {
             require(!TerrainShaderManager.useRegionBatching(RenderType.translucent()), "Water must retain its renderer");
@@ -65,6 +66,13 @@ public final class RegionBatchSmokeTest {
             require(first.commands.getByteBuffer().getInt(16) == (7 | (2 << 3) | (3 << 6)), "GPU section coordinates");
             require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Unchanged cache must not upload");
 
+            var solidParameters = section.getDrawParameters(TerrainRenderType.SOLID);
+            solidParameters.indexCount = 3;
+            solidParameters.vertexOffset = 8;
+            solidParameters.vertexBufferSegment.setReady();
+            require(solid.update(buffers, area, TerrainRenderType.SOLID) && solid.drawCount == 1,
+                    "Independent terrain layer must build its own cache");
+
             area.resetQueue();
             area.addSection(section);
             require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED),
@@ -73,10 +81,12 @@ public final class RegionBatchSmokeTest {
             second.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED);
             require(first.commands.getId() != second.commands.getId(), "Frames must own distinct buffers");
             parameters.indexCount = 12;
-            buffers.meshRevision++;
+            buffers.markMeshChanged(TerrainRenderType.CUTOUT_MIPPED);
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Mesh edit invalidation");
             require(first.commands.getByteBuffer().getInt(0) == 12, "Edited count");
             require(second.commands.getByteBuffer().getInt(0) == 6, "Other frame must remain untouched");
+            require(!solid.update(buffers, area, TerrainRenderType.SOLID),
+                    "Editing one terrain layer must not invalidate another layer's command cache");
 
             area.resetQueue();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
@@ -95,6 +105,7 @@ public final class RegionBatchSmokeTest {
             if (persistentBuffer != null) persistentBuffer.freeBuffer();
             if (first.commands != null) first.commands.freeBuffer();
             if (second.commands != null) second.commands.freeBuffer();
+            if (solid.commands != null) solid.commands.freeBuffer();
             RegionBatchStats.reset();
         }
     }
