@@ -68,10 +68,8 @@ public class UploadBuffer {
         long count = COPY_COUNT.get();
         long bytes = COPY_BYTES.get();
         long nanos = COPY_NANOS.get();
-        double totalMs = nanos / 1_000_000.0D;
-        double averageMs = count == 0L ? 0.0D : totalMs / count;
-        return String.format(Locale.ROOT, "handoffCopy:%d/%.1fMiB/%.1fms avg:%.3fms",
-                count, bytes / 1048576.0D, totalMs, averageMs);
+        return String.format(Locale.ROOT, "hc:%d/%.1fM/%.1fms",
+                count, bytes / 1048576.0D, nanos / 1_000_000.0D);
     }
 
     public void release() {
