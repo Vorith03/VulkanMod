@@ -154,6 +154,18 @@ public class Synchronization {
     }
 
     /**
+     * A caller that explicitly waited this helper's fence may recycle only that
+     * command buffer immediately. Remove it from the normal main-frame retirement
+     * list first so a later frame does not reset/enqueue the same command buffer twice.
+     */
+    public synchronized void retireSameQueueCommandBufferAfterFence(CommandPool.CommandBuffer commandBuffer) {
+        if(!this.sameQueueCommandBuffers.remove(commandBuffer)) {
+            throw new IllegalStateException("Fenced graphics helper was not registered for same-queue retirement");
+        }
+        commandBuffer.reset();
+    }
+
+    /**
      * The caller has already waited for the graphics queue to become idle, so
      * same-queue helper command buffers can be recycled immediately instead of
      * being retained until a later main-frame fence. Semaphore-backed transfer
