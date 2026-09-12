@@ -81,6 +81,7 @@ public final class SectionVoxelSnapshotTest {
         countStore.clear();
 
         testPageAllocator();
+        testGpuPageBudget();
         StorageBufferUsageTest.verify();
         System.out.println("Terrain voxel snapshot tests passed");
     }
@@ -111,6 +112,24 @@ public final class SectionVoxelSnapshotTest {
         require(allocator.allocate(129) == null, "Oversized voxel payload falls back cleanly");
         reject(() -> new RegionVoxelPageAllocator(127, 16));
         reject(() -> new RegionVoxelPageAllocator(128, 3));
+    }
+
+    private static void testGpuPageBudget() {
+        var budget = new RegionVoxelGpuStore.PageBudget(1024);
+        require(budget.tryReserve(512) && budget.usedBytes() == 512,
+                "GPU page budget reserves fixed capacity");
+        require(!budget.tryReserve(513) && budget.usedBytes() == 512 && budget.rejectedPages() == 1,
+                "GPU page budget refuses oversubscription without changing usage");
+        require(budget.tryReserve(512) && budget.usedBytes() == 1024,
+                "GPU page budget accepts exact remaining capacity");
+        require(!budget.tryReserve(1) && budget.rejectedPages() == 2,
+                "GPU page budget counts pressure fallback");
+        budget.release(512);
+        require(budget.usedBytes() == 512, "GPU page budget releases one retired page");
+        budget.release(512);
+        require(budget.usedBytes() == 0, "GPU page budget returns to zero exactly");
+        reject(() -> budget.release(1));
+        reject(() -> new RegionVoxelGpuStore.PageBudget(0));
     }
 
     private static SectionVoxelSnapshot uniform() {
