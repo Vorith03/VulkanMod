@@ -175,7 +175,7 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         require(actual.length == VoxelComputeProbe.RESULT_WORDS,
-                "GPU voxel compute result size must include fixed and compact descriptor regions");
+                "GPU voxel compute result size must include descriptors and face-corner geometry");
         for(int i = 0; i < expected.length; ++i) {
             if(actual[i] != expected[i]) {
                 String kind = i < VoxelComputeProbe.HEADER_WORDS ? "aggregate" : "fixed face descriptor";
@@ -206,13 +206,45 @@ public final class SectionVoxelGpuSmokeTest {
             }
         }
         for(int i = VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + descriptorCount;
-            i < VoxelComputeProbe.RESULT_WORDS; ++i) {
+            i < VoxelComputeProbe.FACE_VERTEX_BASE; ++i) {
             if(actual[i] != 0)
                 throw new AssertionError("GPU voxel compact descriptor tail must remain zero at result word " + i);
         }
 
+        for(int slot = 0; slot < descriptorCount; ++slot) {
+            int descriptor = actual[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + slot];
+            require((descriptor & 0x80000000) != 0,
+                    "Compacted GPU face descriptor must carry the live marker");
+            int index = descriptor & 0xfff;
+            int face = (descriptor >>> 12) & 7;
+            require(index < SectionVoxelSnapshot.BLOCK_COUNT && face < VoxelComputeProbe.FACES_PER_VOXEL,
+                    "Compacted GPU face descriptor must decode to a valid voxel and face");
+
+            int vertexBase = VoxelComputeProbe.FACE_VERTEX_BASE
+                    + slot * VoxelComputeProbe.VERTICES_PER_FACE;
+            int[] actualCorners = Arrays.copyOfRange(actual, vertexBase,
+                    vertexBase + VoxelComputeProbe.VERTICES_PER_FACE);
+            int[] expectedCorners = expectedFaceCorners(index, face);
+            Arrays.sort(actualCorners);
+            Arrays.sort(expectedCorners);
+            for(int corner = 0; corner < VoxelComputeProbe.VERTICES_PER_FACE; ++corner) {
+                if(actualCorners[corner] != expectedCorners[corner]) {
+                    throw new AssertionError("GPU voxel face-corner mismatch at compact slot " + slot
+                            + " corner " + corner
+                            + ": expected=0x" + Integer.toHexString(expectedCorners[corner])
+                            + " actual=0x" + Integer.toHexString(actualCorners[corner]));
+                }
+            }
+        }
+        for(int i = VoxelComputeProbe.FACE_VERTEX_BASE
+                + descriptorCount * VoxelComputeProbe.VERTICES_PER_FACE;
+            i < VoxelComputeProbe.RESULT_WORDS; ++i) {
+            if(actual[i] != 0)
+                throw new AssertionError("GPU voxel face-corner tail must remain zero at result word " + i);
+        }
+
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
     }
 
@@ -236,6 +268,43 @@ public final class SectionVoxelGpuSmokeTest {
 
     private static int encodeFaceDescriptor(int index, int face) {
         return 0x80000000 | (face << 12) | index;
+    }
+
+    private static int[] expectedFaceCorners(int index, int face) {
+        int x0 = index & 15;
+        int y0 = (index >>> 4) & 15;
+        int z0 = (index >>> 8) & 15;
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+        int z1 = z0 + 1;
+
+        return switch(face) {
+            case 0 -> new int[]{
+                    packCorner(x0, y0, z0), packCorner(x1, y0, z0),
+                    packCorner(x1, y0, z1), packCorner(x0, y0, z1)};
+            case 1 -> new int[]{
+                    packCorner(x0, y1, z0), packCorner(x0, y1, z1),
+                    packCorner(x1, y1, z1), packCorner(x1, y1, z0)};
+            case 2 -> new int[]{
+                    packCorner(x0, y0, z0), packCorner(x0, y1, z0),
+                    packCorner(x1, y1, z0), packCorner(x1, y0, z0)};
+            case 3 -> new int[]{
+                    packCorner(x0, y0, z1), packCorner(x1, y0, z1),
+                    packCorner(x1, y1, z1), packCorner(x0, y1, z1)};
+            case 4 -> new int[]{
+                    packCorner(x0, y0, z0), packCorner(x0, y0, z1),
+                    packCorner(x0, y1, z1), packCorner(x0, y1, z0)};
+            case 5 -> new int[]{
+                    packCorner(x1, y0, z0), packCorner(x1, y1, z0),
+                    packCorner(x1, y1, z1), packCorner(x1, y0, z1)};
+            default -> throw new AssertionError("Unexpected GPU face id " + face);
+        };
+    }
+
+    private static int packCorner(int x, int y, int z) {
+        require(x >= 0 && x <= 16 && y >= 0 && y <= 16 && z >= 0 && z <= 16,
+                "GPU face-corner coordinates must stay within the section grid");
+        return x | (y << 5) | (z << 10);
     }
 
     private static boolean isGpuFullCube(SectionVoxelSnapshot snapshot, int index) {

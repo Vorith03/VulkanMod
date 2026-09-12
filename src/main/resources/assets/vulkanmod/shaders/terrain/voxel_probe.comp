@@ -20,12 +20,13 @@ const uint VERSION = 2u;
 const uint BLOCK_COUNT = 4096u;
 const uint PLANE_WORDS = 128u;
 const uint FLAG_PLANES = 5u;
-const uint GPU_FULL_CUBE = 16u;
 const uint GPU_FULL_CUBE_PLANE = 4u;
 const uint HEADER_WORDS = 4u;
 const uint FACES_PER_VOXEL = 6u;
+const uint VERTICES_PER_FACE = 4u;
 const uint FACE_DESCRIPTOR_WORDS = BLOCK_COUNT * FACES_PER_VOXEL;
 const uint COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
+const uint FACE_VERTEX_BASE = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
 
 const uint FACE_DOWN = 1u << 0u;
 const uint FACE_UP = 1u << 1u;
@@ -86,6 +87,58 @@ uint encodeFaceDescriptor(uint index, uint face) {
     return 0x80000000u | (face << 12u) | index;
 }
 
+/* Five bits per axis are sufficient for section-grid coordinates 0..16. */
+uint packCorner(uint x, uint y, uint z) {
+    return x | (y << 5u) | (z << 10u);
+}
+
+/*
+ * Expand one dense face-work item into the four corners of its unit-cube face.
+ * The order is diagnostic/canonical only: current model qualification proves the
+ * corner set, not baked-quad winding, UV orientation, light, tint, AO, or material.
+ */
+void writeFaceCorners(uint compactSlot, uint index, uint face) {
+    uint x0 = index & 15u;
+    uint y0 = (index >> 4u) & 15u;
+    uint z0 = (index >> 8u) & 15u;
+    uint x1 = x0 + 1u;
+    uint y1 = y0 + 1u;
+    uint z1 = z0 + 1u;
+    uint base = FACE_VERTEX_BASE + compactSlot * VERTICES_PER_FACE;
+
+    if (face == 0u) {
+        outputData.words[base] = packCorner(x0, y0, z0);
+        outputData.words[base + 1u] = packCorner(x1, y0, z0);
+        outputData.words[base + 2u] = packCorner(x1, y0, z1);
+        outputData.words[base + 3u] = packCorner(x0, y0, z1);
+    } else if (face == 1u) {
+        outputData.words[base] = packCorner(x0, y1, z0);
+        outputData.words[base + 1u] = packCorner(x0, y1, z1);
+        outputData.words[base + 2u] = packCorner(x1, y1, z1);
+        outputData.words[base + 3u] = packCorner(x1, y1, z0);
+    } else if (face == 2u) {
+        outputData.words[base] = packCorner(x0, y0, z0);
+        outputData.words[base + 1u] = packCorner(x0, y1, z0);
+        outputData.words[base + 2u] = packCorner(x1, y1, z0);
+        outputData.words[base + 3u] = packCorner(x1, y0, z0);
+    } else if (face == 3u) {
+        outputData.words[base] = packCorner(x0, y0, z1);
+        outputData.words[base + 1u] = packCorner(x1, y0, z1);
+        outputData.words[base + 2u] = packCorner(x1, y1, z1);
+        outputData.words[base + 3u] = packCorner(x0, y1, z1);
+    } else if (face == 4u) {
+        outputData.words[base] = packCorner(x0, y0, z0);
+        outputData.words[base + 1u] = packCorner(x0, y0, z1);
+        outputData.words[base + 2u] = packCorner(x0, y1, z1);
+        outputData.words[base + 3u] = packCorner(x0, y1, z0);
+    } else {
+        outputData.words[base] = packCorner(x1, y0, z0);
+        outputData.words[base + 1u] = packCorner(x1, y1, z0);
+        outputData.words[base + 2u] = packCorner(x1, y1, z1);
+        outputData.words[base + 3u] = packCorner(x1, y0, z1);
+    }
+}
+
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= BLOCK_COUNT)
@@ -125,9 +178,11 @@ void main() {
         if ((faceMask & (1u << face)) == 0u)
             continue;
 
+        uint compactSlot = compactBase + compactCursor;
         uint descriptor = encodeFaceDescriptor(index, face);
         outputData.words[descriptorBase + face] = descriptor;
-        outputData.words[COMPACT_DESCRIPTOR_BASE + compactBase + compactCursor] = descriptor;
+        outputData.words[COMPACT_DESCRIPTOR_BASE + compactSlot] = descriptor;
+        writeFaceCorners(compactSlot, index, face);
         ++compactCursor;
     }
 }
