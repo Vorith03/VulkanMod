@@ -200,7 +200,7 @@ public class ChunkAreaManager {
             capacityBytes += (long)buffers.vertexBuffer.getCapacityBytes() + buffers.indexBuffer.getCapacityBytes();
         }
 
-        return String.format(Locale.ROOT, "regionMem:%d/%d %.1f/%.1fMiB",
+        return String.format(Locale.ROOT, "rm:%d/%d %.1f/%.1fM",
                 allocatedRegions, this.size, usedBytes / 1048576.0D, capacityBytes / 1048576.0D);
     }
 
