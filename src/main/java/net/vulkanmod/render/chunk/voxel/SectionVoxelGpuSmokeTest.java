@@ -83,6 +83,8 @@ public final class SectionVoxelGpuSmokeTest {
         for(int i = 0; i < 4096; ++i) {
             int stateId = 1 + Math.floorMod(i * 1103515245 + salt, 6000);
             int flags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
+            if((i & 1) == 0)
+                flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
             builder.add(stateId, flags);
         }
         return builder.finish();
@@ -153,15 +155,17 @@ public final class SectionVoxelGpuSmokeTest {
             expected[0] += stateId;
             expected[1] += flags;
             expected[2] += (stateId * 33) ^ flags ^ i;
-            if((flags & SectionVoxelSnapshot.CPU_REQUIRED) != 0)
+            if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
                 expected[3]++;
         }
 
         for(int i = 0; i < expected.length; ++i)
             require(actual[i] == expected[i], "GPU voxel compute decode mismatch at result word " + i);
 
+        require(expected[3] == SectionVoxelSnapshot.BLOCK_COUNT / 2,
+                "GPU_FULL_CUBE fixture must exercise the fifth flag plane");
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, storage descriptors, push slice offset, compute barriers, exact aggregate readback");
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, storage descriptors, push slice offset, compute barriers, exact aggregate readback");
     }
 
     private static void require(boolean condition, String message) {

@@ -11,7 +11,9 @@ public final class SectionVoxelSnapshotTest {
             var builder = new SectionVoxelSnapshot.Builder(-16, -64, 29999984);
             for (int z = 0; z < 16; z++) for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) {
                 int i = SectionVoxelSnapshot.blockIndex(x, y, z);
-                builder.add(100000 + i % paletteSize, 8 | (i & 7));
+                int expectedFlags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
+                if ((i & 1) == 0) expectedFlags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+                builder.add(100000 + i % paletteSize, expectedFlags);
             }
             var snapshot = builder.finish();
             require(snapshot.paletteSize() == paletteSize, "Palette cardinality, including >256 states");
@@ -24,7 +26,11 @@ public final class SectionVoxelSnapshotTest {
             require(target.order() == ByteOrder.BIG_ENDIAN && target.getInt(0) == 0x12345678,
                     "Caller state/prefix preserved");
             var gpu = target.duplicate().position(4).slice().order(ByteOrder.LITTLE_ENDIAN);
-            require(gpu.getInt(0) == SectionVoxelSnapshot.MAGIC && gpu.getInt(4) == 1, "ABI/version");
+            require(gpu.getInt(0) == SectionVoxelSnapshot.MAGIC
+                            && gpu.getInt(4) == SectionVoxelSnapshot.VERSION,
+                    "ABI/version");
+            require(gpu.getInt(44) == SectionVoxelSnapshot.FLAG_PLANES,
+                    "Header advertises all flag planes");
             require(gpu.getInt(16) == -16 && gpu.getInt(20) == -64 && gpu.getInt(24) == 29999984,
                     "Signed world origins");
             for (int i = 0; i < 4096; i++) {
@@ -34,15 +40,18 @@ public final class SectionVoxelSnapshotTest {
                 require(gpu.getInt(gpu.getInt(32) * 4 + pi * 4) == 100000 + i % paletteSize,
                         "Shader palette decode");
                 int flags = 0;
-                for (int plane = 0; plane < 4; plane++) {
-                    int word = gpu.getInt((gpu.getInt(40) + plane * 128 + (i >>> 5)) * 4);
+                for (int plane = 0; plane < SectionVoxelSnapshot.FLAG_PLANES; plane++) {
+                    int word = gpu.getInt((gpu.getInt(40) + plane * SectionVoxelSnapshot.PLANE_WORDS
+                            + (i >>> 5)) * 4);
                     flags |= ((word >>> (i & 31)) & 1) << plane;
                 }
-                require(flags == (8 | (i & 7)), "Shader flag decode across word boundaries");
+                int expectedFlags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
+                if ((i & 1) == 0) expectedFlags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+                require(flags == expectedFlags, "Shader flag decode across word boundaries/planes");
                 require(snapshot.stateId(i) == 100000 + i % paletteSize && snapshot.flags(i) == flags,
                         "CPU reference decode");
             }
-            reject(() -> builder.add(0, 8));
+            reject(() -> builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED));
             reject(builder::finish);
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() - 1)));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() + 1).position(1)));
@@ -50,8 +59,9 @@ public final class SectionVoxelSnapshotTest {
         }
         reject(() -> new SectionVoxelSnapshot.Builder(1, 0, 0));
         reject(() -> new SectionVoxelSnapshot.Builder(0, 0, 0).finish());
-        reject(() -> new SectionVoxelSnapshot.Builder(0, 0, 0).add(-1, 8));
+        reject(() -> new SectionVoxelSnapshot.Builder(0, 0, 0).add(-1, SectionVoxelSnapshot.CPU_REQUIRED));
         reject(() -> new SectionVoxelSnapshot.Builder(0, 0, 0).add(1, 0));
+        reject(() -> new SectionVoxelSnapshot.Builder(0, 0, 0).add(1, 32 | SectionVoxelSnapshot.CPU_REQUIRED));
         reject(() -> SectionVoxelSnapshot.blockIndex(16, 0, 0));
 
         var small = uniform();
@@ -68,7 +78,7 @@ public final class SectionVoxelSnapshotTest {
         second.remove(511);
         require(first.put(0, small), "Remove returns capacity");
         var largeBuilder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        for (int i = 0; i < 4096; i++) largeBuilder.add(i, 8);
+        for (int i = 0; i < 4096; i++) largeBuilder.add(i, SectionVoxelSnapshot.CPU_REQUIRED);
         require(!first.put(0, largeBuilder.finish()) && first.get(0) == null,
                 "Rejected replacement must invalidate old content");
         require(second.put(0, small), "Rejected replacement leaks no reservation");
@@ -134,7 +144,7 @@ public final class SectionVoxelSnapshotTest {
 
     private static SectionVoxelSnapshot uniform() {
         var builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        for (int i = 0; i < 4096; i++) builder.add(0, 8);
+        for (int i = 0; i < 4096; i++) builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED);
         return builder.finish();
     }
     private static void reject(Runnable action) {

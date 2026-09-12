@@ -12,16 +12,18 @@ import java.util.Map;
  */
 public final class SectionVoxelSnapshot {
     public static final int MAGIC = 0x56584c31;
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     public static final int BLOCK_COUNT = 4096;
     public static final int HEADER_WORDS = 16;
     public static final int INDEX_WORDS = BLOCK_COUNT / 2;
     public static final int PLANE_WORDS = BLOCK_COUNT / 32;
-    public static final int FLAG_PLANES = 4;
+    public static final int FLAG_PLANES = 5;
     public static final int SOLID_RENDER = 1;
     public static final int HAS_FLUID = 2;
     public static final int HAS_BLOCK_ENTITY = 4;
     public static final int CPU_REQUIRED = 8;
+    /** Geometry-only qualification; CPU_REQUIRED remains authoritative until GPU emission is proven. */
+    public static final int GPU_FULL_CUBE = 16;
     public static final int MAX_BYTES = (HEADER_WORDS + BLOCK_COUNT + INDEX_WORDS
             + FLAG_PLANES * PLANE_WORDS) * Integer.BYTES;
 
@@ -96,11 +98,12 @@ public final class SectionVoxelSnapshot {
         public void add(int stateId, int blockFlags) {
             if (finished || count == BLOCK_COUNT)
                 throw new IllegalStateException("Snapshot builder is full or sealed");
-            if (stateId < 0 || (blockFlags & ~15) != 0)
+            if (stateId < 0 || (blockFlags & ~31) != 0)
                 throw new IllegalArgumentException("Invalid state ID or flags");
-            // Until template qualification exists, callers must retain CPU fallback.
+            // GPU_FULL_CUBE is informational in v2. CPU meshing remains authoritative
+            // until GPU face/light/vertex emission has its own validated fallback gate.
             if ((blockFlags & CPU_REQUIRED) == 0)
-                throw new IllegalArgumentException("Version 1 has no GPU-qualified templates");
+                throw new IllegalArgumentException("Version 2 still requires CPU fallback");
             int paletteIndex = palette.computeIfAbsent(stateId, ignored -> palette.size());
             indices[count >>> 1] |= paletteIndex << ((count & 1) * 16);
             for (int plane = 0; plane < FLAG_PLANES; plane++) {
@@ -127,7 +130,7 @@ public final class SectionVoxelSnapshot {
             words[9] = indexOffset;
             words[10] = flagsOffset;
             words[11] = FLAG_PLANES;
-            // 12..15 reserved, zero: no halo, light/tint streams or templates in v1.
+            // 12..15 reserved, zero: no halo, light/tint streams or template table yet.
             palette.forEach((state, index) -> words[HEADER_WORDS + index] = state);
             System.arraycopy(indices, 0, words, indexOffset, indices.length);
             System.arraycopy(flags, 0, words, flagsOffset, flags.length);

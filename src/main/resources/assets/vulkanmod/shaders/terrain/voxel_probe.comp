@@ -16,11 +16,11 @@ layout(push_constant) uniform ProbePushConstants {
 } pc;
 
 const uint MAGIC = 0x56584c31u;
-const uint VERSION = 1u;
+const uint VERSION = 2u;
 const uint BLOCK_COUNT = 4096u;
 const uint PLANE_WORDS = 128u;
-const uint FLAG_PLANES = 4u;
-const uint CPU_REQUIRED = 8u;
+const uint FLAG_PLANES = 5u;
+const uint GPU_FULL_CUBE = 16u;
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
@@ -56,6 +56,6 @@ void main() {
     atomicAdd(outputData.words[0], stateId);
     atomicAdd(outputData.words[1], flags);
     atomicAdd(outputData.words[2], (stateId * 33u) ^ flags ^ index);
-    if ((flags & CPU_REQUIRED) != 0u)
+    if ((flags & GPU_FULL_CUBE) != 0u)
         atomicAdd(outputData.words[3], 1u);
 }
