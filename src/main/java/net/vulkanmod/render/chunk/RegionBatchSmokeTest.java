@@ -14,7 +14,9 @@ public final class RegionBatchSmokeTest {
 
     public static void verify() {
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
+        ChunkArea recycleArea = new ChunkArea(1, new Vector3i(-128, -128, 128));
         DrawBuffers buffers = area.drawBuffers;
+        DrawBuffers recycleBuffers = recycleArea.drawBuffers;
         var first = new RegionDrawBatch.FrameBatch();
         var second = new RegionDrawBatch.FrameBatch();
         var solid = new RegionDrawBatch.FrameBatch();
@@ -27,14 +29,14 @@ public final class RegionBatchSmokeTest {
 
             // A drained coarse ring slot should keep its physical Vulkan buffers
             // when it wraps to a new world region. This is the common traversal path.
-            buffers.allocateBuffers();
-            long regionVertexBuffer = buffers.vertexBuffer.getId();
-            long regionIndexBuffer = buffers.indexBuffer.getId();
+            recycleBuffers.allocateBuffers();
+            long regionVertexBuffer = recycleBuffers.vertexBuffer.getId();
+            long regionIndexBuffer = recycleBuffers.indexBuffer.getId();
             long regionReuseBefore = RegionBatchStats.regionBufferReuses;
-            area.repositionForReuse(256, -128, 128);
-            require(buffers.isAllocated(), "Drained region buffers must remain allocated across ring reuse");
-            require(buffers.vertexBuffer.getId() == regionVertexBuffer
-                            && buffers.indexBuffer.getId() == regionIndexBuffer,
+            recycleArea.repositionForReuse(256, -128, 128);
+            require(recycleBuffers.isAllocated(), "Drained region buffers must remain allocated across ring reuse");
+            require(recycleBuffers.vertexBuffer.getId() == regionVertexBuffer
+                            && recycleBuffers.indexBuffer.getId() == regionIndexBuffer,
                     "Drained region reuse must preserve Vulkan buffer handles");
             require(RegionBatchStats.regionBufferReuses == regionReuseBefore + 1,
                     "Drained region reuse must be observable in terrain stats");
@@ -126,13 +128,13 @@ public final class RegionBatchSmokeTest {
             long fallbackBefore = RegionBatchStats.regionBufferFallbacks;
             try(MemoryStack stack = MemoryStack.stackPush()) {
                 AreaBuffer.Segment liveSegment = new AreaBuffer.Segment();
-                buffers.vertexBuffer.upload(
+                recycleBuffers.vertexBuffer.upload(
                         stack.malloc(TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize()), liveSegment);
                 AreaUploadManager.INSTANCE.waitAllUploads();
             }
-            require(buffers.hasLiveGeometry(), "Fallback probe must create live region geometry");
-            area.repositionForReuse(384, -128, 128);
-            require(!buffers.isAllocated(), "Live region geometry must retain release/reallocate fallback");
+            require(recycleBuffers.hasLiveGeometry(), "Fallback probe must create live region geometry");
+            recycleArea.repositionForReuse(384, -128, 128);
+            require(!recycleBuffers.isAllocated(), "Live region geometry must retain release/reallocate fallback");
             require(RegionBatchStats.regionBufferFallbacks == fallbackBefore + 1,
                     "Live-region fallback must be observable in terrain stats");
 
@@ -140,6 +142,7 @@ public final class RegionBatchSmokeTest {
         } finally {
             if (persistentBuffer != null) persistentBuffer.freeBuffer();
             area.releaseBuffers();
+            recycleArea.releaseBuffers();
             if (first.commands != null) first.commands.freeBuffer();
             if (second.commands != null) second.commands.freeBuffer();
             if (solid.commands != null) solid.commands.freeBuffer();
