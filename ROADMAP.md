@@ -252,7 +252,7 @@ shaders. Define input data now without enabling unqualified GPU rendering.
 
 Mandatory gates:
 
-- [ ] define and validate compact CPU/GPU section input with conservative exception handling;
+- [x] define and validate compact CPU/GPU section input with conservative exception handling;
 - [ ] add bounded region-scoped voxel/state GPU residency and independent update/invalidation;
 - [ ] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
 - [ ] implement correct GPU visibility/section selection;
@@ -264,12 +264,11 @@ Mandatory gates:
 - [ ] preserve translucent/tripwire rendering until separately supported and validated;
 - [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 0/11 verified gates.** Local input infrastructure exists but full CI is pending.
+**Progress: 1/11 verified gates.** Input infrastructure passed CI #353; actual GPU residency/processing remains unimplemented.
 
 Current first slice: `docs/GPU_TERRAIN_BOUNDARY.md`. Runtime-state palette and flags
 are staged with the current CPU result; there is no GPU mesher, template qualifier,
-light/tint/halo stream or GPU voxel allocation yet. Local ABI/store tests pass; the
-remote push was rejected by automatic approval review and needs explicit approval.
+light/tint/halo stream or GPU voxel allocation yet. ABI/store tests and both enabled/disabled lifecycle smokes passed in CI #353.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -336,15 +335,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified remote source: `d41ff7cca9007666d765dc6bc7581c961d084b7c`, **CI #351 green**.
-- Local section-input implementation: `41ed707` plus the following checkpoint commit;
-  **push blocked by automatic approval review; new CI/startup coverage pending**.
+- Verified runtime source: `387afc076e187ce539b9f494d374831e599896bc`, **CI #353 green**
+  (run 34710104092). Build/distribution, voxel ABI/store tests, both capture-mode
+  startups and all existing Vulkan/compatibility smokes passed; logs inspected.
+- Published input commits: `2e38d13`, `22e4956`; startup-fixture correction `387afc0`.
+  CI #352's failure was an early registry-ID assumption in the test, corrected in #353.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10.
-- Active bounded gate: P7.1, validate compact CPU/GPU section input. Java-only ABI/store
-  tests pass locally; no new runtime build has been verified or produced here.
-- Next: obtain push approval, recheck live HEAD, run/inspect CI, record evidence.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 1/11.
+- P7.1 input ABI/ownership infrastructure is verified; next bounded gate is P7.2:
+  capped persistent region SSBO residency and GPU readback, preserving CPU fallback.
 - No new RX 6900 XT A/B measurement or performance claim.
 
-This reconciles stale #308/#342 roadmap/status snapshots with inspected live #351.
-Future agents must recheck live source/CI before proceeding.
+See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for
+scope limits. Documentation-only follow-ups use `[skip ci]`. Recheck live source/CI
+before the next implementation step.

@@ -172,7 +172,7 @@ before visibility or closing unmeasured Phase 6 performance gates.
 `testSectionVoxelSnapshot` (part of Gradle check/build) independently decodes the GPU
 ABI, including 4096 unique/high state IDs, word boundaries, negative coordinates,
 caller buffer offsets/order, invalid records, memory/entry limits and failed replacement.
-Startup smoke is added to verify both gate settings, real registry IDs and Minecraft traversal
+Startup smoke is added to verify both gate settings, synthetic state IDs and real Minecraft traversal
 order, the actual publication/cancellation queue, generation rejection, region wrap,
 release and mesh-revision independence. It does not execute a world build or GPU mesher.
 The full existing Vulkan/compatibility CI suite remains required.
@@ -191,8 +191,25 @@ launcher itself is absent. Shell syntax and `git diff --check` also passed.
 Full local Gradle could not start: its uncached 8.1.1 distribution download failed
 with `java.net.SocketException: Network is unreachable`.
 
-Source commit `41ed707` and follow-up checkpoint work are local only. Automatic
-approval review rejected the remote push, citing lack of explicit authorization
-to publish the payload to GitHub. Remote HEAD was rechecked as `d41ff7c`. New CI and
-startup results are therefore **pending**, not green. Do not distribute this as a
-verified runtime JAR until push approval and the full build/smoke suite complete.
+After explicit user approval, source commits were published through the connected
+GitHub integration as `2e38d13` and `22e4956`. Their tree hashes exactly match local
+`41ed707` and `1cc1ace`; only commit metadata/IDs changed. The command-line Git client
+had no write credentials. CI #353 (run 34710104092) passed in full.
+
+CI #352 built and verified the distributable and passed the snapshot CPU tests,
+but the new early-startup fixture failed `Live Minecraft registry state IDs`:
+Forge had not finalized state IDs at that hook. Follow-up `387afc0` uses explicit
+numeric IDs for this fixture and exercises worker invalidation through the same
+package-local helper used by setDirty, without needing a constructed WorldRenderer.
+It retains the actual Minecraft BlockPos traversal and TaskDispatcher publication
+queue. This is not coverage of real-world ChunkTask.compile or registry readiness;
+those remain gameplay checks. CI #353 passed the corrected fixture in both capture modes.
+
+Verified runtime source: `387afc076e187ce539b9f494d374831e599896bc`, job 103597196130.
+Decoded logs contain `Terrain voxel snapshot tests passed`,
+`Terrain voxel lifecycle smoke passed (capture=false)` and the corresponding
+`capture=true` marker. Build/distribution, both startups, color/depth post-chain,
+screenshot/readback, Crash Assistant, Chat Heads and Flywheel all passed.
+[Build #353 artifact](https://github.com/Vorith03/VulkanMod/actions/runs/34710104092/artifacts/10303446018)
+contains `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.353-g387afc07-all.jar`.
+This closes the bounded input-infrastructure gate, not GPU meshing or AMD performance.

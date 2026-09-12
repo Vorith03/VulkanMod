@@ -16,17 +16,22 @@ Use these together:
 ## Current checkpoint — 2026-09-12
 
 - Branch: `forge-1.20.1`.
-- Verified remote source: `d41ff7cca9007666d765dc6bc7581c961d084b7c`, CI **#351 fully green**
-  (run 34687677511, job 103537424600); actual jobs and logs inspected.
-- Local GPU-terrain input source: `41ed707` plus the following checkpoint commit.
-  **Not pushed / not CI-verified**. Automatic approval review rejected the push,
-  requiring explicit authorization to publish the changes to GitHub.
+- Verified runtime source: `387afc076e187ce539b9f494d374831e599896bc`, CI **#353 fully green**
+  (run 34710104092, job 103597196130); actual jobs and decoded logs inspected.
+- Published input commits: `2e38d13` and `22e4956` (identical trees to local `41ed707`
+  and `1cc1ace`). Follow-up `387afc0` fixes an early-startup test-fixture assumption.
+- CI #352 passed build/distribution and ABI tests, but failed the new fixture because
+  Forge state IDs were not finalized at its hook. #353 uses explicit fixture IDs;
+  actual Minecraft traversal and publication/cancellation/lifecycle checks still run.
+- Artifact: [VulkanMod-Forge-build-353](https://github.com/Vorith03/VulkanMod/actions/runs/34710104092/artifacts/10303446018),
+  `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.353-g387afc07-all.jar`.
+- Documentation-only checkpoint commits after this source use `[skip ci]`.
 - Highest demonstrated legacy milestone remains **6 — playable world**.
 - Phase 3: 11/11. Phase 4: parked 3/8. Phase 5: 3/7. Phase 6: 7/10;
   high-churn RX visual and comparable performance gates remain open.
 - User explicitly advanced the active implementation direction to bounded GPU-driven
-  terrain groundwork. Mesh shaders remain optional and later. No phase gate is
-  closed by the unverified local source.
+  terrain groundwork. Mesh shaders remain optional and later.
+  P7.1 (input format and conservative fallback infrastructure) is now verified, 1/11.
 
 ### New bounded source slice
 
@@ -47,20 +52,21 @@ responsibility table, exact ABI, template design, limits and next milestones.
   safety floors / Vulkan synchronization paths are preserved.
 - Local Java 17 ABI/store tests passed through the installed compiler module, plus
   shell syntax and diff checks. Full Gradle bootstrap failed on a blocked network
-  download. Added enabled/disabled startup coverage has **not run yet**.
+  download. CI #353 passed both capture modes and the full existing suite.
 
 ## Immediate next action
 
-1. Obtain explicit approval for the blocked remote push, then recheck live HEAD and
-   push these commits without overwriting any intervening work.
-2. Follow the resulting CI run. Inspect actual compilation/smoke failures; both
-   `capture=false` and `capture=true` voxel lifecycle markers are required.
-3. After green CI, update this checkpoint with the exact commit/run and artifact.
-   Next implementation is bounded region SSBO residency/readback for this input ABI,
-   not a complete GPU mesher. See the boundary document before touching AreaBuffer.
+1. Next source slice: bounded region SSBO residency/readback for the existing input
+   ABI. Read `docs/GPU_TERRAIN_BOUNDARY.md` before touching AreaBuffer; its usage
+   switch currently creates an IndexBuffer for non-vertex usage.
+2. Add explicit validity/generation and barrier/retirement coverage before any compute
+   consumer can use the resident data. Keep absent/unsupported input CPU-only.
+3. Optional RX 6900 XT test: same route/settings with capture off/on, record F3 voxel
+   residency/rejections and build/handoff/heap overhead, then world exit/reentry and
+   render-distance changes. This measures overhead/lifecycle, not a speedup.
 
-No user-machine test is required before CI is green. A later opt-in RX traversal
-can measure capture overhead and residency, not a claimed performance gain.
+No full GPU mesher, qualified template compiler, GPU voxel allocation or RX A/B
+performance result is claimed. Do not reopen the parked F3+T investigation.
 
 ## Terrain work verified in CI
 
