@@ -29,6 +29,9 @@ public class AreaUploadManager {
     long totalReadyNanos;
     long lastReadyNanos;
     long lastReadyBytes;
+    long stagingCopyCount;
+    long stagingCopyBytes;
+    long stagingCopyNanos;
 
     int currentFrame;
 
@@ -44,6 +47,9 @@ public class AreaUploadManager {
         this.totalReadyNanos = 0L;
         this.lastReadyNanos = 0L;
         this.lastReadyBytes = 0L;
+        this.stagingCopyCount = 0L;
+        this.stagingCopyBytes = 0L;
+        this.stagingCopyNanos = 0L;
 
         for (int i = 0; i < frames; i++) {
             this.recordedUploads[i] = new ObjectArrayList<>();
@@ -87,7 +93,11 @@ public class AreaUploadManager {
             this.commandBuffers[currentFrame] = Device.getGraphicsQueue().beginCommands();
 
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(this.currentFrame);
+        long copyStart = System.nanoTime();
         stagingBuffer.copyBuffer((int) bufferSize, src);
+        this.stagingCopyNanos += Math.max(0L, System.nanoTime() - copyStart);
+        this.stagingCopyBytes += bufferSize;
+        this.stagingCopyCount++;
 
         TransferQueue.uploadBufferCmd(this.commandBuffers[currentFrame], stagingBuffer.getId(), stagingBuffer.getOffset(), bufferId, dstOffset, bufferSize);
 
@@ -202,6 +212,11 @@ public class AreaUploadManager {
                 ? 0.0D
                 : (this.totalReadyNanos / 1_000_000.0D) / this.completedUploadBatches;
         double lastKiB = this.lastReadyBytes / 1024.0D;
+        double stagingCopyMiB = this.stagingCopyBytes / 1048576.0D;
+        double stagingCopyMs = this.stagingCopyNanos / 1_000_000.0D;
+        double averageStagingCopyMs = this.stagingCopyCount == 0L
+                ? 0.0D
+                : stagingCopyMs / this.stagingCopyCount;
 
         int stagingHighWater = 0;
         int stagingCapacity = 0;
@@ -214,8 +229,9 @@ public class AreaUploadManager {
         }
 
         return String.format(Locale.ROOT,
-                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stg:%.1f/%.1fMiB r:%d %s",
+                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stageCpu:%d/%.1fMiB/%.1fms avg:%.3fms stg:%.1f/%.1fMiB r:%d %s",
                 lastReadyMs, lastKiB, averageReadyMs,
+                this.stagingCopyCount, stagingCopyMiB, stagingCopyMs, averageStagingCopyMs,
                 stagingHighWater / 1048576.0D, stagingCapacity / 1048576.0D, stagingResizes,
                 Synchronization.INSTANCE.getStats());
     }
