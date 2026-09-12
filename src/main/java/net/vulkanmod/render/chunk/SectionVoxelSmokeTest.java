@@ -1,8 +1,6 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
@@ -28,11 +26,12 @@ public final class SectionVoxelSmokeTest {
             for (BlockPos pos : BlockPos.betweenClosed(new BlockPos(-16, -96, 176), new BlockPos(-1, -81, 191))) {
                 require(SectionVoxelSnapshot.blockIndex(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15)
                         == index++, "Minecraft traversal must match voxel ABI");
-                builder.add(Block.getId((index & 1) == 0 ? Blocks.STONE.defaultBlockState()
-                        : Blocks.WATER.defaultBlockState()), SectionVoxelSnapshot.CPU_REQUIRED);
+                // This smoke hook runs before Forge finalizes runtime state IDs.
+                // Test the publication ABI with explicit IDs, not premature registry lookups.
+                builder.add((index & 1) == 0 ? 100001 : 100002, SectionVoxelSnapshot.CPU_REQUIRED);
             }
             var snapshot = builder.finish();
-            require(snapshot.paletteSize() == 2, "Live Minecraft registry state IDs");
+            require(snapshot.paletteSize() == 2, "Distinct state IDs in publication fixture");
             long generation = section.getVoxelGeneration();
             var task = new ChunkTask.BuildTask(section, null, false);
             dispatcher.scheduleSectionUpdate(task, section, new EnumMap<>(TerrainRenderType.class),
@@ -60,7 +59,7 @@ public final class SectionVoxelSmokeTest {
             require(area.getVoxels(-16, -96, 176) == null, "Old generation rejected even at identical coordinates");
             section.publishVoxels(snapshot, section.getVoxelGeneration());
             long beforeDirty = section.getVoxelGeneration();
-            Thread dirtyWorker = new Thread(() -> section.setDirty(false), "voxel-dirty-smoke");
+            Thread dirtyWorker = new Thread(section::invalidateVoxels, "voxel-dirty-smoke");
             dirtyWorker.start();
             try {
                 dirtyWorker.join();

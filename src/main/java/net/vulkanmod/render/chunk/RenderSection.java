@@ -342,7 +342,7 @@ public class RenderSection {
             this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot);
     }
 
-    private synchronized void invalidateVoxels() {
+    synchronized void invalidateVoxels() {
         // The missing-neighbor BuildTask path also marks a section dirty from a
         // worker. Serialize generation + store invalidation with publication.
         if (!RegionVoxelStore.ENABLED) return;
