@@ -60,6 +60,7 @@ public final class SectionVoxelGpuSmokeTest {
                             || firstResidency.byteOffset() != secondResidency.byteOffset(),
                     "Replacement must allocate-then-swap instead of overwriting a live slice");
             verifyReadback(store, secondResidency, replacement);
+            verifyCompute(store, secondResidency, replacement);
 
             SectionVoxelSnapshot abandoned = fixture(0x10203040);
             require(store.upload(0, abandoned, 43L), "Pending stale-generation upload must queue");
@@ -132,6 +133,35 @@ public final class SectionVoxelGpuSmokeTest {
             if(readbackBuffer != 0L)
                 MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
         }
+    }
+
+    private static void verifyCompute(RegionVoxelGpuStore store,
+                                      RegionVoxelGpuStore.Residency residency,
+                                      SectionVoxelSnapshot snapshot) {
+        StorageBuffer page = store.getPageBuffer(residency.pageIndex());
+        require(page != null, "Compute probe requires a live resident page");
+
+        int[] actual;
+        try(VoxelComputeProbe probe = new VoxelComputeProbe()) {
+            actual = probe.dispatch(page, residency.byteOffset(), residency.byteLength());
+        }
+
+        int[] expected = new int[4];
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
+            int stateId = snapshot.stateId(i);
+            int flags = snapshot.flags(i);
+            expected[0] += stateId;
+            expected[1] += flags;
+            expected[2] += (stateId * 33) ^ flags ^ i;
+            if((flags & SectionVoxelSnapshot.CPU_REQUIRED) != 0)
+                expected[3]++;
+        }
+
+        for(int i = 0; i < expected.length; ++i)
+            require(actual[i] == expected[i], "GPU voxel compute decode mismatch at result word " + i);
+
+        Initializer.LOGGER.info(
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, storage descriptors, push slice offset, compute barriers, exact aggregate readback");
     }
 
     private static void require(boolean condition, String message) {

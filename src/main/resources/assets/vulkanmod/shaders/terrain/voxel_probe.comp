@@ -1,0 +1,61 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer VoxelPage {
+    uint words[];
+} inputPage;
+
+layout(set = 0, binding = 1, std430) buffer ProbeOutput {
+    uint words[];
+} outputData;
+
+layout(push_constant) uniform ProbePushConstants {
+    uint baseByteOffset;
+    uint byteLength;
+} pc;
+
+const uint MAGIC = 0x56584c31u;
+const uint VERSION = 1u;
+const uint BLOCK_COUNT = 4096u;
+const uint PLANE_WORDS = 128u;
+const uint FLAG_PLANES = 4u;
+const uint CPU_REQUIRED = 8u;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= BLOCK_COUNT)
+        return;
+
+    uint base = pc.baseByteOffset >> 2u;
+    bool validHeader = inputPage.words[base] == MAGIC
+            && inputPage.words[base + 1u] == VERSION
+            && inputPage.words[base + 2u] == pc.byteLength
+            && inputPage.words[base + 3u] == BLOCK_COUNT
+            && inputPage.words[base + 11u] == FLAG_PLANES;
+    if (!validHeader) {
+        if (index == 0u)
+            atomicOr(outputData.words[3], 0x80000000u);
+        return;
+    }
+
+    uint paletteOffset = inputPage.words[base + 8u];
+    uint indexOffset = inputPage.words[base + 9u];
+    uint flagsOffset = inputPage.words[base + 10u];
+
+    uint packed = inputPage.words[base + indexOffset + (index >> 1u)];
+    uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 0xffffu;
+    uint stateId = inputPage.words[base + paletteOffset + paletteIndex];
+
+    uint flags = 0u;
+    for (uint plane = 0u; plane < FLAG_PLANES; ++plane) {
+        uint bits = inputPage.words[base + flagsOffset + plane * PLANE_WORDS + (index >> 5u)];
+        flags |= ((bits >> (index & 31u)) & 1u) << plane;
+    }
+
+    atomicAdd(outputData.words[0], stateId);
+    atomicAdd(outputData.words[1], flags);
+    atomicAdd(outputData.words[2], (stateId * 33u) ^ flags ^ index);
+    if ((flags & CPU_REQUIRED) != 0u)
+        atomicAdd(outputData.words[3], 1u);
+}
