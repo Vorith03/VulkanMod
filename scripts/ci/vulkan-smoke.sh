@@ -114,13 +114,27 @@ case "$mode" in
   chat-heads)
     mkdir -p run/mods
     rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
-    curl -fL --retry 3 \
-      'https://cdn.modrinth.com/data/Wb5oqrBJ/versions/45EJNtBe/chat_heads-0.13.18-forge-1.20.jar' \
-      -o 'run/mods/chat_heads-0.13.18-forge-1.20.jar'
+
+    # runClient uses Mojmap-named development classes while Chat Heads is a
+    # production/SRG mod. Feed the exact 0.13.18 Forge artifact through
+    # ForgeGradle's deobfuscation layer; copying the raw JAR into run/mods makes
+    # its @Shadow SRG names fail before our compatibility target is exercised.
+    if ! grep -Fq '// VULKANMOD_CI_CHAT_HEADS_RUNTIME' build.gradle; then
+      cat >> build.gradle <<'EOF'
+
+// VULKANMOD_CI_CHAT_HEADS_RUNTIME
+repositories {
+    maven { url = 'https://api.modrinth.com/maven' }
+}
+dependencies {
+    runtimeOnly fg.deobf('maven.modrinth:Wb5oqrBJ:45EJNtBe')
+}
+EOF
+    fi
 
     run_client "-Dvulkanmod.smokeTest=true" vulkan-smoke-chat-heads.log
     grep -F "Vulkan smoke test passed" vulkan-smoke-chat-heads.log
-    grep -F "chat_heads-0.13.18-forge-1.20.jar" vulkan-smoke-chat-heads.log
+    grep -F "chat_heads" vulkan-smoke-chat-heads.log
     if grep -E 'chat_heads\.mixins\.json:ChatComponentMixin.*FAILED|InvalidInjectionException.*chatheads\$captureGuiMessage' vulkan-smoke-chat-heads.log; then
       echo "Chat Heads mixin compatibility regression detected" >&2
       exit 1
