@@ -47,9 +47,7 @@ public class AreaUploadManager {
         this.totalReadyNanos = 0L;
         this.lastReadyNanos = 0L;
         this.lastReadyBytes = 0L;
-        this.stagingCopyCount = 0L;
-        this.stagingCopyBytes = 0L;
-        this.stagingCopyNanos = 0L;
+        this.resetCopyStats();
 
         for (int i = 0; i < frames; i++) {
             this.recordedUploads[i] = new ObjectArrayList<>();
@@ -204,6 +202,12 @@ public class AreaUploadManager {
         for(int i = 0; i < this.commandBuffers.length; ++i) {
             waitUploads(i);
         }
+    }
+
+    public void resetCopyStats() {
+        this.stagingCopyCount = 0L;
+        this.stagingCopyBytes = 0L;
+        this.stagingCopyNanos = 0L;
     }
 
     public String getStats() {
