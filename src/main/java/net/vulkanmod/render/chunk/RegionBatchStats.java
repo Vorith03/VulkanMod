@@ -41,7 +41,7 @@ final class RegionBatchStats {
 
     static String describe() {
         String drawStats = String.format(
-                " Region: %d sections/%d calls cmd:%d/%dB mesh:%d/%.1fKiB reuse/new/grow:%d/%d/%d areaReuse/fallback:%d/%d",
+                " R:%d/%d cmd:%d/%dB mesh:%d/%.0fK r/n/g:%d/%d/%d ar/f:%d/%d",
                 sections, calls,
                 commandUploads, commandBytes,
                 meshUploads, meshBytes / 1024.0D,
