@@ -60,11 +60,12 @@ public class AreaUploadManager {
         if(commandBuffer == null || commandBuffer.isSubmitted())
             return;
 
-        // Terrain buffers are consumed by the graphics queue and use exclusive
-        // sharing. Record their copies on that same queue: queue order guarantees
-        // an older frame finishes reading an in-place slice before this write, and
-        // the new main frame consumes the write without a cross-queue semaphore or
-        // queue-family ownership transfer.
+        // Terrain buffers are consumed by the graphics queue. Transfer-capable
+        // buffers use concurrent family sharing when necessary, but that only
+        // handles queue-family ownership; it does not order an older graphics read
+        // against a transfer-queue overwrite of the same persistent slice. Submit
+        // terrain copies on graphics instead so queue order is old draw -> write ->
+        // new draw, with no cross-queue semaphore in the hot path.
         Device.getGraphicsQueue().submitCommands(commandBuffer);
 
         // This helper submission is ordered before the later main graphics submit.
