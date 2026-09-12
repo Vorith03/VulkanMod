@@ -149,23 +149,51 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         int[] expected = new int[4];
+        int eligibleVoxels = 0;
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             int stateId = snapshot.stateId(i);
             int flags = snapshot.flags(i);
+            int faceMask = candidateFaceMask(snapshot, i);
             expected[0] += stateId;
             expected[1] += flags;
-            expected[2] += (stateId * 33) ^ flags ^ i;
+            expected[2] += ((stateId * 33) ^ flags ^ i) ^ (faceMask * 0x9e3779b9);
+            expected[3] += Integer.bitCount(faceMask);
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
-                expected[3]++;
+                eligibleVoxels++;
         }
 
         for(int i = 0; i < expected.length; ++i)
-            require(actual[i] == expected[i], "GPU voxel compute decode mismatch at result word " + i);
+            require(actual[i] == expected[i], "GPU voxel compute/face classification mismatch at result word " + i);
 
-        require(expected[3] == SectionVoxelSnapshot.BLOCK_COUNT / 2,
+        require(eligibleVoxels == SectionVoxelSnapshot.BLOCK_COUNT / 2,
                 "GPU_FULL_CUBE fixture must exercise the fifth flag plane");
+        require(expected[3] == 4608,
+                "Alternating-x fixture must expose the expected conservative candidate face count");
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, storage descriptors, push slice offset, compute barriers, exact aggregate readback");
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, conservative six-neighbor candidate face classification ({} faces), storage descriptors, compute barriers, exact aggregate readback",
+                expected[3]);
+    }
+
+    private static int candidateFaceMask(SectionVoxelSnapshot snapshot, int index) {
+        if(!isGpuFullCube(snapshot, index))
+            return 0;
+
+        int x = index & 15;
+        int y = (index >>> 4) & 15;
+        int z = (index >>> 8) & 15;
+        int mask = 0;
+
+        if(y == 0 || !isGpuFullCube(snapshot, index - 16)) mask |= 1 << 0;
+        if(y == 15 || !isGpuFullCube(snapshot, index + 16)) mask |= 1 << 1;
+        if(z == 0 || !isGpuFullCube(snapshot, index - 256)) mask |= 1 << 2;
+        if(z == 15 || !isGpuFullCube(snapshot, index + 256)) mask |= 1 << 3;
+        if(x == 0 || !isGpuFullCube(snapshot, index - 1)) mask |= 1 << 4;
+        if(x == 15 || !isGpuFullCube(snapshot, index + 1)) mask |= 1 << 5;
+        return mask;
+    }
+
+    private static boolean isGpuFullCube(SectionVoxelSnapshot snapshot, int index) {
+        return (snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0;
     }
 
     private static void require(boolean condition, String message) {

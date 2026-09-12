@@ -21,6 +21,57 @@ const uint BLOCK_COUNT = 4096u;
 const uint PLANE_WORDS = 128u;
 const uint FLAG_PLANES = 5u;
 const uint GPU_FULL_CUBE = 16u;
+const uint GPU_FULL_CUBE_PLANE = 4u;
+
+const uint FACE_DOWN = 1u << 0u;
+const uint FACE_UP = 1u << 1u;
+const uint FACE_NORTH = 1u << 2u;
+const uint FACE_SOUTH = 1u << 3u;
+const uint FACE_WEST = 1u << 4u;
+const uint FACE_EAST = 1u << 5u;
+
+uint decodeFlags(uint base, uint flagsOffset, uint index) {
+    uint flags = 0u;
+    for (uint plane = 0u; plane < FLAG_PLANES; ++plane) {
+        uint bits = inputPage.words[base + flagsOffset + plane * PLANE_WORDS + (index >> 5u)];
+        flags |= ((bits >> (index & 31u)) & 1u) << plane;
+    }
+    return flags;
+}
+
+bool isGpuFullCube(uint base, uint flagsOffset, uint index) {
+    uint bits = inputPage.words[base + flagsOffset + GPU_FULL_CUBE_PLANE * PLANE_WORDS + (index >> 5u)];
+    return ((bits >> (index & 31u)) & 1u) != 0u;
+}
+
+/*
+ * This is deliberately a conservative candidate mask, not Minecraft's final
+ * shouldRenderFace decision. A face is retained whenever its neighbor is outside
+ * this section or is not itself GPU_FULL_CUBE. CPU_REQUIRED remains authoritative.
+ */
+uint candidateFaceMask(uint base, uint flagsOffset, uint index) {
+    if (!isGpuFullCube(base, flagsOffset, index))
+        return 0u;
+
+    uint x = index & 15u;
+    uint y = (index >> 4u) & 15u;
+    uint z = (index >> 8u) & 15u;
+    uint mask = 0u;
+
+    if (y == 0u) mask |= FACE_DOWN;
+    else if (!isGpuFullCube(base, flagsOffset, index - 16u)) mask |= FACE_DOWN;
+    if (y == 15u) mask |= FACE_UP;
+    else if (!isGpuFullCube(base, flagsOffset, index + 16u)) mask |= FACE_UP;
+    if (z == 0u) mask |= FACE_NORTH;
+    else if (!isGpuFullCube(base, flagsOffset, index - 256u)) mask |= FACE_NORTH;
+    if (z == 15u) mask |= FACE_SOUTH;
+    else if (!isGpuFullCube(base, flagsOffset, index + 256u)) mask |= FACE_SOUTH;
+    if (x == 0u) mask |= FACE_WEST;
+    else if (!isGpuFullCube(base, flagsOffset, index - 1u)) mask |= FACE_WEST;
+    if (x == 15u) mask |= FACE_EAST;
+    else if (!isGpuFullCube(base, flagsOffset, index + 1u)) mask |= FACE_EAST;
+    return mask;
+}
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
@@ -46,16 +97,11 @@ void main() {
     uint packed = inputPage.words[base + indexOffset + (index >> 1u)];
     uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 0xffffu;
     uint stateId = inputPage.words[base + paletteOffset + paletteIndex];
-
-    uint flags = 0u;
-    for (uint plane = 0u; plane < FLAG_PLANES; ++plane) {
-        uint bits = inputPage.words[base + flagsOffset + plane * PLANE_WORDS + (index >> 5u)];
-        flags |= ((bits >> (index & 31u)) & 1u) << plane;
-    }
+    uint flags = decodeFlags(base, flagsOffset, index);
+    uint faceMask = candidateFaceMask(base, flagsOffset, index);
 
     atomicAdd(outputData.words[0], stateId);
     atomicAdd(outputData.words[1], flags);
-    atomicAdd(outputData.words[2], (stateId * 33u) ^ flags ^ index);
-    if ((flags & GPU_FULL_CUBE) != 0u)
-        atomicAdd(outputData.words[3], 1u);
+    atomicAdd(outputData.words[2], ((stateId * 33u) ^ flags ^ index) ^ (faceMask * 0x9e3779b9u));
+    atomicAdd(outputData.words[3], uint(bitCount(faceMask)));
 }
