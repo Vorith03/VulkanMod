@@ -20,6 +20,7 @@ public class AreaUploadManager {
 
     ObjectArrayList<AreaBuffer.Segment>[] recordedUploads;
     ObjectArrayList<DrawBuffers.ParametersUpdate>[] updatedParameters;
+    ObjectArrayList<Runnable>[] submittedUploadOps;
     ObjectArrayList<Runnable>[] frameOps;
     CommandPool.CommandBuffer[] commandBuffers;
     long[] firstUploadNanos;
@@ -39,6 +40,7 @@ public class AreaUploadManager {
         this.commandBuffers = new CommandPool.CommandBuffer[frames];
         this.recordedUploads = new ObjectArrayList[frames];
         this.updatedParameters = new ObjectArrayList[frames];
+        this.submittedUploadOps = new ObjectArrayList[frames];
         this.frameOps = new ObjectArrayList[frames];
         this.firstUploadNanos = new long[frames];
         this.recordedUploadBytes = new long[frames];
@@ -52,6 +54,7 @@ public class AreaUploadManager {
         for (int i = 0; i < frames; i++) {
             this.recordedUploads[i] = new ObjectArrayList<>();
             this.updatedParameters[i] = new ObjectArrayList<>();
+            this.submittedUploadOps[i] = new ObjectArrayList<>();
             this.frameOps[i] = new ObjectArrayList<>();
         }
     }
@@ -80,8 +83,39 @@ public class AreaUploadManager {
 
     public void uploadAsync(AreaBuffer.Segment uploadSegment, long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
         Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
+        recordUpload(bufferId, dstOffset, bufferSize, src);
+        this.recordedUploads[this.currentFrame].add(uploadSegment);
+    }
 
-        if(this.recordedUploads[this.currentFrame].isEmpty()) {
+    /**
+     * Records a fixed-buffer upload that is not owned by an {@link AreaBuffer.Segment}.
+     * The callback runs once the copy command has been submitted in graphics-queue
+     * order. It may publish CPU-side residency metadata for later same-queue compute
+     * work, but it must not assume the transfer has completed on the device yet.
+     */
+    public void uploadStorageAsync(Buffer buffer, long dstOffset, ByteBuffer src, Runnable submittedCallback) {
+        Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
+        if(buffer == null || src == null)
+            throw new IllegalArgumentException("Storage upload buffer/source must be present");
+
+        long bufferSize = src.remaining();
+        if(bufferSize <= 0L)
+            throw new IllegalArgumentException("Storage upload must contain data");
+        if(dstOffset < 0L || dstOffset + bufferSize < dstOffset || dstOffset + bufferSize > buffer.getBufferSize())
+            throw new IllegalArgumentException("Storage upload exceeds destination buffer");
+
+        recordUpload(buffer.getId(), dstOffset, bufferSize, src);
+        if(submittedCallback != null)
+            this.submittedUploadOps[this.currentFrame].add(submittedCallback);
+    }
+
+    private void recordUpload(long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
+        if(bufferSize <= 0L || bufferSize > Integer.MAX_VALUE)
+            throw new IllegalArgumentException("Invalid terrain upload size");
+        if(src == null || src.remaining() < bufferSize)
+            throw new IllegalArgumentException("Terrain upload source is too small");
+
+        if(this.firstUploadNanos[this.currentFrame] == 0L) {
             this.firstUploadNanos[this.currentFrame] = System.nanoTime();
             this.recordedUploadBytes[this.currentFrame] = 0L;
         }
@@ -98,8 +132,6 @@ public class AreaUploadManager {
         this.stagingCopyCount++;
 
         TransferQueue.uploadBufferCmd(this.commandBuffers[currentFrame], stagingBuffer.getId(), stagingBuffer.getOffset(), bufferId, dstOffset, bufferSize);
-
-        this.recordedUploads[this.currentFrame].add(uploadSegment);
     }
 
     public void enqueueParameterUpdate(DrawBuffers.ParametersUpdate parametersUpdate) {
@@ -158,7 +190,7 @@ public class AreaUploadManager {
     }
 
     private void markUploadsReady(int frame) {
-        if(!this.recordedUploads[frame].isEmpty() && this.firstUploadNanos[frame] != 0L) {
+        if(this.firstUploadNanos[frame] != 0L) {
             long readyNanos = Math.max(0L, System.nanoTime() - this.firstUploadNanos[frame]);
             this.lastReadyNanos = readyNanos;
             this.lastReadyBytes = this.recordedUploadBytes[frame];
@@ -174,8 +206,13 @@ public class AreaUploadManager {
             parametersUpdate.setDrawParameters();
         }
 
+        for(Runnable submittedOp : this.submittedUploadOps[frame]) {
+            submittedOp.run();
+        }
+
         this.recordedUploads[frame].clear();
         this.updatedParameters[frame].clear();
+        this.submittedUploadOps[frame].clear();
         this.firstUploadNanos[frame] = 0L;
         this.recordedUploadBytes[frame] = 0L;
     }
