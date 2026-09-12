@@ -3,6 +3,8 @@ package net.vulkanmod.render.chunk;
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.vulkan.Device;
+import net.vulkanmod.vulkan.Synchronization;
 import org.joml.Vector3i;
 import org.lwjgl.system.MemoryStack;
 
@@ -42,17 +44,29 @@ public final class RegionBatchSmokeTest {
                     "Drained region reuse must be observable in terrain stats");
 
             // Exercise the production region suballocator with a real GPU buffer.
-            // A rebuild that still fits its old reservation must keep the same
-            // address instead of returning the slice to the free list. A larger
-            // rebuild still takes the established growth/relocation path.
+            // The first copy uses the normal asynchronous submit path: same-graphics-
+            // queue ordering makes the segment immediately eligible for this frame
+            // without registering a cross-queue wait semaphore. The CI-only queue
+            // idle below retires the helper because this smoke exits before a normal
+            // main-frame fence can own that retirement.
             persistentBuffer = new AreaBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 256, Integer.BYTES);
             AreaBuffer.Segment persistentSegment = new AreaBuffer.Segment();
             try(MemoryStack stack = MemoryStack.stackPush()) {
+                int waitSemaphoresBefore = Synchronization.INSTANCE.getWaitSemaphoreCount();
                 persistentBuffer.upload(stack.malloc(64), persistentSegment);
-                AreaUploadManager.INSTANCE.waitAllUploads();
+                AreaUploadManager.INSTANCE.submitUploads();
+                require(persistentSegment.isReady(),
+                        "Same-queue terrain submit must make the segment eligible for the later graphics frame");
+                require(Synchronization.INSTANCE.getWaitSemaphoreCount() == waitSemaphoresBefore,
+                        "Same-queue terrain uploads must not add a transfer wait semaphore");
+                Device.getGraphicsQueue().waitIdle();
+                Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+
                 int originalOffset = persistentSegment.getOffset();
                 int reservedBytes = persistentBuffer.getUsedBytes();
 
+                // A rebuild that still fits its old reservation must keep the same
+                // address instead of returning the slice to the free list.
                 persistentBuffer.upload(stack.malloc(32), persistentSegment);
                 AreaUploadManager.INSTANCE.waitAllUploads();
                 require(persistentSegment.getOffset() == originalOffset,
@@ -60,6 +74,8 @@ public final class RegionBatchSmokeTest {
                 require(persistentBuffer.getUsedBytes() == reservedBytes,
                         "In-place rebuild must preserve reserved-byte accounting");
 
+                // A larger rebuild still takes the established growth/relocation
+                // path, whose source-buffer copy is now graphics-queue ordered too.
                 persistentBuffer.upload(stack.malloc(320), persistentSegment);
                 AreaUploadManager.INSTANCE.waitAllUploads();
                 require(persistentSegment.getOffset() != originalOffset,
