@@ -21,6 +21,15 @@ Future agents should not silently invent a new major workstream. Start from the 
 - Next actions: run the documented full-pack sequence with PickupNotifier absent and adequate headroom; inspect latest/debug logs plus visual results; fix any demonstrated defect before advancing gates. No new performance measurements or roadmap reorder.
 - User-machine action is required because CI cannot establish visual correctness in the actual RX 6900 XT modpack. See the compatibility document for the exact sequence and evidence to retain.
 
+## Source memory reduction — 2026-09-12
+
+User explicitly requested addressing memory consumption at its source. This is a bounded prerequisite investigation within Phase 4; later terrain/performance phases remain gated.
+
+- Confirmed source defect: texture staging copied the whole contiguous source span of a subrectangle, including unrelated pixels between rows. A 64x64 RGBA frame in a 4096-wide sheet needed 1,032,448 staged bytes for 16,384 bytes of texels. Direct `VulkanImage` callers also copied `buffer.limit()` bytes from the current position, potentially exceeding the remaining range.
+- `TextureUploadLayout` validates source geometry/range and copies rows directly into mapped staging using Java 17 absolute bulk ByteBuffer copies. No intermediate native/heap pixel allocation is introduced. `StagingBuffer.copyTexture` reserves the aligned packed size once; Vulkan copies use tightly packed row/image-height fields. Selector budgets now count actual packed bytes, retaining the existing 128 MiB batch / 512 MiB single-upload limits and all process/system guards.
+- Local Java 17 layout tests passed for heap/direct buffers, contiguous/strided/single-row images, 1/2/4-byte pixels, nonzero positions, untouched sentinels and invalid/overflowing source ranges. Full local Gradle remains blocked by the Gradle distribution network download. The screenshot CI gate now includes actual full and offset texture uploads, batched and unbatched submission, exact staging-byte checks and RGBA GPU readback under synchronization validation.
+- CI result for this source change is pending at commit creation. Prior #307 is green. No full-pack RSS reduction, reload survival or performance improvement is claimed yet. This fixes avoidable upload allocation/copying; the #304 mip-generation-time RSS failure may have additional causes.
+
 ## Historical checkpoints
 
 The sections below preserve earlier evidence; their phase labels and suggested artifacts describe those dates, not the current continuation checkpoint above.

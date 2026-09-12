@@ -28,6 +28,7 @@ public final class ScreenshotReadbackSmokeTest {
     private ScreenshotReadbackSmokeTest() {}
 
     public static void verify(Minecraft minecraft) throws Exception {
+        TextureUploadSmokeTest.verify();
         Renderer renderer = Renderer.getInstance();
         RenderTarget main = minecraft.getMainRenderTarget();
         File directory = new File("screenshot-smoke");

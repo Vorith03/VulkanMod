@@ -96,27 +96,15 @@ public abstract class VTextureSelector {
             observedMainFrameSubmissions = mainFrameSubmissions;
         }
 
-        int rowLength = unpackRowLength > 0 ? unpackRowLength : width;
-        if(rowLength < width || unpackSkipRows < 0 || unpackSkipPixels < 0 || unpackSkipPixels + width > rowLength) {
-            throw new IllegalArgumentException("Invalid texture upload row/skip geometry");
-        }
-
-        long formatSize = texture.formatSize;
-        long sourceOffset = ((long)rowLength * unpackSkipRows + unpackSkipPixels) * formatSize;
-        long stagedBytes = ((long)(height - 1) * rowLength + width) * formatSize;
-        long logicalBytes = (long)width * height * formatSize;
+        TextureUploadLayout layout = TextureUploadLayout.of(width, height, unpackSkipRows,
+                unpackSkipPixels, unpackRowLength, texture.formatSize, buffer.remaining());
         long availableBytes = buffer.remaining();
-        long sourceEnd = sourceOffset + stagedBytes;
-
-        if(sourceOffset < 0L || stagedBytes <= 0L || sourceEnd < sourceOffset || sourceEnd > availableBytes) {
-            throw new IllegalArgumentException(String.format(
-                    "Texture upload exceeds source image: source=%d offset=%d span=%d row=%d size=%dx%d",
-                    availableBytes, sourceOffset, stagedBytes, rowLength, width, height));
-        }
+        long stagedBytes = layout.packedBytes();
+        long logicalBytes = stagedBytes;
         if(stagedBytes > MAX_SINGLE_TEXTURE_STAGING) {
             throw new OutOfMemoryError(String.format(
-                    "Refusing %d MiB single texture staging upload (%dx%d row=%d); safety limit is %d MiB",
-                    stagedBytes / (1024L * 1024L), width, height, rowLength,
+                    "Refusing %d MiB single texture staging upload (%dx%d); safety limit is %d MiB",
+                    stagedBytes / (1024L * 1024L), width, height,
                     MAX_SINGLE_TEXTURE_STAGING / (1024 * 1024)));
         }
 
@@ -125,16 +113,8 @@ public abstract class VTextureSelector {
         // to avoid turning /proc reads into per-sprite overhead.
         MemoryDiagnostics.enforceSystemMemorySafety("texture staging");
 
-        // Old VulkanMod copied buffer.limit() for every sub-rectangle. Animated
-        // sprites and mip levels therefore re-copied the entire backing NativeImage
-        // even when Vulkan consumed only one frame. Slice to exactly the contiguous
-        // source span referenced by VkBufferImageCopy and normalize the skips to 0.
-        ByteBuffer uploadBuffer = buffer.duplicate();
-        int basePosition = buffer.position();
-        uploadBuffer.position(basePosition + (int)sourceOffset);
-        uploadBuffer.limit(basePosition + (int)sourceEnd);
-        uploadBuffer = uploadBuffer.slice();
-
+        // Account and reserve only the rectangle's texels. VulkanImage copies
+        // rows directly into mapped staging, excluding unrelated source-row gaps.
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
         int uploadSize = (int)stagedBytes;
@@ -206,7 +186,7 @@ public abstract class VTextureSelector {
 
         try {
             texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset,
-                    0, 0, rowLength, uploadBuffer);
+                    layout, buffer);
         } finally {
             stagingBuffer.setGrowthLimit(Integer.MAX_VALUE);
         }

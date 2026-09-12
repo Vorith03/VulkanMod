@@ -1,6 +1,7 @@
 package net.vulkanmod.vulkan.memory;
 
 import net.vulkanmod.render.chunk.util.Util;
+import net.vulkanmod.vulkan.texture.TextureUploadLayout;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -25,6 +26,22 @@ public class StagingBuffer extends Buffer {
 
     public void copyBuffer(int size, ByteBuffer byteBuffer) {
         copyBuffer(size, byteBuffer, this.growthLimit);
+    }
+
+    public void copyTexture(ByteBuffer source, TextureUploadLayout layout, int alignment) {
+        if(alignment <= 0)
+            throw new IllegalArgumentException("Invalid texture staging alignment");
+        long alignedUsed = ((long)this.usedBytes + alignment - 1L) / alignment * alignment;
+        long required = alignedUsed + layout.packedBytes();
+        if(required > Integer.MAX_VALUE)
+            throw new IllegalStateException("Staging buffer exceeds 2 GiB addressable range");
+        if(required > this.bufferSize) {
+            resizeBuffer(calculateGrowthSize(this.bufferSize, (int)required, this.growthLimit));
+        }
+        layout.copyTo(source, MemoryUtil.memByteBuffer(this.data.get(0), this.bufferSize), (int)alignedUsed);
+        this.offset = (int)alignedUsed;
+        this.usedBytes = (int)required;
+        this.highWaterMark = Math.max(this.highWaterMark, this.usedBytes);
     }
 
     /**

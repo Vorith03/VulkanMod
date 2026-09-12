@@ -179,6 +179,10 @@ Mandatory gates:
 
 **Next work item:** use green build #306 (runtime-equivalent to #304) with PickupNotifier 8.0.0 absent and adequate host-memory headroom. Follow `docs/CREATE_CHRONICLES_COMPATIBILITY.md`: exercise Create/Flywheel, `F3+T`, world exit/re-entry, animated textures and representative gameplay for at least two minutes after re-entry. The last #304 reload failed before apply at the unchanged RSS-pressure guard; do not weaken memory safeguards. CI #306 is verified, but no newer full-pack runtime result is available.
 
+### Current bounded source-memory work
+
+On 2026-09-12 the user explicitly requested reducing memory at its source. The immediate repository task is to eliminate source-row gaps from texture staging and validate packed uploads, then return to the full-pack reload gate. This does not close any gameplay gate or advance the major terrain rewrite. See `AGENT_STATUS.md` for measured synthetic allocation savings and the limits of that evidence.
+
 ### Shaderpack scope
 
 Vanilla Minecraft post effects are core correctness and belong in Phase 3. Full Iris/Oculus-style shaderpack compatibility is **not** an initial release blocker unless the user explicitly promotes it; renderer replacements may be fundamentally incompatible and should be characterized rather than forced together.

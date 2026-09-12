@@ -149,18 +149,22 @@ public class VulkanImage {
     }
 
     public void uploadSubTextureAsync(int mipLevel, int width, int height, int xOffset, int yOffset, int unpackSkipRows, int unpackSkipPixels, int unpackRowLength, ByteBuffer buffer) {
-        long imageSize = buffer.limit();
+        TextureUploadLayout layout = TextureUploadLayout.of(width, height, unpackSkipRows,
+                unpackSkipPixels, unpackRowLength, this.formatSize, buffer.remaining());
+        uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset, layout, buffer);
+    }
+
+    void uploadSubTextureAsync(int mipLevel, int width, int height, int xOffset, int yOffset,
+                               TextureUploadLayout layout, ByteBuffer buffer) {
 
         CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().getCommandBuffer();
         transferDstLayout(commandBuffer);
 
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
-        stagingBuffer.align(this.formatSize);
-
-        stagingBuffer.copyBuffer((int)imageSize, buffer);
+        stagingBuffer.copyTexture(buffer, layout, this.formatSize);
 
         copyBufferToImageCmd(commandBuffer, stagingBuffer.getId(), id, mipLevel, width, height, xOffset, yOffset,
-                (int) (stagingBuffer.getOffset() + (unpackRowLength * unpackSkipRows + unpackSkipPixels) * this.formatSize), unpackRowLength, height);
+                (int)stagingBuffer.getOffset(), 0, 0);
 
         long fence = Device.getGraphicsQueue().endIfNeeded(commandBuffer);
         if (fence != VK_NULL_HANDLE)

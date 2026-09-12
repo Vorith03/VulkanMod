@@ -87,6 +87,7 @@ case "$mode" in
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
     run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.validation=true" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
+    grep -F "Packed texture upload Vulkan smoke passed" vulkan-screenshot-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-screenshot-smoke.log; then
       echo "Screenshot readback smoke produced invalid Vulkan" >&2
       exit 1
