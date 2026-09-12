@@ -215,12 +215,8 @@ public class AreaUploadManager {
         double averageReadyMs = this.completedUploadBatches == 0L
                 ? 0.0D
                 : (this.totalReadyNanos / 1_000_000.0D) / this.completedUploadBatches;
-        double lastKiB = this.lastReadyBytes / 1024.0D;
         double stagingCopyMiB = this.stagingCopyBytes / 1048576.0D;
         double stagingCopyMs = this.stagingCopyNanos / 1_000_000.0D;
-        double averageStagingCopyMs = this.stagingCopyCount == 0L
-                ? 0.0D
-                : stagingCopyMs / this.stagingCopyCount;
 
         int stagingHighWater = 0;
         int stagingCapacity = 0;
@@ -233,9 +229,9 @@ public class AreaUploadManager {
         }
 
         return String.format(Locale.ROOT,
-                "up(rdy/size/avg):%.1fms/%.0fKiB/%.1fms stageCpu:%d/%.1fMiB/%.1fms avg:%.3fms stg:%.1f/%.1fMiB r:%d %s",
-                lastReadyMs, lastKiB, averageReadyMs,
-                this.stagingCopyCount, stagingCopyMiB, stagingCopyMs, averageStagingCopyMs,
+                "up:%.1fms/%.0fK/%.1favg sc:%d/%.1fM/%.1fms stg:%.1f/%.1fM/%dr %s",
+                lastReadyMs, this.lastReadyBytes / 1024.0D, averageReadyMs,
+                this.stagingCopyCount, stagingCopyMiB, stagingCopyMs,
                 stagingHighWater / 1048576.0D, stagingCapacity / 1048576.0D, stagingResizes,
                 Synchronization.INSTANCE.getStats());
     }
