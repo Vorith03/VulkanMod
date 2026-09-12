@@ -12,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.DebugScreenOverlay;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.gui.GuiBatchRenderer;
 import net.vulkanmod.vulkan.DeviceInfo;
 import net.vulkanmod.vulkan.Vulkan;
@@ -24,6 +25,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.lang.management.ManagementFactory;
@@ -76,6 +78,78 @@ public abstract class DebugScreenOverlayM {
 
     private long getOffHeapMemory() {
         return bytesToMegabytes(ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getUsed());
+    }
+
+    /**
+     * Vanilla renders LevelRenderer.getChunkStatistics() as one F3 row. VulkanMod's
+     * terrain profiling outgrew that row badly enough that the useful counters were
+     * off-screen at the target 2560x1440 setup. Keep the ordinary chunk summary on
+     * its original row and add short purpose-specific terrain rows underneath it.
+     */
+    @Inject(method = "getGameInformation", at = @At("RETURN"), cancellable = true)
+    private void vulkanmod$splitTerrainDebugRows(CallbackInfoReturnable<List<String>> cir) {
+        List<String> original = cir.getReturnValue();
+        if(original == null || this.minecraft.level == null)
+            return;
+
+        ArrayList<String> lines = new ArrayList<>(original);
+        int chunkLineIndex = -1;
+        String chunkLine = null;
+        for(int i = 0; i < lines.size(); ++i) {
+            String line = lines.get(i);
+            if(line != null && line.startsWith("Chunks:")) {
+                chunkLineIndex = i;
+                chunkLine = line;
+                break;
+            }
+        }
+        if(chunkLineIndex < 0 || chunkLine == null)
+            return;
+
+        int taskStart = chunkLine.indexOf(", Terrain workers:");
+        if(taskStart < 0)
+            taskStart = chunkLine.indexOf(", iT:"); // readable migration from older profiling builds
+        int regionStart = chunkLine.indexOf(" R:");
+
+        int summaryEnd = chunkLine.length();
+        if(taskStart >= 0)
+            summaryEnd = Math.min(summaryEnd, taskStart);
+        if(regionStart >= 0)
+            summaryEnd = Math.min(summaryEnd, regionStart);
+        lines.set(chunkLineIndex, chunkLine.substring(0, summaryEnd));
+
+        ArrayList<String> terrainLines = new ArrayList<>();
+        WorldRenderer renderer = WorldRenderer.getInstance();
+        if(renderer != null && renderer.getTaskDispatcher() != null) {
+            for(String taskLine : renderer.getTaskDispatcher().getDebugLines()) {
+                // Upload synchronization is useful but makes the upload row too wide.
+                // Give it its own F3 row instead of relying on font/window width.
+                int syncStart = taskLine.indexOf(" sync ");
+                if(syncStart >= 0) {
+                    terrainLines.add(taskLine.substring(0, syncStart));
+                    terrainLines.add("Terrain " + taskLine.substring(syncStart + 1));
+                } else {
+                    terrainLines.add(taskLine);
+                }
+            }
+        }
+
+        // RegionBatchStats is appended to the legacy chunk string by WorldRenderer.
+        // Split draw/churn and residency into separate rows without exposing the
+        // package-private stats object through the renderer API solely for F3.
+        if(regionStart >= 0) {
+            String region = chunkLine.substring(regionStart + 1).trim();
+            int memoryStart = region.indexOf(" rm:");
+            if(memoryStart >= 0) {
+                terrainLines.add("Terrain draw: " + region.substring(0, memoryStart));
+                terrainLines.add("Terrain memory: " + region.substring(memoryStart + 1));
+            } else if(!region.isEmpty()) {
+                terrainLines.add("Terrain draw: " + region);
+            }
+        }
+
+        lines.addAll(chunkLineIndex + 1, terrainLines);
+        cir.setReturnValue(lines);
     }
 
 //    /**
