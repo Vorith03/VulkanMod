@@ -24,6 +24,8 @@ const uint GPU_FULL_CUBE = 16u;
 const uint GPU_FULL_CUBE_PLANE = 4u;
 const uint HEADER_WORDS = 4u;
 const uint FACES_PER_VOXEL = 6u;
+const uint FACE_DESCRIPTOR_WORDS = BLOCK_COUNT * FACES_PER_VOXEL;
+const uint COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
 
 const uint FACE_DOWN = 1u << 0u;
 const uint FACE_UP = 1u << 1u;
@@ -76,10 +78,9 @@ uint candidateFaceMask(uint base, uint flagsOffset, uint index) {
 }
 
 /*
- * Fixed-slot descriptors keep this first geometry work product deterministic:
  * bit 31 marks a live candidate, bits 12..14 hold the face id, and bits 0..11
- * hold the section-local voxel index. A later pass can compact these descriptors
- * without changing the classification contract proven here.
+ * hold the section-local voxel index. Fixed slots preserve the deterministic
+ * classification oracle; compact slots are the first dense GPU face-work list.
  */
 uint encodeFaceDescriptor(uint index, uint face) {
     return 0x80000000u | (face << 12u) | index;
@@ -111,15 +112,22 @@ void main() {
     uint stateId = inputPage.words[base + paletteOffset + paletteIndex];
     uint flags = decodeFlags(base, flagsOffset, index);
     uint faceMask = candidateFaceMask(base, flagsOffset, index);
+    uint faceCount = uint(bitCount(faceMask));
 
     atomicAdd(outputData.words[0], stateId);
     atomicAdd(outputData.words[1], flags);
     atomicAdd(outputData.words[2], ((stateId * 33u) ^ flags ^ index) ^ (faceMask * 0x9e3779b9u));
-    atomicAdd(outputData.words[3], uint(bitCount(faceMask)));
+    uint compactBase = atomicAdd(outputData.words[3], faceCount);
 
     uint descriptorBase = HEADER_WORDS + index * FACES_PER_VOXEL;
+    uint compactCursor = 0u;
     for (uint face = 0u; face < FACES_PER_VOXEL; ++face) {
-        if ((faceMask & (1u << face)) != 0u)
-            outputData.words[descriptorBase + face] = encodeFaceDescriptor(index, face);
+        if ((faceMask & (1u << face)) == 0u)
+            continue;
+
+        uint descriptor = encodeFaceDescriptor(index, face);
+        outputData.words[descriptorBase + face] = descriptor;
+        outputData.words[COMPACT_DESCRIPTOR_BASE + compactBase + compactCursor] = descriptor;
+        ++compactCursor;
     }
 }

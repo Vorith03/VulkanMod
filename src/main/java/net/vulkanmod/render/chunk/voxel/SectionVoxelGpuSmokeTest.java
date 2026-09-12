@@ -13,6 +13,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -148,7 +149,8 @@ public final class SectionVoxelGpuSmokeTest {
             actual = probe.dispatch(page, residency.byteOffset(), residency.byteLength());
         }
 
-        int[] expected = new int[VoxelComputeProbe.RESULT_WORDS];
+        int[] expected = new int[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE];
+        int[] expectedCompact = new int[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
         int eligibleVoxels = 0;
         int descriptorCount = 0;
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
@@ -165,16 +167,18 @@ public final class SectionVoxelGpuSmokeTest {
             int descriptorBase = VoxelComputeProbe.HEADER_WORDS + i * VoxelComputeProbe.FACES_PER_VOXEL;
             for(int face = 0; face < VoxelComputeProbe.FACES_PER_VOXEL; ++face) {
                 if((faceMask & (1 << face)) != 0) {
-                    expected[descriptorBase + face] = encodeFaceDescriptor(i, face);
-                    descriptorCount++;
+                    int descriptor = encodeFaceDescriptor(i, face);
+                    expected[descriptorBase + face] = descriptor;
+                    expectedCompact[descriptorCount++] = descriptor;
                 }
             }
         }
 
-        require(actual.length == expected.length, "GPU voxel compute result size must match the descriptor oracle");
+        require(actual.length == VoxelComputeProbe.RESULT_WORDS,
+                "GPU voxel compute result size must include fixed and compact descriptor regions");
         for(int i = 0; i < expected.length; ++i) {
             if(actual[i] != expected[i]) {
-                String kind = i < VoxelComputeProbe.HEADER_WORDS ? "aggregate" : "face descriptor";
+                String kind = i < VoxelComputeProbe.HEADER_WORDS ? "aggregate" : "fixed face descriptor";
                 throw new AssertionError("GPU voxel compute " + kind + " mismatch at result word " + i
                         + ": expected=0x" + Integer.toHexString(expected[i])
                         + " actual=0x" + Integer.toHexString(actual[i]));
@@ -187,8 +191,28 @@ public final class SectionVoxelGpuSmokeTest {
                 "Alternating-x fixture must expose the expected diagnostic candidate face count");
         require(descriptorCount == expected[3],
                 "Every diagnostic candidate face must produce exactly one fixed-slot descriptor");
+
+        int[] actualCompact = Arrays.copyOfRange(actual,
+                VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE,
+                VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + descriptorCount);
+        int[] expectedDense = Arrays.copyOf(expectedCompact, descriptorCount);
+        Arrays.sort(actualCompact);
+        Arrays.sort(expectedDense);
+        for(int i = 0; i < descriptorCount; ++i) {
+            if(actualCompact[i] != expectedDense[i]) {
+                throw new AssertionError("GPU voxel compact face descriptor mismatch at sorted slot " + i
+                        + ": expected=0x" + Integer.toHexString(expectedDense[i])
+                        + " actual=0x" + Integer.toHexString(actualCompact[i]));
+            }
+        }
+        for(int i = VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + descriptorCount;
+            i < VoxelComputeProbe.RESULT_WORDS; ++i) {
+            if(actual[i] != 0)
+                throw new AssertionError("GPU voxel compact descriptor tail must remain zero at result word " + i);
+        }
+
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot GPU face descriptors, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
     }
 

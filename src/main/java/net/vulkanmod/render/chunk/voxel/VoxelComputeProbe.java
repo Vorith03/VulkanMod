@@ -41,16 +41,17 @@ import static org.lwjgl.vulkan.VK10.*;
  * shape needed for batching many resident sections from the same page later.</p>
  *
  * <p>The current kernel is an oracle, not the final terrain mesher: it decodes all
- * 4096 voxels on the GPU, emits deterministic aggregate values, and writes a
- * fixed-slot candidate-face descriptor stream used by the startup smoke test.
- * The synchronization and descriptor path are the same pieces future face
- * compaction and mesh generation can reuse.</p>
+ * 4096 voxels on the GPU, emits deterministic aggregate values, and writes both
+ * fixed-slot and compacted candidate-face descriptor streams used by the startup
+ * smoke test. The synchronization and descriptor path are the same pieces future
+ * mesh generation can reuse.</p>
  */
 final class VoxelComputeProbe implements AutoCloseable {
     static final int HEADER_WORDS = 4;
     static final int FACES_PER_VOXEL = 6;
     static final int FACE_DESCRIPTOR_WORDS = SectionVoxelSnapshot.BLOCK_COUNT * FACES_PER_VOXEL;
-    static final int RESULT_WORDS = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
+    static final int COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
+    static final int RESULT_WORDS = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
     private static final int RESULT_BYTES = RESULT_WORDS * Integer.BYTES;
     private static final int PUSH_CONSTANT_BYTES = 2 * Integer.BYTES;
     private static final int WORKGROUP_SIZE = 64;
