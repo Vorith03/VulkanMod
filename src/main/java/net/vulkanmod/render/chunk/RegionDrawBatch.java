@@ -109,8 +109,8 @@ final class RegionDrawBatch {
                     data.flip();
                     commands.reset();
                     commands.recordCopyCmd(data);
-                    RegionBatchStats.uploads++;
-                    RegionBatchStats.bytes += drawCount * STRIDE;
+                    RegionBatchStats.commandUploads++;
+                    RegionBatchStats.commandBytes += drawCount * STRIDE;
                 }
             }
             visibilityRevision = currentVisibilityRevision;
