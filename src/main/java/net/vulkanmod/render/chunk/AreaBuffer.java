@@ -8,6 +8,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 public class AreaBuffer {
@@ -37,15 +39,17 @@ public class AreaBuffer {
     }
 
     private Buffer allocateBuffer(int size) {
-        int bufferSize = size;
-
-        Buffer buffer;
         if(this.usage == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
-            buffer = new VertexBuffer(bufferSize, memoryType);
-        } else {
-            buffer = new IndexBuffer(bufferSize, memoryType);
+            return new VertexBuffer(size, memoryType);
         }
-        return buffer;
+        if(this.usage == VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+            return new IndexBuffer(size, memoryType);
+        }
+        if(this.usage == VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
+            return new StorageBuffer(size, memoryType);
+        }
+
+        throw new IllegalArgumentException("Unsupported AreaBuffer usage: 0x" + Integer.toHexString(this.usage));
     }
 
     public synchronized void upload(ByteBuffer byteBuffer, Segment uploadSegment) {
