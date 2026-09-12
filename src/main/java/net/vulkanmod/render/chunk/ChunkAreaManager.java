@@ -5,6 +5,8 @@ import net.vulkanmod.render.chunk.util.CircularIntList;
 import net.vulkanmod.render.chunk.util.Util;
 import org.joml.Vector3i;
 
+import java.util.Locale;
+
 public class ChunkAreaManager {
     static final int WIDTH = 8;
     static final int HEIGHT = 8;
@@ -181,6 +183,25 @@ public class ChunkAreaManager {
         for(ChunkArea chunkArea : this.chunkAreasArr) {
             chunkArea.resetQueue();
         }
+    }
+
+    String getStorageStats() {
+        int allocatedRegions = 0;
+        long usedBytes = 0L;
+        long capacityBytes = 0L;
+
+        for(ChunkArea chunkArea : this.chunkAreasArr) {
+            DrawBuffers buffers = chunkArea.drawBuffers;
+            if(!buffers.isAllocated())
+                continue;
+
+            allocatedRegions++;
+            usedBytes += buffers.vertexBuffer.getUsedBytes() + buffers.indexBuffer.getUsedBytes();
+            capacityBytes += (long)buffers.vertexBuffer.getCapacityBytes() + buffers.indexBuffer.getCapacityBytes();
+        }
+
+        return String.format(Locale.ROOT, "regionMem:%d/%d %.1f/%.1fMiB",
+                allocatedRegions, this.size, usedBytes / 1048576.0D, capacityBytes / 1048576.0D);
     }
 
     private int getAreaIndex(int x, int y, int z) {
