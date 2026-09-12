@@ -18,8 +18,9 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Lightweight accounting for the memory classes that matter during a large
  * resource reload. This deliberately combines JVM/native counters with Linux
- * /proc and AMDGPU sysfs data when those interfaces are available. All platform
- * reads are best-effort so diagnostics never become a startup requirement.
+ * /proc, per-client DRM fdinfo and AMDGPU sysfs data when those interfaces are
+ * available. All platform reads are best-effort so diagnostics never become a
+ * startup requirement.
  */
 public final class MemoryDiagnostics {
     private static final long MIB = 1024L * 1024L;
@@ -99,9 +100,10 @@ public final class MemoryDiagnostics {
     /**
      * Resource reload can accumulate memory outside the Java heap: decoded
      * NativeImages, mapped staging buffers, VMA allocations and driver/GTT
-     * bookkeeping all contribute to process RSS. A JVM heap limit therefore does
-     * not protect the desktop from global OOM. Sample Linux /proc at a low cadence
-     * and fail the reload before the kernel has to invoke the OOM killer.
+     * bookkeeping all contribute to process/system pressure. A JVM heap limit
+     * therefore does not protect the desktop from global OOM. Sample Linux /proc
+     * at a low cadence and fail the reload before the kernel has to invoke the OOM
+     * killer.
      *
      * A high process RSS by itself is not sufficient evidence of system pressure:
      * large resource packs legitimately push this modpack beyond 12 GiB RSS while
@@ -156,6 +158,7 @@ public final class MemoryDiagnostics {
 
             Map<String, Long> process = readKbValues(Path.of("/proc/self/status"));
             Map<String, Long> system = readKbValues(Path.of("/proc/meminfo"));
+            DrmClientMemory drmClient = readDrmClientMemory();
             AmdGpuMemory gpu = readAmdGpuMemory();
 
             MemoryManager memoryManager = MemoryManager.getInstance();
@@ -167,8 +170,9 @@ public final class MemoryDiagnostics {
                             "process rss/anon={}/{} MiB; NativeImage live/peak={}/{} MiB; " +
                             "VulkanImage est-live/peak={}/{} MiB VMA-live/peak={}/{} MiB count={}/{}; " +
                             "tracked buffers host/device={}/{} MiB; staging={}; " +
+                            "process DRM clients={} resident VRAM/GTT={}/{} MiB; " +
                             "system available={} MiB GPUActive={} MiB GPUReclaim={} MiB SwapFree={} MiB; " +
-                            "amdgpu VRAM used/total={}/{} MiB GTT used/total={}/{} MiB",
+                            "amdgpu global VRAM used/total={}/{} MiB GTT used/total={}/{} MiB",
                     reason,
                     toMiB(heapUsed), toMiB(heapCommitted), toMiB(heapMax),
                     kbToMiB(process.get("VmRSS")), kbToMiB(process.get("RssAnon")),
@@ -178,6 +182,7 @@ public final class MemoryDiagnostics {
                     VULKAN_IMAGE_COUNT.get(), VULKAN_IMAGE_COUNT_PEAK.get(),
                     hostBufferMiB, deviceBufferMiB,
                     Vulkan.describeStagingBuffers(),
+                    drmClient.clients, bytesToMiB(drmClient.vramResident), bytesToMiB(drmClient.gttResident),
                     kbToMiB(system.get("MemAvailable")), kbToMiB(system.get("GPUActive")),
                     kbToMiB(system.get("GPUReclaim")), kbToMiB(system.get("SwapFree")),
                     bytesToMiB(gpu.vramUsed), bytesToMiB(gpu.vramTotal),
@@ -247,6 +252,118 @@ public final class MemoryDiagnostics {
         return values;
     }
 
+    /**
+     * Linux DRM fdinfo exposes memory owned by each DRM client in the current
+     * process. AMDGPU's device-wide mem_info_gtt_used counter can include the
+     * compositor, browser and other GPU clients, so it cannot by itself tell us
+     * whether a reload-time GTT surge belongs to Minecraft. Deduplicate duplicated
+     * file descriptors using drm-client-id (scoped by drm-pdev when present), then
+     * sum this process' resident VRAM/GTT buffer objects.
+     */
+    private static DrmClientMemory readDrmClientMemory() {
+        Path fdinfoDir = Path.of("/proc/self/fdinfo");
+        if(!Files.isDirectory(fdinfoDir))
+            return DrmClientMemory.UNAVAILABLE;
+
+        long vramResident = 0L;
+        long gttResident = 0L;
+        int clients = 0;
+        Set<String> seenClients = new HashSet<>();
+
+        try(DirectoryStream<Path> entries = Files.newDirectoryStream(fdinfoDir)) {
+            for(Path entry : entries) {
+                String name = entry.getFileName().toString();
+                if(!name.matches("\\d+"))
+                    continue;
+
+                Map<String, String> values = readStringValues(entry);
+                String driver = values.get("drm-driver");
+                if(driver == null)
+                    continue;
+
+                String clientId = values.get("drm-client-id");
+                String pdev = values.get("drm-pdev");
+                String identity = clientId != null
+                        ? (pdev != null ? pdev : driver) + "#" + clientId
+                        : entry.toString();
+                if(!seenClients.add(identity))
+                    continue;
+
+                long clientVram = readDrmRegionBytes(values, "vram");
+                long clientGtt = readDrmRegionBytes(values, "gtt");
+                if(clientVram < 0L && clientGtt < 0L)
+                    continue;
+
+                ++clients;
+                if(clientVram >= 0L)
+                    vramResident += clientVram;
+                if(clientGtt >= 0L)
+                    gttResident += clientGtt;
+            }
+        } catch (IOException ignored) {
+            return DrmClientMemory.UNAVAILABLE;
+        }
+
+        return clients > 0
+                ? new DrmClientMemory(clients, vramResident, gttResident)
+                : DrmClientMemory.UNAVAILABLE;
+    }
+
+    private static Map<String, String> readStringValues(Path path) throws IOException {
+        Map<String, String> values = new HashMap<>();
+        if(!Files.isReadable(path))
+            return values;
+
+        try(BufferedReader reader = Files.newBufferedReader(path)) {
+            String line;
+            while((line = reader.readLine()) != null) {
+                int colon = line.indexOf(':');
+                if(colon <= 0)
+                    continue;
+
+                String key = line.substring(0, colon);
+                String value = line.substring(colon + 1).trim();
+                if(!value.isEmpty())
+                    values.put(key, value);
+            }
+        }
+        return values;
+    }
+
+    private static long readDrmRegionBytes(Map<String, String> values, String region) {
+        String value = values.get("drm-resident-" + region);
+        if(value == null) {
+            // AMDGPU kernels also expose the older drm-memory-* alias.
+            value = values.get("drm-memory-" + region);
+        }
+        return parseSizedBytes(value);
+    }
+
+    private static long parseSizedBytes(String value) {
+        if(value == null || value.isBlank())
+            return -1L;
+
+        String[] parts = value.trim().split("\\s+");
+        if(parts.length == 0)
+            return -1L;
+
+        try {
+            long amount = Long.parseLong(parts[0]);
+            long multiplier = 1L;
+            if(parts.length > 1) {
+                multiplier = switch(parts[1]) {
+                    case "KiB" -> 1024L;
+                    case "MiB" -> MIB;
+                    case "GiB" -> 1024L * MIB;
+                    default -> 1L;
+                };
+            }
+            return Math.multiplyExact(amount, multiplier);
+        } catch (NumberFormatException | ArithmeticException ignored) {
+            return -1L;
+        }
+    }
+
     private static AmdGpuMemory readAmdGpuMemory() {
         Path drm = Path.of("/sys/class/drm");
         if(!Files.isDirectory(drm))
@@ -307,6 +424,10 @@ public final class MemoryDiagnostics {
         } catch (IOException | NumberFormatException ignored) {
             return -1L;
         }
+    }
+
+    private record DrmClientMemory(int clients, long vramResident, long gttResident) {
+        private static final DrmClientMemory UNAVAILABLE = new DrmClientMemory(-1, -1L, -1L);
     }
 
     private record AmdGpuMemory(long vramUsed, long vramTotal, long gttUsed, long gttTotal) {
