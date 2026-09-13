@@ -133,8 +133,9 @@ uint packCorner(uint x, uint y, uint z) {
 
 /*
  * Expand one dense face-work item into the four corners of its unit-cube face.
- * The order is diagnostic/canonical only: current model qualification proves the
- * corner set, not baked-quad winding, UV orientation, light, tint, AO, or material.
+ * The sequence matches Minecraft FaceInfo's exact baked-quad vertex order for
+ * each direction. Model qualification now proves that positional order too;
+ * UV orientation, light, tint, AO, and material are still not GPU-qualified.
  */
 void writeFaceCorners(uint compactSlot, uint index, uint face) {
     uint x0 = index & 15u;
@@ -146,35 +147,35 @@ void writeFaceCorners(uint compactSlot, uint index, uint face) {
     uint base = FACE_VERTEX_BASE + compactSlot * VERTICES_PER_FACE;
 
     if (face == 0u) {
-        outputData.words[base] = packCorner(x0, y0, z0);
-        outputData.words[base + 1u] = packCorner(x1, y0, z0);
-        outputData.words[base + 2u] = packCorner(x1, y0, z1);
-        outputData.words[base + 3u] = packCorner(x0, y0, z1);
+        outputData.words[base] = packCorner(x0, y0, z1);
+        outputData.words[base + 1u] = packCorner(x0, y0, z0);
+        outputData.words[base + 2u] = packCorner(x1, y0, z0);
+        outputData.words[base + 3u] = packCorner(x1, y0, z1);
     } else if (face == 1u) {
         outputData.words[base] = packCorner(x0, y1, z0);
         outputData.words[base + 1u] = packCorner(x0, y1, z1);
         outputData.words[base + 2u] = packCorner(x1, y1, z1);
         outputData.words[base + 3u] = packCorner(x1, y1, z0);
     } else if (face == 2u) {
-        outputData.words[base] = packCorner(x0, y0, z0);
-        outputData.words[base + 1u] = packCorner(x0, y1, z0);
-        outputData.words[base + 2u] = packCorner(x1, y1, z0);
-        outputData.words[base + 3u] = packCorner(x1, y0, z0);
-    } else if (face == 3u) {
-        outputData.words[base] = packCorner(x0, y0, z1);
-        outputData.words[base + 1u] = packCorner(x1, y0, z1);
-        outputData.words[base + 2u] = packCorner(x1, y1, z1);
-        outputData.words[base + 3u] = packCorner(x0, y1, z1);
-    } else if (face == 4u) {
-        outputData.words[base] = packCorner(x0, y0, z0);
-        outputData.words[base + 1u] = packCorner(x0, y0, z1);
-        outputData.words[base + 2u] = packCorner(x0, y1, z1);
+        outputData.words[base] = packCorner(x1, y1, z0);
+        outputData.words[base + 1u] = packCorner(x1, y0, z0);
+        outputData.words[base + 2u] = packCorner(x0, y0, z0);
         outputData.words[base + 3u] = packCorner(x0, y1, z0);
+    } else if (face == 3u) {
+        outputData.words[base] = packCorner(x0, y1, z1);
+        outputData.words[base + 1u] = packCorner(x0, y0, z1);
+        outputData.words[base + 2u] = packCorner(x1, y0, z1);
+        outputData.words[base + 3u] = packCorner(x1, y1, z1);
+    } else if (face == 4u) {
+        outputData.words[base] = packCorner(x0, y1, z0);
+        outputData.words[base + 1u] = packCorner(x0, y0, z0);
+        outputData.words[base + 2u] = packCorner(x0, y0, z1);
+        outputData.words[base + 3u] = packCorner(x0, y1, z1);
     } else {
-        outputData.words[base] = packCorner(x1, y0, z0);
-        outputData.words[base + 1u] = packCorner(x1, y1, z0);
-        outputData.words[base + 2u] = packCorner(x1, y1, z1);
-        outputData.words[base + 3u] = packCorner(x1, y0, z1);
+        outputData.words[base] = packCorner(x1, y1, z1);
+        outputData.words[base + 1u] = packCorner(x1, y0, z1);
+        outputData.words[base + 2u] = packCorner(x1, y0, z0);
+        outputData.words[base + 3u] = packCorner(x1, y1, z0);
     }
 }
 

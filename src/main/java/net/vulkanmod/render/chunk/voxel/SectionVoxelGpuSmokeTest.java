@@ -1,5 +1,7 @@
 package net.vulkanmod.render.chunk.voxel;
 
+import net.minecraft.client.renderer.FaceInfo;
+import net.minecraft.core.Direction;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
@@ -251,12 +253,10 @@ public final class SectionVoxelGpuSmokeTest {
             int[] actualCorners = Arrays.copyOfRange(actual, vertexBase,
                     vertexBase + VoxelComputeProbe.VERTICES_PER_FACE);
             int[] expectedCorners = expectedFaceCorners(index, face);
-            Arrays.sort(actualCorners);
-            Arrays.sort(expectedCorners);
             for(int corner = 0; corner < VoxelComputeProbe.VERTICES_PER_FACE; ++corner) {
                 if(actualCorners[corner] != expectedCorners[corner]) {
-                    throw new AssertionError("GPU voxel face-corner mismatch at compact slot " + slot
-                            + " corner " + corner
+                    throw new AssertionError("GPU voxel ordered face-corner mismatch at compact slot " + slot
+                            + " vertex " + corner
                             + ": expected=0x" + Integer.toHexString(expectedCorners[corner])
                             + " actual=0x" + Integer.toHexString(actualCorners[corner]));
                 }
@@ -270,7 +270,7 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v4 GPU_FULL_CUBE source qualification plus SOLID_RENDER semantic occlusion and six-face boundary halo, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v4 GPU_FULL_CUBE source qualification plus SOLID_RENDER semantic occlusion and six-face boundary halo, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, exact Minecraft FaceInfo-ordered unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
     }
 
@@ -342,28 +342,37 @@ public final class SectionVoxelGpuSmokeTest {
         int x1 = x0 + 1;
         int y1 = y0 + 1;
         int z1 = z0 + 1;
+        FaceInfo faceInfo = FaceInfo.fromFacing(directionForFace(face));
+        int[] corners = new int[VoxelComputeProbe.VERTICES_PER_FACE];
 
+        for(int vertex = 0; vertex < VoxelComputeProbe.VERTICES_PER_FACE; ++vertex) {
+            FaceInfo.VertexInfo info = faceInfo.getVertexInfo(vertex);
+            int x = extentCoordinate(info.xFace, FaceInfo.Constants.MIN_X, FaceInfo.Constants.MAX_X, x0, x1);
+            int y = extentCoordinate(info.yFace, FaceInfo.Constants.MIN_Y, FaceInfo.Constants.MAX_Y, y0, y1);
+            int z = extentCoordinate(info.zFace, FaceInfo.Constants.MIN_Z, FaceInfo.Constants.MAX_Z, z0, z1);
+            corners[vertex] = packCorner(x, y, z);
+        }
+        return corners;
+    }
+
+    private static Direction directionForFace(int face) {
         return switch(face) {
-            case 0 -> new int[]{
-                    packCorner(x0, y0, z0), packCorner(x1, y0, z0),
-                    packCorner(x1, y0, z1), packCorner(x0, y0, z1)};
-            case 1 -> new int[]{
-                    packCorner(x0, y1, z0), packCorner(x0, y1, z1),
-                    packCorner(x1, y1, z1), packCorner(x1, y1, z0)};
-            case 2 -> new int[]{
-                    packCorner(x0, y0, z0), packCorner(x0, y1, z0),
-                    packCorner(x1, y1, z0), packCorner(x1, y0, z0)};
-            case 3 -> new int[]{
-                    packCorner(x0, y0, z1), packCorner(x1, y0, z1),
-                    packCorner(x1, y1, z1), packCorner(x0, y1, z1)};
-            case 4 -> new int[]{
-                    packCorner(x0, y0, z0), packCorner(x0, y0, z1),
-                    packCorner(x0, y1, z1), packCorner(x0, y1, z0)};
-            case 5 -> new int[]{
-                    packCorner(x1, y0, z0), packCorner(x1, y1, z0),
-                    packCorner(x1, y1, z1), packCorner(x1, y0, z1)};
+            case 0 -> Direction.DOWN;
+            case 1 -> Direction.UP;
+            case 2 -> Direction.NORTH;
+            case 3 -> Direction.SOUTH;
+            case 4 -> Direction.WEST;
+            case 5 -> Direction.EAST;
             default -> throw new AssertionError("Unexpected GPU face id " + face);
         };
+    }
+
+    private static int extentCoordinate(int extent, int minExtent, int maxExtent, int min, int max) {
+        if(extent == minExtent)
+            return min;
+        if(extent == maxExtent)
+            return max;
+        throw new AssertionError("FaceInfo axis extent does not match the requested coordinate axis");
     }
 
     private static int packCorner(int x, int y, int z) {

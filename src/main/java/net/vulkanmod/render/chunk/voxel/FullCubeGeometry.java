@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk.voxel;
 
+import net.minecraft.client.renderer.FaceInfo;
 import net.minecraft.core.Direction;
 
 /** Pure baked-quad geometry checks shared by model qualification and CPU-only tests. */
@@ -9,10 +10,10 @@ final class FullCubeGeometry {
     private FullCubeGeometry() {}
 
     /**
-     * Accept only one canonical unit-cube face: four unique corners on the requested
-     * x/y/z boundary plane. The first three packed vertex words are Minecraft's
-     * position floats; any remaining vertex attributes are intentionally ignored
-     * here and must be qualified separately before a CPU fallback can be removed.
+     * Accept only one unit-cube face: four unique corners on the requested x/y/z
+     * boundary plane. The first three packed vertex words are Minecraft's position
+     * floats; any remaining vertex attributes are intentionally ignored here and
+     * must be qualified separately before a CPU fallback can be removed.
      */
     static boolean isUnitFace(int[] vertices, Direction direction) {
         if(vertices == null || direction == null || vertices.length % 4 != 0)
@@ -72,6 +73,40 @@ final class FullCubeGeometry {
         }
 
         return corners[0] && corners[1] && corners[2] && corners[3];
+    }
+
+    /**
+     * Require the four position vertices to use Minecraft FaceInfo's exact baked
+     * vertex sequence for this direction. This proves both winding and the cyclic
+     * starting corner, which gives later UV/material work a stable vertex identity.
+     */
+    static boolean hasCanonicalVertexOrder(int[] vertices, Direction direction) {
+        if(!isUnitFace(vertices, direction))
+            return false;
+
+        int stride = vertices.length / 4;
+        FaceInfo faceInfo = FaceInfo.fromFacing(direction);
+        for(int vertex = 0; vertex < 4; ++vertex) {
+            FaceInfo.VertexInfo expected = faceInfo.getVertexInfo(vertex);
+            int base = vertex * stride;
+            float x = Float.intBitsToFloat(vertices[base]);
+            float y = Float.intBitsToFloat(vertices[base + 1]);
+            float z = Float.intBitsToFloat(vertices[base + 2]);
+
+            if(!matchesExtent(x, expected.xFace, FaceInfo.Constants.MIN_X, FaceInfo.Constants.MAX_X)
+                    || !matchesExtent(y, expected.yFace, FaceInfo.Constants.MIN_Y, FaceInfo.Constants.MAX_Y)
+                    || !matchesExtent(z, expected.zFace, FaceInfo.Constants.MIN_Z, FaceInfo.Constants.MAX_Z))
+                return false;
+        }
+        return true;
+    }
+
+    private static boolean matchesExtent(float value, int extent, int minExtent, int maxExtent) {
+        if(extent == minExtent)
+            return near(value, 0.0f);
+        if(extent == maxExtent)
+            return near(value, 1.0f);
+        return false;
     }
 
     private static int endpoint(float value) {

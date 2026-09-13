@@ -63,7 +63,7 @@ public final class GpuTerrainModelRegistry {
         CURRENT = snapshot;
 
         Initializer.LOGGER.info(
-                "GPU terrain baked-model generation {}: full-cube geometry {}/{}; rejected [{}]",
+                "GPU terrain baked-model generation {}: canonical full-cube geometry {}/{}; rejected [{}]",
                 generation, qualified.size(), models.size(), describeRejected(rejected));
     }
 
@@ -86,7 +86,7 @@ public final class GpuTerrainModelRegistry {
 
     public static String describe() {
         Snapshot snapshot = CURRENT;
-        return "GPU cube models: " + snapshot.fullCubes.size() + "/" + snapshot.totalStates
+        return "GPU canonical cube models: " + snapshot.fullCubes.size() + "/" + snapshot.totalStates
                 + " (generation " + snapshot.generation + ")";
     }
 
@@ -130,6 +130,8 @@ public final class GpuTerrainModelRegistry {
                 return RejectReason.UNSHADED_FACE;
             if(!FullCubeGeometry.isUnitFace(quad.getVertices(), direction))
                 return RejectReason.NON_UNIT_FACE;
+            if(!FullCubeGeometry.hasCanonicalVertexOrder(quad.getVertices(), direction))
+                return RejectReason.NON_CANONICAL_VERTEX_ORDER;
         }
 
         return null;
@@ -147,7 +149,11 @@ public final class GpuTerrainModelRegistry {
         return joiner.toString();
     }
 
-    /** Metadata placeholder for the first template family; later phases add UV/light data. */
+    /**
+     * Metadata placeholder for the first template family. Face positions now use
+     * Minecraft's exact canonical vertex order; later phases still add UV/material,
+     * light, AO, and other baked attributes before any CPU fallback is removed.
+     */
     public record FullCubeTemplate(int faceMask) {}
 
     private record Snapshot(long generation, int totalStates,
@@ -172,6 +178,7 @@ public final class GpuTerrainModelRegistry {
         FACE_DIRECTION,
         TINTED_FACE,
         UNSHADED_FACE,
-        NON_UNIT_FACE
+        NON_UNIT_FACE,
+        NON_CANONICAL_VERTEX_ORDER
     }
 }
