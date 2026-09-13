@@ -18,6 +18,18 @@ Use these together:
 
 ### Live continuation note — 2026-09-13 (in progress)
 
+- Continuation session baseline: `40ab0350234b4ddc4fda7d83b1a9d4fadfdef5de`;
+  CI #398 (run `34749852306`, job `103704325922`) is fully green, including
+  compilation, both startup modes, model-table compute decode/readback, post-chain,
+  screenshot, Crash Assistant, Chat Heads and Flywheel gates.
+- Current bounded candidate (do not build beyond it until CI proves it): extend the model-table
+  compute oracle to bind one real `RegionVoxelGpuStore` residency at the same time.
+  Build the fixture from actual registered qualified/unqualified state IDs and
+  verify all 4,096 state-ID -> dense-template lookups. Deliberately vary the legacy
+  `GPU_FULL_CUBE` hint independently so the current baked-model table is proven to
+  be authoritative. Keep this diagnostic-only; do not alter `CPU_REQUIRED`, normal
+  meshing, production output ownership, or draw/upload integration.
+
 - Live branch head at session start: `5f35881d5342e14933f31c2a5c5e689019f5d9a4`
   (`gpu terrain: upload model table outside frame staging`).
 - CI #395 (run `34748685616`) compiled and passed the existing voxel compute/readback

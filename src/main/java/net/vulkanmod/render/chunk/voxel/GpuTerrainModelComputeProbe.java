@@ -45,7 +45,7 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
     static final int RESULT_WORDS_PER_TEMPLATE = 1 + GpuTerrainModelTable.TEMPLATE_WORDS;
 
     private static final int WORKGROUP_SIZE = 64;
-    private static final int PUSH_CONSTANT_BYTES = Integer.BYTES;
+    private static final int PUSH_CONSTANT_BYTES = 3 * Integer.BYTES;
 
     private long descriptorSetLayout;
     private long descriptorPool;
@@ -62,14 +62,20 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
         this.createPipeline();
     }
 
-    int[] dispatch(GpuTerrainModelGpuStore.Residency residency, int templateCount) {
+    int[] dispatch(GpuTerrainModelGpuStore.Residency residency, int templateCount,
+                   StorageBuffer voxelPage, int voxelByteOffset, int voxelByteLength) {
         if(this.closed)
             throw new IllegalStateException("GPU terrain model compute probe is closed");
         if(residency == null || !residency.valid() || residency.buffer() == null
                 || residency.byteLength() <= 0 || templateCount <= 0)
             throw new IllegalArgumentException("Valid GPU terrain model-table residency required");
+        if(voxelPage == null || voxelByteOffset < 0 || voxelByteLength <= 0
+                || (voxelByteOffset & 3) != 0
+                || (long)voxelByteOffset + voxelByteLength > voxelPage.getBufferSize())
+            throw new IllegalArgumentException("Valid resident section voxel slice required");
 
-        int resultWords = Math.multiplyExact(templateCount, RESULT_WORDS_PER_TEMPLATE);
+        int resultWords = Math.addExact(voxelLookupBase(templateCount),
+                SectionVoxelSnapshot.BLOCK_COUNT);
         int resultBytes = Math.multiplyExact(resultWords, Integer.BYTES);
         StorageBuffer output = new StorageBuffer(resultBytes, MemoryTypes.GPU_MEM);
         long readbackBuffer = VK_NULL_HANDLE;
@@ -84,21 +90,26 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
             readbackBuffer = pReadbackBuffer.get(0);
             readbackAllocation = pReadbackAllocation.get(0);
 
-            this.updateDescriptorSet(residency.buffer(), residency.byteLength(), output, resultBytes);
+            this.updateDescriptorSet(residency.buffer(), residency.byteLength(),
+                    output, resultBytes, voxelPage);
 
             CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
             vkCmdFillBuffer(commandBuffer.getHandle(), output.getId(), 0L, resultBytes, 0);
             barrierTransferWritesToCompute(commandBuffer, residency.buffer(),
-                    residency.byteLength(), output, resultBytes);
+                    residency.byteLength(), output, resultBytes, voxelPage,
+                    voxelByteOffset, voxelByteLength);
 
             vkCmdBindPipeline(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
             vkCmdBindDescriptorSets(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE,
                     this.pipelineLayout, 0, stack.longs(this.descriptorSet), null);
             ByteBuffer push = stack.malloc(PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder());
             push.putInt(0, templateCount);
+            push.putInt(Integer.BYTES, voxelByteOffset);
+            push.putInt(2 * Integer.BYTES, voxelByteLength);
             vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
                     VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
-            int workgroups = (templateCount + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+            int invocations = Math.max(templateCount, SectionVoxelSnapshot.BLOCK_COUNT);
+            int workgroups = (invocations + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
             vkCmdDispatch(commandBuffer.getHandle(), workgroups, 1, 1);
 
             barrierComputeWritesToTransfer(commandBuffer, output, resultBytes);
@@ -123,10 +134,14 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
         }
     }
 
+    static int voxelLookupBase(int templateCount) {
+        return Math.multiplyExact(templateCount, RESULT_WORDS_PER_TEMPLATE);
+    }
+
     private void createDescriptorResources() {
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(2, stack);
-            for(int i = 0; i < 2; ++i) {
+            VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(3, stack);
+            for(int i = 0; i < 3; ++i) {
                 bindings.get(i)
                         .binding(i)
                         .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
@@ -144,7 +159,7 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
             this.descriptorSetLayout = pLayout.get(0);
 
             VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
-            poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(2);
+            poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(3);
             VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
                     .sType$Default()
                     .pPoolSizes(poolSizes)
@@ -221,14 +236,17 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
     }
 
     private void updateDescriptorSet(StorageBuffer modelTable, int tableBytes,
-                                     StorageBuffer output, int outputBytes) {
+                                     StorageBuffer output, int outputBytes,
+                                     StorageBuffer voxelPage) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorBufferInfo.Buffer tableInfo = VkDescriptorBufferInfo.calloc(1, stack);
             tableInfo.get(0).buffer(modelTable.getId()).offset(0L).range(tableBytes);
             VkDescriptorBufferInfo.Buffer outputInfo = VkDescriptorBufferInfo.calloc(1, stack);
             outputInfo.get(0).buffer(output.getId()).offset(0L).range(outputBytes);
+            VkDescriptorBufferInfo.Buffer voxelInfo = VkDescriptorBufferInfo.calloc(1, stack);
+            voxelInfo.get(0).buffer(voxelPage.getId()).offset(0L).range(voxelPage.getBufferSize());
 
-            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(2, stack);
+            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(3, stack);
             writes.get(0)
                     .sType$Default()
                     .dstSet(this.descriptorSet)
@@ -243,15 +261,25 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .pBufferInfo(outputInfo);
+            writes.get(2)
+                    .sType$Default()
+                    .dstSet(this.descriptorSet)
+                    .dstBinding(2)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .pBufferInfo(voxelInfo);
             vkUpdateDescriptorSets(Device.device, writes, null);
         }
     }
 
     private static void barrierTransferWritesToCompute(CommandPool.CommandBuffer commandBuffer,
                                                         StorageBuffer table, int tableBytes,
-                                                        StorageBuffer output, int outputBytes) {
+                                                        StorageBuffer output, int outputBytes,
+                                                        StorageBuffer voxelPage,
+                                                        int voxelByteOffset,
+                                                        int voxelByteLength) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(2, stack);
+            VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(3, stack);
             barriers.get(0)
                     .sType$Default()
                     .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
@@ -270,6 +298,15 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
                     .buffer(output.getId())
                     .offset(0L)
                     .size(outputBytes);
+            barriers.get(2)
+                    .sType$Default()
+                    .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(voxelPage.getId())
+                    .offset(voxelByteOffset)
+                    .size(voxelByteLength);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                     0, null, barriers, null);

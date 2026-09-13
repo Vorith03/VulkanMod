@@ -1,7 +1,11 @@
 package net.vulkanmod.render.chunk.voxel;
 
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
@@ -13,6 +17,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -28,6 +33,8 @@ public final class GpuTerrainModelTableSmokeTest {
     private GpuTerrainModelTableSmokeTest() {}
 
     public static void verify() {
+        require(AreaUploadManager.INSTANCE != null,
+                "GPU model-table join smoke requires the terrain upload manager");
         GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
         require(table.generation() == GpuTerrainModelRegistry.generation(),
                 "Packed model table must capture the current baked-model generation");
@@ -40,6 +47,7 @@ public final class GpuTerrainModelTableSmokeTest {
         verifyCpuAbi(table);
 
         GpuTerrainModelGpuStore store = new GpuTerrainModelGpuStore();
+        RegionVoxelGpuStore voxelStore = new RegionVoxelGpuStore();
         try {
             require(store.upload(table), "GPU model-table upload must be accepted");
             GpuTerrainModelGpuStore.Residency resident = store.getResidency();
@@ -48,26 +56,42 @@ public final class GpuTerrainModelTableSmokeTest {
             require(resident.byteLength() == table.byteSize(),
                     "GPU model-table residency must expose the exact packed byte length");
             verifyReadback(resident, table);
-            verifyComputeLookup(resident, table);
+
+            SectionVoxelSnapshot voxelSnapshot = joinedVoxelFixture(table);
+            require(voxelStore.upload(0, voxelSnapshot, table.generation()),
+                    "Joined model-table smoke voxel upload must be accepted");
+            AreaUploadManager.INSTANCE.submitUploads();
+            RegionVoxelGpuStore.Residency voxelResidency = voxelStore.getResidency(0);
+            require(voxelResidency.valid() && voxelResidency.generation() == table.generation(),
+                    "Submitted joined-smoke voxel generation must become resident");
+            StorageBuffer voxelPage = voxelStore.getPageBuffer(voxelResidency.pageIndex());
+            require(voxelPage != null,
+                    "Joined model-table compute smoke requires a live voxel page");
+            verifyComputeLookup(resident, table, voxelPage, voxelResidency, voxelSnapshot);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback and compute state-to-template/UV decode",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode and 4096 resident voxel state-ID joins",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {
             Vulkan.waitIdle();
+            voxelStore.close();
             store.close();
         }
     }
 
     private static void verifyComputeLookup(GpuTerrainModelGpuStore.Residency residency,
-                                            GpuTerrainModelTable table) {
+                                            GpuTerrainModelTable table,
+                                            StorageBuffer voxelPage,
+                                            RegionVoxelGpuStore.Residency voxelResidency,
+                                            SectionVoxelSnapshot voxelSnapshot) {
         try(GpuTerrainModelComputeProbe probe = new GpuTerrainModelComputeProbe()) {
-            int[] actual = probe.dispatch(residency, table.templateCount());
-            int expectedWords = Math.multiplyExact(table.templateCount(),
-                    GpuTerrainModelComputeProbe.RESULT_WORDS_PER_TEMPLATE);
+            int[] actual = probe.dispatch(residency, table.templateCount(), voxelPage,
+                    voxelResidency.byteOffset(), voxelResidency.byteLength());
+            int lookupBase = GpuTerrainModelComputeProbe.voxelLookupBase(table.templateCount());
+            int expectedWords = Math.addExact(lookupBase, SectionVoxelSnapshot.BLOCK_COUNT);
             require(actual.length == expectedWords,
-                    "GPU model-table compute output must cover every dense template");
+                    "GPU model-table compute output must cover every dense template and voxel lookup");
 
             for(int template = 0; template < table.templateCount(); ++template) {
                 int outputBase = template * GpuTerrainModelComputeProbe.RESULT_WORDS_PER_TEMPLATE;
@@ -83,7 +107,60 @@ public final class GpuTerrainModelTableSmokeTest {
                     }
                 }
             }
+
+            int qualifiedWithoutHint = 0;
+            int rejectedWithHint = 0;
+            for(int voxel = 0; voxel < SectionVoxelSnapshot.BLOCK_COUNT; ++voxel) {
+                int templateIndex = table.templateIndexForStateId(voxelSnapshot.stateId(voxel));
+                int expected = templateIndex + 1;
+                if(actual[lookupBase + voxel] != expected) {
+                    throw new AssertionError("GPU resident voxel model lookup mismatch at voxel "
+                            + voxel + ": expected=" + expected
+                            + " actual=" + actual[lookupBase + voxel]);
+                }
+
+                boolean hinted = (voxelSnapshot.flags(voxel)
+                        & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0;
+                if(templateIndex >= 0 && !hinted)
+                    qualifiedWithoutHint++;
+                if(templateIndex < 0 && hinted)
+                    rejectedWithHint++;
+            }
+            require(qualifiedWithoutHint > 0 && rejectedWithHint > 0,
+                    "Joined voxel fixture must prove current model-table lookup is independent of stale geometry hints");
         }
+    }
+
+    private static SectionVoxelSnapshot joinedVoxelFixture(GpuTerrainModelTable table) {
+        ArrayList<Integer> qualified = new ArrayList<>();
+        ArrayList<Integer> unqualified = new ArrayList<>();
+        for(Block block : BuiltInRegistries.BLOCK) {
+            for(BlockState state : block.getStateDefinition().getPossibleStates()) {
+                int stateId = Block.getId(state);
+                if(table.templateIndexForStateId(stateId) >= 0)
+                    qualified.add(stateId);
+                else
+                    unqualified.add(stateId);
+            }
+        }
+        require(!qualified.isEmpty() && !unqualified.isEmpty(),
+                "Joined voxel fixture requires real qualified and unqualified block states");
+
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        for(int voxel = 0; voxel < SectionVoxelSnapshot.BLOCK_COUNT; ++voxel) {
+            int category = voxel & 3;
+            boolean useQualified = category < 2;
+            ArrayList<Integer> states = useQualified ? qualified : unqualified;
+            int stateId = states.get((voxel >>> 2) % states.size());
+
+            // Hint agrees for categories 0/3 and deliberately disagrees for 1/2.
+            // The current resource-generation model table must be authoritative.
+            int flags = SectionVoxelSnapshot.CPU_REQUIRED;
+            if(category == 0 || category == 2)
+                flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+            builder.add(stateId, flags);
+        }
+        return builder.finish();
     }
 
     private static void verifyCpuAbi(GpuTerrainModelTable table) {

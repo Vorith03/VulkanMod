@@ -10,8 +10,14 @@ layout(set = 0, binding = 1, std430) writeonly buffer ProbeOutput {
     uint words[];
 } outputData;
 
+layout(set = 0, binding = 2, std430) readonly buffer VoxelPage {
+    uint words[];
+} voxelPage;
+
 layout(push_constant) uniform ProbePushConstants {
     uint templateCount;
+    uint voxelBaseByteOffset;
+    uint voxelByteLength;
 } pc;
 
 const uint MAGIC = 0x47544d31u;
@@ -20,27 +26,61 @@ const uint HEADER_WORDS = 8u;
 const uint TEMPLATE_WORDS = 56u;
 const uint RESULT_WORDS_PER_TEMPLATE = 57u;
 const uint VALID_MARKER = 0x4d4f444cu;
+const uint VOXEL_MAGIC = 0x56584c31u;
+const uint VOXEL_VERSION = 4u;
+const uint BLOCK_COUNT = 4096u;
 
-void main() {
-    uint templateIndex = gl_GlobalInvocationID.x;
-    if (templateIndex >= pc.templateCount)
-        return;
+uint resolveVoxelTemplate(uint index) {
+    if ((pc.voxelBaseByteOffset & 3u) != 0u)
+        return 0u;
 
-    uint outputBase = templateIndex * RESULT_WORDS_PER_TEMPLATE;
-    if (modelTable.words[0] != MAGIC || modelTable.words[1] != VERSION)
-        return;
-    if (modelTable.words[5] != pc.templateCount)
-        return;
+    uint base = pc.voxelBaseByteOffset >> 2u;
+    if (voxelPage.words[base] != VOXEL_MAGIC
+            || voxelPage.words[base + 1u] != VOXEL_VERSION
+            || voxelPage.words[base + 2u] != pc.voxelByteLength
+            || voxelPage.words[base + 3u] != BLOCK_COUNT)
+        return 0u;
 
-    uint templateBase = modelTable.words[7] + templateIndex * TEMPLATE_WORDS;
-    uint stateId = modelTable.words[templateBase];
+    uint paletteCount = voxelPage.words[base + 7u];
+    uint paletteOffset = voxelPage.words[base + 8u];
+    uint indexOffset = voxelPage.words[base + 9u];
+    uint packed = voxelPage.words[base + indexOffset + (index >> 1u)];
+    uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 0xffffu;
+    if (paletteIndex >= paletteCount)
+        return 0u;
+
+    uint stateId = voxelPage.words[base + paletteOffset + paletteIndex];
     uint stateIndexCount = modelTable.words[4];
     if (stateId >= stateIndexCount)
-        return;
-    if (modelTable.words[HEADER_WORDS + stateId] != templateIndex + 1u)
-        return;
+        return 0u;
 
-    outputData.words[outputBase] = VALID_MARKER;
-    for (uint word = 0u; word < TEMPLATE_WORDS; ++word)
-        outputData.words[outputBase + 1u + word] = modelTable.words[templateBase + word];
+    uint densePlusOne = modelTable.words[HEADER_WORDS + stateId];
+    if (densePlusOne > pc.templateCount)
+        return 0u;
+    return densePlusOne;
+}
+
+void main() {
+    uint invocation = gl_GlobalInvocationID.x;
+    bool tableHeaderValid = modelTable.words[0] == MAGIC
+            && modelTable.words[1] == VERSION
+            && modelTable.words[5] == pc.templateCount;
+
+    if (invocation < pc.templateCount && tableHeaderValid) {
+        uint outputBase = invocation * RESULT_WORDS_PER_TEMPLATE;
+        uint templateBase = modelTable.words[7] + invocation * TEMPLATE_WORDS;
+        uint stateId = modelTable.words[templateBase];
+        uint stateIndexCount = modelTable.words[4];
+        if (stateId < stateIndexCount
+                && modelTable.words[HEADER_WORDS + stateId] == invocation + 1u) {
+            outputData.words[outputBase] = VALID_MARKER;
+            for (uint word = 0u; word < TEMPLATE_WORDS; ++word)
+                outputData.words[outputBase + 1u + word] = modelTable.words[templateBase + word];
+        }
+    }
+
+    if (invocation < BLOCK_COUNT && tableHeaderValid) {
+        uint voxelOutputBase = pc.templateCount * RESULT_WORDS_PER_TEMPLATE;
+        outputData.words[voxelOutputBase + invocation] = resolveVoxelTemplate(invocation);
+    }
 }
