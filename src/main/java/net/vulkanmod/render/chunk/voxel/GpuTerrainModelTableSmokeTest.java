@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk.voxel;
 
+import net.minecraft.client.renderer.FaceInfo;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -26,6 +27,8 @@ import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 /** Real Vulkan oracle for the resource-generation GPU terrain model table. */
 public final class GpuTerrainModelTableSmokeTest {
     private static final int JOINED_VOXEL_OFFSET = 64;
+    private static final float POSITION_SCALE = 1900.0f;
+    private static final float UV_SCALE = 65536.0f;
     private static final Direction[] FACE_DIRECTIONS = {
             Direction.DOWN, Direction.UP, Direction.NORTH,
             Direction.SOUTH, Direction.WEST, Direction.EAST
@@ -64,7 +67,7 @@ public final class GpuTerrainModelTableSmokeTest {
                     JOINED_VOXEL_OFFSET, voxelSnapshot.byteSize(), voxelSnapshot);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode, 4096 resident voxel face-row joins, and exact compact candidate face rows",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode, 4096 resident voxel face-row joins, exact compact candidate face rows, and packed position/UV terrain-vertex fields",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {
@@ -200,6 +203,24 @@ public final class GpuTerrainModelTableSmokeTest {
                             + slot + " voxel " + voxel + " face " + face + " word " + word);
                 }
             }
+            int[] expectedCorners = expectedFaceCorners(voxel, face);
+            int vertexBase = VoxelComputeProbe.PARTIAL_VERTEX_BASE
+                    + slot * VoxelComputeProbe.VERTICES_PER_FACE
+                    * VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX;
+            for(int vertex = 0; vertex < VoxelComputeProbe.VERTICES_PER_FACE; ++vertex) {
+                int[] expectedVertex = templateIndex < 0
+                        ? new int[VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX]
+                        : expectedPartialVertex(table, templateIndex, face,
+                                vertex, expectedCorners[vertex]);
+                for(int word = 0; word < expectedVertex.length; ++word) {
+                    if(actual[vertexBase + vertex
+                            * VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX + word]
+                            != expectedVertex[word]) {
+                        throw new AssertionError("Joined compact partial vertex mismatch at slot "
+                                + slot + " vertex " + vertex + " word " + word);
+                    }
+                }
+            }
             if(templateIndex >= 0)
                 qualifiedRows++;
             else
@@ -219,10 +240,72 @@ public final class GpuTerrainModelTableSmokeTest {
                 "Joined compact candidates must cover qualified rows and fail-closed unqualified hints");
         for(int word = VoxelComputeProbe.MODEL_FACE_BASE
                 + candidateCount * VoxelComputeProbe.MODEL_FACE_RESULT_WORDS;
-            word < VoxelComputeProbe.RESULT_WORDS; ++word) {
+            word < VoxelComputeProbe.PARTIAL_VERTEX_BASE; ++word) {
             if(actual[word] != 0)
                 throw new AssertionError("Joined compact model-face tail must remain zero at word " + word);
         }
+        for(int word = VoxelComputeProbe.PARTIAL_VERTEX_BASE
+                + candidateCount * VoxelComputeProbe.VERTICES_PER_FACE
+                * VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX;
+            word < VoxelComputeProbe.RESULT_WORDS; ++word) {
+            if(actual[word] != 0)
+                throw new AssertionError("Joined compact partial-vertex tail must remain zero at word " + word);
+        }
+    }
+
+    private static int[] expectedPartialVertex(GpuTerrainModelTable table,
+                                               int templateIndex,
+                                               int face,
+                                               int vertex,
+                                               int packedCorner) {
+        int x = packedCorner & 31;
+        int y = (packedCorner >>> 5) & 31;
+        int z = (packedCorner >>> 10) & 31;
+        short packedX = (short) (x * POSITION_SCALE + 0.1f);
+        short packedY = (short) (y * POSITION_SCALE + 0.1f);
+        short packedZ = (short) (z * POSITION_SCALE + 0.1f);
+        short packedU = (short) (Float.intBitsToFloat(
+                table.uBits(templateIndex, face, vertex)) * UV_SCALE);
+        short packedV = (short) (Float.intBitsToFloat(
+                table.vBits(templateIndex, face, vertex)) * UV_SCALE);
+        return new int[] {
+                Short.toUnsignedInt(packedX) | (Short.toUnsignedInt(packedY) << 16),
+                Short.toUnsignedInt(packedZ),
+                0,
+                Short.toUnsignedInt(packedU) | (Short.toUnsignedInt(packedV) << 16),
+                0
+        };
+    }
+
+    private static int[] expectedFaceCorners(int index, int face) {
+        int x0 = index & 15;
+        int y0 = (index >>> 4) & 15;
+        int z0 = (index >>> 8) & 15;
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+        int z1 = z0 + 1;
+        FaceInfo faceInfo = FaceInfo.fromFacing(FACE_DIRECTIONS[face]);
+        int[] corners = new int[VoxelComputeProbe.VERTICES_PER_FACE];
+        for(int vertex = 0; vertex < corners.length; ++vertex) {
+            FaceInfo.VertexInfo info = faceInfo.getVertexInfo(vertex);
+            int x = extentCoordinate(info.xFace, FaceInfo.Constants.MIN_X,
+                    FaceInfo.Constants.MAX_X, x0, x1);
+            int y = extentCoordinate(info.yFace, FaceInfo.Constants.MIN_Y,
+                    FaceInfo.Constants.MAX_Y, y0, y1);
+            int z = extentCoordinate(info.zFace, FaceInfo.Constants.MIN_Z,
+                    FaceInfo.Constants.MAX_Z, z0, z1);
+            corners[vertex] = x | (y << 5) | (z << 10);
+        }
+        return corners;
+    }
+
+    private static int extentCoordinate(int extent, int minExtent, int maxExtent,
+                                        int min, int max) {
+        if(extent == minExtent)
+            return min;
+        if(extent == maxExtent)
+            return max;
+        throw new AssertionError("FaceInfo extent must map to a unit-cube coordinate");
     }
 
     private static StorageBuffer uploadJoinedVoxelFixture(SectionVoxelSnapshot snapshot) {

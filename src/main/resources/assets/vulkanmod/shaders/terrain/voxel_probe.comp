@@ -38,12 +38,17 @@ const uint FACE_VERTEX_BASE = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
 const uint FACE_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE;
 const uint MODEL_FACE_RESULT_WORDS = 10u;
 const uint MODEL_FACE_BASE = FACE_VERTEX_BASE + FACE_VERTEX_WORDS;
+const uint MODEL_FACE_RESULT_CAPACITY = FACE_DESCRIPTOR_WORDS * MODEL_FACE_RESULT_WORDS;
+const uint PARTIAL_VERTEX_WORDS_PER_VERTEX = 5u;
+const uint PARTIAL_VERTEX_BASE = MODEL_FACE_BASE + MODEL_FACE_RESULT_CAPACITY;
 
 const uint MODEL_MAGIC = 0x47544d31u;
 const uint MODEL_VERSION = 1u;
 const uint MODEL_HEADER_WORDS = 8u;
 const uint MODEL_TEMPLATE_WORDS = 56u;
 const uint MODEL_FACE_WORDS = 9u;
+const uint POSITION_SCALE = 1900u;
+const float UV_SCALE = 65536.0;
 
 const uint FACE_DOWN = 1u << 0u;
 const uint FACE_UP = 1u << 1u;
@@ -219,6 +224,25 @@ void writeModelFace(uint compactSlot, uint stateId, uint face) {
     outputData.words[outputBase] = densePlusOne;
     for (uint word = 0u; word < MODEL_FACE_WORDS; ++word)
         outputData.words[outputBase + 1u + word] = modelTable.words[faceBase + word];
+
+    uint cornerBase = FACE_VERTEX_BASE + compactSlot * VERTICES_PER_FACE;
+    uint vertexBase = PARTIAL_VERTEX_BASE
+            + compactSlot * VERTICES_PER_FACE * PARTIAL_VERTEX_WORDS_PER_VERTEX;
+    for (uint vertex = 0u; vertex < VERTICES_PER_FACE; ++vertex) {
+        uint corner = outputData.words[cornerBase + vertex];
+        uint x = corner & 31u;
+        uint y = (corner >> 5u) & 31u;
+        uint z = (corner >> 10u) & 31u;
+        uint u = uint(int(uintBitsToFloat(modelTable.words[faceBase + 1u + vertex * 2u])
+                * UV_SCALE)) & 0xffffu;
+        uint v = uint(int(uintBitsToFloat(modelTable.words[faceBase + 2u + vertex * 2u])
+                * UV_SCALE)) & 0xffffu;
+        uint outputVertex = vertexBase + vertex * PARTIAL_VERTEX_WORDS_PER_VERTEX;
+        outputData.words[outputVertex] = (x * POSITION_SCALE)
+                | ((y * POSITION_SCALE) << 16u);
+        outputData.words[outputVertex + 1u] = z * POSITION_SCALE;
+        outputData.words[outputVertex + 3u] = u | (v << 16u);
+    }
 }
 
 void main() {

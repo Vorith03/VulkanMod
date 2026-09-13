@@ -44,9 +44,10 @@ import static org.lwjgl.vulkan.VK10.*;
  * 4096 voxels on the GPU, emits deterministic aggregate values, writes fixed-slot
  * and compacted candidate-face descriptors, and expands compact faces into four
  * section-local unit-cube corner coordinates. When a current baked-model table is
- * supplied, every compact descriptor also resolves its exact sprite/UV face row.
- * The synchronization and descriptor path are the same pieces future mesh
- * generation can reuse.</p>
+ * supplied, every compact descriptor also resolves its exact sprite/UV face row
+ * and packs the position/UV fields of four 20-byte terrain vertices. Unsupported
+ * color/light fields remain zero. The synchronization and descriptor path are the
+ * same pieces future mesh generation can reuse.</p>
  */
 final class VoxelComputeProbe implements AutoCloseable {
     static final int HEADER_WORDS = 4;
@@ -59,7 +60,11 @@ final class VoxelComputeProbe implements AutoCloseable {
     static final int MODEL_FACE_RESULT_WORDS = 1 + GpuTerrainModelTable.FACE_WORDS;
     static final int MODEL_FACE_BASE = FACE_VERTEX_BASE + FACE_VERTEX_WORDS;
     static final int MODEL_FACE_WORDS = FACE_DESCRIPTOR_WORDS * MODEL_FACE_RESULT_WORDS;
-    static final int RESULT_WORDS = MODEL_FACE_BASE + MODEL_FACE_WORDS;
+    static final int PARTIAL_VERTEX_WORDS_PER_VERTEX = 5;
+    static final int PARTIAL_VERTEX_BASE = MODEL_FACE_BASE + MODEL_FACE_WORDS;
+    static final int PARTIAL_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE
+            * PARTIAL_VERTEX_WORDS_PER_VERTEX;
+    static final int RESULT_WORDS = PARTIAL_VERTEX_BASE + PARTIAL_VERTEX_WORDS;
     private static final int RESULT_BYTES = RESULT_WORDS * Integer.BYTES;
     private static final int PUSH_CONSTANT_BYTES = 3 * Integer.BYTES;
     private static final int WORKGROUP_SIZE = 64;

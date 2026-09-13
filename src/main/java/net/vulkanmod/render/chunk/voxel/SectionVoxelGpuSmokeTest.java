@@ -271,7 +271,7 @@ public final class SectionVoxelGpuSmokeTest {
         for(int i = VoxelComputeProbe.MODEL_FACE_BASE;
             i < VoxelComputeProbe.RESULT_WORDS; ++i) {
             if(actual[i] != 0)
-                throw new AssertionError("Disabled GPU model lookup must leave face rows zero at word " + i);
+                throw new AssertionError("Disabled GPU model lookup must leave model/vertex output zero at word " + i);
         }
 
         Initializer.LOGGER.info(
