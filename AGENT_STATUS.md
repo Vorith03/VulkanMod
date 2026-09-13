@@ -18,6 +18,25 @@ Use these together:
 
 ### Live continuation note — 2026-09-13 (in progress)
 
+- Completed continuation from `b3cdcef4cecbf960c6d05d0721b904a1c36ffd1c`:
+  source commit `7fb9571c0653d81052a36556c208ceb93228c2bc`
+  (`gpu terrain: join compact faces to model rows`) adds an optional current-model-
+  table binding to the existing voxel classifier/compaction kernel. Every actual
+  compact descriptor can now emit its dense-template sentinel plus exact 9-word
+  baked face row. The early region-residency smoke retains model lookup disabled;
+  the later baked-model smoke verifies 12,288 compact candidates from real state IDs,
+  including exact qualified sprite/UV rows and zero rows for deliberately misleading
+  unqualified geometry hints, with no missing or duplicate descriptors.
+- CI #402 (run `34774188666`, job `103769144899`) is fully green: compilation,
+  distributable verification, both Vulkan startup modes, post-chain, depth,
+  screenshot, Crash Assistant, Chat Heads, Flywheel, logs and artifacts all passed.
+  This remains diagnostic-only; `CPU_REQUIRED` and production terrain ownership are
+  unchanged, and no performance result is claimed.
+- Next safe checkpoint: combine each qualified compact face's already-verified
+  ordered corners and UV row into a bounded partial terrain-vertex payload, proving
+  the exact position and packed-UV fields against the CPU format while leaving
+  color/light/AO and production allocation untouched. Do not bypass CPU meshing.
+
 - Completed continuation from `7188360b92c44ebd4fe48045b7b8019508e21a6f`:
   source commit `2f35a3aa03856c7e01fbb64b1a9d0910e56d85c7`
   (`gpu terrain: resolve resident voxel face rows`) extends only the diagnostic joined
