@@ -36,6 +36,20 @@ Use these together:
   invariant: it uses the existing fence-owned immediate storage upload for an
   isolated smoke-only voxel page at a nonzero slice offset. The already-green
   `SectionVoxelGpuSmokeTest` remains authoritative for region upload/publication.
+- Corrected source commit: `2f16dd2d8014d2b2f8cec594f4a650c66563c55b`
+  (`gpu terrain: isolate model join fixture upload`). CI #400 (run `34750575140`,
+  job `103706285736`) passed the full workflow. Both startup modes reported 1,730
+  templates, 342 sprites, 24,135 state-index entries, the exact 484,092-byte model
+  table, and all 4,096 resident voxel state-ID joins. Post-chain, depth, screenshot,
+  Crash Assistant, Chat Heads and Flywheel gates also passed.
+- The joined oracle now proves that a current baked-model table can resolve actual
+  state IDs directly from the section ABI at a nonzero device-buffer slice offset;
+  deliberately wrong/missing `GPU_FULL_CUBE` hints do not affect lookup. This is
+  still diagnostic-only and makes no performance claim.
+- Next safe checkpoint: use the joined dense-template index to resolve the exact
+  face row (sprite slot plus four ordered UV pairs) for bounded candidate face work,
+  and compare that GPU output to the baked CPU template. Do not integrate production
+  terrain buffers or clear `CPU_REQUIRED` in that step.
 
 - Live branch head at session start: `5f35881d5342e14933f31c2a5c5e689019f5d9a4`
   (`gpu terrain: upload model table outside frame staging`).
