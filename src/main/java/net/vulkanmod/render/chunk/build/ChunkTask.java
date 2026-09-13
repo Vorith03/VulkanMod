@@ -207,7 +207,18 @@ public class ChunkTask {
 
                             poseStack.pushPose();
                             poseStack.translate(blockPos3.getX() & 15, blockPos3.getY() & 15, blockPos3.getZ() & 15);
-                            blockRenderDispatcher.renderBatched(blockState, blockPos3, renderChunkRegion, poseStack, bufferBuilder, true, randomSource);
+                            if (TerrainBufferBuilder.DEBUG_COMPRESSED_VERTEX_RANGE) {
+                                bufferBuilder.setDebugBlockContext(blockPos3, blockState);
+                                try {
+                                    blockRenderDispatcher.renderBatched(blockState, blockPos3,
+                                            renderChunkRegion, poseStack, bufferBuilder, true, randomSource);
+                                } finally {
+                                    bufferBuilder.clearDebugBlockContext();
+                                }
+                            } else {
+                                blockRenderDispatcher.renderBatched(blockState, blockPos3,
+                                        renderChunkRegion, poseStack, bufferBuilder, true, randomSource);
+                            }
                             poseStack.popPose();
                         }
                     }

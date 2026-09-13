@@ -4,7 +4,10 @@ import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.platform.MemoryTracker;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.render.util.SortUtil;
 import net.vulkanmod.render.chunk.TerrainShaderManager;
 import org.apache.commons.lang3.mutable.MutableInt;
@@ -15,11 +18,16 @@ import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
 public class TerrainBufferBuilder implements VertexConsumer {
 	private static final float POS_CONV = 1900.0f;
 	private static final float UV_CONV = 65536.0f;
+	public static final boolean DEBUG_COMPRESSED_VERTEX_RANGE =
+			Boolean.getBoolean("vulkanmod.debugTerrainVertices");
+	private static final int MAX_VERTEX_RANGE_WARNINGS = 32;
+	private static final AtomicInteger VERTEX_RANGE_WARNINGS = new AtomicInteger();
 
 	private static final int GROWTH_SIZE = 2097152;
 	private static final Logger LOGGER = LogUtils.getLogger();
@@ -43,6 +51,9 @@ public class TerrainBufferBuilder implements VertexConsumer {
 	private float sortY = Float.NaN;
 	private float sortZ = Float.NaN;
 	private boolean indexOnly;
+	private long debugBlockPos = Long.MIN_VALUE;
+	@Nullable
+	private BlockState debugBlockState;
 
 	private long bufferPtr;
 //    private long ptr;
@@ -54,6 +65,21 @@ public class TerrainBufferBuilder implements VertexConsumer {
 		this.bufferPtr = MemoryUtil.memAddress0(this.buffer);
 
 		this.vertexBuilder = TerrainShaderManager.TERRAIN_VERTEX_FORMAT == CustomVertexFormat.COMPRESSED_TERRAIN ? new CompressedVertexBuilder() : new DefaultVertexBuilder();
+	}
+
+	/** Associates an opt-in range warning with the synchronous block render call. */
+	public void setDebugBlockContext(BlockPos pos, BlockState state) {
+		if (DEBUG_COMPRESSED_VERTEX_RANGE) {
+			this.debugBlockPos = pos.asLong();
+			this.debugBlockState = state;
+		}
+	}
+
+	public void clearDebugBlockContext() {
+		if (DEBUG_COMPRESSED_VERTEX_RANGE) {
+			this.debugBlockPos = Long.MIN_VALUE;
+			this.debugBlockState = null;
+		}
 	}
 
 	private void ensureVertexCapacity() {
@@ -645,6 +671,12 @@ public class TerrainBufferBuilder implements VertexConsumer {
 
 		public void vertex(float x, float y, float z, float red, float green, float blue, float alpha, float u, float v, int overlay, int light, float normalX, float normalY, float normalZ) {
 			long ptr = bufferPtr + nextElementByte;
+			if (DEBUG_COMPRESSED_VERTEX_RANGE
+					&& (!isCompressedPositionRepresentable(x)
+					|| !isCompressedPositionRepresentable(y)
+					|| !isCompressedPositionRepresentable(z))) {
+				warnCompressedPositionOverflow(x, y, z);
+			}
 
 			short sX = (short) (x * POS_CONV + 0.1f);
 			short sY = (short) (y * POS_CONV + 0.1f);
@@ -680,5 +712,33 @@ public class TerrainBufferBuilder implements VertexConsumer {
 			nextElementByte += 20;
 			endVertex();
 		}
+	}
+
+	static boolean isCompressedPositionRepresentable(float value) {
+		float scaled = value * POS_CONV + 0.1f;
+		if (!Float.isFinite(scaled))
+			return false;
+		int truncated = (int) scaled;
+		return truncated >= Short.MIN_VALUE && truncated <= Short.MAX_VALUE;
+	}
+
+	private void warnCompressedPositionOverflow(float x, float y, float z) {
+		int warning = VERTEX_RANGE_WARNINGS.getAndIncrement();
+		if (warning >= MAX_VERTEX_RANGE_WARNINGS)
+			return;
+
+		String block = debugBlockState == null ? "unknown"
+				: String.valueOf(BuiltInRegistries.BLOCK.getKey(debugBlockState.getBlock()));
+		String state = debugBlockState == null ? "unknown" : debugBlockState.toString();
+		String position = debugBlockPos == Long.MIN_VALUE ? "unknown"
+				: BlockPos.of(debugBlockPos).toShortString();
+		LOGGER.warn("VULKANMOD_TERRAIN_VERTEX_RANGE: block={} state={} worldPos={} "
+					+ "sectionLocal=({}, {}, {}), packed=({}, {}, {}); signed-short overflow/non-finite "
+					+ "terrain coordinates can create large world-space triangles (warning {}/{})",
+				block, state, position, x, y, z,
+				(short) (x * POS_CONV + 0.1f),
+				(short) (y * POS_CONV + 0.1f),
+				(short) (z * POS_CONV + 0.1f),
+				warning + 1, MAX_VERTEX_RANGE_WARNINGS);
 	}
 }
