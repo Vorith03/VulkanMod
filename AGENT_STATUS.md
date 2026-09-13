@@ -18,13 +18,26 @@ Use these together:
 
 ### Live continuation note — 2026-09-13
 
-- Active continuation from clean head `4c961082a489c3c0e1c976f196393c9b3b3fc0d3`:
-  audit the exact CPU color/AO/light path for the qualified canonical cube subset.
-  Tighten qualification for any baked-quad properties that the partial vertex oracle
-  does not encode, and document the smallest numeric neighborhood contract plus its
-  unresolved stop conditions. Do not extend snapshot v4 or the compute shader in this
-  step; do not allocate production geometry or clear `CPU_REQUIRED`. If interrupted,
-  inspect this note and the worktree before resuming.
+- Completed continuation from `4c961082a489c3c0e1c976f196393c9b3b3fc0d3`:
+  source commit `7f706b085034a25ce577619443864c4b5fb799ec`
+  (`gpu terrain: tighten vertex lighting eligibility`) records the exact CPU output
+  dependencies in `docs/GPU_TERRAIN_LIGHTING_AUDIT_2026-09-13.md` and closes two
+  qualification holes. Every accepted face must now retain per-face ambient
+  occlusion and opaque-white baked vertex colors; otherwise its unrepresented AO or
+  baked-color semantics stay on the CPU path. Snapshot v4 and the compute shader are
+  unchanged.
+- CI #409 (run `34781622935`, job `103789574418`) is fully green: compilation,
+  distributable verification, both Vulkan startup modes, post-chain, depth,
+  screenshot, Crash Assistant, Chat Heads, Flywheel, logs, and artifacts all passed.
+  The startup oracle also confirms that the real vanilla baked-model generation
+  retains a nonempty qualified subset under the tighter gates.
+- Next safe checkpoint: build a CPU-only oracle fixture for canonical full-cube faces
+  across deliberately varied block/sky light and AO neighborhoods. Compare the final
+  four packed color and light words emitted by the real renderer with an independent
+  numeric reference, and explicitly fail closed when Forge's experimental lighting
+  pipeline is enabled. Do not add the proposed 18 x 18 x 18 lighting lattice until
+  its exact sampling radius and float operation order are proven. Preserve
+  `CPU_REQUIRED` and production CPU meshing.
 
 - Completed continuation after safely rebasing over the independently landed runtime-
   toggle series ending at `8472650431e9df8861a694764e88bfc6ce3faeef`:
