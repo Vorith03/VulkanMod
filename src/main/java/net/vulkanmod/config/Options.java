@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.LiteralContents;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.vulkan.Drawer;
 import net.vulkanmod.vulkan.Renderer;
 
@@ -215,12 +216,19 @@ public class Options {
                         Batches opaque terrain and caches draw commands to reduce CPU work.
                         Automatically falls back when unsupported. Disable to compare performance.""")),
                 new SwitchOption("GPU Terrain Experiment",
-                        value -> config.experimentalGpuTerrain = value,
+                        value -> {
+                            config.experimentalGpuTerrain = value;
+                            if (RegionVoxelStore.setConfigEnabled(value)) {
+                                Minecraft minecraft = Minecraft.getInstance();
+                                if (minecraft.level != null && minecraft.levelRenderer != null)
+                                    minecraft.levelRenderer.allChanged();
+                            }
+                        },
                         () -> config.experimentalGpuTerrain)
                         .setTooltip(Component.nullToEmpty("""
                         Enables the experimental GPU terrain data path.
                         CPU terrain rendering remains authoritative for unsupported and production geometry.
-                        Restart Minecraft after changing this option.""")),
+                        Changing this option rebuilds loaded terrain and may briefly stutter.""")),
                 new SwitchOption("Indirect Draw",
                         value -> config.indirectDraw = value,
                         () -> config.indirectDraw)
