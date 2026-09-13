@@ -16,7 +16,30 @@ Use these together:
 
 ## Current checkpoint — 2026-09-12
 
-### Live continuation note — 2026-09-13 (in progress)
+### Live continuation note — 2026-09-13
+
+- Completed continuation after safely rebasing over the independently landed runtime-
+  toggle series ending at `8472650431e9df8861a694764e88bfc6ce3faeef`:
+  source commit `81e953faefd7e065fcdda19a74e50b22d9a5c3e8`
+  (`gpu terrain: pack compact position UV vertices`) extends the joined compact-face
+  oracle with a bounded five-word-per-vertex image of VulkanMod's 20-byte compressed
+  terrain format. Qualified faces populate signed-short x/y/z at the existing 1900
+  scale and unsigned-short atlas UV at the existing 65536 conversion; position
+  padding, color, and light remain zero. The independent CPU-format oracle compares
+  all five words for all four vertices of every qualified compact candidate and
+  requires unqualified and tail output to remain zero.
+- CI #408 (run `34781031238`, job `103787958235`) is fully green: compilation,
+  distributable verification, both Vulkan startup modes, post-chain, depth,
+  screenshot, Crash Assistant, Chat Heads, Flywheel, logs, and artifacts all passed.
+  This remains a smoke-only partial vertex image: no production geometry is
+  allocated, `CPU_REQUIRED` and CPU meshing remain authoritative, and no performance
+  result is claimed.
+- Next safe checkpoint: audit the qualified cube path in `ModelBlockRenderer` and its
+  collaborators to specify the smallest versioned numeric input needed to reproduce
+  CPU color, directional shade, ambient occlusion, and packed light. Establish an
+  exact CPU oracle and document the halo/lattice ownership before extending the
+  snapshot ABI or shader. The renderer already supplies shared quad indices, so do
+  not add a redundant GPU index payload. Do not bypass CPU meshing.
 
 - Completed continuation from `b3cdcef4cecbf960c6d05d0721b904a1c36ffd1c`:
   source commit `7fb9571c0653d81052a36556c208ceb93228c2bc`
