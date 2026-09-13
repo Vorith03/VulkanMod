@@ -200,7 +200,7 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         require(actual.length == VoxelComputeProbe.RESULT_WORDS,
-                "GPU voxel compute result size must include descriptors and face-corner geometry");
+                "GPU voxel compute result size must include descriptors, corners and optional model rows");
         for(int i = 0; i < expected.length; ++i) {
             if(actual[i] != expected[i]) {
                 String kind = i < VoxelComputeProbe.HEADER_WORDS ? "aggregate" : "fixed face descriptor";
@@ -264,9 +264,14 @@ public final class SectionVoxelGpuSmokeTest {
         }
         for(int i = VoxelComputeProbe.FACE_VERTEX_BASE
                 + descriptorCount * VoxelComputeProbe.VERTICES_PER_FACE;
-            i < VoxelComputeProbe.RESULT_WORDS; ++i) {
+            i < VoxelComputeProbe.MODEL_FACE_BASE; ++i) {
             if(actual[i] != 0)
                 throw new AssertionError("GPU voxel face-corner tail must remain zero at result word " + i);
+        }
+        for(int i = VoxelComputeProbe.MODEL_FACE_BASE;
+            i < VoxelComputeProbe.RESULT_WORDS; ++i) {
+            if(actual[i] != 0)
+                throw new AssertionError("Disabled GPU model lookup must leave face rows zero at word " + i);
         }
 
         Initializer.LOGGER.info(

@@ -60,9 +60,11 @@ public final class GpuTerrainModelTableSmokeTest {
             voxelPage = uploadJoinedVoxelFixture(voxelSnapshot);
             verifyComputeLookup(resident, table, voxelPage, JOINED_VOXEL_OFFSET,
                     voxelSnapshot.byteSize(), voxelSnapshot);
+            verifyCompactCandidateFaceRows(resident, table, voxelPage,
+                    JOINED_VOXEL_OFFSET, voxelSnapshot.byteSize(), voxelSnapshot);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode and 4096 resident voxel face-row joins",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode, 4096 resident voxel face-row joins, and exact compact candidate face rows",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {
@@ -141,6 +143,85 @@ public final class GpuTerrainModelTableSmokeTest {
             }
             require(qualifiedWithoutHint > 0 && rejectedWithHint > 0,
                     "Joined voxel fixture must prove current model-table lookup is independent of stale geometry hints");
+        }
+    }
+
+    private static void verifyCompactCandidateFaceRows(
+            GpuTerrainModelGpuStore.Residency residency,
+            GpuTerrainModelTable table,
+            StorageBuffer voxelPage,
+            int voxelByteOffset,
+            int voxelByteLength,
+            SectionVoxelSnapshot voxelSnapshot) {
+        int[] actual;
+        try(VoxelComputeProbe probe = new VoxelComputeProbe()) {
+            actual = probe.dispatch(voxelPage, voxelByteOffset, voxelByteLength,
+                    residency, table.templateCount());
+        }
+
+        require(actual.length == VoxelComputeProbe.RESULT_WORDS,
+                "Joined compact-face output must retain the complete classifier oracle");
+        int candidateCount = actual[3];
+        require(candidateCount == SectionVoxelSnapshot.BLOCK_COUNT / 2
+                        * GpuTerrainModelTable.FACE_COUNT,
+                "Joined fixture must emit all six faces for every geometry-hinted voxel");
+
+        boolean[] seen = new boolean[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
+        int qualifiedRows = 0;
+        int unqualifiedRows = 0;
+        for(int slot = 0; slot < candidateCount; ++slot) {
+            int descriptor = actual[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + slot];
+            require((descriptor & 0x80000000) != 0,
+                    "Joined compact candidate descriptor must carry the live marker");
+            int voxel = descriptor & 0xfff;
+            int face = (descriptor >>> 12) & 7;
+            require(voxel < SectionVoxelSnapshot.BLOCK_COUNT
+                            && face < GpuTerrainModelTable.FACE_COUNT,
+                    "Joined compact candidate descriptor must decode to a valid voxel and face");
+            require((voxelSnapshot.flags(voxel) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0,
+                    "Joined compact candidate must originate from a geometry-hinted voxel");
+            int descriptorIndex = voxel * GpuTerrainModelTable.FACE_COUNT + face;
+            require(!seen[descriptorIndex],
+                    "Joined compact candidate list must not contain duplicate descriptors");
+            seen[descriptorIndex] = true;
+
+            int templateIndex = table.templateIndexForStateId(voxelSnapshot.stateId(voxel));
+            int rowBase = VoxelComputeProbe.MODEL_FACE_BASE
+                    + slot * VoxelComputeProbe.MODEL_FACE_RESULT_WORDS;
+            require(actual[rowBase] == templateIndex + 1,
+                    "Joined compact candidate must resolve through the current model-table state index");
+            for(int word = 0; word < GpuTerrainModelTable.FACE_WORDS; ++word) {
+                int expected = templateIndex < 0 ? 0
+                        : table.word(table.templateBaseWord()
+                                + templateIndex * GpuTerrainModelTable.TEMPLATE_WORDS
+                                + 2 + face * GpuTerrainModelTable.FACE_WORDS + word);
+                if(actual[rowBase + 1 + word] != expected) {
+                    throw new AssertionError("Joined compact candidate face-row mismatch at slot "
+                            + slot + " voxel " + voxel + " face " + face + " word " + word);
+                }
+            }
+            if(templateIndex >= 0)
+                qualifiedRows++;
+            else
+                unqualifiedRows++;
+        }
+
+        for(int voxel = 0; voxel < SectionVoxelSnapshot.BLOCK_COUNT; ++voxel) {
+            boolean expectedCandidate = (voxelSnapshot.flags(voxel)
+                    & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0;
+            for(int face = 0; face < GpuTerrainModelTable.FACE_COUNT; ++face) {
+                require(seen[voxel * GpuTerrainModelTable.FACE_COUNT + face]
+                                == expectedCandidate,
+                        "Joined compact candidate set must match the independent CPU fixture");
+            }
+        }
+        require(qualifiedRows > 0 && unqualifiedRows > 0,
+                "Joined compact candidates must cover qualified rows and fail-closed unqualified hints");
+        for(int word = VoxelComputeProbe.MODEL_FACE_BASE
+                + candidateCount * VoxelComputeProbe.MODEL_FACE_RESULT_WORDS;
+            word < VoxelComputeProbe.RESULT_WORDS; ++word) {
+            if(actual[word] != 0)
+                throw new AssertionError("Joined compact model-face tail must remain zero at word " + word);
         }
     }
 

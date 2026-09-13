@@ -10,9 +10,14 @@ layout(set = 0, binding = 1, std430) buffer ProbeOutput {
     uint words[];
 } outputData;
 
+layout(set = 0, binding = 2, std430) readonly buffer ModelTable {
+    uint words[];
+} modelTable;
+
 layout(push_constant) uniform ProbePushConstants {
     uint baseByteOffset;
     uint byteLength;
+    uint modelTemplateCount;
 } pc;
 
 const uint MAGIC = 0x56584c31u;
@@ -30,6 +35,15 @@ const uint VERTICES_PER_FACE = 4u;
 const uint FACE_DESCRIPTOR_WORDS = BLOCK_COUNT * FACES_PER_VOXEL;
 const uint COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
 const uint FACE_VERTEX_BASE = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
+const uint FACE_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE;
+const uint MODEL_FACE_RESULT_WORDS = 10u;
+const uint MODEL_FACE_BASE = FACE_VERTEX_BASE + FACE_VERTEX_WORDS;
+
+const uint MODEL_MAGIC = 0x47544d31u;
+const uint MODEL_VERSION = 1u;
+const uint MODEL_HEADER_WORDS = 8u;
+const uint MODEL_TEMPLATE_WORDS = 56u;
+const uint MODEL_FACE_WORDS = 9u;
 
 const uint FACE_DOWN = 1u << 0u;
 const uint FACE_UP = 1u << 1u;
@@ -179,6 +193,34 @@ void writeFaceCorners(uint compactSlot, uint index, uint face) {
     }
 }
 
+/*
+ * Resolve one actual compact candidate descriptor through the current baked-model
+ * state index. The zero-filled output remains the fail-closed sentinel when model
+ * lookup is disabled or the voxel is not qualified by the current resource table.
+ */
+void writeModelFace(uint compactSlot, uint stateId, uint face) {
+    if (pc.modelTemplateCount == 0u
+            || modelTable.words[0] != MODEL_MAGIC
+            || modelTable.words[1] != MODEL_VERSION
+            || modelTable.words[5] != pc.modelTemplateCount)
+        return;
+
+    uint stateIndexCount = modelTable.words[4];
+    if (stateId >= stateIndexCount)
+        return;
+    uint densePlusOne = modelTable.words[MODEL_HEADER_WORDS + stateId];
+    if (densePlusOne == 0u || densePlusOne > pc.modelTemplateCount)
+        return;
+
+    uint templateBase = modelTable.words[7]
+            + (densePlusOne - 1u) * MODEL_TEMPLATE_WORDS;
+    uint faceBase = templateBase + 2u + face * MODEL_FACE_WORDS;
+    uint outputBase = MODEL_FACE_BASE + compactSlot * MODEL_FACE_RESULT_WORDS;
+    outputData.words[outputBase] = densePlusOne;
+    for (uint word = 0u; word < MODEL_FACE_WORDS; ++word)
+        outputData.words[outputBase + 1u + word] = modelTable.words[faceBase + word];
+}
+
 void main() {
     uint index = gl_GlobalInvocationID.x;
     if (index >= BLOCK_COUNT)
@@ -225,6 +267,7 @@ void main() {
         outputData.words[descriptorBase + face] = descriptor;
         outputData.words[COMPACT_DESCRIPTOR_BASE + compactSlot] = descriptor;
         writeFaceCorners(compactSlot, index, face);
+        writeModelFace(compactSlot, stateId, face);
         ++compactCursor;
     }
 }
