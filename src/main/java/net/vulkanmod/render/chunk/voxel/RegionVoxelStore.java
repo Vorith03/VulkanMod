@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk.voxel;
 
+import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.RegionBatchLayout;
 
 import java.util.HashMap;
@@ -10,7 +11,8 @@ import java.util.Map;
  * Independent of mesh layers and their revisions. Never allocates Vulkan storage.
  */
 public final class RegionVoxelStore {
-    public static final boolean ENABLED = Boolean.getBoolean("vulkanmod.experimentalSectionVoxels");
+    public static final boolean ENABLED = Boolean.getBoolean("vulkanmod.experimentalSectionVoxels")
+            || (Initializer.CONFIG != null && Initializer.CONFIG.experimentalGpuTerrain);
     private static final Budget GLOBAL_BUDGET = new Budget(32 * 1024 * 1024, 2048);
 
     private final Budget budget;
