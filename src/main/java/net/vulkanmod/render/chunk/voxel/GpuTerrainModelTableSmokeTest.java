@@ -47,6 +47,7 @@ public final class GpuTerrainModelTableSmokeTest {
         require(table.spriteCount() > 0,
                 "Qualified GPU terrain templates must retain sprite identity");
         verifyCpuAbi(table);
+        CanonicalCubeLightingSmokeTest.verify();
 
         GpuTerrainModelGpuStore store = new GpuTerrainModelGpuStore();
         StorageBuffer voxelPage = null;

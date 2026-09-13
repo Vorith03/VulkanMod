@@ -18,6 +18,16 @@ Use these together:
 
 ### Live continuation note — 2026-09-13
 
+- Active continuation from clean head `0ebaeb14971983bdf59bdec3d2db5ec95582dbe9`:
+  build the CPU-only canonical-cube AO/color/light oracle promised below. Compare an
+  independent numeric implementation against the real Minecraft 1.20.1
+  `AmbientOcclusionFace` for all six directions and mixed light/occluder fixtures;
+  prove the actual sample radius and fail section geometry qualification closed for
+  Forge's experimental lighting pipeline. Separately audit the reported modpack-only
+  world-space visual artifact, with compressed terrain-coordinate overflow as the
+  leading hypothesis. Do not change snapshot v4, shaders, production geometry
+  ownership, or `CPU_REQUIRED`. If interrupted, inspect this note and the worktree.
+
 - Completed continuation from `4c961082a489c3c0e1c976f196393c9b3b3fc0d3`:
   source commit `7f706b085034a25ce577619443864c4b5fb799ec`
   (`gpu terrain: tighten vertex lighting eligibility`) records the exact CPU output

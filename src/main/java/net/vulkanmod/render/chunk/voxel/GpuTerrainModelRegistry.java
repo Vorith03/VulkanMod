@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
+import net.minecraftforge.common.ForgeConfig;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -89,7 +90,14 @@ public final class GpuTerrainModelRegistry {
 
     /** Safe from chunk workers: published snapshots are immutable after the volatile swap. */
     public static boolean isFullCubeGeometry(BlockState state) {
-        return state != null && CURRENT.fullCubes.containsKey(state);
+        return isFullCubeGeometry(state,
+                ForgeConfig.CLIENT.experimentalForgeLightPipelineEnabled.get());
+    }
+
+    /** Package-private seam for the startup capability oracle; never mutates Forge config. */
+    static boolean isFullCubeGeometry(BlockState state, boolean forgeExperimentalLighting) {
+        return !forgeExperimentalLighting
+                && state != null && CURRENT.fullCubes.containsKey(state);
     }
 
     public static FullCubeTemplate getFullCubeTemplate(BlockState state) {

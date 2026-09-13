@@ -47,10 +47,15 @@ methods and hooks while resolving AO, light emission, occlusion, and offsets. GP
 code must receive CPU-resolved numeric data and never infer these semantics from a
 block ID.
 
-The smallest plausible spatial source is an 18 x 18 x 18 lattice covering section
-coordinates `[-1, 16]` on each axis. It gives every interior voxel a one-cell halo.
-Before this becomes an ABI, an oracle must prove that the selected vanilla AO path
-never samples outside it. Each lattice point is expected to need, at minimum:
+Inspection of the official Minecraft 1.20.1 client bytecode plus Forge 47.3.0's
+patches proves that a canonical boundary face samples as far as two blocks from its
+source voxel. The AO corner openness checks read `origin + face + tangent + face`.
+For a section-edge source, a one-cell halo is therefore insufficient.
+
+The smallest simple rectangular source is a 20 x 20 x 20 lattice covering section
+coordinates `[-2, 17]` on each axis. A more compact layout could combine an 18-cube
+core with six sparse second-shell slabs, but the extra indexing complexity should be
+justified by measurement. Each lattice point is expected to need, at minimum:
 
 - the exact packed result used by `LevelRenderer.getLightColor`, including emission;
 - the raw float bits of the state's shade-brightness/AO contribution;
@@ -62,11 +67,11 @@ captured or conservatively disqualify the voxel. The existing six 16 x 16
 `SOLID_RENDER` boundary planes are sufficient only for the current conservative face
 rejection experiment; they are not an AO/light halo.
 
-This is deliberately a design bound, not snapshot v5. The precise lattice flags and
-sampling order remain blocked on a source-level CPU oracle for the exact
-`ModelBlockRenderer.AmbientOcclusionFace` implementation shipped by the configured
-Minecraft/Forge runtime. Float operation ordering matters if the packed RGBA8 result
-is compared exactly.
+This is deliberately a design bound, not snapshot v5. The exact canonical-face
+sampling order, corner substitution, light blending and vertex remap are now covered
+by a CPU-only oracle against the runtime `ModelBlockRenderer.AmbientOcclusionFace`.
+The remaining ABI decision is how to encode the resolved values and position offsets
+without making CPU capture as expensive as the meshing work being replaced.
 
 ## Forge pipeline split and fail-closed rules
 
@@ -88,10 +93,8 @@ the baked-model conditions; world-position conditions belong to section capture.
 
 ## Next implementation checkpoint
 
-Build a CPU-only oracle fixture for canonical full-cube faces at deliberately varied
-block/sky light and AO neighborhoods. It must compare the final four packed color and
-light words produced by the real renderer with an independent numeric reference.
-First test the default Forge configuration; add an explicit fail-closed assertion for
-the experimental Forge lighting mode. Only after that passes should a new versioned
-lighting lattice or compute output be added. Snapshot v4, the current compute shader,
+Use the proven two-block radius to prototype a bounded CPU-resolved numeric lattice
+and measure its capture cost and packed size before changing the snapshot ABI. Include
+position offsets or disqualify offset states. Only after that result is favorable
+should color/light compute output be added. Snapshot v4, the current compute shader,
 production geometry allocation, and `CPU_REQUIRED` remain unchanged by this audit.
