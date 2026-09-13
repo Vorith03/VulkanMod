@@ -1,9 +1,13 @@
 package net.vulkanmod.render.chunk.voxel;
 
-import net.vulkanmod.render.chunk.AreaUploadManager;
+import net.vulkanmod.vulkan.Device;
+import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.MemoryTypes;
+import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.memory.StorageBuffer;
+import net.vulkanmod.vulkan.queue.CommandPool;
+import net.vulkanmod.vulkan.queue.TransferQueue;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -11,10 +15,12 @@ import java.nio.ByteBuffer;
 /**
  * Generation-owned device-local residency for one packed GPU terrain model table.
  *
- * <p>Uploads use the existing graphics-queue ordered terrain staging path. A new
- * resource generation revokes discoverable old residency immediately and only
- * publishes the replacement after its copy command has been submitted. CPU terrain
- * remains the fallback when allocation/upload is unavailable.</p>
+ * <p>The model table is rebuilt at the baked-model/resource-generation boundary,
+ * which is not owned by {@code AreaUploadManager}'s per-frame terrain recording
+ * lifecycle. Upload it synchronously on the graphics queue instead: publication
+ * happens only after the copy fence completes, while hot-path section voxel uploads
+ * retain their existing frame-ordered asynchronous path. CPU terrain remains the
+ * fallback when allocation/upload is unavailable.</p>
  */
 public final class GpuTerrainModelGpuStore implements AutoCloseable {
     private long generation = -1L;
@@ -32,8 +38,7 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
         pending = null;
         discardResident();
 
-        if(closed || AreaUploadManager.INSTANCE == null
-                || MemoryManager.getInstance() == null || MemoryTypes.GPU_MEM == null)
+        if(closed || MemoryManager.getInstance() == null || MemoryTypes.GPU_MEM == null)
             return false;
 
         StorageBuffer buffer;
@@ -53,8 +58,8 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
         try {
             table.writeTo(bytes);
             bytes.flip();
-            AreaUploadManager.INSTANCE.uploadStorageAsync(buffer, 0L, bytes,
-                    () -> completeUpload(token));
+            uploadImmediate(buffer, bytes);
+            completeUpload(token);
         } catch(RuntimeException | Error error) {
             if(pending == token)
                 pending = null;
@@ -87,6 +92,28 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
         closed = true;
         pending = null;
         discardResident();
+    }
+
+    private static void uploadImmediate(StorageBuffer destination, ByteBuffer source) {
+        int byteLength = source.remaining();
+        if(byteLength <= 0 || byteLength > destination.getBufferSize())
+            throw new IllegalArgumentException("Invalid GPU terrain model-table upload size");
+
+        StagingBuffer staging = new StagingBuffer(byteLength);
+        try {
+            staging.copyBuffer(byteLength, source);
+            CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
+            TransferQueue.uploadBufferCmd(commandBuffer,
+                    staging.getId(), staging.getOffset(),
+                    destination.getId(), 0L, byteLength);
+            Device.getGraphicsQueue().submitCommands(commandBuffer);
+            Synchronization.waitFence(commandBuffer.getFence());
+            Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
+        } finally {
+            // The graphics fence above owns completion of the staging read. Normal
+            // MemoryManager frame retirement can now reclaim this temporary buffer.
+            staging.freeBuffer();
+        }
     }
 
     private synchronized void completeUpload(Pending token) {

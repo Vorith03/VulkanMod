@@ -2,7 +2,6 @@ package net.vulkanmod.render.chunk.voxel;
 
 import net.minecraft.core.Direction;
 import net.vulkanmod.Initializer;
-import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
@@ -29,9 +28,6 @@ public final class GpuTerrainModelTableSmokeTest {
     private GpuTerrainModelTableSmokeTest() {}
 
     public static void verify() {
-        if(AreaUploadManager.INSTANCE == null)
-            throw new AssertionError("GPU model-table smoke requires the terrain upload manager");
-
         GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
         require(table.generation() == GpuTerrainModelRegistry.generation(),
                 "Packed model table must capture the current baked-model generation");
@@ -46,14 +42,9 @@ public final class GpuTerrainModelTableSmokeTest {
         GpuTerrainModelGpuStore store = new GpuTerrainModelGpuStore();
         try {
             require(store.upload(table), "GPU model-table upload must be accepted");
-            GpuTerrainModelGpuStore.Residency beforeSubmit = store.getResidency();
-            require(!beforeSubmit.valid() && beforeSubmit.generation() == table.generation(),
-                    "GPU model table must not publish before staged-copy submission");
-
-            AreaUploadManager.INSTANCE.submitUploads();
             GpuTerrainModelGpuStore.Residency resident = store.getResidency();
             require(resident.valid() && resident.generation() == table.generation(),
-                    "Submitted GPU model table must become resident");
+                    "Completed GPU model-table upload must publish current-generation residency");
             require(resident.byteLength() == table.byteSize(),
                     "GPU model-table residency must expose the exact packed byte length");
             verifyReadback(resident, table);
