@@ -176,7 +176,7 @@ public class ChunkTask {
                             if (gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                             voxels.add(Block.getId(blockState), flags);
                             if (gpuFullCube)
-                                captureQualifiedCubeBoundaryHalo(voxels, renderChunkRegion, blockPos3);
+                                captureSolidRenderBoundaryHalo(voxels, renderChunkRegion, blockPos3);
                         }
                         RenderType renderType;
                         TerrainBufferBuilder bufferBuilder;
@@ -241,32 +241,44 @@ public class ChunkTask {
             return compileResults;
         }
 
-        private static void captureQualifiedCubeBoundaryHalo(SectionVoxelSnapshot.Builder voxels,
-                                                              RenderChunkRegion region,
-                                                              BlockPos pos) {
+        private static void captureSolidRenderBoundaryHalo(SectionVoxelSnapshot.Builder voxels,
+                                                           RenderChunkRegion region,
+                                                           BlockPos pos) {
             int x = pos.getX() & 15;
             int y = pos.getY() & 15;
             int z = pos.getZ() & 15;
             int index = SectionVoxelSnapshot.blockIndex(x, y, z);
 
-            if (y == 0)
-                voxels.setBoundaryNeighborGpuFullCube(index, 0,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.below())));
-            if (y == 15)
-                voxels.setBoundaryNeighborGpuFullCube(index, 1,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.above())));
-            if (z == 0)
-                voxels.setBoundaryNeighborGpuFullCube(index, 2,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.north())));
-            if (z == 15)
-                voxels.setBoundaryNeighborGpuFullCube(index, 3,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.south())));
-            if (x == 0)
-                voxels.setBoundaryNeighborGpuFullCube(index, 4,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.west())));
-            if (x == 15)
-                voxels.setBoundaryNeighborGpuFullCube(index, 5,
-                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.east())));
+            if (y == 0) {
+                BlockPos neighbor = pos.below();
+                voxels.setBoundaryNeighborSolidRender(index, 0,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
+            if (y == 15) {
+                BlockPos neighbor = pos.above();
+                voxels.setBoundaryNeighborSolidRender(index, 1,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
+            if (z == 0) {
+                BlockPos neighbor = pos.north();
+                voxels.setBoundaryNeighborSolidRender(index, 2,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
+            if (z == 15) {
+                BlockPos neighbor = pos.south();
+                voxels.setBoundaryNeighborSolidRender(index, 3,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
+            if (x == 0) {
+                BlockPos neighbor = pos.west();
+                voxels.setBoundaryNeighborSolidRender(index, 4,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
+            if (x == 15) {
+                BlockPos neighbor = pos.east();
+                voxels.setBoundaryNeighborSolidRender(index, 5,
+                        region.getBlockState(neighbor).isSolidRender(region, neighbor));
+            }
         }
 
         private RenderType compactRenderTypes(RenderType renderType) {

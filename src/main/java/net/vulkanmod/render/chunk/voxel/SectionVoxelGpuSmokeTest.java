@@ -81,24 +81,31 @@ public final class SectionVoxelGpuSmokeTest {
 
     private static SectionVoxelSnapshot fixture(int salt) {
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        for(int i = 0; i < 4096; ++i) {
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
+            int x = i & 15;
+            int y = (i >>> 4) & 15;
+            int z = (i >>> 8) & 15;
             int stateId = 1 + Math.floorMod(i * 1103515245 + salt, 6000);
-            int flags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
-            boolean gpuFullCube = (i & 1) == 0;
-            if(gpuFullCube)
-                flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+            boolean gpuFullCube = (x & 1) == 0;
+            boolean solidRender = (x & 3) == 0;
+
+            int flags = SectionVoxelSnapshot.CPU_REQUIRED;
+            if(solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
+            if((i & 2) != 0) flags |= SectionVoxelSnapshot.HAS_FLUID;
+            if((i & 4) != 0) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
+            if(gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
             builder.add(stateId, flags);
 
             if(gpuFullCube) {
-                int x = i & 15;
-                int y = (i >>> 4) & 15;
-                int z = (i >>> 8) & 15;
-                if(y == 0) builder.setBoundaryNeighborGpuFullCube(i, 0, true);
-                if(y == 15) builder.setBoundaryNeighborGpuFullCube(i, 1, true);
-                if(z == 0) builder.setBoundaryNeighborGpuFullCube(i, 2, true);
-                if(z == 15) builder.setBoundaryNeighborGpuFullCube(i, 3, true);
-                if(x == 0) builder.setBoundaryNeighborGpuFullCube(i, 4, true);
-                if(x == 15) builder.setBoundaryNeighborGpuFullCube(i, 5, true);
+                // Synthetic cross-section neighbors mirror the same semantic split:
+                // x%4==0 is a full solid occluder; x%4==2 is cube-shaped but does
+                // not occlude. This proves halo semantics independently of geometry.
+                if(y == 0) builder.setBoundaryNeighborSolidRender(i, 0, solidRender);
+                if(y == 15) builder.setBoundaryNeighborSolidRender(i, 1, solidRender);
+                if(z == 0) builder.setBoundaryNeighborSolidRender(i, 2, solidRender);
+                if(z == 15) builder.setBoundaryNeighborSolidRender(i, 3, solidRender);
+                if(x == 0) builder.setBoundaryNeighborSolidRender(i, 4, solidRender);
+                if(x == 15) builder.setBoundaryNeighborSolidRender(i, 5, solidRender);
             }
         }
         return builder.finish();
@@ -165,6 +172,7 @@ public final class SectionVoxelGpuSmokeTest {
         int[] expected = new int[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE];
         int[] expectedCompact = new int[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
         int eligibleVoxels = 0;
+        int solidRenderVoxels = 0;
         int descriptorCount = 0;
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             int stateId = snapshot.stateId(i);
@@ -176,6 +184,8 @@ public final class SectionVoxelGpuSmokeTest {
             expected[3] += Integer.bitCount(faceMask);
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
                 eligibleVoxels++;
+            if((flags & SectionVoxelSnapshot.SOLID_RENDER) != 0)
+                solidRenderVoxels++;
 
             int descriptorBase = VoxelComputeProbe.HEADER_WORDS + i * VoxelComputeProbe.FACES_PER_VOXEL;
             for(int face = 0; face < VoxelComputeProbe.FACES_PER_VOXEL; ++face) {
@@ -199,9 +209,12 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         require(eligibleVoxels == SectionVoxelSnapshot.BLOCK_COUNT / 2,
-                "GPU_FULL_CUBE fixture must exercise the fifth flag plane");
-        require(expected[3] == 3840,
-                "Qualified boundary halo must suppress all synthetic cross-section cube faces");
+                "GPU_FULL_CUBE fixture must retain the geometry-qualified half of the section");
+        require(solidRenderVoxels == SectionVoxelSnapshot.BLOCK_COUNT / 4,
+                "SOLID_RENDER fixture must independently qualify one quarter of the section");
+        verifySemanticOcclusionFixture(snapshot);
+        require(expected[3] == 7936,
+                "v4 semantic occlusion fixture must retain geometry-only neighbors and suppress solid occluders");
         require(descriptorCount == expected[3],
                 "Every diagnostic candidate face must produce exactly one fixed-slot descriptor");
 
@@ -257,8 +270,35 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v3 GPU_FULL_CUBE plane plus six-face boundary halo, cross-section-aware diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v4 GPU_FULL_CUBE source qualification plus SOLID_RENDER semantic occlusion and six-face boundary halo, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
+    }
+
+    private static void verifySemanticOcclusionFixture(SectionVoxelSnapshot snapshot) {
+        int geometryOnlyInterior = SectionVoxelSnapshot.blockIndex(2, 1, 1);
+        int solidOccludedInterior = SectionVoxelSnapshot.blockIndex(4, 1, 1);
+        require(isGpuFullCube(snapshot, geometryOnlyInterior)
+                        && isGpuFullCube(snapshot, solidOccludedInterior),
+                "Semantic occlusion fixture sources must both have identical GPU cube geometry eligibility");
+        require(!isSolidRender(snapshot, geometryOnlyInterior + 16),
+                "Geometry-only interior neighbor must remain non-occluding");
+        require((candidateFaceMask(snapshot, geometryOnlyInterior) & (1 << 1)) != 0,
+                "Geometry-only interior neighbor must not suppress the candidate UP face");
+        require(isSolidRender(snapshot, solidOccludedInterior + 16),
+                "Semantic interior neighbor must carry SOLID_RENDER");
+        require((candidateFaceMask(snapshot, solidOccludedInterior) & (1 << 1)) == 0,
+                "SOLID_RENDER interior neighbor must suppress the candidate UP face");
+
+        int geometryOnlyBoundary = SectionVoxelSnapshot.blockIndex(2, 0, 1);
+        int solidOccludedBoundary = SectionVoxelSnapshot.blockIndex(4, 0, 1);
+        require(!snapshot.boundaryNeighborSolidRender(geometryOnlyBoundary, 0),
+                "Geometry-only boundary neighbor must remain non-occluding in the halo");
+        require((candidateFaceMask(snapshot, geometryOnlyBoundary) & 1) != 0,
+                "Geometry-only boundary neighbor must not suppress the candidate DOWN face");
+        require(snapshot.boundaryNeighborSolidRender(solidOccludedBoundary, 0),
+                "Semantic boundary neighbor must carry SOLID_RENDER in the halo");
+        require((candidateFaceMask(snapshot, solidOccludedBoundary) & 1) == 0,
+                "SOLID_RENDER boundary neighbor must suppress the candidate DOWN face");
     }
 
     private static int candidateFaceMask(SectionVoxelSnapshot snapshot, int index) {
@@ -271,23 +311,23 @@ public final class SectionVoxelGpuSmokeTest {
         int mask = 0;
 
         if(y == 0) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 0)) mask |= 1 << 0;
-        } else if(!isGpuFullCube(snapshot, index - 16)) mask |= 1 << 0;
+            if(!snapshot.boundaryNeighborSolidRender(index, 0)) mask |= 1 << 0;
+        } else if(!isSolidRender(snapshot, index - 16)) mask |= 1 << 0;
         if(y == 15) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 1)) mask |= 1 << 1;
-        } else if(!isGpuFullCube(snapshot, index + 16)) mask |= 1 << 1;
+            if(!snapshot.boundaryNeighborSolidRender(index, 1)) mask |= 1 << 1;
+        } else if(!isSolidRender(snapshot, index + 16)) mask |= 1 << 1;
         if(z == 0) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 2)) mask |= 1 << 2;
-        } else if(!isGpuFullCube(snapshot, index - 256)) mask |= 1 << 2;
+            if(!snapshot.boundaryNeighborSolidRender(index, 2)) mask |= 1 << 2;
+        } else if(!isSolidRender(snapshot, index - 256)) mask |= 1 << 2;
         if(z == 15) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 3)) mask |= 1 << 3;
-        } else if(!isGpuFullCube(snapshot, index + 256)) mask |= 1 << 3;
+            if(!snapshot.boundaryNeighborSolidRender(index, 3)) mask |= 1 << 3;
+        } else if(!isSolidRender(snapshot, index + 256)) mask |= 1 << 3;
         if(x == 0) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 4)) mask |= 1 << 4;
-        } else if(!isGpuFullCube(snapshot, index - 1)) mask |= 1 << 4;
+            if(!snapshot.boundaryNeighborSolidRender(index, 4)) mask |= 1 << 4;
+        } else if(!isSolidRender(snapshot, index - 1)) mask |= 1 << 4;
         if(x == 15) {
-            if(!snapshot.boundaryNeighborGpuFullCube(index, 5)) mask |= 1 << 5;
-        } else if(!isGpuFullCube(snapshot, index + 1)) mask |= 1 << 5;
+            if(!snapshot.boundaryNeighborSolidRender(index, 5)) mask |= 1 << 5;
+        } else if(!isSolidRender(snapshot, index + 1)) mask |= 1 << 5;
         return mask;
     }
 
@@ -334,6 +374,10 @@ public final class SectionVoxelGpuSmokeTest {
 
     private static boolean isGpuFullCube(SectionVoxelSnapshot snapshot, int index) {
         return (snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0;
+    }
+
+    private static boolean isSolidRender(SectionVoxelSnapshot snapshot, int index) {
+        return (snapshot.flags(index) & SectionVoxelSnapshot.SOLID_RENDER) != 0;
     }
 
     private static void require(boolean condition, String message) {

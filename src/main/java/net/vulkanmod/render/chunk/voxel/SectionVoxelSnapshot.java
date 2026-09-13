@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public final class SectionVoxelSnapshot {
     public static final int MAGIC = 0x56584c31;
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
     public static final int BLOCK_COUNT = 4096;
     public static final int HEADER_WORDS = 16;
     public static final int INDEX_WORDS = BLOCK_COUNT / 2;
@@ -21,6 +21,7 @@ public final class SectionVoxelSnapshot {
     public static final int HALO_FACES = 6;
     public static final int HALO_FACE_WORDS = 256 / 32;
     public static final int HALO_WORDS = HALO_FACES * HALO_FACE_WORDS;
+    /** Minecraft's position-aware full solid-render/occlusion result. */
     public static final int SOLID_RENDER = 1;
     public static final int HAS_FLUID = 2;
     public static final int HAS_BLOCK_ENTITY = 4;
@@ -67,10 +68,14 @@ public final class SectionVoxelSnapshot {
 
     /**
      * Returns whether the one-block-outside neighbor for a section-boundary face
-     * was qualified as GPU_FULL_CUBE when this snapshot was built. Faces use the
+     * was a full SOLID_RENDER occluder when this snapshot was built. Faces use the
      * vanilla Direction ordinal order: down, up, north, south, west, east.
+     *
+     * <p>This is deliberately semantic rather than model-based. GPU_FULL_CUBE says
+     * the source geometry is safe to instantiate; SOLID_RENDER says a neighbor is
+     * safe to use for conservative full-face rejection.</p>
      */
-    public boolean boundaryNeighborGpuFullCube(int index, int face) {
+    public boolean boundaryNeighborSolidRender(int index, int face) {
         checkIndex(index);
         int bit = haloBit(index, face);
         int word = words[words[12] + face * HALO_FACE_WORDS + (bit >>> 5)];
@@ -151,10 +156,10 @@ public final class SectionVoxelSnapshot {
                 throw new IllegalStateException("Snapshot builder is full or sealed");
             if (stateId < 0 || (blockFlags & ~31) != 0)
                 throw new IllegalArgumentException("Invalid state ID or flags");
-            // GPU_FULL_CUBE remains informational in v3. CPU meshing remains authoritative
+            // GPU_FULL_CUBE remains informational in v4. CPU meshing remains authoritative
             // until GPU face/light/vertex emission has its own validated fallback gate.
             if ((blockFlags & CPU_REQUIRED) == 0)
-                throw new IllegalArgumentException("Version 3 still requires CPU fallback");
+                throw new IllegalArgumentException("Version 4 still requires CPU fallback");
             int paletteIndex = palette.computeIfAbsent(stateId, ignored -> palette.size());
             indices[count >>> 1] |= paletteIndex << ((count & 1) * 16);
             for (int plane = 0; plane < FLAG_PLANES; plane++) {
@@ -165,17 +170,18 @@ public final class SectionVoxelSnapshot {
         }
 
         /**
-         * Capture only the qualified-cube occupancy immediately outside one section
-         * face. This is a narrow face-rejection halo, not final occlusion/light/AO data.
+         * Capture only full SOLID_RENDER occupancy immediately outside one section
+         * face. This is a narrow, conservative face-rejection halo, not complete
+         * shouldRenderFace/light/AO data.
          */
-        public void setBoundaryNeighborGpuFullCube(int index, int face, boolean gpuFullCube) {
+        public void setBoundaryNeighborSolidRender(int index, int face, boolean solidRender) {
             if (finished)
                 throw new IllegalStateException("Snapshot builder is sealed");
             checkIndex(index);
             int bit = haloBit(index, face);
             int word = face * HALO_FACE_WORDS + (bit >>> 5);
             int mask = 1 << (bit & 31);
-            if (gpuFullCube) halo[word] |= mask;
+            if (solidRender) halo[word] |= mask;
             else halo[word] &= ~mask;
         }
 

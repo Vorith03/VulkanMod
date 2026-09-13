@@ -14,12 +14,12 @@ public final class SectionVoxelSnapshotTest {
                 int expectedFlags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
                 if ((i & 1) == 0) expectedFlags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                 builder.add(100000 + i % paletteSize, expectedFlags);
-                if (y == 0) builder.setBoundaryNeighborGpuFullCube(i, 0, expectedHalo(i, 0));
-                if (y == 15) builder.setBoundaryNeighborGpuFullCube(i, 1, expectedHalo(i, 1));
-                if (z == 0) builder.setBoundaryNeighborGpuFullCube(i, 2, expectedHalo(i, 2));
-                if (z == 15) builder.setBoundaryNeighborGpuFullCube(i, 3, expectedHalo(i, 3));
-                if (x == 0) builder.setBoundaryNeighborGpuFullCube(i, 4, expectedHalo(i, 4));
-                if (x == 15) builder.setBoundaryNeighborGpuFullCube(i, 5, expectedHalo(i, 5));
+                if (y == 0) builder.setBoundaryNeighborSolidRender(i, 0, expectedHalo(i, 0));
+                if (y == 15) builder.setBoundaryNeighborSolidRender(i, 1, expectedHalo(i, 1));
+                if (z == 0) builder.setBoundaryNeighborSolidRender(i, 2, expectedHalo(i, 2));
+                if (z == 15) builder.setBoundaryNeighborSolidRender(i, 3, expectedHalo(i, 3));
+                if (x == 0) builder.setBoundaryNeighborSolidRender(i, 4, expectedHalo(i, 4));
+                if (x == 15) builder.setBoundaryNeighborSolidRender(i, 5, expectedHalo(i, 5));
             }
             var snapshot = builder.finish();
             require(snapshot.paletteSize() == paletteSize, "Palette cardinality, including >256 states");
@@ -38,7 +38,7 @@ public final class SectionVoxelSnapshotTest {
             require(gpu.getInt(44) == SectionVoxelSnapshot.FLAG_PLANES,
                     "Header advertises all flag planes");
             require(gpu.getInt(52) == SectionVoxelSnapshot.HALO_WORDS,
-                    "Header advertises the six-face qualified-cube halo");
+                    "Header advertises the six-face solid-render halo");
             require(gpu.getInt(16) == -16 && gpu.getInt(20) == -64 && gpu.getInt(24) == 29999984,
                     "Signed world origins");
             for (int i = 0; i < 4096; i++) {
@@ -70,10 +70,10 @@ public final class SectionVoxelSnapshotTest {
                 if (x == 15) verifyHalo(gpu, snapshot, i, 5);
             }
             reject(() -> builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED));
-            reject(() -> builder.setBoundaryNeighborGpuFullCube(0, 0, true));
+            reject(() -> builder.setBoundaryNeighborSolidRender(0, 0, true));
             reject(builder::finish);
-            reject(() -> snapshot.boundaryNeighborGpuFullCube(SectionVoxelSnapshot.blockIndex(1, 1, 1), 0));
-            reject(() -> snapshot.boundaryNeighborGpuFullCube(0, 6));
+            reject(() -> snapshot.boundaryNeighborSolidRender(SectionVoxelSnapshot.blockIndex(1, 1, 1), 0));
+            reject(() -> snapshot.boundaryNeighborSolidRender(0, 6));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() - 1)));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() + 1).position(1)));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize()).asReadOnlyBuffer()));
@@ -122,9 +122,9 @@ public final class SectionVoxelSnapshotTest {
         int haloOffset = gpu.getInt(48);
         int word = gpu.getInt((haloOffset + face * SectionVoxelSnapshot.HALO_FACE_WORDS + (bit >>> 5)) * 4);
         boolean decoded = ((word >>> (bit & 31)) & 1) != 0;
-        require(decoded == expectedHalo(index, face), "Shader boundary halo decode");
-        require(snapshot.boundaryNeighborGpuFullCube(index, face) == decoded,
-                "CPU boundary halo reference decode");
+        require(decoded == expectedHalo(index, face), "Shader solid-render halo decode");
+        require(snapshot.boundaryNeighborSolidRender(index, face) == decoded,
+                "CPU solid-render halo reference decode");
     }
 
     private static int haloBit(int index, int face) {
