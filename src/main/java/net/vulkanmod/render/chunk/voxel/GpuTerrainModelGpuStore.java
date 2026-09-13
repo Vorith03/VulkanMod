@@ -58,7 +58,7 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
         try {
             table.writeTo(bytes);
             bytes.flip();
-            uploadImmediate(buffer, bytes);
+            uploadImmediate(buffer, 0L, bytes);
             completeUpload(token);
         } catch(RuntimeException | Error error) {
             if(pending == token)
@@ -94,10 +94,12 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
         discardResident();
     }
 
-    private static void uploadImmediate(StorageBuffer destination, ByteBuffer source) {
+    static void uploadImmediate(StorageBuffer destination, long destinationOffset, ByteBuffer source) {
         int byteLength = source.remaining();
-        if(byteLength <= 0 || byteLength > destination.getBufferSize())
-            throw new IllegalArgumentException("Invalid GPU terrain model-table upload size");
+        if(destination == null || destinationOffset < 0L || byteLength <= 0
+                || destinationOffset + byteLength < destinationOffset
+                || destinationOffset + byteLength > destination.getBufferSize())
+            throw new IllegalArgumentException("Invalid immediate storage upload range");
 
         StagingBuffer staging = new StagingBuffer(byteLength);
         try {
@@ -105,7 +107,7 @@ public final class GpuTerrainModelGpuStore implements AutoCloseable {
             CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
             TransferQueue.uploadBufferCmd(commandBuffer,
                     staging.getId(), staging.getOffset(),
-                    destination.getId(), 0L, byteLength);
+                    destination.getId(), destinationOffset, byteLength);
             Device.getGraphicsQueue().submitCommands(commandBuffer);
             Synchronization.waitFence(commandBuffer.getFence());
             Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);

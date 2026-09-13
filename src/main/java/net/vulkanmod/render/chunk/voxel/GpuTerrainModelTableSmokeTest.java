@@ -5,11 +5,11 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
-import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryManager;
+import net.vulkanmod.vulkan.memory.MemoryTypes;
 import net.vulkanmod.vulkan.memory.StorageBuffer;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.TransferQueue;
@@ -25,6 +25,7 @@ import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
 /** Real Vulkan oracle for the resource-generation GPU terrain model table. */
 public final class GpuTerrainModelTableSmokeTest {
+    private static final int JOINED_VOXEL_OFFSET = 64;
     private static final Direction[] FACE_DIRECTIONS = {
             Direction.DOWN, Direction.UP, Direction.NORTH,
             Direction.SOUTH, Direction.WEST, Direction.EAST
@@ -33,8 +34,6 @@ public final class GpuTerrainModelTableSmokeTest {
     private GpuTerrainModelTableSmokeTest() {}
 
     public static void verify() {
-        require(AreaUploadManager.INSTANCE != null,
-                "GPU model-table join smoke requires the terrain upload manager");
         GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
         require(table.generation() == GpuTerrainModelRegistry.generation(),
                 "Packed model table must capture the current baked-model generation");
@@ -47,7 +46,7 @@ public final class GpuTerrainModelTableSmokeTest {
         verifyCpuAbi(table);
 
         GpuTerrainModelGpuStore store = new GpuTerrainModelGpuStore();
-        RegionVoxelGpuStore voxelStore = new RegionVoxelGpuStore();
+        StorageBuffer voxelPage = null;
         try {
             require(store.upload(table), "GPU model-table upload must be accepted");
             GpuTerrainModelGpuStore.Residency resident = store.getResidency();
@@ -58,16 +57,9 @@ public final class GpuTerrainModelTableSmokeTest {
             verifyReadback(resident, table);
 
             SectionVoxelSnapshot voxelSnapshot = joinedVoxelFixture(table);
-            require(voxelStore.upload(0, voxelSnapshot, table.generation()),
-                    "Joined model-table smoke voxel upload must be accepted");
-            AreaUploadManager.INSTANCE.submitUploads();
-            RegionVoxelGpuStore.Residency voxelResidency = voxelStore.getResidency(0);
-            require(voxelResidency.valid() && voxelResidency.generation() == table.generation(),
-                    "Submitted joined-smoke voxel generation must become resident");
-            StorageBuffer voxelPage = voxelStore.getPageBuffer(voxelResidency.pageIndex());
-            require(voxelPage != null,
-                    "Joined model-table compute smoke requires a live voxel page");
-            verifyComputeLookup(resident, table, voxelPage, voxelResidency, voxelSnapshot);
+            voxelPage = uploadJoinedVoxelFixture(voxelSnapshot);
+            verifyComputeLookup(resident, table, voxelPage, JOINED_VOXEL_OFFSET,
+                    voxelSnapshot.byteSize(), voxelSnapshot);
 
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode and 4096 resident voxel state-ID joins",
@@ -75,7 +67,8 @@ public final class GpuTerrainModelTableSmokeTest {
                     table.stateIndexCount(), table.byteSize());
         } finally {
             Vulkan.waitIdle();
-            voxelStore.close();
+            if(voxelPage != null)
+                voxelPage.freeBuffer();
             store.close();
         }
     }
@@ -83,11 +76,12 @@ public final class GpuTerrainModelTableSmokeTest {
     private static void verifyComputeLookup(GpuTerrainModelGpuStore.Residency residency,
                                             GpuTerrainModelTable table,
                                             StorageBuffer voxelPage,
-                                            RegionVoxelGpuStore.Residency voxelResidency,
+                                            int voxelByteOffset,
+                                            int voxelByteLength,
                                             SectionVoxelSnapshot voxelSnapshot) {
         try(GpuTerrainModelComputeProbe probe = new GpuTerrainModelComputeProbe()) {
             int[] actual = probe.dispatch(residency, table.templateCount(), voxelPage,
-                    voxelResidency.byteOffset(), voxelResidency.byteLength());
+                    voxelByteOffset, voxelByteLength);
             int lookupBase = GpuTerrainModelComputeProbe.voxelLookupBase(table.templateCount());
             int expectedWords = Math.addExact(lookupBase, SectionVoxelSnapshot.BLOCK_COUNT);
             require(actual.length == expectedWords,
@@ -128,6 +122,23 @@ public final class GpuTerrainModelTableSmokeTest {
             }
             require(qualifiedWithoutHint > 0 && rejectedWithHint > 0,
                     "Joined voxel fixture must prove current model-table lookup is independent of stale geometry hints");
+        }
+    }
+
+    private static StorageBuffer uploadJoinedVoxelFixture(SectionVoxelSnapshot snapshot) {
+        StorageBuffer buffer = new StorageBuffer(
+                JOINED_VOXEL_OFFSET + snapshot.byteSize(), MemoryTypes.GPU_MEM);
+        ByteBuffer bytes = MemoryUtil.memAlloc(snapshot.byteSize());
+        try {
+            snapshot.writeTo(bytes);
+            bytes.flip();
+            GpuTerrainModelGpuStore.uploadImmediate(buffer, JOINED_VOXEL_OFFSET, bytes);
+            return buffer;
+        } catch(RuntimeException | Error error) {
+            buffer.freeBuffer();
+            throw error;
+        } finally {
+            MemoryUtil.memFree(bytes);
         }
     }
 

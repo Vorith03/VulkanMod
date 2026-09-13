@@ -29,6 +29,13 @@ Use these together:
   `GPU_FULL_CUBE` hint independently so the current baked-model table is proven to
   be authoritative. Keep this diagnostic-only; do not alter `CPU_REQUIRED`, normal
   meshing, production output ownership, or draw/upload integration.
+- First candidate was published as `e554306d4402777b5ef43cb10b33a23d00fca63d`.
+  CI #399 compiled and packaged it, then the first startup correctly rejected
+  `RegionVoxelGpuStore.upload` because baked-model reload occurs outside the
+  `AreaUploadManager` frame domain. The follow-up candidate must not weaken that
+  invariant: it uses the existing fence-owned immediate storage upload for an
+  isolated smoke-only voxel page at a nonzero slice offset. The already-green
+  `SectionVoxelGpuSmokeTest` remains authoritative for region upload/publication.
 
 - Live branch head at session start: `5f35881d5342e14933f31c2a5c5e689019f5d9a4`
   (`gpu terrain: upload model table outside frame staging`).
