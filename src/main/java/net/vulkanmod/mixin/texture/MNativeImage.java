@@ -20,15 +20,6 @@ import java.nio.ByteBuffer;
 
 @Mixin(NativeImage.class)
 public abstract class MNativeImage implements VNativeImageI {
-    @Unique
-    private static final long vulkanmod$MIB = 1024L * 1024L;
-    @Unique
-    private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB = Math.max(
-            1024L, Long.getLong("vulkanmod.nativeImageSafetyLimitMiB", 4096L));
-    @Unique
-    private static final long vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES =
-            vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB * vulkanmod$MIB;
-
     @Shadow private long pixels;
     @Shadow private long size;
 
@@ -103,24 +94,6 @@ public abstract class MNativeImage implements VNativeImageI {
             }
             throw error;
         }
-
-        long live = MemoryDiagnostics.getNativeImageLiveBytes();
-        if(live <= vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_BYTES)
-            return;
-
-        // Mixin 0.8.5 does not permit a constructor HEAD injector. Check at RETURN
-        // instead, but explicitly release the just-created image before propagating
-        // the failure so the circuit breaker itself cannot strand native memory.
-        long triggeringBytes = this.vulkanmod$trackedNativeBytes;
-        MemoryDiagnostics.logSnapshot("NativeImage safety limit after allocation");
-        SpriteMipMemoryTracker.logSnapshot("NativeImage safety limit");
-        this.close();
-        throw new OutOfMemoryError(String.format(
-                "VulkanMod stopped resource loading before NativeImage memory could exhaust the system: " +
-                        "tracked=%d MiB trigger=%d MiB limit=%d MiB (%dx%d). " +
-                        "Override with -Dvulkanmod.nativeImageSafetyLimitMiB=<MiB> only for diagnosis.",
-                live / vulkanmod$MIB, triggeringBytes / vulkanmod$MIB,
-                vulkanmod$NATIVE_IMAGE_SAFETY_LIMIT_MIB, this.width, this.height));
     }
 
     @Inject(method = "close", at = @At("HEAD"))

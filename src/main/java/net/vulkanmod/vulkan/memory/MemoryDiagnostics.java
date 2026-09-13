@@ -26,13 +26,13 @@ public final class MemoryDiagnostics {
     private static final long MIB = 1024L * 1024L;
     private static final long NATIVE_IMAGE_REPORT_STEP = 512L * MIB;
     private static final long SYSTEM_MEMORY_CHECK_INTERVAL_NANOS = 250_000_000L;
-    private static final long SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB = Math.max(
-            1024L, Long.getLong("vulkanmod.systemAvailableSafetyLimitMiB", 4096L));
-    private static final long PROCESS_RSS_SAFETY_LIMIT_MIB = Math.max(
-            4096L, Long.getLong("vulkanmod.processRssSafetyLimitMiB", 12288L));
-    private static final long PROCESS_RSS_PRESSURE_AVAILABLE_MIB = Math.max(
-            SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB,
-            Long.getLong("vulkanmod.processRssPressureAvailableMiB", 8192L));
+    private static final long SYSTEM_AVAILABLE_RESERVE_MIN_MIB = Math.max(
+            512L,
+            Long.getLong(
+                    "vulkanmod.systemAvailableReserveMinMiB",
+                    Long.getLong("vulkanmod.systemAvailableSafetyLimitMiB", 2048L)));
+    private static final long SYSTEM_AVAILABLE_RESERVE_PERCENT = Math.min(
+            50L, Math.max(0L, Long.getLong("vulkanmod.systemAvailableReservePercent", 10L)));
 
     private static final AtomicLong NATIVE_IMAGE_LIVE = new AtomicLong();
     private static final AtomicLong NATIVE_IMAGE_PEAK = new AtomicLong();
@@ -105,10 +105,10 @@ public final class MemoryDiagnostics {
      * at a low cadence and fail the reload before the kernel has to invoke the OOM
      * killer.
      *
-     * A high process RSS by itself is not sufficient evidence of system pressure:
-     * large resource packs legitimately push this modpack beyond 12 GiB RSS while
-     * Linux can still have many GiB available. Treat the RSS threshold as an early
-     * warning that only becomes fatal when system availability is also declining.
+     * Do not impose a fixed process-RSS or resource-memory ceiling here. Large
+     * resource packs may legitimately use far more memory on a machine that still
+     * has plenty available. Instead reserve a small, adaptive amount of physical
+     * memory for the OS and other applications and allow VulkanMod to use the rest.
      */
     public static void enforceSystemMemorySafety(String reason) {
         long now = System.nanoTime();
@@ -124,22 +124,20 @@ public final class MemoryDiagnostics {
 
             long rssMiB = kbToMiB(process.get("VmRSS"));
             long availableMiB = kbToMiB(system.get("MemAvailable"));
-            boolean rssTooHigh = rssMiB >= 0L && rssMiB > PROCESS_RSS_SAFETY_LIMIT_MIB;
-            boolean systemTooLow = availableMiB >= 0L && availableMiB < SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB;
-            boolean rssUnderSystemPressure = rssTooHigh && availableMiB >= 0L
-                    && availableMiB < PROCESS_RSS_PRESSURE_AVAILABLE_MIB;
-            if(!rssUnderSystemPressure && !systemTooLow)
+            long totalMiB = kbToMiB(system.get("MemTotal"));
+            long reserveMiB = calculateSystemAvailableReserveMiB(totalMiB);
+            if(!isSystemMemoryPressure(availableMiB, totalMiB))
                 return;
 
             logSnapshot("system memory safety trip: " + reason);
             throw new OutOfMemoryError(String.format(
-                    "VulkanMod stopped resource loading before global OOM: process RSS=%d MiB " +
-                            "(soft limit=%d MiB; enforced below %d MiB available), system MemAvailable=%d MiB " +
-                            "(hard minimum=%d MiB). Override with -Dvulkanmod.processRssSafetyLimitMiB=<MiB>, " +
-                            "-Dvulkanmod.processRssPressureAvailableMiB=<MiB>, or " +
-                            "-Dvulkanmod.systemAvailableSafetyLimitMiB=<MiB> only for diagnosis.",
-                    rssMiB, PROCESS_RSS_SAFETY_LIMIT_MIB, PROCESS_RSS_PRESSURE_AVAILABLE_MIB,
-                    availableMiB, SYSTEM_AVAILABLE_SAFETY_LIMIT_MIB));
+                    "VulkanMod stopped resource loading before global OOM: process RSS=%d MiB (diagnostic only), " +
+                            "system MemAvailable=%d MiB / MemTotal=%d MiB, adaptive reserve=%d MiB " +
+                            "(max of %d MiB and %d%% of physical memory). Override with " +
+                            "-Dvulkanmod.systemAvailableReserveMinMiB=<MiB> or " +
+                            "-Dvulkanmod.systemAvailableReservePercent=<percent> only for diagnosis.",
+                    rssMiB, availableMiB, totalMiB, reserveMiB,
+                    SYSTEM_AVAILABLE_RESERVE_MIN_MIB, SYSTEM_AVAILABLE_RESERVE_PERCENT));
         } catch (OutOfMemoryError error) {
             throw error;
         } catch (Throwable throwable) {
@@ -147,6 +145,38 @@ public final class MemoryDiagnostics {
                 Initializer.LOGGER.warn("System memory safety diagnostics are unavailable: {}", throwable.toString());
             }
         }
+    }
+
+    static long calculateSystemAvailableReserveMiB(long totalMiB) {
+        return calculateSystemAvailableReserveMiB(
+                totalMiB, SYSTEM_AVAILABLE_RESERVE_MIN_MIB, SYSTEM_AVAILABLE_RESERVE_PERCENT);
+    }
+
+    static long calculateSystemAvailableReserveMiB(
+            long totalMiB, long minimumReserveMiB, long reservePercent) {
+        long minimum = Math.max(0L, minimumReserveMiB);
+        long percent = Math.min(100L, Math.max(0L, reservePercent));
+        if(totalMiB <= 0L || percent == 0L)
+            return minimum;
+
+        // Divide before multiplying so even malformed /proc data cannot overflow
+        // while computing a percentage of total physical memory.
+        long proportional = (totalMiB / 100L) * percent
+                + ((totalMiB % 100L) * percent) / 100L;
+        return Math.max(minimum, proportional);
+    }
+
+    static boolean isSystemMemoryPressure(long availableMiB, long totalMiB) {
+        return isSystemMemoryPressure(
+                availableMiB, totalMiB,
+                SYSTEM_AVAILABLE_RESERVE_MIN_MIB, SYSTEM_AVAILABLE_RESERVE_PERCENT);
+    }
+
+    static boolean isSystemMemoryPressure(
+            long availableMiB, long totalMiB, long minimumReserveMiB, long reservePercent) {
+        return availableMiB >= 0L
+                && availableMiB <= calculateSystemAvailableReserveMiB(
+                        totalMiB, minimumReserveMiB, reservePercent);
     }
 
     public static void logSnapshot(String reason) {
@@ -164,6 +194,8 @@ public final class MemoryDiagnostics {
             MemoryManager memoryManager = MemoryManager.getInstance();
             int hostBufferMiB = memoryManager != null ? memoryManager.getNativeMemoryMB() : -1;
             int deviceBufferMiB = memoryManager != null ? memoryManager.getDeviceMemoryMB() : -1;
+            long totalMiB = kbToMiB(system.get("MemTotal"));
+            long reserveMiB = calculateSystemAvailableReserveMiB(totalMiB);
 
             Initializer.LOGGER.info(
                     "Memory snapshot [{}]: heap used/committed/max={}/{}/{} MiB; " +
@@ -171,7 +203,7 @@ public final class MemoryDiagnostics {
                             "VulkanImage est-live/peak={}/{} MiB VMA-live/peak={}/{} MiB count={}/{}; " +
                             "tracked buffers host/device={}/{} MiB; staging={}; " +
                             "process DRM clients={} resident VRAM/GTT={}/{} MiB; " +
-                            "system available={} MiB GPUActive={} MiB GPUReclaim={} MiB SwapFree={} MiB; " +
+                            "system available/total/reserve={}/{}/{} MiB GPUActive={} MiB GPUReclaim={} MiB SwapFree={} MiB; " +
                             "amdgpu global VRAM used/total={}/{} MiB GTT used/total={}/{} MiB",
                     reason,
                     toMiB(heapUsed), toMiB(heapCommitted), toMiB(heapMax),
@@ -183,8 +215,9 @@ public final class MemoryDiagnostics {
                     hostBufferMiB, deviceBufferMiB,
                     Vulkan.describeStagingBuffers(),
                     drmClient.clients, bytesToMiB(drmClient.vramResident), bytesToMiB(drmClient.gttResident),
-                    kbToMiB(system.get("MemAvailable")), kbToMiB(system.get("GPUActive")),
-                    kbToMiB(system.get("GPUReclaim")), kbToMiB(system.get("SwapFree")),
+                    kbToMiB(system.get("MemAvailable")), totalMiB, reserveMiB,
+                    kbToMiB(system.get("GPUActive")), kbToMiB(system.get("GPUReclaim")),
+                    kbToMiB(system.get("SwapFree")),
                     bytesToMiB(gpu.vramUsed), bytesToMiB(gpu.vramTotal),
                     bytesToMiB(gpu.gttUsed), bytesToMiB(gpu.gttTotal));
         } catch (Throwable throwable) {

@@ -285,6 +285,7 @@ tasks.named('check').configure {
     dependsOn 'testSectionVoxelSnapshot'
     dependsOn 'testResourceReloadGeneration'
     dependsOn 'testTextureUploadLayout'
+    dependsOn 'testMemoryPressurePolicy'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -303,6 +304,12 @@ tasks.register('testTextureUploadLayout', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.vulkan.texture.TextureUploadLayoutTest'
+}
+
+tasks.register('testMemoryPressurePolicy', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.memory.MemoryPressurePolicyTest'
 }
 
 tasks.withType(JavaCompile).configureEach {
