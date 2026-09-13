@@ -4,7 +4,6 @@ import net.minecraft.core.BlockPos;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
-import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTableSmokeTest;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelGpuSmokeTest;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
@@ -93,7 +92,6 @@ public final class SectionVoxelSmokeTest {
             require(!abandoned.get(), "Shutdown must discard queued voxel publication closures");
 
             SectionVoxelGpuSmokeTest.verify();
-            GpuTerrainModelTableSmokeTest.verify();
             Initializer.LOGGER.info("Terrain voxel lifecycle smoke passed (capture={})", RegionVoxelStore.ENABLED);
         } finally {
             dispatcher.stopThreads();

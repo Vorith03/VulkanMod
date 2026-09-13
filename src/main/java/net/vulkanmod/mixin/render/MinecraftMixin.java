@@ -90,10 +90,10 @@ public class MinecraftMixin {
         var deviceInfo = Vulkan.getDeviceInfo();
         Initializer.LOGGER.info("Vulkan renderer active: {}", deviceInfo != null ? deviceInfo.deviceName : "device info unavailable");
 
-        // CI can request a deterministic startup smoke test. Before exiting,
-        // force-load representative late render targets so their Mixins apply.
-        // This catches failures that otherwise appear only during resource/model
-        // loading or the first chunk build after Minecraft construction returns.
+        // CI can request a deterministic startup smoke test. Run the renderer and
+        // section-lifecycle checks here, then let resource loading continue until
+        // BlockModelShaper publishes the first baked-model generation. That later
+        // boundary owns the model-table GPU readback and final smoke-test exit.
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
             try {
                 Class.forName("net.minecraft.client.model.geom.ModelPart$Cube");
@@ -130,8 +130,7 @@ public class MinecraftMixin {
                 }
             }
 
-            Initializer.LOGGER.info("Vulkan smoke test passed");
-            System.exit(0);
+            Initializer.LOGGER.info("Vulkan early smoke checks passed; awaiting baked model cache");
         }
     }
 
