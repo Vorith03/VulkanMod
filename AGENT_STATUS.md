@@ -18,6 +18,25 @@ Use these together:
 
 ### Live continuation note — 2026-09-13 (in progress)
 
+- Completed continuation from `7188360b92c44ebd4fe48045b7b8019508e21a6f`:
+  source commit `2f35a3aa03856c7e01fbb64b1a9d0910e56d85c7`
+  (`gpu terrain: resolve resident voxel face rows`) extends only the diagnostic joined
+  compute oracle. Each of 4,096 resident voxels now resolves its current dense baked
+  template and one direction-cycled exact face row: sprite slot plus four ordered UV
+  pairs. GPU output is compared word-for-word against the CPU table, while unqualified
+  states must retain a zero template sentinel and an entirely zero face row. Shader
+  palette/index range checks also fail closed for malformed slices.
+- CI #401 (run `34773590690`, job `103767512106`) is fully green: compilation and
+  distributable checks, both Vulkan startup modes, post-chain, depth, screenshot,
+  Crash Assistant, Chat Heads, Flywheel, logs, and artifacts all passed. This remains
+  smoke/oracle-only; `CPU_REQUIRED` and production terrain ownership are unchanged,
+  and no performance result is claimed.
+- Next safe checkpoint: bind the current model table to the existing voxel classifier/
+  compaction oracle and resolve the exact face row for its actual compact candidate
+  descriptors (voxel index plus direction). Compare every compact GPU row against the
+  CPU baked template while preserving the current face/corner assertions. Do not yet
+  integrate production terrain buffers or clear `CPU_REQUIRED`.
+
 - Continuation session baseline: `40ab0350234b4ddc4fda7d83b1a9d4fadfdef5de`;
   CI #398 (run `34749852306`, job `103704325922`) is fully green, including
   compilation, both startup modes, model-table compute decode/readback, post-chain,
