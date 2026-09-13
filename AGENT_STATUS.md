@@ -18,15 +18,40 @@ Use these together:
 
 ### Live continuation note — 2026-09-13
 
-- Active continuation from clean head `0ebaeb14971983bdf59bdec3d2db5ec95582dbe9`:
-  build the CPU-only canonical-cube AO/color/light oracle promised below. Compare an
-  independent numeric implementation against the real Minecraft 1.20.1
-  `AmbientOcclusionFace` for all six directions and mixed light/occluder fixtures;
-  prove the actual sample radius and fail section geometry qualification closed for
-  Forge's experimental lighting pipeline. Separately audit the reported modpack-only
-  world-space visual artifact, with compressed terrain-coordinate overflow as the
-  leading hypothesis. Do not change snapshot v4, shaders, production geometry
-  ownership, or `CPU_REQUIRED`. If interrupted, inspect this note and the worktree.
+- Completed GPU-terrain continuation from
+  `0ebaeb14971983bdf59bdec3d2db5ec95582dbe9`: source commit
+  `9d4b349017a0aa22cc64cf326868b7d06bd68b74`
+  (`gpu terrain: verify canonical cube lighting oracle`) compares an independent
+  numeric implementation with the real Minecraft 1.20.1
+  `ModelBlockRenderer.AmbientOcclusionFace`. It proves 120 exact packed color/light
+  vertex results across all six directions, open neighborhoods and every blocked-
+  diagonal substitution pair. It also proves that canonical faces sample two blocks
+  outward, correcting the proposed one-cell/18-cube halo to a simple 20 x 20 x 20
+  bound over section coordinates `[-2, 17]`, and makes section geometry eligibility
+  fail closed under Forge's experimental lighting pipeline.
+- CI #410 (run `34785863257`, job `103801104012`) is fully green: compilation,
+  distributable verification, both Vulkan startup modes and the live lighting oracle,
+  post-chain, depth, screenshot, Crash Assistant, Chat Heads, Flywheel, logs and
+  artifacts all passed. Snapshot v4, compute shaders, production geometry ownership,
+  and `CPU_REQUIRED` remain unchanged.
+- Completed bounded artifact diagnosis in source commit
+  `2c536ff61510606039eb2433c48fda7aaa17113f`
+  (`terrain: diagnose compressed vertex overflow`). The leading explanation for the
+  modpack-only artifact with a reachable world-space edge is a custom baked vertex
+  overflowing the signed-short x1900 terrain format and producing a large triangle.
+  `-Dvulkanmod.debugTerrainVertices=true` now emits at most 32
+  `VULKANMOD_TERRAIN_VERTEX_RANGE` warnings with the exact block, state, world
+  position, local coordinate and wrapped value. It is restart-only, default-off and
+  does not alter geometry. See `docs/MODPACK_TERRAIN_ARTIFACT_DIAGNOSIS_2026-09-13.md`.
+- CI #411 (run `34790146735`, job `103812728827`) is fully green across the complete
+  build, both startups, render tests, compatibility tests, logs, and artifacts.
+- Next safe GPU-terrain checkpoint: prototype and measure a CPU-resolved numeric
+  lighting lattice using the proven two-block radius before changing snapshot v4.
+  Compare a simple 20-cube encoding with an 18-cube plus sparse second-shell layout;
+  include exact packed light, raw shade-brightness values, AO occlusion predicates,
+  and a conservative position-offset policy. Reject the design if capture cost or
+  retained bytes approach the CPU mesh cost. Do not clear `CPU_REQUIRED` or allocate
+  production GPU geometry yet.
 
 - Completed continuation from `4c961082a489c3c0e1c976f196393c9b3b3fc0d3`:
   source commit `7f706b085034a25ce577619443864c4b5fb799ec`
