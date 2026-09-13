@@ -33,14 +33,20 @@ Use these together:
   `git diff --check` pass; local Gradle remains blocked because this checkout cannot
   reach the uncached Gradle 8.1.1 distribution. Commit/push this repair, then inspect
   the resulting live CI before expanding GPU terrain scope.
-- Repair commit was published as `e5cfc7c5600a13faf05ef7948f66861516299c51`;
-  CI #396 (run `34749580353`) was still queued when the next local checkpoint began.
-- Uncommitted next checkpoint files (if this note is encountered mid-session):
-  `GpuTerrainModelComputeProbe.java`, `model_table_probe.comp`, and the corresponding
-  `GpuTerrainModelTableSmokeTest` call/oracle. The bounded probe dispatches one GPU
-  invocation per dense baked template, verifies sparse state-ID reverse lookup,
-  and reads every ordered face/sprite/UV word through compute. It remains smoke-only
-  and does not publish terrain or change CPU fallback. Run CI before retaining it.
+- Repair commit was published as `e5cfc7c5600a13faf05ef7948f66861516299c51`.
+- The next bounded checkpoint was published as
+  `9dea481088f6fed3ce801a33944c86fa021b0c85`
+  (`gpu terrain: decode baked templates in compute`). Its smoke-only probe dispatches
+  one GPU invocation per dense baked template, verifies sparse state-ID reverse
+  lookup, and reads every ordered face/sprite/UV word through compute. It does not
+  publish terrain or change CPU fallback.
+- CI #396 (repair only, run `34749580353`) and #397 (compute decode, run
+  `34749765897`) remained queued without a runner at handoff time. Local Gradle is
+  also blocked because the uncached 8.1.1 distribution cannot be reached here.
+  **Resume by inspecting live CI first.** If #397 fails, fix it before new terrain
+  work. If green, the next safe design task is joining a resident section voxel
+  stream to this model table in one oracle dispatch so actual voxel state IDs, not
+  the CPU-captured `GPU_FULL_CUBE` flag alone, select the dense face template.
 
 - Branch: `forge-1.20.1`.
 - Source head immediately before this documentation refresh: `3d85f800d8e5dae685c037b3f3012a27dd6a679c` (`terrain: generate GPU cube face corners`).
