@@ -253,8 +253,8 @@ shaders. Define input data now without enabling unqualified GPU rendering.
 Mandatory gates:
 
 - [x] define and validate compact CPU/GPU section input with conservative exception handling;
-- [ ] add bounded region-scoped voxel/state GPU residency and independent update/invalidation;
-- [ ] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
+- [x] add bounded region-scoped voxel/state GPU residency and independent update/invalidation;
+- [x] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
 - [ ] implement correct GPU visibility/section selection;
 - [ ] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
 - [ ] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
@@ -264,11 +264,15 @@ Mandatory gates:
 - [ ] preserve translucent/tripwire rendering until separately supported and validated;
 - [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 1/11 verified gates.** Input infrastructure passed CI #353; actual GPU residency/processing remains unimplemented.
+**Progress: 3/11 verified gates.** Input infrastructure, bounded region residency,
+and diagnostic compute plumbing are verified. Production GPU selection, indirect
+commands and hybrid terrain meshing remain unimplemented.
 
-Current first slice: `docs/GPU_TERRAIN_BOUNDARY.md`. Runtime-state palette and flags
-are staged with the current CPU result; there is no GPU mesher, template qualifier,
-light/tint/halo stream or GPU voxel allocation yet. ABI/store tests and both enabled/disabled lifecycle smokes passed in CI #353.
+Current lighting slice: the exact dense-lattice prototype in
+`docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both a 20-cube
+and an 18-cube plus sparse second shell as too large. Reusable canonical model
+templates and partial position/UV vertex generation are proven in diagnostic compute,
+but lighting metadata remains unresolved and CPU terrain output remains authoritative.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -335,15 +339,15 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `387afc076e187ce539b9f494d374831e599896bc`, **CI #353 green**
-  (run 34710104092). Build/distribution, voxel ABI/store tests, both capture-mode
-  startups and all existing Vulkan/compatibility smokes passed; logs inspected.
-- Published input commits: `2e38d13`, `22e4956`; startup-fixture correction `387afc0`.
-  CI #352's failure was an early registry-ID assumption in the test, corrected in #353.
+- Verified runtime source: `6b0e85141d46d04c085e2cb30b1731070580520d`,
+  **CI #412 green** (run `34790944136`, job `103814917365`). Build/distribution,
+  both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
+  compatibility smokes passed; logs inspected.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 1/11.
-- P7.1 input ABI/ownership infrastructure is verified; next bounded gate is P7.2:
-  capped persistent region SSBO residency and GPU readback, preserving CPU fallback.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 3/11.
+- P7 input ABI, capped persistent region SSBO residency and diagnostic compute
+  plumbing are verified. Next, measure demand-driven lighting occupancy from actual
+  surviving canonical face candidates before extending snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 
 See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for

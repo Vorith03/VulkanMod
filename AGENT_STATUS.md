@@ -18,6 +18,33 @@ Use these together:
 
 ### Live continuation note — 2026-09-13
 
+- Completed the bounded lighting-lattice decision in source commit
+  `6b0e85141d46d04c085e2cb30b1731070580520d`
+  (`gpu terrain: measure canonical lighting lattice`). A startup-only exact numeric
+  prototype captures packed light, raw shade-brightness bits, AO light-passing
+  predicates and six raw directional shade values. It proves unique/bounded indexing
+  and bit-exact access for every lighting sample used by all six canonical faces of
+  all 4,096 section voxels. The simple 20-cube is 8,000 samples/65,024 bytes; the
+  18-cube plus six second-shell slabs is 7,776 samples/63,204 bytes, saving only
+  1,820 bytes (2.80%). Both dense layouts are rejected as a production ABI because
+  the simple payload alone exceeds half the compressed vertex bytes of a closed
+  section's exposed faces. Qualified voxels now also fail closed when their actual
+  position offset is nonzero. Snapshot v4, `CPU_REQUIRED`, compute shaders and
+  production geometry ownership are unchanged.
+- CI #412 (run `34790944136`, job `103814917365`) is fully green across compilation,
+  distribution, both Vulkan startups, the lighting/model/compute oracles, post-chain,
+  depth, screenshot, Crash Assistant, Chat Heads, Flywheel, logs and artifacts. Four
+  startup fixtures logged overlapping warmed synthetic capture times of 3.516-7.602
+  ms; these are diagnostic fixture measurements, not gameplay performance evidence.
+  See `docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md`.
+- Next safe GPU-terrain checkpoint: add a measurement-only demand estimator over
+  real captured sections. Starting from qualified voxels and the already-conservative
+  candidate face masks, count unique required lighting points and active coarse
+  fixed-size bricks, including worst-case fallback. Do not call/capture lighting
+  semantics or extend snapshot v4 until representative section density proves a
+  demand-driven layout materially cheaper than the corresponding CPU mesh. Preserve
+  `CPU_REQUIRED` and production CPU geometry.
+
 - Completed GPU-terrain continuation from
   `0ebaeb14971983bdf59bdec3d2db5ec95582dbe9`: source commit
   `9d4b349017a0aa22cc64cf326868b7d06bd68b74`

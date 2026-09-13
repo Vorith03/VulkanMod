@@ -91,10 +91,17 @@ vertex color, per-face AO disabled, tint, unshaded faces, custom/model-data geom
 unsupported render layers, fluids, and block entities. The model registry handles
 the baked-model conditions; world-position conditions belong to section capture.
 
-## Next implementation checkpoint
+## Prototype result and next implementation checkpoint
 
-Use the proven two-block radius to prototype a bounded CPU-resolved numeric lattice
-and measure its capture cost and packed size before changing the snapshot ABI. Include
-position offsets or disqualify offset states. Only after that result is favorable
-should color/light compute output be added. Snapshot v4, the current compute shader,
-production geometry allocation, and `CPU_REQUIRED` remain unchanged by this audit.
+The bounded prototype in
+`GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both dense layouts as
+a production ABI. The 20-cube layout requires 65,024 bytes per section; the more
+complex 18-cube plus sparse second shell saves only 1,820 bytes (2.80%). Position-
+offset states now fail world-position qualification closed rather than adding another
+stream.
+
+Next, measure the unique lighting points or fixed-size bricks demanded by surviving
+canonical candidate faces in real sections. Do not capture or retain a production
+lighting stream until that demand-driven layout is demonstrably cheaper than the CPU
+mesh it is intended to replace. Snapshot v4, the current compute shader, production
+geometry allocation, and `CPU_REQUIRED` remain unchanged.
