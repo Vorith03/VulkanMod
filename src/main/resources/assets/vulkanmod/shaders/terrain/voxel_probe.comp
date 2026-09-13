@@ -16,11 +16,13 @@ layout(push_constant) uniform ProbePushConstants {
 } pc;
 
 const uint MAGIC = 0x56584c31u;
-const uint VERSION = 2u;
+const uint VERSION = 3u;
 const uint BLOCK_COUNT = 4096u;
 const uint PLANE_WORDS = 128u;
 const uint FLAG_PLANES = 5u;
 const uint GPU_FULL_CUBE_PLANE = 4u;
+const uint HALO_FACE_WORDS = 8u;
+const uint HALO_WORDS = 48u;
 const uint HEADER_WORDS = 4u;
 const uint FACES_PER_VOXEL = 6u;
 const uint VERTICES_PER_FACE = 4u;
@@ -49,12 +51,30 @@ bool isGpuFullCube(uint base, uint flagsOffset, uint index) {
     return ((bits >> (index & 31u)) & 1u) != 0u;
 }
 
+uint haloBit(uint index, uint face) {
+    uint x = index & 15u;
+    uint y = (index >> 4u) & 15u;
+    uint z = (index >> 8u) & 15u;
+    if (face <= 1u)
+        return x | (z << 4u);
+    if (face <= 3u)
+        return x | (y << 4u);
+    return z | (y << 4u);
+}
+
+bool boundaryNeighborGpuFullCube(uint base, uint haloOffset, uint index, uint face) {
+    uint bit = haloBit(index, face);
+    uint bits = inputPage.words[base + haloOffset + face * HALO_FACE_WORDS + (bit >> 5u)];
+    return ((bits >> (bit & 31u)) & 1u) != 0u;
+}
+
 /*
- * This is deliberately a diagnostic candidate mask, not Minecraft's final
- * shouldRenderFace decision. A face is retained whenever its neighbor is outside
- * this section or is not itself GPU_FULL_CUBE. CPU_REQUIRED remains authoritative.
+ * This remains a diagnostic candidate mask, not Minecraft's final shouldRenderFace
+ * decision. Interior faces use qualified-cube occupancy from the section itself;
+ * section-edge faces use the v3 one-block qualified-cube halo captured from the
+ * existing RenderChunkRegion. CPU_REQUIRED remains authoritative.
  */
-uint candidateFaceMask(uint base, uint flagsOffset, uint index) {
+uint candidateFaceMask(uint base, uint flagsOffset, uint haloOffset, uint index) {
     if (!isGpuFullCube(base, flagsOffset, index))
         return 0u;
 
@@ -63,18 +83,24 @@ uint candidateFaceMask(uint base, uint flagsOffset, uint index) {
     uint z = (index >> 8u) & 15u;
     uint mask = 0u;
 
-    if (y == 0u) mask |= FACE_DOWN;
-    else if (!isGpuFullCube(base, flagsOffset, index - 16u)) mask |= FACE_DOWN;
-    if (y == 15u) mask |= FACE_UP;
-    else if (!isGpuFullCube(base, flagsOffset, index + 16u)) mask |= FACE_UP;
-    if (z == 0u) mask |= FACE_NORTH;
-    else if (!isGpuFullCube(base, flagsOffset, index - 256u)) mask |= FACE_NORTH;
-    if (z == 15u) mask |= FACE_SOUTH;
-    else if (!isGpuFullCube(base, flagsOffset, index + 256u)) mask |= FACE_SOUTH;
-    if (x == 0u) mask |= FACE_WEST;
-    else if (!isGpuFullCube(base, flagsOffset, index - 1u)) mask |= FACE_WEST;
-    if (x == 15u) mask |= FACE_EAST;
-    else if (!isGpuFullCube(base, flagsOffset, index + 1u)) mask |= FACE_EAST;
+    if (y == 0u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 0u)) mask |= FACE_DOWN;
+    } else if (!isGpuFullCube(base, flagsOffset, index - 16u)) mask |= FACE_DOWN;
+    if (y == 15u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 1u)) mask |= FACE_UP;
+    } else if (!isGpuFullCube(base, flagsOffset, index + 16u)) mask |= FACE_UP;
+    if (z == 0u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 2u)) mask |= FACE_NORTH;
+    } else if (!isGpuFullCube(base, flagsOffset, index - 256u)) mask |= FACE_NORTH;
+    if (z == 15u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 3u)) mask |= FACE_SOUTH;
+    } else if (!isGpuFullCube(base, flagsOffset, index + 256u)) mask |= FACE_SOUTH;
+    if (x == 0u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 4u)) mask |= FACE_WEST;
+    } else if (!isGpuFullCube(base, flagsOffset, index - 1u)) mask |= FACE_WEST;
+    if (x == 15u) {
+        if (!boundaryNeighborGpuFullCube(base, haloOffset, index, 5u)) mask |= FACE_EAST;
+    } else if (!isGpuFullCube(base, flagsOffset, index + 1u)) mask |= FACE_EAST;
     return mask;
 }
 
@@ -149,7 +175,8 @@ void main() {
             && inputPage.words[base + 1u] == VERSION
             && inputPage.words[base + 2u] == pc.byteLength
             && inputPage.words[base + 3u] == BLOCK_COUNT
-            && inputPage.words[base + 11u] == FLAG_PLANES;
+            && inputPage.words[base + 11u] == FLAG_PLANES
+            && inputPage.words[base + 13u] == HALO_WORDS;
     if (!validHeader) {
         if (index == 0u)
             atomicOr(outputData.words[3], 0x80000000u);
@@ -159,12 +186,13 @@ void main() {
     uint paletteOffset = inputPage.words[base + 8u];
     uint indexOffset = inputPage.words[base + 9u];
     uint flagsOffset = inputPage.words[base + 10u];
+    uint haloOffset = inputPage.words[base + 12u];
 
     uint packed = inputPage.words[base + indexOffset + (index >> 1u)];
     uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 0xffffu;
     uint stateId = inputPage.words[base + paletteOffset + paletteIndex];
     uint flags = decodeFlags(base, flagsOffset, index);
-    uint faceMask = candidateFaceMask(base, flagsOffset, index);
+    uint faceMask = candidateFaceMask(base, flagsOffset, haloOffset, index);
     uint faceCount = uint(bitCount(faceMask));
 
     atomicAdd(outputData.words[0], stateId);
