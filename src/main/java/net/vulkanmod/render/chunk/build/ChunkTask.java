@@ -172,9 +172,11 @@ public class ChunkTask {
                             if (solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
                             if (hasBlockEntity) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
                             if (!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
-                            if (GpuTerrainModelRegistry.isFullCubeGeometry(blockState))
-                                flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+                            boolean gpuFullCube = GpuTerrainModelRegistry.isFullCubeGeometry(blockState);
+                            if (gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                             voxels.add(Block.getId(blockState), flags);
+                            if (gpuFullCube)
+                                captureQualifiedCubeBoundaryHalo(voxels, renderChunkRegion, blockPos3);
                         }
                         RenderType renderType;
                         TerrainBufferBuilder bufferBuilder;
@@ -237,6 +239,34 @@ public class ChunkTask {
 
             compileResults.visibilitySet = visGraph.resolve();
             return compileResults;
+        }
+
+        private static void captureQualifiedCubeBoundaryHalo(SectionVoxelSnapshot.Builder voxels,
+                                                              RenderChunkRegion region,
+                                                              BlockPos pos) {
+            int x = pos.getX() & 15;
+            int y = pos.getY() & 15;
+            int z = pos.getZ() & 15;
+            int index = SectionVoxelSnapshot.blockIndex(x, y, z);
+
+            if (y == 0)
+                voxels.setBoundaryNeighborGpuFullCube(index, 0,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.below())));
+            if (y == 15)
+                voxels.setBoundaryNeighborGpuFullCube(index, 1,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.above())));
+            if (z == 0)
+                voxels.setBoundaryNeighborGpuFullCube(index, 2,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.north())));
+            if (z == 15)
+                voxels.setBoundaryNeighborGpuFullCube(index, 3,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.south())));
+            if (x == 0)
+                voxels.setBoundaryNeighborGpuFullCube(index, 4,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.west())));
+            if (x == 15)
+                voxels.setBoundaryNeighborGpuFullCube(index, 5,
+                        GpuTerrainModelRegistry.isFullCubeGeometry(region.getBlockState(pos.east())));
         }
 
         private RenderType compactRenderTypes(RenderType renderType) {
