@@ -62,7 +62,7 @@ public final class GpuTerrainModelTableSmokeTest {
                     voxelSnapshot.byteSize(), voxelSnapshot);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode and 4096 resident voxel state-ID joins",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode and 4096 resident voxel face-row joins",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {
@@ -83,9 +83,11 @@ public final class GpuTerrainModelTableSmokeTest {
             int[] actual = probe.dispatch(residency, table.templateCount(), voxelPage,
                     voxelByteOffset, voxelByteLength);
             int lookupBase = GpuTerrainModelComputeProbe.voxelLookupBase(table.templateCount());
-            int expectedWords = Math.addExact(lookupBase, SectionVoxelSnapshot.BLOCK_COUNT);
+            int expectedWords = Math.addExact(lookupBase,
+                    Math.multiplyExact(SectionVoxelSnapshot.BLOCK_COUNT,
+                            GpuTerrainModelComputeProbe.RESULT_WORDS_PER_VOXEL));
             require(actual.length == expectedWords,
-                    "GPU model-table compute output must cover every dense template and voxel lookup");
+                    "GPU model-table compute output must cover every dense template and voxel face lookup");
 
             for(int template = 0; template < table.templateCount(); ++template) {
                 int outputBase = template * GpuTerrainModelComputeProbe.RESULT_WORDS_PER_TEMPLATE;
@@ -107,10 +109,27 @@ public final class GpuTerrainModelTableSmokeTest {
             for(int voxel = 0; voxel < SectionVoxelSnapshot.BLOCK_COUNT; ++voxel) {
                 int templateIndex = table.templateIndexForStateId(voxelSnapshot.stateId(voxel));
                 int expected = templateIndex + 1;
-                if(actual[lookupBase + voxel] != expected) {
+                int voxelBase = GpuTerrainModelComputeProbe.voxelResultBase(
+                        table.templateCount(), voxel);
+                if(actual[voxelBase] != expected) {
                     throw new AssertionError("GPU resident voxel model lookup mismatch at voxel "
                             + voxel + ": expected=" + expected
-                            + " actual=" + actual[lookupBase + voxel]);
+                            + " actual=" + actual[voxelBase]);
+                }
+
+                // Cycle all six directions without trusting the legacy geometry hint.
+                int face = voxel % GpuTerrainModelTable.FACE_COUNT;
+                for(int word = 0; word < GpuTerrainModelTable.FACE_WORDS; ++word) {
+                    int expectedFaceWord = templateIndex < 0 ? 0
+                            : table.word(table.templateBaseWord()
+                                    + templateIndex * GpuTerrainModelTable.TEMPLATE_WORDS
+                                    + 2 + face * GpuTerrainModelTable.FACE_WORDS + word);
+                    if(actual[voxelBase + 1 + word] != expectedFaceWord) {
+                        throw new AssertionError("GPU resident voxel face-row mismatch at voxel "
+                                + voxel + " face " + face + " word " + word
+                                + ": expected=" + expectedFaceWord
+                                + " actual=" + actual[voxelBase + 1 + word]);
+                    }
                 }
 
                 boolean hinted = (voxelSnapshot.flags(voxel)

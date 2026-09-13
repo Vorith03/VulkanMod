@@ -34,15 +34,17 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Compute-side ABI oracle for the baked-model table.
  *
- * <p>Each invocation resolves one dense template, verifies its reverse state-ID
- * mapping through the sparse state index, then copies the complete face template
- * into a normalized output row. This proves the shader can follow the same
- * state-ID -> dense-template -> ordered UV path future terrain meshing needs. It
- * does not publish geometry or replace CPU model semantics.</p>
+ * <p>Dense-template invocations verify reverse state-ID mappings and copy complete
+ * templates. Section-voxel invocations independently resolve their runtime state
+ * ID and copy one deterministic face row (sprite plus ordered UVs). This proves the
+ * shader can follow the same state-ID -> dense-template -> face-template path
+ * future terrain meshing needs. It does not publish geometry or replace CPU model
+ * semantics.</p>
  */
 final class GpuTerrainModelComputeProbe implements AutoCloseable {
     static final int VALID_MARKER = 0x4d4f444c; // MODL
     static final int RESULT_WORDS_PER_TEMPLATE = 1 + GpuTerrainModelTable.TEMPLATE_WORDS;
+    static final int RESULT_WORDS_PER_VOXEL = 1 + GpuTerrainModelTable.FACE_WORDS;
 
     private static final int WORKGROUP_SIZE = 64;
     private static final int PUSH_CONSTANT_BYTES = 3 * Integer.BYTES;
@@ -75,7 +77,7 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
             throw new IllegalArgumentException("Valid resident section voxel slice required");
 
         int resultWords = Math.addExact(voxelLookupBase(templateCount),
-                SectionVoxelSnapshot.BLOCK_COUNT);
+                Math.multiplyExact(SectionVoxelSnapshot.BLOCK_COUNT, RESULT_WORDS_PER_VOXEL));
         int resultBytes = Math.multiplyExact(resultWords, Integer.BYTES);
         StorageBuffer output = new StorageBuffer(resultBytes, MemoryTypes.GPU_MEM);
         long readbackBuffer = VK_NULL_HANDLE;
@@ -136,6 +138,13 @@ final class GpuTerrainModelComputeProbe implements AutoCloseable {
 
     static int voxelLookupBase(int templateCount) {
         return Math.multiplyExact(templateCount, RESULT_WORDS_PER_TEMPLATE);
+    }
+
+    static int voxelResultBase(int templateCount, int voxelIndex) {
+        if(voxelIndex < 0 || voxelIndex >= SectionVoxelSnapshot.BLOCK_COUNT)
+            throw new IndexOutOfBoundsException("GPU terrain voxel result " + voxelIndex);
+        return Math.addExact(voxelLookupBase(templateCount),
+                Math.multiplyExact(voxelIndex, RESULT_WORDS_PER_VOXEL));
     }
 
     private void createDescriptorResources() {

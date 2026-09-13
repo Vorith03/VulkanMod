@@ -25,6 +25,9 @@ const uint VERSION = 1u;
 const uint HEADER_WORDS = 8u;
 const uint TEMPLATE_WORDS = 56u;
 const uint RESULT_WORDS_PER_TEMPLATE = 57u;
+const uint FACE_COUNT = 6u;
+const uint FACE_WORDS = 9u;
+const uint RESULT_WORDS_PER_VOXEL = 10u;
 const uint VALID_MARKER = 0x4d4f444cu;
 const uint VOXEL_MAGIC = 0x56584c31u;
 const uint VOXEL_VERSION = 4u;
@@ -35,6 +38,9 @@ uint resolveVoxelTemplate(uint index) {
         return 0u;
 
     uint base = pc.voxelBaseByteOffset >> 2u;
+    uint voxelWords = pc.voxelByteLength >> 2u;
+    if (voxelWords < 10u)
+        return 0u;
     if (voxelPage.words[base] != VOXEL_MAGIC
             || voxelPage.words[base + 1u] != VOXEL_VERSION
             || voxelPage.words[base + 2u] != pc.voxelByteLength
@@ -44,7 +50,13 @@ uint resolveVoxelTemplate(uint index) {
     uint paletteCount = voxelPage.words[base + 7u];
     uint paletteOffset = voxelPage.words[base + 8u];
     uint indexOffset = voxelPage.words[base + 9u];
-    uint packed = voxelPage.words[base + indexOffset + (index >> 1u)];
+    uint packedIndex = index >> 1u;
+    if (paletteCount == 0u || paletteOffset >= voxelWords
+            || paletteCount > voxelWords - paletteOffset
+            || indexOffset >= voxelWords
+            || packedIndex >= voxelWords - indexOffset)
+        return 0u;
+    uint packed = voxelPage.words[base + indexOffset + packedIndex];
     uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 0xffffu;
     if (paletteIndex >= paletteCount)
         return 0u;
@@ -81,6 +93,15 @@ void main() {
 
     if (invocation < BLOCK_COUNT && tableHeaderValid) {
         uint voxelOutputBase = pc.templateCount * RESULT_WORDS_PER_TEMPLATE;
-        outputData.words[voxelOutputBase + invocation] = resolveVoxelTemplate(invocation);
+        uint outputBase = voxelOutputBase + invocation * RESULT_WORDS_PER_VOXEL;
+        uint densePlusOne = resolveVoxelTemplate(invocation);
+        outputData.words[outputBase] = densePlusOne;
+        if (densePlusOne != 0u) {
+            uint face = invocation % FACE_COUNT;
+            uint templateBase = modelTable.words[7] + (densePlusOne - 1u) * TEMPLATE_WORDS;
+            uint faceBase = templateBase + 2u + face * FACE_WORDS;
+            for (uint word = 0u; word < FACE_WORDS; ++word)
+                outputData.words[outputBase + 1u + word] = modelTable.words[faceBase + word];
+        }
     }
 }
