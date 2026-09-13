@@ -84,9 +84,22 @@ public final class SectionVoxelGpuSmokeTest {
         for(int i = 0; i < 4096; ++i) {
             int stateId = 1 + Math.floorMod(i * 1103515245 + salt, 6000);
             int flags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
-            if((i & 1) == 0)
+            boolean gpuFullCube = (i & 1) == 0;
+            if(gpuFullCube)
                 flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
             builder.add(stateId, flags);
+
+            if(gpuFullCube) {
+                int x = i & 15;
+                int y = (i >>> 4) & 15;
+                int z = (i >>> 8) & 15;
+                if(y == 0) builder.setBoundaryNeighborGpuFullCube(i, 0, true);
+                if(y == 15) builder.setBoundaryNeighborGpuFullCube(i, 1, true);
+                if(z == 0) builder.setBoundaryNeighborGpuFullCube(i, 2, true);
+                if(z == 15) builder.setBoundaryNeighborGpuFullCube(i, 3, true);
+                if(x == 0) builder.setBoundaryNeighborGpuFullCube(i, 4, true);
+                if(x == 15) builder.setBoundaryNeighborGpuFullCube(i, 5, true);
+            }
         }
         return builder.finish();
     }
@@ -187,8 +200,8 @@ public final class SectionVoxelGpuSmokeTest {
 
         require(eligibleVoxels == SectionVoxelSnapshot.BLOCK_COUNT / 2,
                 "GPU_FULL_CUBE fixture must exercise the fifth flag plane");
-        require(expected[3] == 4608,
-                "Alternating-x fixture must expose the expected diagnostic candidate face count");
+        require(expected[3] == 3840,
+                "Qualified boundary halo must suppress all synthetic cross-section cube faces");
         require(descriptorCount == expected[3],
                 "Every diagnostic candidate face must produce exactly one fixed-slot descriptor");
 
@@ -244,7 +257,7 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v2 GPU_FULL_CUBE plane, six-neighbor diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v3 GPU_FULL_CUBE plane plus six-face boundary halo, cross-section-aware diagnostic face classification, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, canonical unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
     }
 
@@ -257,12 +270,24 @@ public final class SectionVoxelGpuSmokeTest {
         int z = (index >>> 8) & 15;
         int mask = 0;
 
-        if(y == 0 || !isGpuFullCube(snapshot, index - 16)) mask |= 1 << 0;
-        if(y == 15 || !isGpuFullCube(snapshot, index + 16)) mask |= 1 << 1;
-        if(z == 0 || !isGpuFullCube(snapshot, index - 256)) mask |= 1 << 2;
-        if(z == 15 || !isGpuFullCube(snapshot, index + 256)) mask |= 1 << 3;
-        if(x == 0 || !isGpuFullCube(snapshot, index - 1)) mask |= 1 << 4;
-        if(x == 15 || !isGpuFullCube(snapshot, index + 1)) mask |= 1 << 5;
+        if(y == 0) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 0)) mask |= 1 << 0;
+        } else if(!isGpuFullCube(snapshot, index - 16)) mask |= 1 << 0;
+        if(y == 15) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 1)) mask |= 1 << 1;
+        } else if(!isGpuFullCube(snapshot, index + 16)) mask |= 1 << 1;
+        if(z == 0) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 2)) mask |= 1 << 2;
+        } else if(!isGpuFullCube(snapshot, index - 256)) mask |= 1 << 2;
+        if(z == 15) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 3)) mask |= 1 << 3;
+        } else if(!isGpuFullCube(snapshot, index + 256)) mask |= 1 << 3;
+        if(x == 0) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 4)) mask |= 1 << 4;
+        } else if(!isGpuFullCube(snapshot, index - 1)) mask |= 1 << 4;
+        if(x == 15) {
+            if(!snapshot.boundaryNeighborGpuFullCube(index, 5)) mask |= 1 << 5;
+        } else if(!isGpuFullCube(snapshot, index + 1)) mask |= 1 << 5;
         return mask;
     }
 
