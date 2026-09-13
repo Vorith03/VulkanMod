@@ -30,6 +30,9 @@ import java.util.Map;
 final class CanonicalCubeLightingSmokeTest {
     private static final BlockPos ORIGIN = new BlockPos(0, 64, 0);
     private static final BlockState SOURCE_STATE = Blocks.STONE.defaultBlockState();
+    private static final int COMPRESSED_VERTEX_BYTES = 20;
+    private static final int CLOSED_SECTION_BOUNDARY_VERTEX_BYTES =
+            6 * 16 * 16 * 4 * COMPRESSED_VERTEX_BYTES;
 
     private CanonicalCubeLightingSmokeTest() {}
 
@@ -41,6 +44,7 @@ final class CanonicalCubeLightingSmokeTest {
                 "Forge experimental lighting must fail GPU cube qualification closed");
 
         ReflectedAmbientOcclusion renderer = new ReflectedAmbientOcclusion();
+        LatticeResult lattice = verifyLatticePrototype();
         int comparisons = 0;
         for(Direction face : Direction.values()) {
             LightingLevel open = new LightingLevel();
@@ -69,8 +73,131 @@ final class CanonicalCubeLightingSmokeTest {
 
         ModelBlockRenderer.clearCache();
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_LIGHTING_ORACLE_OK: {} exact packed color/light vertex comparisons across six open and mixed-occluder canonical faces; two-block sample radius; Forge experimental lighting fail-closed",
-                comparisons);
+                "VULKANMOD_GPU_TERRAIN_LIGHTING_ORACLE_OK: {} exact packed color/light vertex comparisons across six open and mixed-occluder canonical faces; two-block sample radius; Forge experimental lighting fail-closed; lattice rectangular={}/{}us sparse={}/{}us (bytes/fixture capture), sparse saving={} bytes",
+                comparisons, lattice.rectangularBytes, lattice.rectangularNanos / 1_000,
+                lattice.sparseBytes, lattice.sparseNanos / 1_000,
+                lattice.rectangularBytes - lattice.sparseBytes);
+    }
+
+    private static LatticeResult verifyLatticePrototype() {
+        verifyLayoutIndices(CanonicalCubeLightingLattice.Layout.RECTANGULAR_20,
+                CanonicalCubeLightingLattice.RECTANGULAR_SAMPLE_COUNT);
+        verifyLayoutIndices(CanonicalCubeLightingLattice.Layout.CORE_18_WITH_SECOND_SHELL,
+                CanonicalCubeLightingLattice.SPARSE_SAMPLE_COUNT);
+        LightingLevel level = new LightingLevel();
+        for(int z = -2; z <= 17; ++z) {
+            for(int y = 62; y <= 81; ++y) {
+                for(int x = -2; x <= 17; ++x) {
+                    if(Math.floorMod(x * 3 + y * 5 + z * 7, 11) == 0)
+                        level.setState(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
+                }
+            }
+        }
+
+        BlockPos sectionOrigin = new BlockPos(0, 64, 0);
+        // Warm both paths once so the logged capture comparison is not dominated by
+        // first-use class/JIT work. Timing is diagnostic and has no pass threshold.
+        CanonicalCubeLightingLattice.capture(level, sectionOrigin,
+                CanonicalCubeLightingLattice.Layout.RECTANGULAR_20);
+        CanonicalCubeLightingLattice.capture(level, sectionOrigin,
+                CanonicalCubeLightingLattice.Layout.CORE_18_WITH_SECOND_SHELL);
+        CanonicalCubeLightingLattice rectangular = CanonicalCubeLightingLattice.capture(
+                level, sectionOrigin, CanonicalCubeLightingLattice.Layout.RECTANGULAR_20);
+        CanonicalCubeLightingLattice sparse = CanonicalCubeLightingLattice.capture(
+                level, sectionOrigin,
+                CanonicalCubeLightingLattice.Layout.CORE_18_WITH_SECOND_SHELL);
+
+        require(rectangular.sampleCount()
+                        == CanonicalCubeLightingLattice.RECTANGULAR_SAMPLE_COUNT,
+                "Rectangular lighting lattice must contain exactly 8000 samples");
+        require(sparse.sampleCount() == CanonicalCubeLightingLattice.SPARSE_SAMPLE_COUNT,
+                "Sparse lighting lattice must contain exactly 7776 samples");
+        require(rectangular.payloadBytes() == 65_024,
+                "Rectangular exact numeric lighting payload must remain explicit");
+        require(sparse.payloadBytes() == 63_204,
+                "Sparse exact numeric lighting payload must remain explicit");
+        require((rectangular.payloadBytes() - sparse.payloadBytes()) * 100
+                        < rectangular.payloadBytes() * 3,
+                "Sparse second shell should be rejected unless it saves at least three percent");
+        require(rectangular.payloadBytes() * 2 > CLOSED_SECTION_BOUNDARY_VERTEX_BYTES,
+                "Dense lighting payload must be recognized as over half a closed section's boundary vertices");
+
+        for(Direction direction : Direction.values()) {
+            require(rectangular.directionalShadeBits(direction)
+                            == sparse.directionalShadeBits(direction),
+                    "Lighting layouts must retain exact raw directional shade bits");
+        }
+        for(int z = 0; z < 16; ++z) {
+            for(int y = 0; y < 16; ++y) {
+                for(int x = 0; x < 16; ++x) {
+                    for(Direction face : Direction.values())
+                        compareRequiredSamples(rectangular, sparse, x, y, z, face);
+                }
+            }
+        }
+        return new LatticeResult(rectangular.payloadBytes(), sparse.payloadBytes(),
+                rectangular.captureNanos(), sparse.captureNanos());
+    }
+
+    private static void verifyLayoutIndices(CanonicalCubeLightingLattice.Layout layout,
+                                            int expectedSamples) {
+        boolean[] seen = new boolean[expectedSamples];
+        int count = 0;
+        for(int z = -2; z <= 17; ++z) {
+            for(int y = -2; y <= 17; ++y) {
+                for(int x = -2; x <= 17; ++x) {
+                    int index = CanonicalCubeLightingLattice.index(layout, x, y, z);
+                    if(index < 0)
+                        continue;
+                    require(index < expectedSamples && !seen[index],
+                            "Lighting layout indices must be unique and bounded");
+                    seen[index] = true;
+                    ++count;
+                }
+            }
+        }
+        require(count == expectedSamples,
+                "Lighting layout must populate every declared sample exactly once");
+    }
+
+    private static void compareRequiredSamples(CanonicalCubeLightingLattice rectangular,
+                                               CanonicalCubeLightingLattice sparse,
+                                               int x, int y, int z, Direction face) {
+        Direction[] tangent = tangents(face);
+        int centerX = x + face.getStepX();
+        int centerY = y + face.getStepY();
+        int centerZ = z + face.getStepZ();
+        compareLatticeSample(rectangular, sparse, centerX, centerY, centerZ);
+        for(int i = 0; i < 4; ++i) {
+            int sideX = centerX + tangent[i].getStepX();
+            int sideY = centerY + tangent[i].getStepY();
+            int sideZ = centerZ + tangent[i].getStepZ();
+            compareLatticeSample(rectangular, sparse, sideX, sideY, sideZ);
+            compareLatticeSample(rectangular, sparse,
+                    sideX + face.getStepX(), sideY + face.getStepY(),
+                    sideZ + face.getStepZ());
+        }
+        int[][] diagonals = { { 0, 2 }, { 0, 3 }, { 1, 2 }, { 1, 3 } };
+        for(int[] diagonal : diagonals) {
+            Direction first = tangent[diagonal[0]];
+            Direction second = tangent[diagonal[1]];
+            compareLatticeSample(rectangular, sparse,
+                    centerX + first.getStepX() + second.getStepX(),
+                    centerY + first.getStepY() + second.getStepY(),
+                    centerZ + first.getStepZ() + second.getStepZ());
+        }
+    }
+
+    private static void compareLatticeSample(CanonicalCubeLightingLattice rectangular,
+                                             CanonicalCubeLightingLattice sparse,
+                                             int x, int y, int z) {
+        require(rectangular.packedLight(x, y, z) == sparse.packedLight(x, y, z),
+                "Lighting layouts must retain exact packed light");
+        require(rectangular.shadeBrightnessBits(x, y, z)
+                        == sparse.shadeBrightnessBits(x, y, z),
+                "Lighting layouts must retain exact raw shade-brightness bits");
+        require(rectangular.lightPasses(x, y, z) == sparse.lightPasses(x, y, z),
+                "Lighting layouts must retain exact AO occlusion predicates");
     }
 
     private static FaceResult calculateReference(LightingLevel level, Direction face) {
@@ -379,6 +506,8 @@ final class CanonicalCubeLightingSmokeTest {
 
     private record Sample(float brightness, int light) {}
     private record FaceResult(int[] colors, int[] lights) {}
+    private record LatticeResult(int rectangularBytes, int sparseBytes,
+                                 long rectangularNanos, long sparseNanos) {}
 
     private static void require(boolean condition, String message) {
         if(!condition)

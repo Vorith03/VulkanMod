@@ -172,7 +172,8 @@ public class ChunkTask {
                             if (solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
                             if (hasBlockEntity) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
                             if (!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
-                            boolean gpuFullCube = GpuTerrainModelRegistry.isFullCubeGeometry(blockState);
+                            boolean gpuFullCube = GpuTerrainModelRegistry.isFullCubeGeometry(blockState)
+                                    && hasZeroPositionOffset(blockState, renderChunkRegion, blockPos3);
                             if (gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                             voxels.add(Block.getId(blockState), flags);
                             if (gpuFullCube)
@@ -290,6 +291,13 @@ public class ChunkTask {
                 voxels.setBoundaryNeighborSolidRender(index, 5,
                         region.getBlockState(neighbor).isSolidRender(region, neighbor));
             }
+        }
+
+        private static boolean hasZeroPositionOffset(BlockState state,
+                                                     RenderChunkRegion region,
+                                                     BlockPos pos) {
+            var offset = state.getOffset(region, pos);
+            return offset.x == 0.0D && offset.y == 0.0D && offset.z == 0.0D;
         }
 
         private RenderType compactRenderTypes(RenderType renderType) {
