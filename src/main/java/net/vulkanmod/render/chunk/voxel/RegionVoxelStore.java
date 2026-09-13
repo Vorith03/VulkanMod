@@ -11,7 +11,8 @@ import java.util.Map;
  * Independent of mesh layers and their revisions. Never allocates Vulkan storage.
  */
 public final class RegionVoxelStore {
-    public static final boolean ENABLED = Boolean.getBoolean("vulkanmod.experimentalSectionVoxels")
+    private static final boolean FORCE_ENABLED = Boolean.getBoolean("vulkanmod.experimentalSectionVoxels");
+    public static volatile boolean ENABLED = FORCE_ENABLED
             || (Initializer.CONFIG != null && Initializer.CONFIG.experimentalGpuTerrain);
     private static final Budget GLOBAL_BUDGET = new Budget(32 * 1024 * 1024, 2048);
 
@@ -21,6 +22,18 @@ public final class RegionVoxelStore {
 
     public RegionVoxelStore() { this(GLOBAL_BUDGET); }
     RegionVoxelStore(Budget budget) { this.budget = budget; }
+
+    /**
+     * Applies the saved UI setting while preserving the JVM property as a force-on
+     * override for CI/debugging. Returns true only when the effective runtime state
+     * changed and loaded terrain therefore needs to be rebuilt.
+     */
+    public static boolean setConfigEnabled(boolean enabled) {
+        boolean effective = FORCE_ENABLED || enabled;
+        boolean changed = ENABLED != effective;
+        ENABLED = effective;
+        return changed;
+    }
 
     public boolean put(int slot, SectionVoxelSnapshot snapshot) {
         if (slot < 0 || slot >= RegionBatchLayout.MAX_SECTIONS)
