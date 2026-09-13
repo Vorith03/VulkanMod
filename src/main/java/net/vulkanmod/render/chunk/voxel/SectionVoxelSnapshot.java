@@ -12,12 +12,15 @@ import java.util.Map;
  */
 public final class SectionVoxelSnapshot {
     public static final int MAGIC = 0x56584c31;
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
     public static final int BLOCK_COUNT = 4096;
     public static final int HEADER_WORDS = 16;
     public static final int INDEX_WORDS = BLOCK_COUNT / 2;
     public static final int PLANE_WORDS = BLOCK_COUNT / 32;
     public static final int FLAG_PLANES = 5;
+    public static final int HALO_FACES = 6;
+    public static final int HALO_FACE_WORDS = 256 / 32;
+    public static final int HALO_WORDS = HALO_FACES * HALO_FACE_WORDS;
     public static final int SOLID_RENDER = 1;
     public static final int HAS_FLUID = 2;
     public static final int HAS_BLOCK_ENTITY = 4;
@@ -25,7 +28,7 @@ public final class SectionVoxelSnapshot {
     /** Geometry-only qualification; CPU_REQUIRED remains authoritative until GPU emission is proven. */
     public static final int GPU_FULL_CUBE = 16;
     public static final int MAX_BYTES = (HEADER_WORDS + BLOCK_COUNT + INDEX_WORDS
-            + FLAG_PLANES * PLANE_WORDS) * Integer.BYTES;
+            + FLAG_PLANES * PLANE_WORDS + HALO_WORDS) * Integer.BYTES;
 
     private final int[] words;
 
@@ -62,6 +65,18 @@ public final class SectionVoxelSnapshot {
         return flags;
     }
 
+    /**
+     * Returns whether the one-block-outside neighbor for a section-boundary face
+     * was qualified as GPU_FULL_CUBE when this snapshot was built. Faces use the
+     * vanilla Direction ordinal order: down, up, north, south, west, east.
+     */
+    public boolean boundaryNeighborGpuFullCube(int index, int face) {
+        checkIndex(index);
+        int bit = haloBit(index, face);
+        int word = words[words[12] + face * HALO_FACE_WORDS + (bit >>> 5)];
+        return ((word >>> (bit & 31)) & 1) != 0;
+    }
+
     /** Write directly into a caller-owned staging slice; never allocates native memory. */
     public void writeTo(ByteBuffer target) {
         if (target.isReadOnly() || target.remaining() < byteSize()
@@ -77,12 +92,48 @@ public final class SectionVoxelSnapshot {
             throw new IllegalArgumentException("Invalid voxel index");
     }
 
+    private static int haloBit(int index, int face) {
+        if (face < 0 || face >= HALO_FACES)
+            throw new IllegalArgumentException("Invalid halo face");
+        int x = index & 15;
+        int y = (index >>> 4) & 15;
+        int z = (index >>> 8) & 15;
+        return switch (face) {
+            case 0 -> {
+                if (y != 0) throw new IllegalArgumentException("DOWN halo requires y=0");
+                yield x | (z << 4);
+            }
+            case 1 -> {
+                if (y != 15) throw new IllegalArgumentException("UP halo requires y=15");
+                yield x | (z << 4);
+            }
+            case 2 -> {
+                if (z != 0) throw new IllegalArgumentException("NORTH halo requires z=0");
+                yield x | (y << 4);
+            }
+            case 3 -> {
+                if (z != 15) throw new IllegalArgumentException("SOUTH halo requires z=15");
+                yield x | (y << 4);
+            }
+            case 4 -> {
+                if (x != 0) throw new IllegalArgumentException("WEST halo requires x=0");
+                yield z | (y << 4);
+            }
+            case 5 -> {
+                if (x != 15) throw new IllegalArgumentException("EAST halo requires x=15");
+                yield z | (y << 4);
+            }
+            default -> throw new IllegalArgumentException("Invalid halo face");
+        };
+    }
+
     /** Worker-local, single-use builder. No BlockState, world, model or BE references escape. */
     public static final class Builder {
         private final int x, y, z;
         private final Map<Integer, Integer> palette = new HashMap<>();
         private final int[] indices = new int[INDEX_WORDS];
         private final int[] flags = new int[FLAG_PLANES * PLANE_WORDS];
+        private final int[] halo = new int[HALO_WORDS];
         private int count;
         private boolean finished;
 
@@ -100,10 +151,10 @@ public final class SectionVoxelSnapshot {
                 throw new IllegalStateException("Snapshot builder is full or sealed");
             if (stateId < 0 || (blockFlags & ~31) != 0)
                 throw new IllegalArgumentException("Invalid state ID or flags");
-            // GPU_FULL_CUBE is informational in v2. CPU meshing remains authoritative
+            // GPU_FULL_CUBE remains informational in v3. CPU meshing remains authoritative
             // until GPU face/light/vertex emission has its own validated fallback gate.
             if ((blockFlags & CPU_REQUIRED) == 0)
-                throw new IllegalArgumentException("Version 2 still requires CPU fallback");
+                throw new IllegalArgumentException("Version 3 still requires CPU fallback");
             int paletteIndex = palette.computeIfAbsent(stateId, ignored -> palette.size());
             indices[count >>> 1] |= paletteIndex << ((count & 1) * 16);
             for (int plane = 0; plane < FLAG_PLANES; plane++) {
@@ -113,13 +164,29 @@ public final class SectionVoxelSnapshot {
             count++;
         }
 
+        /**
+         * Capture only the qualified-cube occupancy immediately outside one section
+         * face. This is a narrow face-rejection halo, not final occlusion/light/AO data.
+         */
+        public void setBoundaryNeighborGpuFullCube(int index, int face, boolean gpuFullCube) {
+            if (finished)
+                throw new IllegalStateException("Snapshot builder is sealed");
+            checkIndex(index);
+            int bit = haloBit(index, face);
+            int word = face * HALO_FACE_WORDS + (bit >>> 5);
+            int mask = 1 << (bit & 31);
+            if (gpuFullCube) halo[word] |= mask;
+            else halo[word] &= ~mask;
+        }
+
         public SectionVoxelSnapshot finish() {
             if (finished || count != BLOCK_COUNT)
                 throw new IllegalStateException("Exactly 4096 voxels required, once");
             finished = true;
             int indexOffset = HEADER_WORDS + palette.size();
             int flagsOffset = indexOffset + INDEX_WORDS;
-            int[] words = new int[flagsOffset + flags.length];
+            int haloOffset = flagsOffset + flags.length;
+            int[] words = new int[haloOffset + halo.length];
             words[0] = MAGIC;
             words[1] = VERSION;
             words[2] = words.length * Integer.BYTES;
@@ -130,10 +197,13 @@ public final class SectionVoxelSnapshot {
             words[9] = indexOffset;
             words[10] = flagsOffset;
             words[11] = FLAG_PLANES;
-            // 12..15 reserved, zero: no halo, light/tint streams or template table yet.
+            words[12] = haloOffset;
+            words[13] = HALO_WORDS;
+            // 14..15 reserved, zero: no light/tint/template streams yet.
             palette.forEach((state, index) -> words[HEADER_WORDS + index] = state);
             System.arraycopy(indices, 0, words, indexOffset, indices.length);
             System.arraycopy(flags, 0, words, flagsOffset, flags.length);
+            System.arraycopy(halo, 0, words, haloOffset, halo.length);
             return new SectionVoxelSnapshot(words);
         }
     }
