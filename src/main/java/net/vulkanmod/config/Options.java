@@ -214,6 +214,13 @@ public class Options {
                         .setTooltip(Component.nullToEmpty("""
                         Batches opaque terrain and caches draw commands to reduce CPU work.
                         Automatically falls back when unsupported. Disable to compare performance.""")),
+                new SwitchOption("GPU Terrain Experiment",
+                        value -> config.experimentalGpuTerrain = value,
+                        () -> config.experimentalGpuTerrain)
+                        .setTooltip(Component.nullToEmpty("""
+                        Enables the experimental GPU terrain data path.
+                        CPU terrain rendering remains authoritative for unsupported and production geometry.
+                        Restart Minecraft after changing this option.""")),
                 new SwitchOption("Indirect Draw",
                         value -> config.indirectDraw = value,
                         () -> config.indirectDraw)
