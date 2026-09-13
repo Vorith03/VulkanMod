@@ -14,6 +14,12 @@ public final class SectionVoxelSnapshotTest {
                 int expectedFlags = SectionVoxelSnapshot.CPU_REQUIRED | (i & 7);
                 if ((i & 1) == 0) expectedFlags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                 builder.add(100000 + i % paletteSize, expectedFlags);
+                if (y == 0) builder.setBoundaryNeighborGpuFullCube(i, 0, expectedHalo(i, 0));
+                if (y == 15) builder.setBoundaryNeighborGpuFullCube(i, 1, expectedHalo(i, 1));
+                if (z == 0) builder.setBoundaryNeighborGpuFullCube(i, 2, expectedHalo(i, 2));
+                if (z == 15) builder.setBoundaryNeighborGpuFullCube(i, 3, expectedHalo(i, 3));
+                if (x == 0) builder.setBoundaryNeighborGpuFullCube(i, 4, expectedHalo(i, 4));
+                if (x == 15) builder.setBoundaryNeighborGpuFullCube(i, 5, expectedHalo(i, 5));
             }
             var snapshot = builder.finish();
             require(snapshot.paletteSize() == paletteSize, "Palette cardinality, including >256 states");
@@ -31,6 +37,8 @@ public final class SectionVoxelSnapshotTest {
                     "ABI/version");
             require(gpu.getInt(44) == SectionVoxelSnapshot.FLAG_PLANES,
                     "Header advertises all flag planes");
+            require(gpu.getInt(52) == SectionVoxelSnapshot.HALO_WORDS,
+                    "Header advertises the six-face qualified-cube halo");
             require(gpu.getInt(16) == -16 && gpu.getInt(20) == -64 && gpu.getInt(24) == 29999984,
                     "Signed world origins");
             for (int i = 0; i < 4096; i++) {
@@ -50,9 +58,22 @@ public final class SectionVoxelSnapshotTest {
                 require(flags == expectedFlags, "Shader flag decode across word boundaries/planes");
                 require(snapshot.stateId(i) == 100000 + i % paletteSize && snapshot.flags(i) == flags,
                         "CPU reference decode");
+
+                int x = i & 15;
+                int y = (i >>> 4) & 15;
+                int z = (i >>> 8) & 15;
+                if (y == 0) verifyHalo(gpu, snapshot, i, 0);
+                if (y == 15) verifyHalo(gpu, snapshot, i, 1);
+                if (z == 0) verifyHalo(gpu, snapshot, i, 2);
+                if (z == 15) verifyHalo(gpu, snapshot, i, 3);
+                if (x == 0) verifyHalo(gpu, snapshot, i, 4);
+                if (x == 15) verifyHalo(gpu, snapshot, i, 5);
             }
             reject(() -> builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED));
+            reject(() -> builder.setBoundaryNeighborGpuFullCube(0, 0, true));
             reject(builder::finish);
+            reject(() -> snapshot.boundaryNeighborGpuFullCube(SectionVoxelSnapshot.blockIndex(1, 1, 1), 0));
+            reject(() -> snapshot.boundaryNeighborGpuFullCube(0, 6));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() - 1)));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize() + 1).position(1)));
             reject(() -> snapshot.writeTo(ByteBuffer.allocate(snapshot.byteSize()).asReadOnlyBuffer()));
@@ -94,6 +115,29 @@ public final class SectionVoxelSnapshotTest {
         testGpuPageBudget();
         StorageBufferUsageTest.verify();
         System.out.println("Terrain voxel snapshot tests passed");
+    }
+
+    private static void verifyHalo(ByteBuffer gpu, SectionVoxelSnapshot snapshot, int index, int face) {
+        int bit = haloBit(index, face);
+        int haloOffset = gpu.getInt(48);
+        int word = gpu.getInt((haloOffset + face * SectionVoxelSnapshot.HALO_FACE_WORDS + (bit >>> 5)) * 4);
+        boolean decoded = ((word >>> (bit & 31)) & 1) != 0;
+        require(decoded == expectedHalo(index, face), "Shader boundary halo decode");
+        require(snapshot.boundaryNeighborGpuFullCube(index, face) == decoded,
+                "CPU boundary halo reference decode");
+    }
+
+    private static int haloBit(int index, int face) {
+        int x = index & 15;
+        int y = (index >>> 4) & 15;
+        int z = (index >>> 8) & 15;
+        if (face <= 1) return x | (z << 4);
+        if (face <= 3) return x | (y << 4);
+        return z | (y << 4);
+    }
+
+    private static boolean expectedHalo(int index, int face) {
+        return ((index * 31 + face * 17) & 3) == 0;
     }
 
     private static void testPageAllocator() {
