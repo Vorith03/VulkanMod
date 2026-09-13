@@ -18,6 +18,14 @@ Use these together:
 
 ### Live continuation note — 2026-09-13
 
+- Active continuation from clean head `4c961082a489c3c0e1c976f196393c9b3b3fc0d3`:
+  audit the exact CPU color/AO/light path for the qualified canonical cube subset.
+  Tighten qualification for any baked-quad properties that the partial vertex oracle
+  does not encode, and document the smallest numeric neighborhood contract plus its
+  unresolved stop conditions. Do not extend snapshot v4 or the compute shader in this
+  step; do not allocate production geometry or clear `CPU_REQUIRED`. If interrupted,
+  inspect this note and the worktree before resuming.
+
 - Completed continuation after safely rebasing over the independently landed runtime-
   toggle series ending at `8472650431e9df8861a694764e88bfc6ce3faeef`:
   source commit `81e953faefd7e065fcdda19a74e50b22d9a5c3e8`

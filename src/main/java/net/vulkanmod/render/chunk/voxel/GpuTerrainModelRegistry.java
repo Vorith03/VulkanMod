@@ -164,6 +164,10 @@ public final class GpuTerrainModelRegistry {
                 return Qualification.rejected(RejectReason.TINTED_FACE);
             if(!quad.isShade())
                 return Qualification.rejected(RejectReason.UNSHADED_FACE);
+            if(!quad.hasAmbientOcclusion())
+                return Qualification.rejected(RejectReason.FACE_AMBIENT_OCCLUSION_DISABLED);
+            if(!hasOpaqueWhiteVertexColors(quad.getVertices()))
+                return Qualification.rejected(RejectReason.NON_WHITE_VERTEX_COLOR);
             if(!FullCubeGeometry.isUnitFace(quad.getVertices(), direction))
                 return Qualification.rejected(RejectReason.NON_UNIT_FACE);
             if(!FullCubeGeometry.hasCanonicalVertexOrder(quad.getVertices(), direction))
@@ -227,6 +231,24 @@ public final class GpuTerrainModelRegistry {
     private static boolean finiteUv(int uBits, int vBits) {
         return Float.isFinite(Float.intBitsToFloat(uBits))
                 && Float.isFinite(Float.intBitsToFloat(vBits));
+    }
+
+    /**
+     * VertexConsumer.putBulkData multiplies baked vertex color into the AO/shade
+     * result even when a quad has no tint index. Until the immutable model table
+     * carries those four color words, only the identity value is reproducible.
+     */
+    private static boolean hasOpaqueWhiteVertexColors(int[] vertices) {
+        if(vertices == null || vertices.length % 4 != 0)
+            return false;
+        int stride = vertices.length / 4;
+        if(stride < 4)
+            return false;
+        for(int vertex = 0; vertex < 4; vertex++) {
+            if(vertices[vertex * stride + 3] != 0xffffffff)
+                return false;
+        }
+        return true;
     }
 
     private static String describeRejected(EnumMap<RejectReason, Integer> rejected) {
@@ -355,6 +377,8 @@ public final class GpuTerrainModelRegistry {
         FACE_DIRECTION,
         TINTED_FACE,
         UNSHADED_FACE,
+        FACE_AMBIENT_OCCLUSION_DISABLED,
+        NON_WHITE_VERTEX_COLOR,
         NON_UNIT_FACE,
         NON_CANONICAL_VERTEX_ORDER,
         INVALID_FACE_TEXTURE_TEMPLATE,
