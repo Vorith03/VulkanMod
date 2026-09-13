@@ -1,0 +1,46 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer ModelTable {
+    uint words[];
+} modelTable;
+
+layout(set = 0, binding = 1, std430) writeonly buffer ProbeOutput {
+    uint words[];
+} outputData;
+
+layout(push_constant) uniform ProbePushConstants {
+    uint templateCount;
+} pc;
+
+const uint MAGIC = 0x47544d31u;
+const uint VERSION = 1u;
+const uint HEADER_WORDS = 8u;
+const uint TEMPLATE_WORDS = 56u;
+const uint RESULT_WORDS_PER_TEMPLATE = 57u;
+const uint VALID_MARKER = 0x4d4f444cu;
+
+void main() {
+    uint templateIndex = gl_GlobalInvocationID.x;
+    if (templateIndex >= pc.templateCount)
+        return;
+
+    uint outputBase = templateIndex * RESULT_WORDS_PER_TEMPLATE;
+    if (modelTable.words[0] != MAGIC || modelTable.words[1] != VERSION)
+        return;
+    if (modelTable.words[5] != pc.templateCount)
+        return;
+
+    uint templateBase = modelTable.words[7] + templateIndex * TEMPLATE_WORDS;
+    uint stateId = modelTable.words[templateBase];
+    uint stateIndexCount = modelTable.words[4];
+    if (stateId >= stateIndexCount)
+        return;
+    if (modelTable.words[HEADER_WORDS + stateId] != templateIndex + 1u)
+        return;
+
+    outputData.words[outputBase] = VALID_MARKER;
+    for (uint word = 0u; word < TEMPLATE_WORDS; ++word)
+        outputData.words[outputBase + 1u + word] = modelTable.words[templateBase + word];
+}

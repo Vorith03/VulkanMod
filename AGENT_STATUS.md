@@ -33,6 +33,14 @@ Use these together:
   `git diff --check` pass; local Gradle remains blocked because this checkout cannot
   reach the uncached Gradle 8.1.1 distribution. Commit/push this repair, then inspect
   the resulting live CI before expanding GPU terrain scope.
+- Repair commit was published as `e5cfc7c5600a13faf05ef7948f66861516299c51`;
+  CI #396 (run `34749580353`) was still queued when the next local checkpoint began.
+- Uncommitted next checkpoint files (if this note is encountered mid-session):
+  `GpuTerrainModelComputeProbe.java`, `model_table_probe.comp`, and the corresponding
+  `GpuTerrainModelTableSmokeTest` call/oracle. The bounded probe dispatches one GPU
+  invocation per dense baked template, verifies sparse state-ID reverse lookup,
+  and reads every ordered face/sprite/UV word through compute. It remains smoke-only
+  and does not publish terrain or change CPU fallback. Run CI before retaining it.
 
 - Branch: `forge-1.20.1`.
 - Source head immediately before this documentation refresh: `3d85f800d8e5dae685c037b3f3012a27dd6a679c` (`terrain: generate GPU cube face corners`).

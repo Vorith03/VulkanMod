@@ -48,14 +48,41 @@ public final class GpuTerrainModelTableSmokeTest {
             require(resident.byteLength() == table.byteSize(),
                     "GPU model-table residency must expose the exact packed byte length");
             verifyReadback(resident, table);
+            verifyComputeLookup(resident, table);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI and device-local readback",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback and compute state-to-template/UV decode",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {
             Vulkan.waitIdle();
             store.close();
+        }
+    }
+
+    private static void verifyComputeLookup(GpuTerrainModelGpuStore.Residency residency,
+                                            GpuTerrainModelTable table) {
+        try(GpuTerrainModelComputeProbe probe = new GpuTerrainModelComputeProbe()) {
+            int[] actual = probe.dispatch(residency, table.templateCount());
+            int expectedWords = Math.multiplyExact(table.templateCount(),
+                    GpuTerrainModelComputeProbe.RESULT_WORDS_PER_TEMPLATE);
+            require(actual.length == expectedWords,
+                    "GPU model-table compute output must cover every dense template");
+
+            for(int template = 0; template < table.templateCount(); ++template) {
+                int outputBase = template * GpuTerrainModelComputeProbe.RESULT_WORDS_PER_TEMPLATE;
+                require(actual[outputBase] == GpuTerrainModelComputeProbe.VALID_MARKER,
+                        "GPU model-table compute lookup must validate sparse state mapping for template "
+                                + template);
+                int tableBase = table.templateBaseWord()
+                        + template * GpuTerrainModelTable.TEMPLATE_WORDS;
+                for(int word = 0; word < GpuTerrainModelTable.TEMPLATE_WORDS; ++word) {
+                    if(actual[outputBase + 1 + word] != table.word(tableBase + word)) {
+                        throw new AssertionError("GPU model-table compute decode mismatch at template "
+                                + template + " word " + word);
+                    }
+                }
+            }
         }
     }
 
