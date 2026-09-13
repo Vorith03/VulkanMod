@@ -130,6 +130,17 @@ public class MinecraftMixin {
                 }
             }
 
+            // Crash Assistant's published production/SRG mixin cannot execute its
+            // constructor-return body in ForgeGradle's Mojmap runClient namespace.
+            // Its dedicated compatibility fixture still needs the historical
+            // pre-return exit after proving the mod loaded and our Vulkan-safe GPU
+            // detector replacement applied. Ordinary startup fixtures continue to
+            // baked-model publication and validate the GPU model table there.
+            if(Boolean.getBoolean("vulkanmod.smokeExitAtConstructor")) {
+                Initializer.LOGGER.info("Vulkan smoke test passed");
+                System.exit(0);
+            }
+
             Initializer.LOGGER.info("Vulkan early smoke checks passed; awaiting baked model cache");
         }
     }

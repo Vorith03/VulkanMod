@@ -16,6 +16,24 @@ Use these together:
 
 ## Current checkpoint — 2026-09-12
 
+### Live continuation note — 2026-09-13 (in progress)
+
+- Live branch head at session start: `5f35881d5342e14933f31c2a5c5e689019f5d9a4`
+  (`gpu terrain: upload model table outside frame staging`).
+- CI #395 (run `34748685616`) compiled and passed the existing voxel compute/readback
+  oracle, then failed during the Crash Assistant compatibility smoke after the
+  startup smoke was extended through baked-model publication. The raw production/SRG
+  Crash Assistant JAR calls `Minecraft.m_91087_()` inside the Mojmap-named `runClient`
+  environment, causing `NoSuchMethodError`; this is a development-runtime remapping
+  fixture issue exposed by the later smoke exit, not a GPU model-table assertion.
+- The bounded repair adds `vulkanmod.smokeExitAtConstructor` only to the dedicated
+  Crash Assistant fixture, retaining its historical constructor-boundary exit after
+  Vulkan/compatibility checks. Ordinary startup fixtures still continue through
+  baked-model publication and validate the GPU model table. Shell syntax and
+  `git diff --check` pass; local Gradle remains blocked because this checkout cannot
+  reach the uncached Gradle 8.1.1 distribution. Commit/push this repair, then inspect
+  the resulting live CI before expanding GPU terrain scope.
+
 - Branch: `forge-1.20.1`.
 - Source head immediately before this documentation refresh: `3d85f800d8e5dae685c037b3f3012a27dd6a679c` (`terrain: generate GPU cube face corners`).
 - Last fully verified CI before the newest compaction/geometry commits: **#378**, run `34719727902`, green at `adff3d2163b37d4e1a632cd1a89e93b8c54b3db7`.

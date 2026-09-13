@@ -106,7 +106,11 @@ case "$mode" in
       'https://cdn.modrinth.com/data/ix1qq8Ux/versions/mcLRynoF/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar' \
       -o 'run/mods/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar'
 
-    run_client "-Dvulkanmod.smokeTest=true" vulkan-smoke-crash-assistant.log
+    # Crash Assistant ships production/SRG mixin bytecode inside a nested JAR.
+    # ForgeGradle cannot deobfuscate that nested payload for Mojmap runClient, so
+    # retain the constructor-boundary exit for this compatibility-only fixture.
+    # The ordinary startup fixtures continue through baked-model publication.
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.smokeExitAtConstructor=true" vulkan-smoke-crash-assistant.log
     grep -F "Vulkan smoke test passed" vulkan-smoke-crash-assistant.log
     grep -F "CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar" vulkan-smoke-crash-assistant.log
     if grep -F "No context is current or a function that is not available in the current context was called" vulkan-smoke-crash-assistant.log; then
