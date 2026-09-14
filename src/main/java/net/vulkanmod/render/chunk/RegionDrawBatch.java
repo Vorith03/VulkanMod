@@ -1,6 +1,8 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
+import net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic;
+import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
@@ -26,6 +28,9 @@ final class RegionDrawBatch {
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
+    private final GpuRegionCandidateTable[] diagnosticTables =
+            new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
+    private final long[] diagnosticTokens = new long[TerrainRenderType.VALUES.length];
 
     void draw(DrawBuffers buffers, ChunkArea area, Pipeline pipeline, RenderType renderType,
               double camX, double camY, double camZ) {
@@ -42,6 +47,7 @@ final class RegionDrawBatch {
         // Renderer.beginFrame has waited this frame's fence. Other frames' command
         // buffers remain untouched, even during edits or visibility changes.
         batch.update(buffers, area, type);
+        compareLiveCandidates(area, type);
         publishLiveCandidates(buffers, area, type);
         if (batch.drawCount == 0) return;
         RegionBatchStats.sections += batch.drawCount;
@@ -62,6 +68,28 @@ final class RegionDrawBatch {
                 vkCmdDrawIndexedIndirect(commandBuffer, batch.commands.getId(), (long) first * STRIDE,
                         Math.min(limit, batch.drawCount - first), STRIDE);
             }
+        }
+    }
+
+    private void compareLiveCandidates(ChunkArea area, TerrainRenderType type) {
+        int layer = type.ordinal();
+        GpuRegionCandidateTable table = diagnosticTables[layer];
+        long token = diagnosticTokens[layer];
+        if(table == null || token == 0L)
+            return;
+        if(!GpuLiveSectionSelectionDiagnostic.isCurrent(token)) {
+            diagnosticTables[layer] = null;
+            diagnosticTokens[layer] = 0L;
+            return;
+        }
+        GpuRegionCandidateGpuStore.Residency residency = area.getGpuCandidateResidency(type);
+        if(residency == null || !residency.valid()
+                || residency.generation() != table.generation())
+            return;
+        VFrustum frustum = VFrustum.currentGpuSelectionFrustum();
+        if(GpuLiveSectionSelectionDiagnostic.compare(token, residency, table, layer, frustum)) {
+            diagnosticTables[layer] = null;
+            diagnosticTokens[layer] = 0L;
         }
     }
 
@@ -113,10 +141,29 @@ final class RegionDrawBatch {
         if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint)
             return;
 
+        long oldToken = diagnosticTokens[layer];
+        if(oldToken != 0L) {
+            GpuLiveSectionSelectionDiagnostic.cancel(oldToken);
+            diagnosticTokens[layer] = 0L;
+            diagnosticTables[layer] = null;
+        }
+
+        GpuRegionCandidateTable table = builder.finish();
+        long diagnosticToken = GpuLiveSectionSelectionDiagnostic.claim();
+        boolean queued = area.publishGpuCandidates(type, table);
+
         candidateInitialized[layer] = true;
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
-        area.publishGpuCandidates(type, builder.finish());
+
+        if(diagnosticToken != 0L) {
+            if(queued) {
+                diagnosticTokens[layer] = diagnosticToken;
+                diagnosticTables[layer] = table;
+            } else {
+                GpuLiveSectionSelectionDiagnostic.cancel(diagnosticToken);
+            }
+        }
     }
 
     private static long mix(long hash, long value) {
@@ -136,6 +183,10 @@ final class RegionDrawBatch {
         for(int layer = 0; layer < candidateInitialized.length; ++layer) {
             candidateInitialized[layer] = false;
             candidateFingerprints[layer] = 0L;
+            if(diagnosticTokens[layer] != 0L)
+                GpuLiveSectionSelectionDiagnostic.cancel(diagnosticTokens[layer]);
+            diagnosticTokens[layer] = 0L;
+            diagnosticTables[layer] = null;
         }
     }
 
