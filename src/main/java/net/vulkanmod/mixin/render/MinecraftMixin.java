@@ -183,6 +183,12 @@ public class MinecraftMixin {
         Renderer renderer = Renderer.getInstance();
         Profiler2 p = Profiler2.getMainProfiler();
         p.push("submitRender");
+        // Candidate/storage uploads can be recorded during terrain draw recording,
+        // after compileSections() performed the normal upload flush. Submit any
+        // current-slot leftovers before the main graphics command buffer so its
+        // frame fence also owns their staging/command-buffer lifetime. Otherwise a
+        // slot can cycle around and reset staging bytes before those copies execute.
+        net.vulkanmod.render.chunk.AreaUploadManager.INSTANCE.submitUploads();
         renderer.endFrame();
         p.pop();
     }
