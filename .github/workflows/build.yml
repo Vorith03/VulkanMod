@@ -47,6 +47,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh startup
       - name: Smoke-test Forge client Vulkan startup without early splash
         run: bash scripts/ci/vulkan-smoke.sh no-splash
+      - name: Smoke-test persistent GPU indirect shadow commands
+        run: bash scripts/ci/vulkan-smoke.sh gpu-indirect-shadow
       - name: Smoke-test vanilla Vulkan post-chain execution
         run: bash scripts/ci/vulkan-smoke.sh post-chain
       - name: Smoke-test vanilla Vulkan depth post-chain execution
@@ -67,6 +69,7 @@ jobs:
           path: |
             vulkan-smoke.log
             vulkan-smoke-no-splash.log
+            vulkan-gpu-indirect-shadow-smoke.log
             vulkan-post-chain-smoke.log
             vulkan-depth-post-chain-smoke.log
             vulkan-screenshot-smoke.log

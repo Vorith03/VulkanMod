@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel}" >&2
+  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel}" >&2
   exit 2
 }
 
@@ -59,6 +59,22 @@ case "$mode" in
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log
+    ;;
+
+  gpu-indirect-shadow)
+    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    mkdir -p run
+    export VK_LAYER_SETTINGS_PATH="$repo_root/run"
+    echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.smokeExitAtConstructor=true -Dvulkanmod.experimentalGpuIndirectCommands=true -Dvulkanmod.ciGpuIndirectShadowSmoke=true -Dvulkanmod.validation=true" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_READY" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "Vulkan smoke test passed" vulkan-gpu-indirect-shadow-smoke.log
+    if grep -E 'Validation Error|SYNC-HAZARD' vulkan-gpu-indirect-shadow-smoke.log; then
+      echo "GPU indirect shadow smoke produced invalid Vulkan" >&2
+      exit 1
+    fi
+    rm -f run/vk_layer_settings.txt
     ;;
 
   post-chain)
