@@ -1,0 +1,42 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer CandidateCommands {
+    uint words[];
+} inputCommands;
+
+layout(set = 0, binding = 1, std430) buffer SelectedCommands {
+    uint words[];
+} outputCommands;
+
+layout(push_constant) uniform SelectionPushConstants {
+    uint candidateCount;
+    uint outputCapacity;
+} pc;
+
+const uint COMMAND_WORDS = 5u;
+const uint HEADER_WORDS = 3u;
+
+void main() {
+    uint candidate = gl_GlobalInvocationID.x;
+    if (candidate >= pc.candidateCount)
+        return;
+
+    uint source = candidate * COMMAND_WORDS;
+    uint indexCount = inputCommands.words[source];
+    uint instanceCount = inputCommands.words[source + 1u];
+    if (indexCount == 0u || instanceCount == 0u)
+        return;
+
+    uint slot = atomicAdd(outputCommands.words[0], 1u);
+    if (slot >= pc.outputCapacity) {
+        atomicOr(outputCommands.words[2], 1u);
+        return;
+    }
+
+    atomicAdd(outputCommands.words[1], 1u);
+    uint target = HEADER_WORDS + slot * COMMAND_WORDS;
+    for (uint word = 0u; word < COMMAND_WORDS; ++word)
+        outputCommands.words[target + word] = inputCommands.words[source + word];
+}

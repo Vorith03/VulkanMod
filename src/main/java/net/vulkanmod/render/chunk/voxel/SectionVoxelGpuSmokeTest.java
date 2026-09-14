@@ -36,6 +36,7 @@ public final class SectionVoxelGpuSmokeTest {
             throw new AssertionError("GPU voxel smoke requires the terrain upload manager");
 
         verifyLightingDemandFixtures();
+        GpuSectionSelectionSmokeTest.verify();
 
         RegionVoxelGpuStore store = new RegionVoxelGpuStore();
         try {
