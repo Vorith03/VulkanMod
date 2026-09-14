@@ -257,16 +257,17 @@ Mandatory gates:
 - [x] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
 - [ ] implement correct GPU visibility/section selection;
 - [ ] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
-- [ ] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
+- [x] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
 - [ ] implement hybrid ordinary-cube meshing with halo/light/tint inputs and output-overflow fallback;
 - [ ] integrate rebuild/unload/world/resource-generation transitions without stale GPU data;
 - [ ] preserve arbitrary Forge callbacks, block entities and unsupported models on CPU;
 - [ ] preserve translucent/tripwire rendering until separately supported and validated;
 - [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 3/11 verified gates.** Input infrastructure, bounded region residency,
-and diagnostic compute plumbing are verified. Production GPU selection, indirect
-commands and hybrid terrain meshing remain unimplemented.
+**Progress: 4/11 verified gates.** Input infrastructure, bounded region residency,
+diagnostic compute plumbing, and the fail-closed reusable model-instance contract
+are verified. Production GPU selection, indirect commands and hybrid terrain meshing
+remain unimplemented.
 
 Current lighting slice: the exact dense-lattice prototype in
 `docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both a 20-cube
@@ -283,6 +284,12 @@ counts plus overflow are verified without out-of-bounds writes. This establishes
 fallback contract needed by hybrid meshing, but does not complete that production
 gate because allocation/publication, lighting/color and CPU fallback integration are
 not implemented.
+
+The reusable model/template gate is complete for the supported subset as recorded in
+`docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. The qualifier now exercises
+Forge's actual ModelData/render-type quad API, requires a singleton solid layer and
+rejects seed-varying geometry. Unsupported Forge callbacks and per-position offsets
+remain CPU-only rather than being approximated.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -349,16 +356,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `5550d6e3247c87609b1990f7cd352f7333c76f67`,
-  **CI #416 green** (run `34803738729`, job `103851375878`). Build/distribution,
+- Verified runtime source: `3ebc4b2eee14c9c1aa8036068859d910a0f846a0`,
+  **CI #417 green** (run `34807713756`, job `103862733527`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
   compatibility smokes passed; logs inspected.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 3/11.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 4/11.
 - P7 input ABI, capped persistent region SSBO residency and diagnostic compute
-  plumbing are verified. Compact output now has verified capacity/overflow safety.
-  Demand telemetry is ready; next, collect real modpack section density before
-  extending snapshot v4.
+  plumbing are verified. Reusable Forge model instances and compact output
+  capacity/overflow safety are also verified for the supported subset. Demand
+  telemetry is ready; next, collect real modpack section density before extending
+  snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 
 See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for

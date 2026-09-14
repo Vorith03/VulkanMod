@@ -18,6 +18,18 @@ Use these together:
 
 ### Live continuation note — 2026-09-14
 
+- Completed the Forge model-instance qualification contract in source commit
+  `3ebc4b2eee14c9c1aa8036068859d910a0f846a0`
+  (`gpu terrain: enforce Forge model instance contract`). Qualification now uses the
+  real Forge five-argument quad API with `ModelData.EMPTY`, requires exactly the
+  solid render layer and state-aware AO, and rejects seed-varying quad contents.
+  Exact `SimpleBakedModel`, zero per-position offset, canonical geometry, white
+  untinted vertices and all prior fail-closed rules still apply. CI #417 (run
+  `34807713756`, job `103862733527`) is fully green and retained 1,730 templates,
+  342 sprites, 24,135 state-index entries and the exact 484,092-byte table across
+  repeated startups. This closes the reusable-template/instance-metadata Phase 7
+  gate for the supported subset; all other models remain CPU-only. Phase 7 is now
+  4/11. See `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`.
 - Completed capacity-bounded compact face/vertex compute output in source commit
   `c8c409265f271f2f35da48de62268fd07746645d`
   (`gpu terrain: bound compact compute output`). The caller supplies a compact face
