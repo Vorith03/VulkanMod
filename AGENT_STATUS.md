@@ -18,6 +18,21 @@ Use these together:
 
 ### Live continuation note — 2026-09-14
 
+- Added the first bounded GPU section-selection/indirect-command oracle in source
+  commit `7f1ea528442a48e07be9e268be172387817c3ff7`
+  (`gpu terrain: verify bounded section selection`). A compute pass consumes the
+  existing five-word indexed-indirect ABI, rejects zero-count candidates, compacts
+  live commands into caller-sized output, preserves every command word, and reports
+  requested/written/overflow counters. Its 512-candidate fixture resolves 310 live
+  commands; full capacity matches the independent CPU set exactly, capacity 17
+  stays in bounds with overflow, and capacity zero is a safe fallback signal. CI
+  #418 (run `34808397281`, job `103864694566`) is fully green and emitted the marker
+  in both Vulkan startups and compatibility fixtures. This is diagnostic groundwork,
+  not the completed Phase 7 visibility gate: CPU graph/frustum selection and current
+  region draws remain authoritative. Phase 7 therefore remains 4/11. Next, define a
+  generation-owned region candidate record and prove exact frustum/eligibility
+  selection before production integration. See
+  `docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md`.
 - Completed the Forge model-instance qualification contract in source commit
   `3ebc4b2eee14c9c1aa8036068859d910a0f846a0`
   (`gpu terrain: enforce Forge model instance contract`). Qualification now uses the

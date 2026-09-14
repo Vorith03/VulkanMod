@@ -291,6 +291,13 @@ Forge's actual ModelData/render-type quad API, requires a singleton solid layer 
 rejects seed-varying geometry. Unsupported Forge callbacks and per-position offsets
 remain CPU-only rather than being approximated.
 
+The bounded selection probe in
+`docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md` now proves GPU compaction of
+the existing five-word indexed-indirect ABI with exact metadata preservation and an
+explicit overflow fallback. It does not yet close either selection or indirect-command
+gate: the input is a synthetic CPU-qualified candidate set, no frustum/graph state is
+resident, and production region draws do not consume its output.
+
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
 or CPU fallback on the RX 6900 XT. Existing Phase 6 measurement gates remain open.
@@ -356,17 +363,20 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `3ebc4b2eee14c9c1aa8036068859d910a0f846a0`,
-  **CI #417 green** (run `34807713756`, job `103862733527`). Build/distribution,
+- Verified runtime source: `7f1ea528442a48e07be9e268be172387817c3ff7`,
+  **CI #418 green** (run `34808397281`, job `103864694566`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
-  compatibility smokes passed; logs inspected.
+  compatibility smokes passed; logs inspected. The bounded section-selection oracle
+  repeatedly selected the exact 310/512 live-command fixture and verified capacity
+  17 and zero-capacity overflow fallbacks.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 4/11.
 - P7 input ABI, capped persistent region SSBO residency and diagnostic compute
   plumbing are verified. Reusable Forge model instances and compact output
-  capacity/overflow safety are also verified for the supported subset. Demand
-  telemetry is ready; next, collect real modpack section density before extending
-  snapshot v4.
+  capacity/overflow safety are also verified for the supported subset. GPU command
+  compaction now has a bounded diagnostic proof, but correct resident frustum/graph
+  selection and production consumption remain open. Demand telemetry is ready;
+  collect real modpack section density before extending snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 
 See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for
