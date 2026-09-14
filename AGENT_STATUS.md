@@ -18,6 +18,21 @@ Use these together:
 
 ### Live continuation note — 2026-09-14
 
+- Added region-owned device-local candidate-table residency in source commit
+  `10c6c46d55dfeca5cfd7d503d1ad57dcc3997e55`
+  (`gpu terrain: retain region candidate residency`). Each store uses fixed maximum
+  16,416-byte buffers under a 16 MiB global cap, queues copies through the existing
+  graphics-ordered terrain uploader, revokes old discoverable state immediately,
+  and publishes only from the matching submission callback. Replacements use fresh
+  storage; stale uploads, pre-submit invalidation, allocation/budget failure, region
+  reposition and world/area release all fail closed to the CPU draw path. CI #420
+  (run `34813758435`, job `103880076065`) is fully green. The Vulkan smoke verifies
+  exact resident bytes, pre-submit invisibility, fresh-buffer replacement, stale
+  generation rejection and `ChunkArea` lifecycle cleanup. Phase 7 remains 4/11
+  because no live region candidate producer or production compute-to-indirect draw
+  consumer exists yet. Next, build candidate tables from live region/layer draw
+  metadata behind the experimental gate and compare their GPU selection with the
+  authoritative CPU queue without changing rendered output.
 - Extended section-selection groundwork in source commit
   `7cbcc4f348cad721a1491a2b81b1e84af2fe16b3`
   (`gpu terrain: qualify region section candidates`). The new fixed, versioned

@@ -9,6 +9,13 @@ indirect-command building block. They do
 not change production rendering. CPU graph traversal, frustum visibility, region
 command construction and direct/legacy fallbacks remain authoritative.
 
+Source commit `10c6c46d55dfeca5cfd7d503d1ad57dcc3997e55` adds the
+region-owned device-local store. It allocates fixed maximum 16,416-byte buffers under
+a 16 MiB global cap, stages table bytes through `AreaUploadManager`, and publishes
+residency only after the graphics-queue copy is submitted. A new generation revokes
+old discoverable residency before replacement; the previous physical buffer remains
+fence-retired. Allocation or budget pressure simply leaves the CPU path authoritative.
+
 The table header includes magic, version, a 64-bit generation, candidate count and
 the exact 128-block-aligned region origin. Each eight-word record contains the five
 indirect-command words plus readiness, CPU graph-visibility and terrain-layer flags.
@@ -55,20 +62,26 @@ result. The log repeatedly emitted:
 
 `VULKANMOD_GPU_SECTION_SELECTION_OK: 39 exact frustum/layer/ready/graph matches from 512 generation-owned candidates; bounded overflow and stale rejection verified`
 
+CI #420 (run `34813758435`, job `103880076065`) additionally verifies exact bytes
+after asynchronous publication, invisibility before submission, fresh-buffer
+replacement, rejection of older generations, invalidation while a copy is pending,
+and cleanup when the owning `ChunkArea` changes position. The full build, both Vulkan
+startups and every compatibility/render smoke passed.
+
 ## Remaining boundary
 
 This does not complete the Phase 7 GPU visibility/section-selection or bounded
 indirect-command gate. Before either gate can close, the renderer still needs:
 
-- persistent region-owned candidate-table GPU residency and frame-safe publication;
+- a live producer from current region/layer draw metadata;
 - production camera/frustum input extraction and comparison against live selection;
 - graph/smart-culling ownership defined without hiding Forge-visible sections;
 - frame-safe output lifetime and compute-to-indirect-draw barriers;
 - production overflow fallback and lifecycle invalidation;
 - RX 6900 XT visual and performance evidence.
 
-The next safe source step is a region-owned GPU store for the candidate table with
-allocate-then-publish generation semantics and invalidation on mesh/visibility/region
-lifecycle changes. It must remain diagnostic until live CPU/GPU selection agreement
-is measured. Lighting-demand telemetry remains an independent prerequisite for
-hybrid meshing, not for this selection track.
+The next safe source step is a feature-gated live producer from current region/layer
+draw metadata. It should publish only when mesh or visibility revisions change, run
+GPU selection diagnostically, and compare against the authoritative CPU command set
+without affecting rendered output. Lighting-demand telemetry remains an independent
+prerequisite for hybrid meshing, not for this selection track.
