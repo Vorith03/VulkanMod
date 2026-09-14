@@ -56,6 +56,7 @@ public final class GpuLiveSectionSelectionDiagnostic {
     private static final int OVERFLOW = 2;
     private static final int TABLE_VALID = 3;
     private static final int PARAMETER_WORDS = 36;
+    private static final int DIAGNOSTIC_PARAMETER_WORDS = 8;
 
     private static long nextToken = 1L;
     private static long activeToken;
@@ -146,16 +147,19 @@ public final class GpuLiveSectionSelectionDiagnostic {
 
             float[] planes = new float[VFrustum.PLANE_COUNT * VFrustum.PLANE_WORDS];
             frustum.copyPlaneEquations(planes);
-            int[] result;
+            ProbeResult probeResult;
             try(Probe probe = new Probe()) {
-                result = probe.dispatch(residency, table, targetLayer,
+                probeResult = probe.dispatch(residency, table, targetLayer,
                         frustum.relativeX(table.regionX()),
                         frustum.relativeY(table.regionY()),
                         frustum.relativeZ(table.regionZ()), planes);
             }
 
-            String gpuMismatch = validateResult(result, table, reconstructed.rowByPacked,
-                    cpuExpected, cpuCount);
+            int[] result = probeResult.output;
+            String gpuMismatch = result[TABLE_VALID] == 1
+                    ? validateResult(result, table, reconstructed.rowByPacked,
+                    cpuExpected, cpuCount)
+                    : describeTableValidationFailure(probeResult, table, targetLayer);
             String mismatch = predicateMismatch != null ? predicateMismatch : gpuMismatch;
             int sample = complete(token);
             if(mismatch == null) {
@@ -272,7 +276,60 @@ public final class GpuLiveSectionSelectionDiagnostic {
         return null;
     }
 
+    private static String describeTableValidationFailure(ProbeResult result,
+                                                         GpuRegionCandidateTable table,
+                                                         int layer) {
+        int[] expectedTable = {
+                GpuRegionCandidateTable.MAGIC,
+                GpuRegionCandidateTable.VERSION,
+                (int)table.generation(),
+                (int)(table.generation() >>> 32),
+                table.candidateCount(),
+                table.regionX(), table.regionY(), table.regionZ()
+        };
+        int[] expectedParameters = {
+                (int)table.generation(),
+                (int)(table.generation() >>> 32),
+                layer,
+                RegionBatchLayout.MAX_SECTIONS,
+                table.regionX(), table.regionY(), table.regionZ(), 0
+        };
+        String tableDiff = describeWords("candidate", expectedTable, result.candidateHeader);
+        String parameterDiff = describeWords("parameters", expectedParameters, result.parameterHeader);
+        if(tableDiff == null && parameterDiff == null) {
+            return "GPU table validation status remained " + result.output[TABLE_VALID]
+                    + " even though post-dispatch candidate/parameter headers match; possible visibility/execution anomaly";
+        }
+        if(tableDiff == null)
+            return parameterDiff;
+        if(parameterDiff == null)
+            return tableDiff;
+        return tableDiff + "; " + parameterDiff;
+    }
+
+    private static String describeWords(String label, int[] expected, int[] actual) {
+        StringBuilder mismatch = null;
+        int words = Math.min(expected.length, actual.length);
+        for(int i = 0; i < words; ++i) {
+            if(expected[i] == actual[i])
+                continue;
+            if(mismatch == null)
+                mismatch = new StringBuilder(label).append(" header mismatch");
+            mismatch.append(" word").append(i)
+                    .append(" expected=0x").append(Integer.toHexString(expected[i]))
+                    .append(" actual=0x").append(Integer.toHexString(actual[i]));
+        }
+        if(actual.length != expected.length) {
+            if(mismatch == null)
+                mismatch = new StringBuilder(label).append(" header mismatch");
+            mismatch.append(" expectedWords=").append(expected.length)
+                    .append(" actualWords=").append(actual.length);
+        }
+        return mismatch == null ? null : mismatch.toString();
+    }
+
     private record Comparison(boolean[] expectedPacked, int[] rowByPacked, int count) {}
+    private record ProbeResult(int[] output, int[] candidateHeader, int[] parameterHeader) {}
 
     private static final class Probe implements AutoCloseable {
         private static final int WORKGROUP_SIZE = 64;
@@ -292,13 +349,16 @@ public final class GpuLiveSectionSelectionDiagnostic {
             createPipeline();
         }
 
-        int[] dispatch(GpuRegionCandidateGpuStore.Residency residency,
-                       GpuRegionCandidateTable table, int targetLayer,
-                       float regionX, float regionY, float regionZ, float[] planes) {
+        ProbeResult dispatch(GpuRegionCandidateGpuStore.Residency residency,
+                             GpuRegionCandidateTable table, int targetLayer,
+                             float regionX, float regionY, float regionZ, float[] planes) {
             int capacity = RegionBatchLayout.MAX_SECTIONS;
             int outputWords = OUTPUT_HEADER_WORDS + capacity * COMMAND_WORDS;
             int outputBytes = outputWords * Integer.BYTES;
             int parameterBytes = PARAMETER_WORDS * Integer.BYTES;
+            int candidateHeaderBytes = GpuRegionCandidateTable.HEADER_WORDS * Integer.BYTES;
+            int parameterDiagnosticBytes = DIAGNOSTIC_PARAMETER_WORDS * Integer.BYTES;
+            int readbackBytes = outputBytes + candidateHeaderBytes + parameterDiagnosticBytes;
             StorageBuffer output = new StorageBuffer(outputBytes, MemoryTypes.GPU_MEM);
             StorageBuffer parameters = new StorageBuffer(parameterBytes, MemoryTypes.GPU_MEM);
             StagingBuffer parameterStaging = new StagingBuffer(parameterBytes);
@@ -315,7 +375,7 @@ public final class GpuLiveSectionSelectionDiagnostic {
                 LongBuffer pReadbackBuffer = stack.mallocLong(1);
                 var pReadbackAllocation = stack.mallocPointer(1);
                 MemoryManager memoryManager = MemoryManager.getInstance();
-                memoryManager.createBuffer(outputBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                memoryManager.createBuffer(readbackBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                         pReadbackBuffer, pReadbackAllocation);
                 readbackBuffer = pReadbackBuffer.get(0);
@@ -334,21 +394,36 @@ public final class GpuLiveSectionSelectionDiagnostic {
                 vkCmdDispatch(commandBuffer.getHandle(),
                         (table.candidateCount() + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
                 barrierComputeToTransfer(commandBuffer, output);
+                barrierComputeReadsToTransfer(commandBuffer, residency.buffer(),
+                        candidateHeaderBytes, parameters, parameterDiagnosticBytes);
                 TransferQueue.uploadBufferCmd(commandBuffer, output.getId(), 0L,
                         readbackBuffer, 0L, outputBytes);
+                TransferQueue.uploadBufferCmd(commandBuffer, residency.buffer().getId(), 0L,
+                        readbackBuffer, outputBytes, candidateHeaderBytes);
+                TransferQueue.uploadBufferCmd(commandBuffer, parameters.getId(), 0L,
+                        readbackBuffer, outputBytes + candidateHeaderBytes,
+                        parameterDiagnosticBytes);
                 Device.getGraphicsQueue().submitCommands(commandBuffer);
                 Synchronization.waitFence(commandBuffer.getFence());
                 Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
 
-                int[] result = new int[outputWords];
+                int[] outputResult = new int[outputWords];
+                int[] candidateHeader = new int[GpuRegionCandidateTable.HEADER_WORDS];
+                int[] parameterHeader = new int[DIAGNOSTIC_PARAMETER_WORDS];
                 long allocation = readbackAllocation;
-                memoryManager.MapAndCopy(allocation, outputBytes, pointer -> {
-                    ByteBuffer actual = pointer.getByteBuffer(0, outputBytes)
+                memoryManager.MapAndCopy(allocation, readbackBytes, pointer -> {
+                    ByteBuffer actual = pointer.getByteBuffer(0, readbackBytes)
                             .order(ByteOrder.nativeOrder());
                     for(int word = 0; word < outputWords; ++word)
-                        result[word] = actual.getInt(word * Integer.BYTES);
+                        outputResult[word] = actual.getInt(word * Integer.BYTES);
+                    int candidateOffset = outputBytes;
+                    for(int word = 0; word < candidateHeader.length; ++word)
+                        candidateHeader[word] = actual.getInt(candidateOffset + word * Integer.BYTES);
+                    int parameterOffset = outputBytes + candidateHeaderBytes;
+                    for(int word = 0; word < parameterHeader.length; ++word)
+                        parameterHeader[word] = actual.getInt(parameterOffset + word * Integer.BYTES);
                 });
-                return result;
+                return new ProbeResult(outputResult, candidateHeader, parameterHeader);
             } finally {
                 MemoryUtil.memFree(parameterData);
                 parameterStaging.freeBuffer();
@@ -507,6 +582,28 @@ public final class GpuLiveSectionSelectionDiagnostic {
                         .buffer(output.getId()).offset(0L).size(output.getBufferSize());
                 vkCmdPipelineBarrier(commandBuffer.getHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, barrier, null);
+            }
+        }
+
+        private static void barrierComputeReadsToTransfer(CommandPool.CommandBuffer commandBuffer,
+                                                          StorageBuffer input,
+                                                          int inputBytes,
+                                                          StorageBuffer parameters,
+                                                          int parameterBytes) {
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(2, stack);
+                barriers.get(0).sType$Default().srcAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                        .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(input.getId()).offset(0L).size(inputBytes);
+                barriers.get(1).sType$Default().srcAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                        .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(parameters.getId()).offset(0L).size(parameterBytes);
+                vkCmdPipelineBarrier(commandBuffer.getHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, barriers, null);
             }
         }
 
