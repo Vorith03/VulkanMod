@@ -295,7 +295,10 @@ The bounded selection probe in
 `docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md` now proves GPU compaction of
 the existing five-word indexed-indirect ABI with exact metadata preservation and an
 explicit overflow fallback. It does not yet close either selection or indirect-command
-gate: the input is a synthetic CPU-qualified candidate set, no frustum/graph state is
+gate. Its versioned region candidate table and GPU predicate now cover generation,
+region identity, mesh readiness, CPU graph visibility, terrain layer, nonempty draws
+and six-plane frustum intersection with exact CPU-oracle agreement. The fixture is
+still uploaded only for the isolated smoke, no candidate state is persistently
 resident, and production region draws do not consume its output.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
@@ -363,19 +366,19 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `7f1ea528442a48e07be9e268be172387817c3ff7`,
-  **CI #418 green** (run `34808397281`, job `103864694566`). Build/distribution,
+- Verified runtime source: `7cbcc4f348cad721a1491a2b81b1e84af2fe16b3`,
+  **CI #419 green** (run `34810466530`, job `103870615231`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
   compatibility smokes passed; logs inspected. The bounded section-selection oracle
-  repeatedly selected the exact 310/512 live-command fixture and verified capacity
-  17 and zero-capacity overflow fallbacks.
+  repeatedly matched the exact 39/512 CPU frustum/readiness/graph/layer result and
+  verified reduced-capacity overflow and stale-generation rejection.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 4/11.
 - P7 input ABI, capped persistent region SSBO residency and diagnostic compute
   plumbing are verified. Reusable Forge model instances and compact output
   capacity/overflow safety are also verified for the supported subset. GPU command
-  compaction now has a bounded diagnostic proof, but correct resident frustum/graph
-  selection and production consumption remain open. Demand telemetry is ready;
+  selection now has a bounded, versioned CPU/GPU predicate proof, but persistent
+  candidate residency and production consumption remain open. Demand telemetry is ready;
   collect real modpack section density before extending snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 

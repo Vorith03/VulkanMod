@@ -18,6 +18,22 @@ Use these together:
 
 ### Live continuation note — 2026-09-14
 
+- Extended section-selection groundwork in source commit
+  `7cbcc4f348cad721a1491a2b81b1e84af2fe16b3`
+  (`gpu terrain: qualify region section candidates`). The new fixed, versioned
+  `GpuRegionCandidateTable` owns a 64-bit generation and exact 128-block region
+  origin; each bounded record carries the existing five indexed-indirect words plus
+  readiness, CPU graph-visibility and terrain-layer metadata. The compute oracle now
+  validates magic/version/generation/origin, applies nonempty/readiness/graph/layer
+  eligibility and six camera-relative frustum planes, then emits capacity-bounded
+  commands. CI #419 (run `34810466530`, job `103870615231`) is fully green. The
+  independent CPU oracle and GPU both selected exactly 39/512 records; reduced
+  capacity overflow and stale-generation rejection also passed repeatedly. This is
+  still an isolated oracle, so Phase 7 remains 4/11: no persistent candidate-table
+  residency or production command consumption exists yet. Next, add region-owned
+  GPU candidate residency with allocate-then-publish generation semantics and
+  lifecycle invalidation, while retaining current region draws. See
+  `docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md`.
 - Added the first bounded GPU section-selection/indirect-command oracle in source
   commit `7f1ea528442a48e07be9e268be172387817c3ff7`
   (`gpu terrain: verify bounded section selection`). A compute pass consumes the
