@@ -68,7 +68,7 @@ public final class GpuTerrainModelTableSmokeTest {
                     JOINED_VOXEL_OFFSET, voxelSnapshot.byteSize(), voxelSnapshot);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; exact CPU ABI, device-local readback, compute state-to-template/UV decode, 4096 resident voxel face-row joins, exact compact candidate face rows, and packed position/UV terrain-vertex fields",
+                    "VULKANMOD_GPU_TERRAIN_MODEL_TABLE_OK: generation {}, {} templates, {} sprites, {} state-index entries, {} bytes; stable Forge ModelData.EMPTY/solid-layer templates, exact CPU ABI, device-local readback, compute state-to-template/UV decode, 4096 resident voxel face-row joins, exact compact candidate face rows, and packed position/UV terrain-vertex fields",
                     table.generation(), table.templateCount(), table.spriteCount(),
                     table.stateIndexCount(), table.byteSize());
         } finally {

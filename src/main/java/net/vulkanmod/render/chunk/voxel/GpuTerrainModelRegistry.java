@@ -13,8 +13,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
+import net.minecraftforge.client.model.data.ModelData;
 import net.minecraftforge.common.ForgeConfig;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -31,10 +33,13 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>This registry is diagnostic-only for now: CPU renderBatched remains authoritative.
  * Qualification is based on the actual baked model generation, never a block ID,
- * block class, registry name, or SOLID_RENDER bit. The whole immutable snapshot is
- * replaced atomically when BlockModelShaper installs a new baked-model cache.</p>
+ * block class, registry name, or SOLID_RENDER bit. It queries the Forge ModelData
+ * and render-type overload used by terrain rendering and rejects multi-layer or
+ * seed-varying results. The whole immutable snapshot is replaced atomically when
+ * BlockModelShaper installs a new baked-model cache.</p>
  */
 public final class GpuTerrainModelRegistry {
+    private static final long[] QUAD_STABILITY_SEEDS = { 0L, 42L, 0x6a09e667f3bcc909L };
     private static final AtomicLong NEXT_GENERATION = new AtomicLong();
     private static volatile Snapshot CURRENT = Snapshot.empty();
 
@@ -136,7 +141,8 @@ public final class GpuTerrainModelRegistry {
             return Qualification.rejected(RejectReason.BLOCK_ENTITY);
         if(!state.getFluidState().isEmpty())
             return Qualification.rejected(RejectReason.FLUID);
-        if(ItemBlockRenderTypes.getChunkRenderType(state) != RenderType.solid())
+        RenderType solid = RenderType.solid();
+        if(ItemBlockRenderTypes.getChunkRenderType(state) != solid)
             return Qualification.rejected(RejectReason.NON_SOLID_LAYER);
 
         // Exact class, not instanceof: Forge/custom wrapper models may implement
@@ -146,10 +152,17 @@ public final class GpuTerrainModelRegistry {
             return Qualification.rejected(RejectReason.NON_SIMPLE_MODEL);
         if(model.isCustomRenderer())
             return Qualification.rejected(RejectReason.CUSTOM_RENDERER);
-        if(!model.useAmbientOcclusion())
+        var renderTypes = model.getRenderTypes(state, RandomSource.create(0L), ModelData.EMPTY);
+        var renderTypeIterator = renderTypes.iterator();
+        if(!renderTypeIterator.hasNext() || renderTypeIterator.next() != solid
+                || renderTypeIterator.hasNext())
+            return Qualification.rejected(RejectReason.FORGE_RENDER_TYPE_CONTRACT);
+        if(!model.useAmbientOcclusion(state, solid))
             return Qualification.rejected(RejectReason.AMBIENT_OCCLUSION_DISABLED);
 
-        List<BakedQuad> unculled = model.getQuads(state, null, RandomSource.create(0L));
+        List<BakedQuad> unculled = stableForgeQuads(model, state, null, solid);
+        if(unculled == null)
+            return Qualification.rejected(RejectReason.UNSTABLE_FORGE_QUADS);
         if(!unculled.isEmpty())
             return Qualification.rejected(RejectReason.UNCULLED_QUADS);
 
@@ -161,7 +174,9 @@ public final class GpuTerrainModelRegistry {
         FaceTemplate east = null;
 
         for(Direction direction : Direction.values()) {
-            List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(0L));
+            List<BakedQuad> quads = stableForgeQuads(model, state, direction, solid);
+            if(quads == null)
+                return Qualification.rejected(RejectReason.UNSTABLE_FORGE_QUADS);
             if(quads.size() != 1)
                 return Qualification.rejected(RejectReason.FACE_QUAD_COUNT);
 
@@ -198,6 +213,48 @@ public final class GpuTerrainModelRegistry {
         }
 
         return Qualification.accepted(new FullCubeTemplate(0x3f, down, up, north, south, west, east));
+    }
+
+    /**
+     * Query the same Forge overload used by terrain rendering. Exact
+     * {@link SimpleBakedModel} instances inherit Forge's ModelData.EMPTY behavior;
+     * multiple position-like seeds guard that the captured generation has no
+     * random variant hidden behind the otherwise static model.
+     */
+    private static List<BakedQuad> stableForgeQuads(BakedModel model, BlockState state,
+                                                     Direction direction, RenderType renderType) {
+        List<BakedQuad> baseline = null;
+        RandomSource random = RandomSource.create();
+        for(long seed : QUAD_STABILITY_SEEDS) {
+            random.setSeed(seed);
+            List<BakedQuad> candidate = model.getQuads(state, direction, random,
+                    ModelData.EMPTY, renderType);
+            if(candidate == null)
+                return null;
+            if(baseline == null)
+                baseline = candidate;
+            else if(!sameQuads(baseline, candidate))
+                return null;
+        }
+        return baseline;
+    }
+
+    private static boolean sameQuads(List<BakedQuad> left, List<BakedQuad> right) {
+        if(left.size() != right.size())
+            return false;
+        for(int i = 0; i < left.size(); ++i) {
+            BakedQuad a = left.get(i);
+            BakedQuad b = right.get(i);
+            if(a == null || b == null
+                    || a.getTintIndex() != b.getTintIndex()
+                    || a.getDirection() != b.getDirection()
+                    || a.isShade() != b.isShade()
+                    || a.hasAmbientOcclusion() != b.hasAmbientOcclusion()
+                    || a.getSprite() != b.getSprite()
+                    || !Arrays.equals(a.getVertices(), b.getVertices()))
+                return false;
+        }
+        return true;
     }
 
     /**
@@ -379,7 +436,9 @@ public final class GpuTerrainModelRegistry {
         NON_SOLID_LAYER,
         NON_SIMPLE_MODEL,
         CUSTOM_RENDERER,
+        FORGE_RENDER_TYPE_CONTRACT,
         AMBIENT_OCCLUSION_DISABLED,
+        UNSTABLE_FORGE_QUADS,
         UNCULLED_QUADS,
         FACE_QUAD_COUNT,
         FACE_DIRECTION,
