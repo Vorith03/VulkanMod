@@ -168,6 +168,7 @@ public class ChunkAreaManager {
         int z1 = Math.floorMod(AreaZ, this.xzSize);
 
         chunkArea = this.chunkAreasArr[this.getAreaIndex(x1, AreaY, z1)];
+        chunkArea.registerSection(section, x, y, z);
 
         return chunkArea;
     }

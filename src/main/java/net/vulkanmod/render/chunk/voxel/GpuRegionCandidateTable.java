@@ -77,8 +77,11 @@ public final class GpuRegionCandidateTable {
         private int count;
 
         public Builder(long generation, int regionX, int regionY, int regionZ) {
-            if((regionX & 127) != 0 || (regionY & 127) != 0 || (regionZ & 127) != 0)
-                throw new IllegalArgumentException("GPU candidate region origin must be 128-block aligned");
+            // ChunkArea spans eight sections per axis, but dimensions such as the
+            // Overworld begin at Y=-64. The ABI only requires a section-aligned
+            // origin; packedSection is relative to that origin and remains 0..511.
+            if(((regionX | regionY | regionZ) & 15) != 0)
+                throw new IllegalArgumentException("GPU candidate region origin must be section aligned");
             this.generation = generation;
             this.regionX = regionX;
             this.regionY = regionY;

@@ -25,10 +25,13 @@ public class ChunkArea {
     private RegionVoxelGpuStore gpuVoxels;
     private final GpuRegionCandidateGpuStore[] gpuCandidates =
             new GpuRegionCandidateGpuStore[TerrainRenderType.VALUES.length];
+    private final RenderSection[] ownedSections =
+            new RenderSection[RegionBatchLayout.MAX_SECTIONS];
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
     private boolean visibilityRewritePending;
+    private short traversalFrame = -1;
 
     public ChunkArea(int i, Vector3i origin) {
         this.index = i;
@@ -136,13 +139,46 @@ public class ChunkArea {
     }
 
     public void addSection(RenderSection section) {
+        this.traversalFrame = section.getLastFrame();
         this.sectionQueue.add(section);
+    }
+
+    /**
+     * Track fine-grid ownership independently of visibility. Old references can be
+     * left behind when a ring section moves between still-resident coarse areas;
+     * getOwnedSection validates the section's current area and local slot before use.
+     */
+    void registerSection(RenderSection section, int x, int y, int z) {
+        int slot = voxelSlot(x, y, z);
+        if(slot < 0)
+            throw new IllegalStateException("Render section does not belong to selected ChunkArea");
+        this.ownedSections[slot] = section;
+    }
+
+    RenderSection getOwnedSection(int slot) {
+        if(slot < 0 || slot >= this.ownedSections.length)
+            throw new IndexOutOfBoundsException("Region section slot");
+        RenderSection section = this.ownedSections[slot];
+        if(section == null)
+            return null;
+        if(section.getChunkArea() != this
+                || voxelSlot(section.xOffset, section.yOffset, section.zOffset) != slot) {
+            this.ownedSections[slot] = null;
+            return null;
+        }
+        return section;
+    }
+
+    boolean isGraphVisible(RenderSection section) {
+        return section != null && this.traversalFrame != -1
+                && section.getLastFrame() == this.traversalFrame;
     }
 
     public void resetQueue() {
         this.finishVisibilityRewrite();
         this.sectionQueue.beginRewrite();
         this.visibilityRewritePending = true;
+        this.traversalFrame = -1;
     }
 
     long getVisibilityRevision() {
@@ -311,6 +347,8 @@ public class ChunkArea {
                 gpuCandidates[layer] = null;
             }
         }
+        Arrays.fill(this.ownedSections, null);
+        this.traversalFrame = -1;
     }
 
     public synchronized void releaseBuffers() {

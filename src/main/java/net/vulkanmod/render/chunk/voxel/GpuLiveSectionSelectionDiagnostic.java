@@ -38,8 +38,8 @@ import java.util.Arrays;
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
- * Opt-in, rate-limited comparison of the live resident candidate table against the
- * CPU frustum predicate. It never supplies commands to production rendering.
+ * Opt-in, rate-limited comparison of live resident candidate tables against the
+ * authoritative CPU draw set. It never supplies commands to production rendering.
  */
 public final class GpuLiveSectionSelectionDiagnostic {
     private static final boolean ENABLED = Boolean.getBoolean(
@@ -111,21 +111,36 @@ public final class GpuLiveSectionSelectionDiagnostic {
                                   GpuRegionCandidateGpuStore.Residency residency,
                                   GpuRegionCandidateTable table,
                                   int targetLayer,
-                                  VFrustum frustum) {
+                                  VFrustum frustum,
+                                  boolean[] cpuExpected) {
         if(!isCurrent(token))
             return true;
         if(residency == null || !residency.valid() || table == null || frustum == null
+                || cpuExpected == null
+                || cpuExpected.length != RegionBatchLayout.MAX_SECTIONS
                 || residency.generation() != table.generation())
             return false;
 
         try {
-            Comparison expected = buildExpected(table, targetLayer, frustum);
+            Comparison reconstructed = buildExpected(table, targetLayer, frustum);
+            String predicateMismatch = compareExpectedSets(
+                    reconstructed.expectedPacked, cpuExpected);
+            int cpuCount = count(cpuExpected);
+
             if(table.candidateCount() == 0) {
                 int sample = complete(token);
-                Initializer.LOGGER.info(
-                        "VULKANMOD_GPU_LIVE_SECTION_SELECTION_OK: sample={} region=({}, {}, {}) layer={} generation={} selected=0 candidates=0",
-                        sample, table.regionX(), table.regionY(), table.regionZ(),
-                        targetLayer, table.generation());
+                if(predicateMismatch == null && cpuCount == 0) {
+                    Initializer.LOGGER.info(
+                            "VULKANMOD_GPU_LIVE_SECTION_SELECTION_OK: sample={} region=({}, {}, {}) layer={} generation={} selected=0 candidates=0",
+                            sample, table.regionX(), table.regionY(), table.regionZ(),
+                            targetLayer, table.generation());
+                } else {
+                    Initializer.LOGGER.error(
+                            "VULKANMOD_GPU_LIVE_SECTION_SELECTION_MISMATCH: sample={} region=({}, {}, {}) layer={} generation={} expected={} candidates=0 reason={}",
+                            sample, table.regionX(), table.regionY(), table.regionZ(),
+                            targetLayer, table.generation(), cpuCount,
+                            predicateMismatch == null ? "CPU queue is nonempty" : predicateMismatch);
+                }
                 return true;
             }
 
@@ -139,18 +154,20 @@ public final class GpuLiveSectionSelectionDiagnostic {
                         frustum.relativeZ(table.regionZ()), planes);
             }
 
-            String mismatch = validateResult(result, table, expected);
+            String gpuMismatch = validateResult(result, table, reconstructed.rowByPacked,
+                    cpuExpected, cpuCount);
+            String mismatch = predicateMismatch != null ? predicateMismatch : gpuMismatch;
             int sample = complete(token);
             if(mismatch == null) {
                 Initializer.LOGGER.info(
                         "VULKANMOD_GPU_LIVE_SECTION_SELECTION_OK: sample={} region=({}, {}, {}) layer={} generation={} selected={} candidates={}",
                         sample, table.regionX(), table.regionY(), table.regionZ(),
-                        targetLayer, table.generation(), expected.count, table.candidateCount());
+                        targetLayer, table.generation(), cpuCount, table.candidateCount());
             } else {
                 Initializer.LOGGER.error(
-                        "VULKANMOD_GPU_LIVE_SECTION_SELECTION_MISMATCH: sample={} region=({}, {}, {}) layer={} generation={} expected={} candidates={} reason={}",
+                        "VULKANMOD_GPU_LIVE_SECTION_SELECTION_MISMATCH: sample={} region=({}, {}, {}) layer={} generation={} expected={} reconstructed={} candidates={} reason={}",
                         sample, table.regionX(), table.regionY(), table.regionZ(),
-                        targetLayer, table.generation(), expected.count,
+                        targetLayer, table.generation(), cpuCount, reconstructed.count,
                         table.candidateCount(), mismatch);
             }
             return true;
@@ -199,8 +216,26 @@ public final class GpuLiveSectionSelectionDiagnostic {
         return new Comparison(expectedPacked, rowByPacked, count);
     }
 
+    private static String compareExpectedSets(boolean[] reconstructed, boolean[] cpuExpected) {
+        for(int packed = 0; packed < RegionBatchLayout.MAX_SECTIONS; ++packed) {
+            if(reconstructed[packed] != cpuExpected[packed])
+                return "CPU graph/frustum reconstruction differs at section " + packed
+                        + " reconstructed=" + reconstructed[packed]
+                        + " cpuQueue=" + cpuExpected[packed];
+        }
+        return null;
+    }
+
+    private static int count(boolean[] values) {
+        int count = 0;
+        for(boolean value : values)
+            if(value) count++;
+        return count;
+    }
+
     private static String validateResult(int[] result, GpuRegionCandidateTable table,
-                                         Comparison expected) {
+                                         int[] rowByPacked, boolean[] cpuExpected,
+                                         int cpuCount) {
         if(result.length != OUTPUT_HEADER_WORDS
                 + RegionBatchLayout.MAX_SECTIONS * COMMAND_WORDS)
             return "unexpected output size";
@@ -208,7 +243,7 @@ public final class GpuLiveSectionSelectionDiagnostic {
             return "resident table rejected by generation/origin validation";
         if(result[OVERFLOW] != 0)
             return "full-capacity output overflowed";
-        if(result[REQUESTED] != expected.count || result[WRITTEN] != expected.count)
+        if(result[REQUESTED] != cpuCount || result[WRITTEN] != cpuCount)
             return "count mismatch requested=" + result[REQUESTED]
                     + " written=" + result[WRITTEN];
 
@@ -216,20 +251,22 @@ public final class GpuLiveSectionSelectionDiagnostic {
         for(int slot = 0; slot < result[WRITTEN]; ++slot) {
             int base = OUTPUT_HEADER_WORDS + slot * COMMAND_WORDS;
             int packed = result[base + 4];
-            if(packed < 0 || packed >= seen.length || !expected.expectedPacked[packed])
+            if(packed < 0 || packed >= seen.length || !cpuExpected[packed])
                 return "GPU emitted CPU-ineligible section " + packed;
             if(seen[packed])
                 return "GPU emitted duplicate section " + packed;
             seen[packed] = true;
-            int row = expected.rowByPacked[packed];
+            int row = rowByPacked[packed];
+            if(row < 0)
+                return "CPU queue section is absent from candidate superset " + packed;
             for(int word = 0; word < COMMAND_WORDS; ++word) {
                 if(result[base + word] != table.recordWord(row, word))
                     return "command metadata mismatch for section " + packed
                             + " word " + word;
             }
         }
-        for(int packed = 0; packed < expected.expectedPacked.length; ++packed) {
-            if(seen[packed] != expected.expectedPacked[packed])
+        for(int packed = 0; packed < cpuExpected.length; ++packed) {
+            if(seen[packed] != cpuExpected[packed])
                 return "selection set mismatch for section " + packed;
         }
         return null;
@@ -332,8 +369,9 @@ public final class GpuLiveSectionSelectionDiagnostic {
                     .putInt(layer).putInt(capacity)
                     .putInt(table.regionX()).putInt(table.regionY()).putInt(table.regionZ()).putInt(0)
                     .putFloat(regionX).putFloat(regionY).putFloat(regionZ).putInt(0);
-            for(float value : planes)
-                target.putFloat(value);
+            int planeWords = VFrustum.PLANE_COUNT * VFrustum.PLANE_WORDS;
+            for(int index = 0; index < planeWords; ++index)
+                target.putFloat(planes[index]);
         }
 
         private void createDescriptorResources() {

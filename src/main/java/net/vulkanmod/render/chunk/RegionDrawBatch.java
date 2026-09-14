@@ -30,6 +30,8 @@ final class RegionDrawBatch {
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] diagnosticTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
+    private final boolean[][] diagnosticExpected =
+            new boolean[TerrainRenderType.VALUES.length][];
     private final long[] diagnosticTokens = new long[TerrainRenderType.VALUES.length];
 
     void draw(DrawBuffers buffers, ChunkArea area, Pipeline pipeline, RenderType renderType,
@@ -74,11 +76,13 @@ final class RegionDrawBatch {
     private void compareLiveCandidates(ChunkArea area, TerrainRenderType type) {
         int layer = type.ordinal();
         GpuRegionCandidateTable table = diagnosticTables[layer];
+        boolean[] cpuExpected = diagnosticExpected[layer];
         long token = diagnosticTokens[layer];
-        if(table == null || token == 0L)
+        if(table == null || cpuExpected == null || token == 0L)
             return;
         if(!GpuLiveSectionSelectionDiagnostic.isCurrent(token)) {
             diagnosticTables[layer] = null;
+            diagnosticExpected[layer] = null;
             diagnosticTokens[layer] = 0L;
             return;
         }
@@ -87,18 +91,19 @@ final class RegionDrawBatch {
                 || residency.generation() != table.generation())
             return;
         VFrustum frustum = VFrustum.currentGpuSelectionFrustum();
-        if(GpuLiveSectionSelectionDiagnostic.compare(token, residency, table, layer, frustum)) {
+        if(GpuLiveSectionSelectionDiagnostic.compare(
+                token, residency, table, layer, frustum, cpuExpected)) {
             diagnosticTables[layer] = null;
+            diagnosticExpected[layer] = null;
             diagnosticTokens[layer] = 0L;
         }
     }
 
     /**
-     * Diagnostic-only bridge from the live CPU-authoritative region queue to the
-     * generation-owned GPU candidate ABI. Rendering still consumes FrameBatch.
-     * A content fingerprint prevents frame-local batch copies from republishing an
-     * identical table while still noticing upload-readiness changes that do not bump
-     * the mesh revision.
+     * Diagnostic-only bridge from the full live region section set to the
+     * generation-owned GPU candidate ABI. GRAPH_VISIBLE is the CPU graph/smart-cull
+     * result before the frustum check; the GPU probe therefore owns the frustum
+     * decision over a true superset while production rendering stays CPU-driven.
      */
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         if(!LIVE_GPU_SECTION_SELECTION)
@@ -117,22 +122,22 @@ final class RegionDrawBatch {
         fingerprint = mix(fingerprint, layer);
 
         int count = 0;
-        var iterator = area.sectionQueue.iterator(false);
-        while(iterator.hasNext()) {
-            RenderSection section = iterator.next();
+        for(int slot = 0; slot < MAX_SECTIONS; ++slot) {
+            RenderSection section = area.getOwnedSection(slot);
+            if(section == null)
+                continue;
             DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
-            int packedSection = packSection(section.xOffset - area.position.x,
-                    section.yOffset - area.position.y, section.zOffset - area.position.z);
             boolean ready = parameters.indexCount != 0
                     && parameters.vertexBufferSegment.isReady();
-            int flags = GpuRegionCandidateTable.flags(ready, true, layer);
+            boolean graphVisible = area.isGraphVisible(section);
+            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, layer);
             builder.add(parameters.indexCount, 1, parameters.firstIndex,
-                    parameters.vertexOffset, packedSection, flags);
+                    parameters.vertexOffset, slot, flags);
 
             fingerprint = mix(fingerprint, parameters.indexCount);
             fingerprint = mix(fingerprint, parameters.firstIndex);
             fingerprint = mix(fingerprint, parameters.vertexOffset);
-            fingerprint = mix(fingerprint, packedSection);
+            fingerprint = mix(fingerprint, slot);
             fingerprint = mix(fingerprint, flags);
             count++;
         }
@@ -146,10 +151,12 @@ final class RegionDrawBatch {
             GpuLiveSectionSelectionDiagnostic.cancel(oldToken);
             diagnosticTokens[layer] = 0L;
             diagnosticTables[layer] = null;
+            diagnosticExpected[layer] = null;
         }
 
         GpuRegionCandidateTable table = builder.finish();
         long diagnosticToken = GpuLiveSectionSelectionDiagnostic.claim();
+        boolean[] cpuExpected = diagnosticToken == 0L ? null : buildCpuExpected(area, type);
         boolean queued = area.publishGpuCandidates(type, table);
 
         candidateInitialized[layer] = true;
@@ -160,10 +167,26 @@ final class RegionDrawBatch {
             if(queued) {
                 diagnosticTokens[layer] = diagnosticToken;
                 diagnosticTables[layer] = table;
+                diagnosticExpected[layer] = cpuExpected;
             } else {
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticToken);
             }
         }
+    }
+
+    private static boolean[] buildCpuExpected(ChunkArea area, TerrainRenderType type) {
+        boolean[] expected = new boolean[MAX_SECTIONS];
+        var iterator = area.sectionQueue.iterator(false);
+        while(iterator.hasNext()) {
+            RenderSection section = iterator.next();
+            DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+            if(parameters.indexCount == 0 || !parameters.vertexBufferSegment.isReady())
+                continue;
+            int packed = packSection(section.xOffset - area.position.x,
+                    section.yOffset - area.position.y, section.zOffset - area.position.z);
+            expected[packed] = true;
+        }
+        return expected;
     }
 
     private static long mix(long hash, long value) {
@@ -187,6 +210,7 @@ final class RegionDrawBatch {
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticTokens[layer]);
             diagnosticTokens[layer] = 0L;
             diagnosticTables[layer] = null;
+            diagnosticExpected[layer] = null;
         }
     }
 
