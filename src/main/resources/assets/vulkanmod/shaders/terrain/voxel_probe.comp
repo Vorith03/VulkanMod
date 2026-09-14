@@ -18,6 +18,7 @@ layout(push_constant) uniform ProbePushConstants {
     uint baseByteOffset;
     uint byteLength;
     uint modelTemplateCount;
+    uint compactCapacity;
 } pc;
 
 const uint MAGIC = 0x56584c31u;
@@ -29,18 +30,14 @@ const uint SOLID_RENDER_PLANE = 0u;
 const uint GPU_FULL_CUBE_PLANE = 4u;
 const uint HALO_FACE_WORDS = 8u;
 const uint HALO_WORDS = 48u;
-const uint HEADER_WORDS = 4u;
+// Header: state sum, flag sum, checksum, requested faces, written faces, overflow.
+const uint HEADER_WORDS = 6u;
 const uint FACES_PER_VOXEL = 6u;
 const uint VERTICES_PER_FACE = 4u;
 const uint FACE_DESCRIPTOR_WORDS = BLOCK_COUNT * FACES_PER_VOXEL;
 const uint COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
-const uint FACE_VERTEX_BASE = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
-const uint FACE_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE;
 const uint MODEL_FACE_RESULT_WORDS = 10u;
-const uint MODEL_FACE_BASE = FACE_VERTEX_BASE + FACE_VERTEX_WORDS;
-const uint MODEL_FACE_RESULT_CAPACITY = FACE_DESCRIPTOR_WORDS * MODEL_FACE_RESULT_WORDS;
 const uint PARTIAL_VERTEX_WORDS_PER_VERTEX = 5u;
-const uint PARTIAL_VERTEX_BASE = MODEL_FACE_BASE + MODEL_FACE_RESULT_CAPACITY;
 
 const uint MODEL_MAGIC = 0x47544d31u;
 const uint MODEL_VERSION = 1u;
@@ -56,6 +53,18 @@ const uint FACE_NORTH = 1u << 2u;
 const uint FACE_SOUTH = 1u << 3u;
 const uint FACE_WEST = 1u << 4u;
 const uint FACE_EAST = 1u << 5u;
+
+uint faceVertexBase() {
+    return COMPACT_DESCRIPTOR_BASE + pc.compactCapacity;
+}
+
+uint modelFaceBase() {
+    return faceVertexBase() + pc.compactCapacity * VERTICES_PER_FACE;
+}
+
+uint partialVertexBase() {
+    return modelFaceBase() + pc.compactCapacity * MODEL_FACE_RESULT_WORDS;
+}
 
 uint decodeFlags(uint base, uint flagsOffset, uint index) {
     uint flags = 0u;
@@ -163,7 +172,7 @@ void writeFaceCorners(uint compactSlot, uint index, uint face) {
     uint x1 = x0 + 1u;
     uint y1 = y0 + 1u;
     uint z1 = z0 + 1u;
-    uint base = FACE_VERTEX_BASE + compactSlot * VERTICES_PER_FACE;
+    uint base = faceVertexBase() + compactSlot * VERTICES_PER_FACE;
 
     if (face == 0u) {
         outputData.words[base] = packCorner(x0, y0, z1);
@@ -220,13 +229,13 @@ void writeModelFace(uint compactSlot, uint stateId, uint face) {
     uint templateBase = modelTable.words[7]
             + (densePlusOne - 1u) * MODEL_TEMPLATE_WORDS;
     uint faceBase = templateBase + 2u + face * MODEL_FACE_WORDS;
-    uint outputBase = MODEL_FACE_BASE + compactSlot * MODEL_FACE_RESULT_WORDS;
+    uint outputBase = modelFaceBase() + compactSlot * MODEL_FACE_RESULT_WORDS;
     outputData.words[outputBase] = densePlusOne;
     for (uint word = 0u; word < MODEL_FACE_WORDS; ++word)
         outputData.words[outputBase + 1u + word] = modelTable.words[faceBase + word];
 
-    uint cornerBase = FACE_VERTEX_BASE + compactSlot * VERTICES_PER_FACE;
-    uint vertexBase = PARTIAL_VERTEX_BASE
+    uint cornerBase = faceVertexBase() + compactSlot * VERTICES_PER_FACE;
+    uint vertexBase = partialVertexBase()
             + compactSlot * VERTICES_PER_FACE * PARTIAL_VERTEX_WORDS_PER_VERTEX;
     for (uint vertex = 0u; vertex < VERTICES_PER_FACE; ++vertex) {
         uint corner = outputData.words[cornerBase + vertex];
@@ -289,9 +298,15 @@ void main() {
         uint compactSlot = compactBase + compactCursor;
         uint descriptor = encodeFaceDescriptor(index, face);
         outputData.words[descriptorBase + face] = descriptor;
+        if (compactSlot >= pc.compactCapacity) {
+            atomicOr(outputData.words[5], 1u);
+            ++compactCursor;
+            continue;
+        }
         outputData.words[COMPACT_DESCRIPTOR_BASE + compactSlot] = descriptor;
         writeFaceCorners(compactSlot, index, face);
         writeModelFace(compactSlot, stateId, face);
+        atomicAdd(outputData.words[4], 1u);
         ++compactCursor;
     }
 }

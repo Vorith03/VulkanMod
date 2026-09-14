@@ -223,8 +223,12 @@ public final class SectionVoxelGpuSmokeTest {
         require(page != null, "Compute probe requires a live resident page");
 
         int[] actual;
+        int boundedCapacity = 127;
+        int[] bounded;
         try(VoxelComputeProbe probe = new VoxelComputeProbe()) {
             actual = probe.dispatch(page, residency.byteOffset(), residency.byteLength());
+            bounded = probe.dispatch(page, residency.byteOffset(), residency.byteLength(),
+                    boundedCapacity);
         }
 
         int[] expected = new int[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE];
@@ -254,6 +258,8 @@ public final class SectionVoxelGpuSmokeTest {
                 }
             }
         }
+        expected[4] = descriptorCount;
+        expected[5] = 0;
 
         require(actual.length == VoxelComputeProbe.RESULT_WORDS,
                 "GPU voxel compute result size must include descriptors, corners and optional model rows");
@@ -275,6 +281,7 @@ public final class SectionVoxelGpuSmokeTest {
                 "v4 semantic occlusion fixture must retain geometry-only neighbors and suppress solid occluders");
         require(descriptorCount == expected[3],
                 "Every diagnostic candidate face must produce exactly one fixed-slot descriptor");
+        verifyBoundedOverflow(bounded, boundedCapacity, expected, snapshot);
 
         int[] actualCompact = Arrays.copyOfRange(actual,
                 VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE,
@@ -331,8 +338,58 @@ public final class SectionVoxelGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v4 GPU_FULL_CUBE source qualification plus SOLID_RENDER semantic occlusion and six-face boundary halo, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, exact Minecraft FaceInfo-ordered unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
+                "VULKANMOD_VOXEL_COMPUTE_OK: 4096 voxel decode, v4 GPU_FULL_CUBE source qualification plus SOLID_RENDER semantic occlusion and six-face boundary halo, {} exact fixed-slot descriptors, dense GPU face-list compaction with no missing/duplicate descriptors, explicit bounded-output overflow contract, exact Minecraft FaceInfo-ordered unit-cube face-corner generation, storage descriptors, compute barriers, full-stream readback",
                 descriptorCount);
+    }
+
+    private static void verifyBoundedOverflow(int[] actual, int capacity,
+                                              int[] expected,
+                                              SectionVoxelSnapshot snapshot) {
+        require(actual.length == VoxelComputeProbe.resultWords(capacity),
+                "Bounded compute output must allocate only its declared compact capacity");
+        for(int i = 0; i < 4; ++i) {
+            if(actual[i] != expected[i])
+                throw new AssertionError("Bounded compute aggregate mismatch at " + i);
+        }
+        require(actual[4] == capacity,
+                "Bounded compute output must report the exact written face count");
+        require(actual[5] == 1,
+                "Bounded compute output must report explicit overflow");
+        for(int i = VoxelComputeProbe.HEADER_WORDS;
+            i < VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE; ++i) {
+            if(actual[i] != expected[i])
+                throw new AssertionError("Bounded fixed descriptor mismatch at " + i);
+        }
+
+        boolean[] seen = new boolean[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
+        int faceVertexBase = VoxelComputeProbe.faceVertexBase(capacity);
+        for(int slot = 0; slot < capacity; ++slot) {
+            int descriptor = actual[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + slot];
+            require((descriptor & 0x80000000) != 0,
+                    "Bounded compact descriptor must carry the live marker");
+            int voxel = descriptor & 0xfff;
+            int face = (descriptor >>> 12) & 7;
+            require(voxel < SectionVoxelSnapshot.BLOCK_COUNT
+                            && face < VoxelComputeProbe.FACES_PER_VOXEL,
+                    "Bounded compact descriptor must decode to a valid face");
+            int descriptorIndex = voxel * VoxelComputeProbe.FACES_PER_VOXEL + face;
+            require(!seen[descriptorIndex]
+                            && (candidateFaceMask(snapshot, voxel) & (1 << face)) != 0,
+                    "Bounded output must contain unique real candidate faces");
+            seen[descriptorIndex] = true;
+
+            int[] corners = expectedFaceCorners(voxel, face);
+            for(int vertex = 0; vertex < VoxelComputeProbe.VERTICES_PER_FACE; ++vertex) {
+                require(actual[faceVertexBase + slot * VoxelComputeProbe.VERTICES_PER_FACE
+                                + vertex] == corners[vertex],
+                        "Bounded face corners must match the CPU oracle");
+            }
+        }
+        for(int i = VoxelComputeProbe.modelFaceBase(capacity);
+            i < actual.length; ++i) {
+            if(actual[i] != 0)
+                throw new AssertionError("Disabled bounded model output must remain zero at " + i);
+        }
     }
 
     private static void verifySemanticOcclusionFixture(SectionVoxelSnapshot snapshot) {

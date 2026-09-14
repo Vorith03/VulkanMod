@@ -46,27 +46,25 @@ import static org.lwjgl.vulkan.VK10.*;
  * section-local unit-cube corner coordinates. When a current baked-model table is
  * supplied, every compact descriptor also resolves its exact sprite/UV face row
  * and packs the position/UV fields of four 20-byte terrain vertices. Unsupported
- * color/light fields remain zero. The synchronization and descriptor path are the
- * same pieces future mesh generation can reuse.</p>
+ * color/light fields remain zero. Compact output capacity is explicit: the kernel
+ * reports requested and written counts plus overflow so a production caller can
+ * fall back instead of overrunning its allocation. The synchronization and
+ * descriptor path are the same pieces future mesh generation can reuse.</p>
  */
 final class VoxelComputeProbe implements AutoCloseable {
-    static final int HEADER_WORDS = 4;
+    // Header: state sum, flag sum, checksum, requested faces, written faces, overflow.
+    static final int HEADER_WORDS = 6;
     static final int FACES_PER_VOXEL = 6;
     static final int VERTICES_PER_FACE = 4;
     static final int FACE_DESCRIPTOR_WORDS = SectionVoxelSnapshot.BLOCK_COUNT * FACES_PER_VOXEL;
     static final int COMPACT_DESCRIPTOR_BASE = HEADER_WORDS + FACE_DESCRIPTOR_WORDS;
-    static final int FACE_VERTEX_BASE = COMPACT_DESCRIPTOR_BASE + FACE_DESCRIPTOR_WORDS;
-    static final int FACE_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE;
     static final int MODEL_FACE_RESULT_WORDS = 1 + GpuTerrainModelTable.FACE_WORDS;
-    static final int MODEL_FACE_BASE = FACE_VERTEX_BASE + FACE_VERTEX_WORDS;
-    static final int MODEL_FACE_WORDS = FACE_DESCRIPTOR_WORDS * MODEL_FACE_RESULT_WORDS;
     static final int PARTIAL_VERTEX_WORDS_PER_VERTEX = 5;
-    static final int PARTIAL_VERTEX_BASE = MODEL_FACE_BASE + MODEL_FACE_WORDS;
-    static final int PARTIAL_VERTEX_WORDS = FACE_DESCRIPTOR_WORDS * VERTICES_PER_FACE
-            * PARTIAL_VERTEX_WORDS_PER_VERTEX;
-    static final int RESULT_WORDS = PARTIAL_VERTEX_BASE + PARTIAL_VERTEX_WORDS;
-    private static final int RESULT_BYTES = RESULT_WORDS * Integer.BYTES;
-    private static final int PUSH_CONSTANT_BYTES = 3 * Integer.BYTES;
+    static final int FACE_VERTEX_BASE = faceVertexBase(FACE_DESCRIPTOR_WORDS);
+    static final int MODEL_FACE_BASE = modelFaceBase(FACE_DESCRIPTOR_WORDS);
+    static final int PARTIAL_VERTEX_BASE = partialVertexBase(FACE_DESCRIPTOR_WORDS);
+    static final int RESULT_WORDS = resultWords(FACE_DESCRIPTOR_WORDS);
+    private static final int PUSH_CONSTANT_BYTES = 4 * Integer.BYTES;
     private static final int WORKGROUP_SIZE = 64;
     private static final int WORKGROUP_COUNT = SectionVoxelSnapshot.BLOCK_COUNT / WORKGROUP_SIZE;
 
@@ -87,11 +85,25 @@ final class VoxelComputeProbe implements AutoCloseable {
     }
 
     int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength) {
-        return this.dispatch(inputPage, sliceByteOffset, sliceByteLength, null, 0);
+        return this.dispatch(inputPage, sliceByteOffset, sliceByteLength, null, 0,
+                FACE_DESCRIPTOR_WORDS);
+    }
+
+    int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength,
+                   int compactCapacity) {
+        return this.dispatch(inputPage, sliceByteOffset, sliceByteLength, null, 0,
+                compactCapacity);
     }
 
     int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength,
                    GpuTerrainModelGpuStore.Residency modelResidency, int templateCount) {
+        return this.dispatch(inputPage, sliceByteOffset, sliceByteLength,
+                modelResidency, templateCount, FACE_DESCRIPTOR_WORDS);
+    }
+
+    private int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength,
+                           GpuTerrainModelGpuStore.Residency modelResidency,
+                           int templateCount, int compactCapacity) {
         if(this.closed)
             throw new IllegalStateException("Voxel compute probe is closed");
         if(inputPage == null || sliceByteOffset < 0 || sliceByteLength <= 0
@@ -103,30 +115,34 @@ final class VoxelComputeProbe implements AutoCloseable {
                 || hasModelTable && (!modelResidency.valid() || modelResidency.buffer() == null
                 || modelResidency.byteLength() <= 0))
             throw new IllegalArgumentException("Valid model-table residency and template count must agree");
+        if(compactCapacity < 0 || compactCapacity > FACE_DESCRIPTOR_WORDS)
+            throw new IllegalArgumentException("Invalid compact face-output capacity");
 
         StorageBuffer modelTable = hasModelTable ? modelResidency.buffer() : inputPage;
         int modelTableBytes = hasModelTable
                 ? modelResidency.byteLength() : Math.toIntExact(inputPage.getBufferSize());
 
-        StorageBuffer output = new StorageBuffer(RESULT_BYTES, MemoryTypes.GPU_MEM);
+        int resultWords = resultWords(compactCapacity);
+        int resultBytes = Math.multiplyExact(resultWords, Integer.BYTES);
+        StorageBuffer output = new StorageBuffer(resultBytes, MemoryTypes.GPU_MEM);
         long readbackBuffer = VK_NULL_HANDLE;
         long readbackAllocation = VK_NULL_HANDLE;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer pReadbackBuffer = stack.mallocLong(1);
             var pReadbackAllocation = stack.mallocPointer(1);
             MemoryManager memoryManager = MemoryManager.getInstance();
-            memoryManager.createBuffer(RESULT_BYTES, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            memoryManager.createBuffer(resultBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pReadbackBuffer, pReadbackAllocation);
             readbackBuffer = pReadbackBuffer.get(0);
             readbackAllocation = pReadbackAllocation.get(0);
 
-            this.updateDescriptorSet(inputPage, output, modelTable, modelTableBytes);
+            this.updateDescriptorSet(inputPage, output, resultBytes, modelTable, modelTableBytes);
 
             CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
-            vkCmdFillBuffer(commandBuffer.getHandle(), output.getId(), 0L, RESULT_BYTES, 0);
+            vkCmdFillBuffer(commandBuffer.getHandle(), output.getId(), 0L, resultBytes, 0);
             barrierTransferWritesToCompute(commandBuffer, inputPage, output,
-                    hasModelTable ? modelTable : null, modelTableBytes);
+                    resultBytes, hasModelTable ? modelTable : null, modelTableBytes);
 
             vkCmdBindPipeline(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, this.pipeline);
             vkCmdBindDescriptorSets(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -135,23 +151,24 @@ final class VoxelComputeProbe implements AutoCloseable {
             push.putInt(0, sliceByteOffset);
             push.putInt(Integer.BYTES, sliceByteLength);
             push.putInt(2 * Integer.BYTES, templateCount);
+            push.putInt(3 * Integer.BYTES, compactCapacity);
             vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
                     VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
             vkCmdDispatch(commandBuffer.getHandle(), WORKGROUP_COUNT, 1, 1);
 
-            barrierComputeWritesToTransfer(commandBuffer, output);
+            barrierComputeWritesToTransfer(commandBuffer, output, resultBytes);
             TransferQueue.uploadBufferCmd(commandBuffer, output.getId(), 0L,
-                    readbackBuffer, 0L, RESULT_BYTES);
+                    readbackBuffer, 0L, resultBytes);
 
             Device.getGraphicsQueue().submitCommands(commandBuffer);
             Synchronization.waitFence(commandBuffer.getFence());
             Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
 
-            int[] result = new int[RESULT_WORDS];
+            int[] result = new int[resultWords];
             long allocation = readbackAllocation;
-            memoryManager.MapAndCopy(allocation, RESULT_BYTES, pointer -> {
-                ByteBuffer actual = pointer.getByteBuffer(0, RESULT_BYTES).order(ByteOrder.nativeOrder());
-                for(int i = 0; i < RESULT_WORDS; ++i)
+            memoryManager.MapAndCopy(allocation, resultBytes, pointer -> {
+                ByteBuffer actual = pointer.getByteBuffer(0, resultBytes).order(ByteOrder.nativeOrder());
+                for(int i = 0; i < resultWords; ++i)
                     result[i] = actual.getInt(i * Integer.BYTES);
             });
             return result;
@@ -264,7 +281,8 @@ final class VoxelComputeProbe implements AutoCloseable {
     }
 
     private void updateDescriptorSet(StorageBuffer inputPage, StorageBuffer output,
-                                     StorageBuffer modelTable, int modelTableBytes) {
+                                     int outputBytes, StorageBuffer modelTable,
+                                     int modelTableBytes) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorBufferInfo.Buffer inputInfo = VkDescriptorBufferInfo.calloc(1, stack);
             inputInfo.get(0)
@@ -275,7 +293,7 @@ final class VoxelComputeProbe implements AutoCloseable {
             outputInfo.get(0)
                     .buffer(output.getId())
                     .offset(0L)
-                    .range(RESULT_BYTES);
+                    .range(outputBytes);
             VkDescriptorBufferInfo.Buffer modelInfo = VkDescriptorBufferInfo.calloc(1, stack);
             modelInfo.get(0)
                     .buffer(modelTable.getId())
@@ -314,6 +332,7 @@ final class VoxelComputeProbe implements AutoCloseable {
     private static void barrierTransferWritesToCompute(CommandPool.CommandBuffer commandBuffer,
                                                         StorageBuffer inputPage,
                                                         StorageBuffer output,
+                                                        int outputBytes,
                                                         StorageBuffer modelTable,
                                                         int modelTableBytes) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
@@ -336,7 +355,7 @@ final class VoxelComputeProbe implements AutoCloseable {
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(output.getId())
                     .offset(0L)
-                    .size(RESULT_BYTES);
+                    .size(outputBytes);
             if(modelTable != null) {
                 barriers.get(2)
                         .sType$Default()
@@ -355,7 +374,8 @@ final class VoxelComputeProbe implements AutoCloseable {
     }
 
     private static void barrierComputeWritesToTransfer(CommandPool.CommandBuffer commandBuffer,
-                                                        StorageBuffer output) {
+                                                        StorageBuffer output,
+                                                        int outputBytes) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.calloc(1, stack);
             barrier.get(0)
@@ -366,7 +386,7 @@ final class VoxelComputeProbe implements AutoCloseable {
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(output.getId())
                     .offset(0L)
-                    .size(RESULT_BYTES);
+                    .size(outputBytes);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     0, null, barrier, null);
@@ -382,6 +402,28 @@ final class VoxelComputeProbe implements AutoCloseable {
             int graphicsFamily = Queue.getQueueFamilies().graphicsFamily;
             return (properties.get(graphicsFamily).queueFlags() & VK_QUEUE_COMPUTE_BIT) != 0;
         }
+    }
+
+    static int faceVertexBase(int compactCapacity) {
+        return Math.addExact(COMPACT_DESCRIPTOR_BASE, compactCapacity);
+    }
+
+    static int modelFaceBase(int compactCapacity) {
+        return Math.addExact(faceVertexBase(compactCapacity),
+                Math.multiplyExact(compactCapacity, VERTICES_PER_FACE));
+    }
+
+    static int partialVertexBase(int compactCapacity) {
+        return Math.addExact(modelFaceBase(compactCapacity),
+                Math.multiplyExact(compactCapacity, MODEL_FACE_RESULT_WORDS));
+    }
+
+    static int resultWords(int compactCapacity) {
+        if(compactCapacity < 0 || compactCapacity > FACE_DESCRIPTOR_WORDS)
+            throw new IllegalArgumentException("Invalid compact face-output capacity");
+        return Math.addExact(partialVertexBase(compactCapacity),
+                Math.multiplyExact(compactCapacity,
+                        VERTICES_PER_FACE * PARTIAL_VERTEX_WORDS_PER_VERTEX));
     }
 
     private static void check(int result, String action) {

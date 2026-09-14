@@ -169,6 +169,8 @@ public final class GpuTerrainModelTableSmokeTest {
         require(candidateCount == SectionVoxelSnapshot.BLOCK_COUNT / 2
                         * GpuTerrainModelTable.FACE_COUNT,
                 "Joined fixture must emit all six faces for every geometry-hinted voxel");
+        require(actual[4] == candidateCount && actual[5] == 0,
+                "Full joined output capacity must report every write without overflow");
 
         boolean[] seen = new boolean[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
         int qualifiedRows = 0;
