@@ -43,6 +43,22 @@ public class VFrustum {
         return currentGpuSelectionFrustum;
     }
 
+    /**
+     * Freeze the exact matrix/camera state used by the current CPU traversal.
+     * Candidate-table uploads are asynchronous, so live GPU validation must not
+     * later pair an older graph/CPU queue generation with a newer mutable frustum.
+     */
+    public VFrustum snapshot() {
+        VFrustum snapshot = new VFrustum();
+        snapshot.viewVector.set(this.viewVector);
+        snapshot.camX = this.camX;
+        snapshot.camY = this.camY;
+        snapshot.camZ = this.camZ;
+        snapshot.matrix.set(this.matrix);
+        snapshot.frustum.set(snapshot.matrix, false);
+        return snapshot;
+    }
+
     public void setCamOffset(double camX, double camY, double camZ) {
         this.camX = camX;
         this.camY = camY;

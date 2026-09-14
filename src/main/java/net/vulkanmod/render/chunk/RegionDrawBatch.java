@@ -32,8 +32,12 @@ final class RegionDrawBatch {
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] candidateTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
+    private final VFrustum[] candidateFrustums =
+            new VFrustum[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] diagnosticTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
+    private final VFrustum[] diagnosticFrustums =
+            new VFrustum[TerrainRenderType.VALUES.length];
     private final boolean[][] diagnosticExpected =
             new boolean[TerrainRenderType.VALUES.length][];
     private final long[] diagnosticTokens = new long[TerrainRenderType.VALUES.length];
@@ -84,12 +88,14 @@ final class RegionDrawBatch {
     private void compareLiveCandidates(ChunkArea area, TerrainRenderType type) {
         int layer = type.ordinal();
         GpuRegionCandidateTable table = diagnosticTables[layer];
+        VFrustum frustum = diagnosticFrustums[layer];
         boolean[] cpuExpected = diagnosticExpected[layer];
         long token = diagnosticTokens[layer];
-        if(table == null || cpuExpected == null || token == 0L)
+        if(table == null || frustum == null || cpuExpected == null || token == 0L)
             return;
         if(!GpuLiveSectionSelectionDiagnostic.isCurrent(token)) {
             diagnosticTables[layer] = null;
+            diagnosticFrustums[layer] = null;
             diagnosticExpected[layer] = null;
             diagnosticTokens[layer] = 0L;
             return;
@@ -98,10 +104,10 @@ final class RegionDrawBatch {
         if(residency == null || !residency.valid()
                 || residency.generation() != table.generation())
             return;
-        VFrustum frustum = VFrustum.currentGpuSelectionFrustum();
         if(GpuLiveSectionSelectionDiagnostic.compare(
                 token, residency, table, layer, frustum, cpuExpected)) {
             diagnosticTables[layer] = null;
+            diagnosticFrustums[layer] = null;
             diagnosticExpected[layer] = null;
             diagnosticTokens[layer] = 0L;
         }
@@ -118,14 +124,12 @@ final class RegionDrawBatch {
             return;
         int layer = type.ordinal();
         GpuRegionCandidateTable table = candidateTables[layer];
-        if(table == null)
+        VFrustum frustum = candidateFrustums[layer];
+        if(table == null || frustum == null)
             return;
         GpuRegionCandidateGpuStore.Residency residency = area.getGpuCandidateResidency(type);
         if(residency == null || !residency.valid()
                 || residency.generation() != table.generation())
-            return;
-        VFrustum frustum = VFrustum.currentGpuSelectionFrustum();
-        if(frustum == null)
             return;
 
         GpuSectionSelectionShadowStore store = shadowStores[layer];
@@ -190,11 +194,18 @@ final class RegionDrawBatch {
             GpuLiveSectionSelectionDiagnostic.cancel(oldToken);
             diagnosticTokens[layer] = 0L;
             diagnosticTables[layer] = null;
+            diagnosticFrustums[layer] = null;
             diagnosticExpected[layer] = null;
         }
 
+        // The CPU queue, graph-visible flags and frustum are one traversal snapshot.
+        // Candidate residency is asynchronous, so freeze the frustum now rather than
+        // comparing or dispatching this generation against a later camera state.
+        VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
+        VFrustum frustumSnapshot = currentFrustum == null ? null : currentFrustum.snapshot();
         GpuRegionCandidateTable table = builder.finish();
-        long diagnosticToken = GpuLiveSectionSelectionDiagnostic.claim();
+        long diagnosticToken = frustumSnapshot == null
+                ? 0L : GpuLiveSectionSelectionDiagnostic.claim();
         boolean[] cpuExpected = diagnosticToken == 0L ? null : buildCpuExpected(area, type);
         boolean queued = area.publishGpuCandidates(type, table);
 
@@ -202,11 +213,13 @@ final class RegionDrawBatch {
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
         candidateTables[layer] = queued ? table : null;
+        candidateFrustums[layer] = queued ? frustumSnapshot : null;
 
         if(diagnosticToken != 0L) {
             if(queued) {
                 diagnosticTokens[layer] = diagnosticToken;
                 diagnosticTables[layer] = table;
+                diagnosticFrustums[layer] = frustumSnapshot;
                 diagnosticExpected[layer] = cpuExpected;
             } else {
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticToken);
@@ -247,10 +260,12 @@ final class RegionDrawBatch {
             candidateInitialized[layer] = false;
             candidateFingerprints[layer] = 0L;
             candidateTables[layer] = null;
+            candidateFrustums[layer] = null;
             if(diagnosticTokens[layer] != 0L)
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticTokens[layer]);
             diagnosticTokens[layer] = 0L;
             diagnosticTables[layer] = null;
+            diagnosticFrustums[layer] = null;
             diagnosticExpected[layer] = null;
             if(shadowStores[layer] != null) {
                 shadowStores[layer].close();

@@ -103,6 +103,7 @@ public class MinecraftMixin {
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }
+            net.vulkanmod.render.chunk.VFrustumSnapshotSmokeTest.verify();
             net.vulkanmod.render.chunk.RegionBatchSmokeTest.verify();
             net.vulkanmod.render.chunk.SectionVoxelSmokeTest.verify();
             net.vulkanmod.render.chunk.build.PublicationDrainSmokeTest.verify();
