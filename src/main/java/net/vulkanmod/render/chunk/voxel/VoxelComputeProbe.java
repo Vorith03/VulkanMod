@@ -101,9 +101,9 @@ final class VoxelComputeProbe implements AutoCloseable {
                 modelResidency, templateCount, FACE_DESCRIPTOR_WORDS);
     }
 
-    private int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength,
-                           GpuTerrainModelGpuStore.Residency modelResidency,
-                           int templateCount, int compactCapacity) {
+    int[] dispatch(StorageBuffer inputPage, int sliceByteOffset, int sliceByteLength,
+                   GpuTerrainModelGpuStore.Residency modelResidency,
+                   int templateCount, int compactCapacity) {
         if(this.closed)
             throw new IllegalStateException("Voxel compute probe is closed");
         if(inputPage == null || sliceByteOffset < 0 || sliceByteLength <= 0

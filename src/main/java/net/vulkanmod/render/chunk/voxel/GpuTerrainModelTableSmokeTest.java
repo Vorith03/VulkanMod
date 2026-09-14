@@ -158,9 +158,13 @@ public final class GpuTerrainModelTableSmokeTest {
             int voxelByteLength,
             SectionVoxelSnapshot voxelSnapshot) {
         int[] actual;
+        int boundedCapacity = 131;
+        int[] bounded;
         try(VoxelComputeProbe probe = new VoxelComputeProbe()) {
             actual = probe.dispatch(voxelPage, voxelByteOffset, voxelByteLength,
                     residency, table.templateCount());
+            bounded = probe.dispatch(voxelPage, voxelByteOffset, voxelByteLength,
+                    residency, table.templateCount(), boundedCapacity);
         }
 
         require(actual.length == VoxelComputeProbe.RESULT_WORDS,
@@ -171,6 +175,8 @@ public final class GpuTerrainModelTableSmokeTest {
                 "Joined fixture must emit all six faces for every geometry-hinted voxel");
         require(actual[4] == candidateCount && actual[5] == 0,
                 "Full joined output capacity must report every write without overflow");
+        verifyBoundedCompactCandidateFaceRows(bounded, boundedCapacity, actual,
+                table, voxelSnapshot);
 
         boolean[] seen = new boolean[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
         int qualifiedRows = 0;
@@ -253,6 +259,85 @@ public final class GpuTerrainModelTableSmokeTest {
             word < VoxelComputeProbe.RESULT_WORDS; ++word) {
             if(actual[word] != 0)
                 throw new AssertionError("Joined compact partial-vertex tail must remain zero at word " + word);
+        }
+    }
+
+    private static void verifyBoundedCompactCandidateFaceRows(
+            int[] bounded,
+            int capacity,
+            int[] full,
+            GpuTerrainModelTable table,
+            SectionVoxelSnapshot voxelSnapshot) {
+        require(bounded.length == VoxelComputeProbe.resultWords(capacity),
+                "Bounded joined output must allocate only its declared compact capacity");
+        for(int word = 0; word < 4; ++word) {
+            require(bounded[word] == full[word],
+                    "Bounded joined aggregate must match the full dispatch");
+        }
+        require(bounded[4] == capacity && bounded[5] == 1,
+                "Bounded joined output must report exact writes and overflow");
+        for(int word = VoxelComputeProbe.HEADER_WORDS;
+            word < VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE; ++word) {
+            require(bounded[word] == full[word],
+                    "Bounded joined fixed descriptors must match the full dispatch");
+        }
+
+        boolean[] seen = new boolean[VoxelComputeProbe.FACE_DESCRIPTOR_WORDS];
+        int faceVertexBase = VoxelComputeProbe.faceVertexBase(capacity);
+        int modelFaceBase = VoxelComputeProbe.modelFaceBase(capacity);
+        int partialVertexBase = VoxelComputeProbe.partialVertexBase(capacity);
+        for(int slot = 0; slot < capacity; ++slot) {
+            int descriptor = bounded[VoxelComputeProbe.COMPACT_DESCRIPTOR_BASE + slot];
+            require((descriptor & 0x80000000) != 0,
+                    "Bounded joined compact descriptor must carry the live marker");
+            int voxel = descriptor & 0xfff;
+            int face = (descriptor >>> 12) & 7;
+            require(voxel < SectionVoxelSnapshot.BLOCK_COUNT
+                            && face < GpuTerrainModelTable.FACE_COUNT,
+                    "Bounded joined compact descriptor must decode to a valid face");
+            require((voxelSnapshot.flags(voxel) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0,
+                    "Bounded joined compact descriptor must originate from a candidate voxel");
+            int descriptorIndex = voxel * GpuTerrainModelTable.FACE_COUNT + face;
+            require(!seen[descriptorIndex],
+                    "Bounded joined compact output must not contain duplicate descriptors");
+            seen[descriptorIndex] = true;
+
+            int[] expectedCorners = expectedFaceCorners(voxel, face);
+            for(int vertex = 0; vertex < VoxelComputeProbe.VERTICES_PER_FACE; ++vertex) {
+                require(bounded[faceVertexBase
+                                + slot * VoxelComputeProbe.VERTICES_PER_FACE + vertex]
+                                == expectedCorners[vertex],
+                        "Bounded joined face corners must match the CPU oracle");
+            }
+
+            int templateIndex = table.templateIndexForStateId(voxelSnapshot.stateId(voxel));
+            int rowBase = modelFaceBase + slot * VoxelComputeProbe.MODEL_FACE_RESULT_WORDS;
+            require(bounded[rowBase] == templateIndex + 1,
+                    "Bounded joined candidate must retain its exact model sentinel");
+            for(int word = 0; word < GpuTerrainModelTable.FACE_WORDS; ++word) {
+                int expected = templateIndex < 0 ? 0
+                        : table.word(table.templateBaseWord()
+                                + templateIndex * GpuTerrainModelTable.TEMPLATE_WORDS
+                                + 2 + face * GpuTerrainModelTable.FACE_WORDS + word);
+                require(bounded[rowBase + 1 + word] == expected,
+                        "Bounded joined model row must match the CPU table");
+            }
+
+            int vertexBase = partialVertexBase
+                    + slot * VoxelComputeProbe.VERTICES_PER_FACE
+                    * VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX;
+            for(int vertex = 0; vertex < VoxelComputeProbe.VERTICES_PER_FACE; ++vertex) {
+                int[] expectedVertex = templateIndex < 0
+                        ? new int[VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX]
+                        : expectedPartialVertex(table, templateIndex, face,
+                                vertex, expectedCorners[vertex]);
+                for(int word = 0; word < expectedVertex.length; ++word) {
+                    require(bounded[vertexBase + vertex
+                                    * VoxelComputeProbe.PARTIAL_VERTEX_WORDS_PER_VERTEX + word]
+                                    == expectedVertex[word],
+                            "Bounded joined partial vertex must match the CPU format oracle");
+                }
+            }
         }
     }
 
