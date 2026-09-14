@@ -28,6 +28,7 @@
     "debug.GlDebugInfoM",
     "debug.KeyboardHandlerM",
     "debug.TerrainDebugOverlayMixin",
+    "debug.FTBLibraryCompatSmokeMixin",
 
     "gui.GuiM",
 
