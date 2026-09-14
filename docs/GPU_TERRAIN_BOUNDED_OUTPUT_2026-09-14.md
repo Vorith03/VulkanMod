@@ -47,6 +47,13 @@ requested/written counts, the overflow flag, 127 unique real compact candidates,
 and every emitted corner. It also requires all disabled model/partial-vertex output
 to remain zero.
 
+Follow-on source commit `5550d6e3247c87609b1990f7cd352f7333c76f67`
+uses capacity 131 with a live baked-model table. For every nondeterministically
+selected compact candidate it verifies the exact dynamic corner/model/partial-vertex
+bases, model sentinel, nine-word face row, and all five words of each packed partial
+vertex against the independent CPU oracle. Unsupported states must retain zero model
+and vertex rows.
+
 ## Evidence
 
 CI #415 (run `34803346357`, job `103850253149`) is fully green. It compiled and
@@ -55,6 +62,9 @@ startups. The startup log reported `VULKANMOD_VOXEL_COMPUTE_OK` with 7,936 candi
 faces and the bounded-output overflow contract. Post-chain, depth, screenshot,
 Crash Assistant, Chat Heads, Flywheel, log upload, and build artifact upload also
 passed.
+
+CI #416 (run `34803738729`, job `103851375878`) is also fully green after the joined
+bounded-model extension, across the same complete workflow.
 
 ## Remaining boundary
 

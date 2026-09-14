@@ -349,8 +349,8 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `c8c409265f271f2f35da48de62268fd07746645d`,
-  **CI #415 green** (run `34803346357`, job `103850253149`). Build/distribution,
+- Verified runtime source: `5550d6e3247c87609b1990f7cd352f7333c76f67`,
+  **CI #416 green** (run `34803738729`, job `103851375878`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
   compatibility smokes passed; logs inspected.
 - Highest demonstrated milestone: 6, playable world.

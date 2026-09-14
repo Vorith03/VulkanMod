@@ -26,10 +26,14 @@ Use these together:
   beyond the declared capacity. The forced-overflow oracle requests 7,936 faces with
   capacity 127 and verifies all fixed descriptors, 127 unique compact faces, exact
   corners, and untouched disabled output. `CPU_REQUIRED` and production CPU geometry
-  remain authoritative. CI #415 (run `34803346357`, job `103850253149`) is fully
-  green across build/distribution, both Vulkan startups, compute/render checks,
-  screenshot, Crash Assistant, Chat Heads, Flywheel, logs and artifacts. See
-  `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`.
+  remain authoritative. Follow-on source commit
+  `5550d6e3247c87609b1990f7cd352f7333c76f67`
+  (`gpu terrain: verify bounded model output`) applies the same reduced-capacity
+  oracle to joined baked-model rows and packed position/UV vertices, including
+  fail-closed unsupported states. CI #416 (run `34803738729`, job `103851375878`)
+  is fully green across build/distribution, both Vulkan startups, compute/render
+  checks, screenshot, Crash Assistant, Chat Heads, Flywheel, logs and artifacts.
+  See `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`.
 - Completed the follow-on real-section lighting-demand estimator in source commits
   `9d64eb0c5c5ec7f41cc5e429df7656a5e6040b15`
   (`gpu terrain: measure lighting demand density`) and
