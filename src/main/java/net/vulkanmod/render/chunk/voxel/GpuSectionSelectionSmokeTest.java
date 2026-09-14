@@ -1,9 +1,12 @@
 package net.vulkanmod.render.chunk.voxel;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.AreaUploadManager;
+import net.vulkanmod.render.chunk.ChunkArea;
 import net.vulkanmod.render.chunk.RegionBatchLayout;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
+import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.MemoryTypes;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
@@ -14,6 +17,7 @@ import net.vulkanmod.vulkan.queue.TransferQueue;
 import net.vulkanmod.vulkan.shader.SPIRVUtils;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.joml.Vector3i;
 import org.lwjgl.vulkan.VkBufferMemoryBarrier;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
@@ -87,6 +91,8 @@ public final class GpuSectionSelectionSmokeTest {
                         * Integer.BYTES,
                 "Region candidate ABI must have deterministic bounded size");
 
+        verifyResidency(table);
+
         try(Probe probe = new Probe()) {
             int[] full = probe.dispatch(table, GENERATION, TARGET_LAYER,
                     relativeX, relativeY, relativeZ, RegionBatchLayout.MAX_SECTIONS);
@@ -113,6 +119,111 @@ public final class GpuSectionSelectionSmokeTest {
         Initializer.LOGGER.info(
                 "VULKANMOD_GPU_SECTION_SELECTION_OK: {} exact frustum/layer/ready/graph matches from {} generation-owned candidates; bounded overflow and stale rejection verified",
                 expectedCount, RegionBatchLayout.MAX_SECTIONS);
+    }
+
+    private static void verifyResidency(GpuRegionCandidateTable table) {
+        GpuRegionCandidateGpuStore store = new GpuRegionCandidateGpuStore();
+        try {
+            require(store.upload(table), "Initial GPU candidate upload must queue");
+            require(!store.getResidency().valid()
+                            && store.getResidency().generation() == table.generation(),
+                    "Candidate residency must not publish before copy submission");
+            AreaUploadManager.INSTANCE.submitUploads();
+            GpuRegionCandidateGpuStore.Residency first = store.getResidency();
+            require(first.valid() && first.generation() == table.generation()
+                            && first.regionX() == table.regionX()
+                            && first.regionY() == table.regionY()
+                            && first.regionZ() == table.regionZ(),
+                    "Submitted candidate generation and region must publish together");
+            verifyResidencyBytes(first, table);
+
+            GpuRegionCandidateTable replacement = singleCandidateTable(
+                    table.generation() + 1, table.regionX(), table.regionY(), table.regionZ());
+            require(store.upload(replacement), "Replacement GPU candidate upload must queue");
+            require(!store.getResidency().valid(),
+                    "Replacement generation must revoke discoverable old residency");
+            AreaUploadManager.INSTANCE.submitUploads();
+            GpuRegionCandidateGpuStore.Residency second = store.getResidency();
+            require(second.valid() && second.generation() == replacement.generation()
+                            && second.buffer().getId() != first.buffer().getId(),
+                    "Candidate replacement must allocate then publish without overwrite");
+            verifyResidencyBytes(second, replacement);
+            require(!store.upload(table) && store.getResidency().valid(),
+                    "Stale candidate uploads must not revoke the current generation");
+
+            GpuRegionCandidateTable abandoned = singleCandidateTable(
+                    replacement.generation() + 1, table.regionX(), table.regionY(), table.regionZ());
+            require(store.upload(abandoned), "Pending candidate generation must queue");
+            store.invalidate(abandoned.generation() + 1);
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(!store.getResidency().valid()
+                            && store.getResidency().generation() == abandoned.generation() + 1,
+                    "Invalidation before submission must prevent stale candidate publication");
+        } finally {
+            Vulkan.waitIdle();
+            store.close();
+        }
+
+        ChunkArea area = new ChunkArea(0,
+                new Vector3i(table.regionX(), table.regionY(), table.regionZ()));
+        try {
+            require(area.publishGpuCandidates(table), "ChunkArea must own matching candidate upload");
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(area.getGpuCandidateResidency() != null
+                            && area.getGpuCandidateResidency().valid(),
+                    "ChunkArea must expose its submitted candidate generation");
+            area.setPosition(0, 0, 0);
+            require(area.getGpuCandidateResidency() == null,
+                    "Region reposition must clear candidate residency");
+        } finally {
+            Vulkan.waitIdle();
+            area.releaseBuffers();
+        }
+    }
+
+    private static GpuRegionCandidateTable singleCandidateTable(long generation,
+                                                                 int x, int y, int z) {
+        return new GpuRegionCandidateTable.Builder(generation, x, y, z)
+                .add(6, 1, 0, 0, 0,
+                        GpuRegionCandidateTable.flags(true, true, TARGET_LAYER))
+                .finish();
+    }
+
+    private static void verifyResidencyBytes(GpuRegionCandidateGpuStore.Residency residency,
+                                             GpuRegionCandidateTable expectedTable) {
+        int byteLength = expectedTable.byteSize();
+        ByteBuffer expected = MemoryUtil.memAlloc(byteLength).order(ByteOrder.nativeOrder());
+        long readbackBuffer = VK_NULL_HANDLE;
+        long readbackAllocation = VK_NULL_HANDLE;
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            expectedTable.writeTo(expected);
+            expected.flip();
+            LongBuffer pBuffer = stack.mallocLong(1);
+            var pAllocation = stack.mallocPointer(1);
+            MemoryManager manager = MemoryManager.getInstance();
+            manager.createBuffer(byteLength, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pBuffer, pAllocation);
+            readbackBuffer = pBuffer.get(0);
+            readbackAllocation = pAllocation.get(0);
+            CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
+            TransferQueue.uploadBufferCmd(commandBuffer, residency.buffer().getId(), 0L,
+                    readbackBuffer, 0L, byteLength);
+            Device.getGraphicsQueue().submitCommands(commandBuffer);
+            Synchronization.waitFence(commandBuffer.getFence());
+            Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
+            long allocation = readbackAllocation;
+            manager.MapAndCopy(allocation, byteLength, pointer -> {
+                ByteBuffer actual = pointer.getByteBuffer(0, byteLength);
+                for(int index = 0; index < byteLength; ++index)
+                    require(actual.get(index) == expected.get(index),
+                            "GPU candidate residency byte mismatch at " + index);
+            });
+        } finally {
+            MemoryUtil.memFree(expected);
+            if(readbackBuffer != VK_NULL_HANDLE)
+                MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
+        }
     }
 
     private static boolean intersectsFrustum(int packedSection, float regionX,

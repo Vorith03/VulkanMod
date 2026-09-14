@@ -4,6 +4,8 @@ import net.minecraft.core.BlockPos;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelGpuStore;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
+import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
+import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
 import net.vulkanmod.vulkan.memory.StorageBuffer;
 import org.joml.FrustumIntersection;
@@ -20,6 +22,7 @@ public class ChunkArea {
     DrawBuffers drawBuffers;
     private RegionVoxelStore voxels;
     private RegionVoxelGpuStore gpuVoxels;
+    private GpuRegionCandidateGpuStore gpuCandidates;
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
@@ -226,6 +229,26 @@ public class ChunkArea {
 
     public synchronized long getVoxelRevision() { return voxels == null ? 0L : voxels.revision(); }
 
+    public synchronized boolean publishGpuCandidates(GpuRegionCandidateTable table) {
+        if(table == null)
+            throw new IllegalArgumentException("GPU region candidate table must be present");
+        if(table.regionX() != position.x || table.regionY() != position.y
+                || table.regionZ() != position.z)
+            throw new IllegalArgumentException("GPU candidate table origin does not match region");
+        if(gpuCandidates == null)
+            gpuCandidates = new GpuRegionCandidateGpuStore();
+        return gpuCandidates.upload(table);
+    }
+
+    public synchronized GpuRegionCandidateGpuStore.Residency getGpuCandidateResidency() {
+        return gpuCandidates == null ? null : gpuCandidates.getResidency();
+    }
+
+    public synchronized void invalidateGpuCandidates(long generation) {
+        if(gpuCandidates != null)
+            gpuCandidates.invalidate(generation);
+    }
+
     /** Compatibility entry point while callers transition to explicit generations. */
     public synchronized void removeVoxels(int x, int y, int z) {
         int slot = voxelSlot(x, y, z);
@@ -255,6 +278,10 @@ public class ChunkArea {
         if (gpuVoxels != null) {
             gpuVoxels.close();
             gpuVoxels = null;
+        }
+        if(gpuCandidates != null) {
+            gpuCandidates.close();
+            gpuCandidates = null;
         }
     }
 
