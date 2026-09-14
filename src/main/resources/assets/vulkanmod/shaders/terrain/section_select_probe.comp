@@ -2,41 +2,88 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, std430) readonly buffer CandidateCommands {
+layout(set = 0, binding = 0, std430) readonly buffer CandidateTable {
     uint words[];
-} inputCommands;
+} inputTable;
 
 layout(set = 0, binding = 1, std430) buffer SelectedCommands {
     uint words[];
 } outputCommands;
 
-layout(push_constant) uniform SelectionPushConstants {
-    uint candidateCount;
-    uint outputCapacity;
-} pc;
+layout(set = 0, binding = 2, std430) readonly buffer SelectionParameters {
+    uint words[];
+} parameters;
 
+const uint MAGIC = 0x47525331u;
+const uint VERSION = 1u;
+const uint HEADER_WORDS = 8u;
+const uint RECORD_WORDS = 8u;
 const uint COMMAND_WORDS = 5u;
-const uint HEADER_WORDS = 3u;
+const uint OUTPUT_HEADER_WORDS = 4u;
+const uint READY = 1u;
+const uint GRAPH_VISIBLE = 2u;
+const uint LAYER_SHIFT = 8u;
+const uint LAYER_MASK = 15u;
+
+bool tableIsCurrent() {
+    return inputTable.words[0] == MAGIC
+        && inputTable.words[1] == VERSION
+        && inputTable.words[2] == parameters.words[0]
+        && inputTable.words[3] == parameters.words[1]
+        && inputTable.words[4] <= 512u
+        && inputTable.words[5] == parameters.words[4]
+        && inputTable.words[6] == parameters.words[5]
+        && inputTable.words[7] == parameters.words[6];
+}
+
+bool intersectsFrustum(uint packedSection) {
+    vec3 localMin = vec3(float((packedSection & 7u) << 4u),
+                         float(((packedSection >> 3u) & 7u) << 4u),
+                         float(((packedSection >> 6u) & 7u) << 4u));
+    vec3 minimum = vec3(uintBitsToFloat(parameters.words[8]),
+                        uintBitsToFloat(parameters.words[9]),
+                        uintBitsToFloat(parameters.words[10])) + localMin;
+    vec3 maximum = minimum + vec3(16.0);
+    for (uint plane = 0u; plane < 6u; ++plane) {
+        uint base = 12u + plane * 4u;
+        vec4 equation = vec4(uintBitsToFloat(parameters.words[base]),
+                             uintBitsToFloat(parameters.words[base + 1u]),
+                             uintBitsToFloat(parameters.words[base + 2u]),
+                             uintBitsToFloat(parameters.words[base + 3u]));
+        vec3 positive = mix(minimum, maximum, greaterThanEqual(equation.xyz, vec3(0.0)));
+        if (dot(equation.xyz, positive) + equation.w < 0.0)
+            return false;
+    }
+    return true;
+}
 
 void main() {
     uint candidate = gl_GlobalInvocationID.x;
-    if (candidate >= pc.candidateCount)
+    if (!tableIsCurrent())
+        return;
+    atomicOr(outputCommands.words[3], 1u);
+    if (candidate >= inputTable.words[4])
         return;
 
-    uint source = candidate * COMMAND_WORDS;
-    uint indexCount = inputCommands.words[source];
-    uint instanceCount = inputCommands.words[source + 1u];
-    if (indexCount == 0u || instanceCount == 0u)
+    uint source = HEADER_WORDS + candidate * RECORD_WORDS;
+    uint flags = inputTable.words[source + 5u];
+    uint requiredFlags = READY | GRAPH_VISIBLE;
+    if ((flags & requiredFlags) != requiredFlags
+            || ((flags >> LAYER_SHIFT) & LAYER_MASK) != parameters.words[2]
+            || inputTable.words[source] == 0u
+            || inputTable.words[source + 1u] == 0u
+            || !intersectsFrustum(inputTable.words[source + 4u]))
         return;
 
     uint slot = atomicAdd(outputCommands.words[0], 1u);
-    if (slot >= pc.outputCapacity) {
+    uint capacity = parameters.words[3];
+    if (slot >= capacity) {
         atomicOr(outputCommands.words[2], 1u);
         return;
     }
 
     atomicAdd(outputCommands.words[1], 1u);
-    uint target = HEADER_WORDS + slot * COMMAND_WORDS;
+    uint target = OUTPUT_HEADER_WORDS + slot * COMMAND_WORDS;
     for (uint word = 0u; word < COMMAND_WORDS; ++word)
-        outputCommands.words[target + word] = inputCommands.words[source + word];
+        outputCommands.words[target + word] = inputTable.words[source + word];
 }

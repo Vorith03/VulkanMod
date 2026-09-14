@@ -24,7 +24,6 @@ import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
-import org.lwjgl.vulkan.VkPushConstantRange;
 import org.lwjgl.vulkan.VkQueueFamilyProperties;
 import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
@@ -36,79 +35,114 @@ import java.nio.LongBuffer;
 
 import static org.lwjgl.vulkan.VK10.*;
 
-/**
- * Isolated Vulkan oracle for bounded GPU section selection.
- *
- * <p>The input is Vulkan's existing five-word indexed indirect command ABI. A zero
- * index or instance count marks a candidate which must not draw. The compute pass
- * compacts live candidates into a caller-sized output and reports requested,
- * written and overflow counts before this mechanism is allowed to own production
- * commands. CPU graph traversal and the current region draw path remain
- * authoritative.</p>
- */
+/** Isolated Vulkan oracle for generation-safe region section selection. */
 public final class GpuSectionSelectionSmokeTest {
     private static final int COMMAND_WORDS = RegionBatchLayout.STRIDE / Integer.BYTES;
-    private static final int HEADER_WORDS = 3;
+    private static final int OUTPUT_HEADER_WORDS = 4;
     private static final int REQUESTED = 0;
     private static final int WRITTEN = 1;
     private static final int OVERFLOW = 2;
+    private static final int TABLE_VALID = 3;
+    private static final int PARAMETER_WORDS = 36;
+    private static final int TARGET_LAYER = 1;
+    private static final long GENERATION = 0x1122334455667788L;
+
+    // Camera-relative planes: x [-16,48], y [-32,64], z [0,80].
+    private static final float[][] PLANES = {
+            { 1, 0, 0, 16}, {-1, 0, 0, 48},
+            { 0, 1, 0, 32}, { 0,-1, 0, 64},
+            { 0, 0, 1,  0}, { 0, 0,-1, 80}
+    };
 
     private GpuSectionSelectionSmokeTest() {}
 
     public static void verify() {
-        int[] candidates = new int[RegionBatchLayout.MAX_SECTIONS * COMMAND_WORDS];
+        int regionX = -128;
+        int regionY = -128;
+        int regionZ = -128;
+        float relativeX = -64.0f;
+        float relativeY = -64.0f;
+        float relativeZ = -64.0f;
+        GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
+                GENERATION, regionX, regionY, regionZ);
         boolean[] expected = new boolean[RegionBatchLayout.MAX_SECTIONS];
         int expectedCount = 0;
         for(int section = 0; section < RegionBatchLayout.MAX_SECTIONS; ++section) {
-            int base = section * COMMAND_WORDS;
-            boolean hasIndices = section % 3 != 0;
-            boolean selectedByCpu = section % 11 != 0;
-            candidates[base] = hasIndices ? 6 + section * 3 : 0;
-            candidates[base + 1] = selectedByCpu ? 1 : 0;
-            candidates[base + 2] = section * 7;
-            candidates[base + 3] = -section * 13;
-            candidates[base + 4] = section;
-            expected[section] = hasIndices && selectedByCpu;
+            boolean ready = section % 5 != 0;
+            boolean graphVisible = section % 7 != 0;
+            int layer = section % 3;
+            int indexCount = section % 11 == 0 ? 0 : 6 + section * 3;
+            int instanceCount = section % 13 == 0 ? 0 : 1;
+            builder.add(indexCount, instanceCount, section * 7, -section * 13, section,
+                    GpuRegionCandidateTable.flags(ready, graphVisible, layer));
+            expected[section] = ready && graphVisible && layer == TARGET_LAYER
+                    && indexCount != 0 && instanceCount != 0
+                    && intersectsFrustum(section, relativeX, relativeY, relativeZ);
             if(expected[section]) expectedCount++;
         }
+        GpuRegionCandidateTable table = builder.finish();
+        require(table.candidateCount() == RegionBatchLayout.MAX_SECTIONS
+                        && table.byteSize() == (GpuRegionCandidateTable.HEADER_WORDS
+                        + RegionBatchLayout.MAX_SECTIONS * GpuRegionCandidateTable.RECORD_WORDS)
+                        * Integer.BYTES,
+                "Region candidate ABI must have deterministic bounded size");
 
         try(Probe probe = new Probe()) {
-            int[] full = probe.dispatch(candidates, RegionBatchLayout.MAX_SECTIONS,
-                    RegionBatchLayout.MAX_SECTIONS);
-            require(full[REQUESTED] == expectedCount && full[WRITTEN] == expectedCount
-                            && full[OVERFLOW] == 0,
-                    "Unbounded GPU selection must emit every live candidate exactly once");
+            int[] full = probe.dispatch(table, GENERATION, TARGET_LAYER,
+                    relativeX, relativeY, relativeZ, RegionBatchLayout.MAX_SECTIONS);
+            require(full[TABLE_VALID] == 1 && full[REQUESTED] == expectedCount
+                            && full[WRITTEN] == expectedCount && full[OVERFLOW] == 0,
+                    "GPU frustum selection must exactly count the current eligible set");
             verifyCommands(full, expected, expectedCount,
                     RegionBatchLayout.MAX_SECTIONS, true);
 
-            int capacity = 17;
-            int[] bounded = probe.dispatch(candidates, RegionBatchLayout.MAX_SECTIONS, capacity);
-            require(bounded[REQUESTED] == expectedCount && bounded[WRITTEN] == capacity
-                            && bounded[OVERFLOW] == 1,
-                    "Bounded GPU selection must expose overflow without exceeding capacity");
+            int capacity = 9;
+            int[] bounded = probe.dispatch(table, GENERATION, TARGET_LAYER,
+                    relativeX, relativeY, relativeZ, capacity);
+            require(bounded[TABLE_VALID] == 1 && bounded[REQUESTED] == expectedCount
+                            && bounded[WRITTEN] == capacity && bounded[OVERFLOW] == 1,
+                    "Bounded GPU frustum selection must signal overflow without overrunning");
             verifyCommands(bounded, expected, capacity, capacity, false);
 
-            int[] disabled = probe.dispatch(candidates, RegionBatchLayout.MAX_SECTIONS, 0);
-            require(disabled.length == HEADER_WORDS && disabled[REQUESTED] == expectedCount
-                            && disabled[WRITTEN] == 0 && disabled[OVERFLOW] == 1,
-                    "Zero-capacity selection must remain a safe fallback signal");
+            int[] stale = probe.dispatch(table, GENERATION + 1, TARGET_LAYER,
+                    relativeX, relativeY, relativeZ, RegionBatchLayout.MAX_SECTIONS);
+            for(int word : stale)
+                require(word == 0, "Stale region generation must produce no GPU commands");
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_SECTION_SELECTION_OK: {} live of {} candidates; bounded capacity/overflow and exact indirect metadata verified",
+                "VULKANMOD_GPU_SECTION_SELECTION_OK: {} exact frustum/layer/ready/graph matches from {} generation-owned candidates; bounded overflow and stale rejection verified",
                 expectedCount, RegionBatchLayout.MAX_SECTIONS);
     }
 
+    private static boolean intersectsFrustum(int packedSection, float regionX,
+                                             float regionY, float regionZ) {
+        float minX = regionX + ((packedSection & 7) << 4);
+        float minY = regionY + (((packedSection >>> 3) & 7) << 4);
+        float minZ = regionZ + (((packedSection >>> 6) & 7) << 4);
+        float maxX = minX + 16.0f;
+        float maxY = minY + 16.0f;
+        float maxZ = minZ + 16.0f;
+        for(float[] plane : PLANES) {
+            float x = plane[0] >= 0.0f ? maxX : minX;
+            float y = plane[1] >= 0.0f ? maxY : minY;
+            float z = plane[2] >= 0.0f ? maxZ : minZ;
+            if(plane[0] * x + plane[1] * y + plane[2] * z + plane[3] < 0.0f)
+                return false;
+        }
+        return true;
+    }
+
     private static void verifyCommands(int[] result, boolean[] expected, int written,
-                                       int capacity, boolean requireFullCoverage) {
-        require(result.length == HEADER_WORDS + capacity * COMMAND_WORDS,
+                                       int capacity, boolean fullCoverage) {
+        require(result.length == OUTPUT_HEADER_WORDS + capacity * COMMAND_WORDS,
                 "GPU selection result must match declared capacity");
         boolean[] seen = new boolean[RegionBatchLayout.MAX_SECTIONS];
         for(int slot = 0; slot < written; ++slot) {
-            int base = HEADER_WORDS + slot * COMMAND_WORDS;
+            int base = OUTPUT_HEADER_WORDS + slot * COMMAND_WORDS;
             int section = result[base + 4];
             require(section >= 0 && section < expected.length && expected[section],
-                    "GPU selection emitted an ineligible candidate");
+                    "GPU selection emitted a CPU-ineligible candidate");
             require(!seen[section], "GPU selection emitted a candidate more than once");
             seen[section] = true;
             require(result[base] == 6 + section * 3 && result[base + 1] == 1
@@ -116,14 +150,14 @@ public final class GpuSectionSelectionSmokeTest {
                             && result[base + 3] == -section * 13,
                     "GPU selection must preserve all five indirect-command words");
         }
-        if(requireFullCoverage) {
+        if(fullCoverage) {
             for(int section = 0; section < expected.length; ++section)
                 require(seen[section] == expected[section],
-                        "Full-capacity GPU selection must exactly match the CPU oracle");
+                        "GPU selection must exactly match the independent CPU set");
         }
-        for(int word = HEADER_WORDS + written * COMMAND_WORDS;
+        for(int word = OUTPUT_HEADER_WORDS + written * COMMAND_WORDS;
             word < result.length; ++word)
-            require(result[word] == 0, "Unwritten GPU selection capacity must remain zero");
+            require(result[word] == 0, "Unused GPU command capacity must remain zero");
     }
 
     private static void require(boolean condition, String message) {
@@ -131,9 +165,7 @@ public final class GpuSectionSelectionSmokeTest {
     }
 
     private static final class Probe implements AutoCloseable {
-        private static final int PUSH_CONSTANT_BYTES = 2 * Integer.BYTES;
         private static final int WORKGROUP_SIZE = 64;
-
         private long descriptorSetLayout;
         private long descriptorPool;
         private long descriptorSet;
@@ -150,29 +182,34 @@ public final class GpuSectionSelectionSmokeTest {
             createPipeline();
         }
 
-        int[] dispatch(int[] commands, int candidateCount, int outputCapacity) {
+        int[] dispatch(GpuRegionCandidateTable table, long expectedGeneration, int targetLayer,
+                       float regionX, float regionY, float regionZ, int capacity) {
             if(closed) throw new IllegalStateException("Section-selection probe is closed");
-            if(candidateCount <= 0 || candidateCount > RegionBatchLayout.MAX_SECTIONS
-                    || outputCapacity < 0 || outputCapacity > RegionBatchLayout.MAX_SECTIONS
-                    || commands.length < candidateCount * COMMAND_WORDS)
-                throw new IllegalArgumentException("Invalid section-selection bounds");
+            if(table == null || table.candidateCount() <= 0
+                    || targetLayer < 0 || targetLayer > 15 || capacity < 0
+                    || capacity > RegionBatchLayout.MAX_SECTIONS)
+                throw new IllegalArgumentException("Invalid section-selection input");
 
-            int inputBytes = Math.multiplyExact(candidateCount,
-                    RegionBatchLayout.STRIDE);
-            int outputWords = Math.addExact(HEADER_WORDS,
-                    Math.multiplyExact(outputCapacity, COMMAND_WORDS));
-            int outputBytes = Math.multiplyExact(outputWords, Integer.BYTES);
-            StorageBuffer input = new StorageBuffer(inputBytes, MemoryTypes.GPU_MEM);
+            int outputWords = OUTPUT_HEADER_WORDS + capacity * COMMAND_WORDS;
+            int outputBytes = outputWords * Integer.BYTES;
+            int parameterBytes = PARAMETER_WORDS * Integer.BYTES;
+            StorageBuffer input = new StorageBuffer(table.byteSize(), MemoryTypes.GPU_MEM);
             StorageBuffer output = new StorageBuffer(outputBytes, MemoryTypes.GPU_MEM);
-            StagingBuffer staging = new StagingBuffer(inputBytes);
+            StorageBuffer parameters = new StorageBuffer(parameterBytes, MemoryTypes.GPU_MEM);
+            StagingBuffer inputStaging = new StagingBuffer(table.byteSize());
+            StagingBuffer parameterStaging = new StagingBuffer(parameterBytes);
             long readbackBuffer = VK_NULL_HANDLE;
             long readbackAllocation = VK_NULL_HANDLE;
-            ByteBuffer bytes = MemoryUtil.memAlloc(inputBytes).order(ByteOrder.nativeOrder());
+            ByteBuffer tableBytes = MemoryUtil.memAlloc(table.byteSize()).order(ByteOrder.nativeOrder());
+            ByteBuffer parameterData = MemoryUtil.memAlloc(parameterBytes).order(ByteOrder.nativeOrder());
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                for(int word = 0; word < candidateCount * COMMAND_WORDS; ++word)
-                    bytes.putInt(commands[word]);
-                bytes.flip();
-                staging.copyBuffer(inputBytes, bytes);
+                table.writeTo(tableBytes);
+                tableBytes.flip();
+                inputStaging.copyBuffer(table.byteSize(), tableBytes);
+                writeParameters(parameterData, table, expectedGeneration, targetLayer, capacity,
+                        regionX, regionY, regionZ);
+                parameterData.flip();
+                parameterStaging.copyBuffer(parameterBytes, parameterData);
 
                 LongBuffer pReadbackBuffer = stack.mallocLong(1);
                 var pReadbackAllocation = stack.mallocPointer(1);
@@ -183,25 +220,20 @@ public final class GpuSectionSelectionSmokeTest {
                 readbackBuffer = pReadbackBuffer.get(0);
                 readbackAllocation = pReadbackAllocation.get(0);
 
-                updateDescriptorSet(input, output);
+                updateDescriptorSet(input, output, parameters);
                 CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
-                TransferQueue.uploadBufferCmd(commandBuffer, staging.getId(), staging.getOffset(),
-                        input.getId(), 0L, inputBytes);
+                TransferQueue.uploadBufferCmd(commandBuffer, inputStaging.getId(), inputStaging.getOffset(),
+                        input.getId(), 0L, table.byteSize());
+                TransferQueue.uploadBufferCmd(commandBuffer, parameterStaging.getId(), parameterStaging.getOffset(),
+                        parameters.getId(), 0L, parameterBytes);
                 vkCmdFillBuffer(commandBuffer.getHandle(), output.getId(), 0L, outputBytes, 0);
-                barrierTransferToCompute(commandBuffer, input, inputBytes, output, outputBytes);
-
+                barrierTransferToCompute(commandBuffer, input, output, parameters);
                 vkCmdBindPipeline(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
                 vkCmdBindDescriptorSets(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE,
                         pipelineLayout, 0, stack.longs(descriptorSet), null);
-                ByteBuffer push = stack.malloc(PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder());
-                push.putInt(0, candidateCount);
-                push.putInt(Integer.BYTES, outputCapacity);
-                vkCmdPushConstants(commandBuffer.getHandle(), pipelineLayout,
-                        VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
-                int workgroups = (candidateCount + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
-                if(workgroups > 0) vkCmdDispatch(commandBuffer.getHandle(), workgroups, 1, 1);
-
-                barrierComputeToTransfer(commandBuffer, output, outputBytes);
+                vkCmdDispatch(commandBuffer.getHandle(),
+                        (table.candidateCount() + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
+                barrierComputeToTransfer(commandBuffer, output);
                 TransferQueue.uploadBufferCmd(commandBuffer, output.getId(), 0L,
                         readbackBuffer, 0L, outputBytes);
                 Device.getGraphicsQueue().submitCommands(commandBuffer);
@@ -218,47 +250,57 @@ public final class GpuSectionSelectionSmokeTest {
                 });
                 return result;
             } finally {
-                MemoryUtil.memFree(bytes);
-                staging.freeBuffer();
+                MemoryUtil.memFree(tableBytes);
+                MemoryUtil.memFree(parameterData);
+                inputStaging.freeBuffer();
+                parameterStaging.freeBuffer();
                 input.freeBuffer();
                 output.freeBuffer();
+                parameters.freeBuffer();
                 if(readbackBuffer != VK_NULL_HANDLE)
                     MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
             }
         }
 
+        private static void writeParameters(ByteBuffer target, GpuRegionCandidateTable table,
+                                            long generation, int layer, int capacity,
+                                            float regionX, float regionY, float regionZ) {
+            target.putInt((int)generation).putInt((int)(generation >>> 32))
+                    .putInt(layer).putInt(capacity)
+                    .putInt(table.regionX()).putInt(table.regionY()).putInt(table.regionZ()).putInt(0)
+                    .putFloat(regionX).putFloat(regionY).putFloat(regionZ).putInt(0);
+            for(float[] plane : PLANES)
+                for(float value : plane) target.putFloat(value);
+        }
+
         private void createDescriptorResources() {
             try(MemoryStack stack = MemoryStack.stackPush()) {
                 VkDescriptorSetLayoutBinding.Buffer bindings =
-                        VkDescriptorSetLayoutBinding.calloc(2, stack);
-                for(int binding = 0; binding < 2; ++binding) {
+                        VkDescriptorSetLayoutBinding.calloc(3, stack);
+                for(int binding = 0; binding < 3; ++binding)
                     bindings.get(binding).binding(binding)
                             .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                             .descriptorCount(1).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
                             .pImmutableSamplers(null);
-                }
-                VkDescriptorSetLayoutCreateInfo layoutInfo =
-                        VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default()
-                                .pBindings(bindings);
                 LongBuffer pLayout = stack.mallocLong(1);
-                check(vkCreateDescriptorSetLayout(Device.device, layoutInfo, null, pLayout),
+                check(vkCreateDescriptorSetLayout(Device.device,
+                        VkDescriptorSetLayoutCreateInfo.calloc(stack).sType$Default()
+                                .pBindings(bindings), null, pLayout),
                         "create section-selection descriptor layout");
                 descriptorSetLayout = pLayout.get(0);
-
                 VkDescriptorPoolSize.Buffer poolSize = VkDescriptorPoolSize.calloc(1, stack);
-                poolSize.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(2);
-                VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
-                        .sType$Default().pPoolSizes(poolSize).maxSets(1);
+                poolSize.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(3);
                 LongBuffer pPool = stack.mallocLong(1);
-                check(vkCreateDescriptorPool(Device.device, poolInfo, null, pPool),
+                check(vkCreateDescriptorPool(Device.device,
+                        VkDescriptorPoolCreateInfo.calloc(stack).sType$Default()
+                                .pPoolSizes(poolSize).maxSets(1), null, pPool),
                         "create section-selection descriptor pool");
                 descriptorPool = pPool.get(0);
-
-                VkDescriptorSetAllocateInfo allocateInfo = VkDescriptorSetAllocateInfo.calloc(stack)
-                        .sType$Default().descriptorPool(descriptorPool)
-                        .pSetLayouts(stack.longs(descriptorSetLayout));
                 LongBuffer pSet = stack.mallocLong(1);
-                check(vkAllocateDescriptorSets(Device.device, allocateInfo, pSet),
+                check(vkAllocateDescriptorSets(Device.device,
+                        VkDescriptorSetAllocateInfo.calloc(stack).sType$Default()
+                                .descriptorPool(descriptorPool)
+                                .pSetLayouts(stack.longs(descriptorSetLayout)), pSet),
                         "allocate section-selection descriptor set");
                 descriptorSet = pSet.get(0);
             }
@@ -266,14 +308,10 @@ public final class GpuSectionSelectionSmokeTest {
 
         private void createPipelineLayout() {
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                VkPushConstantRange.Buffer pushRange = VkPushConstantRange.calloc(1, stack);
-                pushRange.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
-                        .offset(0).size(PUSH_CONSTANT_BYTES);
-                VkPipelineLayoutCreateInfo layoutInfo = VkPipelineLayoutCreateInfo.calloc(stack)
-                        .sType$Default().pSetLayouts(stack.longs(descriptorSetLayout))
-                        .pPushConstantRanges(pushRange);
                 LongBuffer pLayout = stack.mallocLong(1);
-                check(vkCreatePipelineLayout(Device.device, layoutInfo, null, pLayout),
+                check(vkCreatePipelineLayout(Device.device,
+                        VkPipelineLayoutCreateInfo.calloc(stack).sType$Default()
+                                .pSetLayouts(stack.longs(descriptorSetLayout)), null, pLayout),
                         "create section-selection pipeline layout");
                 pipelineLayout = pLayout.get(0);
             }
@@ -285,23 +323,21 @@ public final class GpuSectionSelectionSmokeTest {
                     SPIRVUtils.ShaderKind.COMPUTE_SHADER);
             long module = VK_NULL_HANDLE;
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                VkShaderModuleCreateInfo moduleInfo = VkShaderModuleCreateInfo.calloc(stack)
-                        .sType$Default().pCode(spirv.bytecode());
                 LongBuffer pModule = stack.mallocLong(1);
-                check(vkCreateShaderModule(Device.device, moduleInfo, null, pModule),
+                check(vkCreateShaderModule(Device.device,
+                        VkShaderModuleCreateInfo.calloc(stack).sType$Default()
+                                .pCode(spirv.bytecode()), null, pModule),
                         "create section-selection shader module");
                 module = pModule.get(0);
-                VkPipelineShaderStageCreateInfo stageInfo =
-                        VkPipelineShaderStageCreateInfo.calloc(stack).sType$Default()
-                                .stage(VK_SHADER_STAGE_COMPUTE_BIT).module(module)
-                                .pName(stack.UTF8("main"));
-                VkComputePipelineCreateInfo.Buffer pipelineInfo =
-                        VkComputePipelineCreateInfo.calloc(1, stack);
-                pipelineInfo.get(0).sType$Default().stage(stageInfo).layout(pipelineLayout)
+                VkPipelineShaderStageCreateInfo stage = VkPipelineShaderStageCreateInfo.calloc(stack)
+                        .sType$Default().stage(VK_SHADER_STAGE_COMPUTE_BIT)
+                        .module(module).pName(stack.UTF8("main"));
+                VkComputePipelineCreateInfo.Buffer info = VkComputePipelineCreateInfo.calloc(1, stack);
+                info.get(0).sType$Default().stage(stage).layout(pipelineLayout)
                         .basePipelineHandle(VK_NULL_HANDLE).basePipelineIndex(-1);
                 LongBuffer pPipeline = stack.mallocLong(1);
-                check(vkCreateComputePipelines(Device.device, VK_NULL_HANDLE,
-                        pipelineInfo, null, pPipeline), "create section-selection pipeline");
+                check(vkCreateComputePipelines(Device.device, VK_NULL_HANDLE, info, null, pPipeline),
+                        "create section-selection pipeline");
                 pipeline = pPipeline.get(0);
             } finally {
                 if(module != VK_NULL_HANDLE) vkDestroyShaderModule(Device.device, module, null);
@@ -309,52 +345,63 @@ public final class GpuSectionSelectionSmokeTest {
             }
         }
 
-        private void updateDescriptorSet(StorageBuffer input, StorageBuffer output) {
+        private void updateDescriptorSet(StorageBuffer input, StorageBuffer output,
+                                         StorageBuffer parameters) {
             try(MemoryStack stack = MemoryStack.stackPush()) {
                 VkDescriptorBufferInfo.Buffer inputInfo = VkDescriptorBufferInfo.calloc(1, stack);
                 inputInfo.get(0).buffer(input.getId()).offset(0L).range(input.getBufferSize());
                 VkDescriptorBufferInfo.Buffer outputInfo = VkDescriptorBufferInfo.calloc(1, stack);
                 outputInfo.get(0).buffer(output.getId()).offset(0L).range(output.getBufferSize());
-                VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(2, stack);
+                VkDescriptorBufferInfo.Buffer parameterInfo = VkDescriptorBufferInfo.calloc(1, stack);
+                parameterInfo.get(0).buffer(parameters.getId()).offset(0L).range(parameters.getBufferSize());
+                VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(3, stack);
                 writes.get(0).sType$Default().dstSet(descriptorSet).dstBinding(0)
-                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                        .descriptorCount(1).pBufferInfo(inputInfo);
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1)
+                        .pBufferInfo(inputInfo);
                 writes.get(1).sType$Default().dstSet(descriptorSet).dstBinding(1)
-                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                        .descriptorCount(1).pBufferInfo(outputInfo);
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1)
+                        .pBufferInfo(outputInfo);
+                writes.get(2).sType$Default().dstSet(descriptorSet).dstBinding(2)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1)
+                        .pBufferInfo(parameterInfo);
                 vkUpdateDescriptorSets(Device.device, writes, null);
             }
         }
 
         private static void barrierTransferToCompute(CommandPool.CommandBuffer commandBuffer,
-                                                      StorageBuffer input, int inputBytes,
-                                                      StorageBuffer output, int outputBytes) {
+                                                      StorageBuffer input, StorageBuffer output,
+                                                      StorageBuffer parameters) {
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(2, stack);
-                barriers.get(0).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                        .dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
-                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                        .buffer(input.getId()).offset(0L).size(inputBytes);
+                VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(3, stack);
+                readBarrier(barriers.get(0), input);
                 barriers.get(1).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
                         .dstAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
                         .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                         .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                        .buffer(output.getId()).offset(0L).size(outputBytes);
+                        .buffer(output.getId()).offset(0L).size(output.getBufferSize());
+                readBarrier(barriers.get(2), parameters);
                 vkCmdPipelineBarrier(commandBuffer.getHandle(), VK_PIPELINE_STAGE_TRANSFER_BIT,
                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, null, barriers, null);
             }
         }
 
+        private static void readBarrier(VkBufferMemoryBarrier barrier, StorageBuffer buffer) {
+            barrier.sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(buffer.getId()).offset(0L).size(buffer.getBufferSize());
+        }
+
         private static void barrierComputeToTransfer(CommandPool.CommandBuffer commandBuffer,
-                                                      StorageBuffer output, int outputBytes) {
+                                                      StorageBuffer output) {
             try(MemoryStack stack = MemoryStack.stackPush()) {
                 VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.calloc(1, stack);
                 barrier.get(0).sType$Default().srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
                         .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
                         .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                         .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                        .buffer(output.getId()).offset(0L).size(outputBytes);
+                        .buffer(output.getId()).offset(0L).size(output.getBufferSize());
                 vkCmdPipelineBarrier(commandBuffer.getHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, barrier, null);
             }
