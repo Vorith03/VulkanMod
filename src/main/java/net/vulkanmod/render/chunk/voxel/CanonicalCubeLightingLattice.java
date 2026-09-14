@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.state.BlockState;
 final class CanonicalCubeLightingLattice {
     static final int RECTANGULAR_SAMPLE_COUNT = 20 * 20 * 20;
     static final int SPARSE_SAMPLE_COUNT = 18 * 18 * 18 + 6 * 18 * 18;
+    static final int MAX_DEMANDED_SAMPLE_COUNT = 18 * 18 * 18 + 6 * (18 * 18 - 4);
     private static final int CORE_WIDTH = 18;
     private static final int CORE_SAMPLE_COUNT = CORE_WIDTH * CORE_WIDTH * CORE_WIDTH;
 

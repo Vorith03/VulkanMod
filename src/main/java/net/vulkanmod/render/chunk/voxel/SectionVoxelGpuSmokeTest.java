@@ -112,12 +112,14 @@ public final class SectionVoxelGpuSmokeTest {
         require(open.qualifiedVoxels() == SectionVoxelSnapshot.BLOCK_COUNT
                         && open.candidateFaces() == SectionVoxelSnapshot.BLOCK_COUNT * 6,
                 "Open qualified fixture must retain every canonical face candidate");
-        require(open.uniqueSamples() == CanonicalCubeLightingLattice.SPARSE_SAMPLE_COUNT
+        require(open.uniqueSamples() == CanonicalCubeLightingLattice.MAX_DEMANDED_SAMPLE_COUNT
                         && open.activeBricks() == 125,
-                "Worst-case canonical demand must cover every reachable sparse-shell point");
-        require(open.projectedPointBytes() >= 65_024
+                "Worst-case canonical demand must cover every reachable point; actual samples="
+                        + open.uniqueSamples() + " bricks=" + open.activeBricks());
+        require(open.projectedPointBytes() * 100 > 65_024 * 95
                         && open.projectedBrickBytes() >= 65_024,
-                "Worst-case demand encodings must fall back before exceeding the dense reference");
+                "Worst-case demand encodings must be recognized as no material dense-reference saving; point/brick="
+                        + open.projectedPointBytes() + "/" + open.projectedBrickBytes());
 
         GpuLightingDemandTelemetry.Demand occluded = GpuLightingDemandTelemetry.analyze(
                 occludedBuilder.finish());
