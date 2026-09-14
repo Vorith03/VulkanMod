@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
+import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -16,7 +17,15 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** Opaque commands survive camera movement; each frame owns its writable copy. */
 final class RegionDrawBatch {
+    private static final boolean LIVE_GPU_SECTION_SELECTION = Boolean.getBoolean(
+            "vulkanmod.experimentalGpuSectionSelection");
+    private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
+    private static final long FNV_PRIME = 0x100000001b3L;
+
     private FrameBatch[][] batches;
+    private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
+    private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
 
     void draw(DrawBuffers buffers, ChunkArea area, Pipeline pipeline, RenderType renderType,
               double camX, double camY, double camZ) {
@@ -33,6 +42,7 @@ final class RegionDrawBatch {
         // Renderer.beginFrame has waited this frame's fence. Other frames' command
         // buffers remain untouched, even during edits or visibility changes.
         batch.update(buffers, area, type);
+        publishLiveCandidates(buffers, area, type);
         if (batch.drawCount == 0) return;
         RegionBatchStats.sections += batch.drawCount;
 
@@ -55,14 +65,78 @@ final class RegionDrawBatch {
         }
     }
 
-    void free() {
-        if (batches == null) return;
-        for (FrameBatch[] layer : batches) {
-            for (FrameBatch batch : layer) {
-                if (batch != null && batch.commands != null) batch.commands.freeBuffer();
-            }
+    /**
+     * Diagnostic-only bridge from the live CPU-authoritative region queue to the
+     * generation-owned GPU candidate ABI. Rendering still consumes FrameBatch.
+     * A content fingerprint prevents frame-local batch copies from republishing an
+     * identical table while still noticing upload-readiness changes that do not bump
+     * the mesh revision.
+     */
+    private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
+        if(!LIVE_GPU_SECTION_SELECTION)
+            return;
+
+        int layer = type.ordinal();
+        long generation = candidateGenerations[layer] + 1L;
+        GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
+                generation, area.position.x, area.position.y, area.position.z);
+        long fingerprint = FNV_OFFSET_BASIS;
+        fingerprint = mix(fingerprint, area.getVisibilityRevision());
+        fingerprint = mix(fingerprint, buffers.getMeshRevision(type));
+        fingerprint = mix(fingerprint, area.position.x);
+        fingerprint = mix(fingerprint, area.position.y);
+        fingerprint = mix(fingerprint, area.position.z);
+        fingerprint = mix(fingerprint, layer);
+
+        int count = 0;
+        var iterator = area.sectionQueue.iterator(false);
+        while(iterator.hasNext()) {
+            RenderSection section = iterator.next();
+            DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+            int packedSection = packSection(section.xOffset - area.position.x,
+                    section.yOffset - area.position.y, section.zOffset - area.position.z);
+            boolean ready = parameters.indexCount != 0
+                    && parameters.vertexBufferSegment.isReady();
+            int flags = GpuRegionCandidateTable.flags(ready, true, layer);
+            builder.add(parameters.indexCount, 1, parameters.firstIndex,
+                    parameters.vertexOffset, packedSection, flags);
+
+            fingerprint = mix(fingerprint, parameters.indexCount);
+            fingerprint = mix(fingerprint, parameters.firstIndex);
+            fingerprint = mix(fingerprint, parameters.vertexOffset);
+            fingerprint = mix(fingerprint, packedSection);
+            fingerprint = mix(fingerprint, flags);
+            count++;
         }
-        batches = null;
+        fingerprint = mix(fingerprint, count);
+
+        if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint)
+            return;
+
+        candidateInitialized[layer] = true;
+        candidateFingerprints[layer] = fingerprint;
+        candidateGenerations[layer] = generation;
+        area.publishGpuCandidates(type, builder.finish());
+    }
+
+    private static long mix(long hash, long value) {
+        hash ^= value;
+        return hash * FNV_PRIME;
+    }
+
+    void free() {
+        if (batches != null) {
+            for (FrameBatch[] layer : batches) {
+                for (FrameBatch batch : layer) {
+                    if (batch != null && batch.commands != null) batch.commands.freeBuffer();
+                }
+            }
+            batches = null;
+        }
+        for(int layer = 0; layer < candidateInitialized.length; ++layer) {
+            candidateInitialized[layer] = false;
+            candidateFingerprints[layer] = 0L;
+        }
     }
 
     static final class FrameBatch {

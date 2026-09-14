@@ -7,6 +7,7 @@ import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
+import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.memory.StorageBuffer;
 import org.joml.FrustumIntersection;
 import org.joml.Vector3i;
@@ -22,7 +23,8 @@ public class ChunkArea {
     DrawBuffers drawBuffers;
     private RegionVoxelStore voxels;
     private RegionVoxelGpuStore gpuVoxels;
-    private GpuRegionCandidateGpuStore gpuCandidates;
+    private final GpuRegionCandidateGpuStore[] gpuCandidates =
+            new GpuRegionCandidateGpuStore[TerrainRenderType.VALUES.length];
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
@@ -229,24 +231,48 @@ public class ChunkArea {
 
     public synchronized long getVoxelRevision() { return voxels == null ? 0L : voxels.revision(); }
 
-    public synchronized boolean publishGpuCandidates(GpuRegionCandidateTable table) {
+    public synchronized boolean publishGpuCandidates(TerrainRenderType type,
+                                                     GpuRegionCandidateTable table) {
+        if(type == null)
+            throw new IllegalArgumentException("GPU candidate terrain layer must be present");
         if(table == null)
             throw new IllegalArgumentException("GPU region candidate table must be present");
         if(table.regionX() != position.x || table.regionY() != position.y
                 || table.regionZ() != position.z)
             throw new IllegalArgumentException("GPU candidate table origin does not match region");
-        if(gpuCandidates == null)
-            gpuCandidates = new GpuRegionCandidateGpuStore();
-        return gpuCandidates.upload(table);
+        int layer = type.ordinal();
+        if(gpuCandidates[layer] == null)
+            gpuCandidates[layer] = new GpuRegionCandidateGpuStore();
+        return gpuCandidates[layer].upload(table);
+    }
+
+    public synchronized GpuRegionCandidateGpuStore.Residency getGpuCandidateResidency(
+            TerrainRenderType type) {
+        if(type == null)
+            throw new IllegalArgumentException("GPU candidate terrain layer must be present");
+        GpuRegionCandidateGpuStore store = gpuCandidates[type.ordinal()];
+        return store == null ? null : store.getResidency();
+    }
+
+    public synchronized void invalidateGpuCandidates(TerrainRenderType type, long generation) {
+        if(type == null)
+            throw new IllegalArgumentException("GPU candidate terrain layer must be present");
+        GpuRegionCandidateGpuStore store = gpuCandidates[type.ordinal()];
+        if(store != null)
+            store.invalidate(generation);
+    }
+
+    /** Compatibility entry points for the original single-table residency smoke. */
+    public synchronized boolean publishGpuCandidates(GpuRegionCandidateTable table) {
+        return publishGpuCandidates(TerrainRenderType.SOLID, table);
     }
 
     public synchronized GpuRegionCandidateGpuStore.Residency getGpuCandidateResidency() {
-        return gpuCandidates == null ? null : gpuCandidates.getResidency();
+        return getGpuCandidateResidency(TerrainRenderType.SOLID);
     }
 
     public synchronized void invalidateGpuCandidates(long generation) {
-        if(gpuCandidates != null)
-            gpuCandidates.invalidate(generation);
+        invalidateGpuCandidates(TerrainRenderType.SOLID, generation);
     }
 
     /** Compatibility entry point while callers transition to explicit generations. */
@@ -279,9 +305,11 @@ public class ChunkArea {
             gpuVoxels.close();
             gpuVoxels = null;
         }
-        if(gpuCandidates != null) {
-            gpuCandidates.close();
-            gpuCandidates = null;
+        for(int layer = 0; layer < gpuCandidates.length; ++layer) {
+            if(gpuCandidates[layer] != null) {
+                gpuCandidates[layer].close();
+                gpuCandidates[layer] = null;
+            }
         }
     }
 
