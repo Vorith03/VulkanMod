@@ -59,6 +59,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
     private int regionX;
     private int regionY;
     private int regionZ;
+    private int lastDispatchFrame = -1;
     private boolean valid;
     private boolean closed;
 
@@ -188,6 +189,13 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         if(frame < 0 || frame >= parameters.length)
             return false;
 
+        // A frame slot owns one parameter buffer and descriptor set. Do not rewrite
+        // either after a helper submission from this same frame; its fence is owned
+        // by the later main-frame submit. A newer generation simply waits until the
+        // renderer advances to another frame slot, keeping the CPU draw authoritative.
+        if(lastDispatchFrame == frame)
+            return false;
+
         GpuSectionSelectionShadowPipeline.State pipeline =
                 GpuSectionSelectionShadowPipeline.get();
         float[] planes = new float[VFrustum.PLANE_COUNT * VFrustum.PLANE_WORDS];
@@ -239,6 +247,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         this.regionX = table.regionX();
         this.regionY = table.regionY();
         this.regionZ = table.regionZ();
+        this.lastDispatchFrame = frame;
         this.valid = true;
         logReady(table, targetLayer);
         return true;
