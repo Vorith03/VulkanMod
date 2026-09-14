@@ -277,6 +277,13 @@ The opt-in estimator in `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.m
 now measures demand-driven point/brick density against actual CPU mesh bytes; real
 Create Chronicles section evidence is the next gate.
 
+The diagnostic compact face/vertex stream is now explicitly capacity-bounded as
+recorded in `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`: requested and written
+counts plus overflow are verified without out-of-bounds writes. This establishes the
+fallback contract needed by hybrid meshing, but does not complete that production
+gate because allocation/publication, lighting/color and CPU fallback integration are
+not implemented.
+
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
 or CPU fallback on the RX 6900 XT. Existing Phase 6 measurement gates remain open.
@@ -342,15 +349,16 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `2de36511134e48feb0ab9076d6a84bef64b1787e`,
-  **CI #414 green** (run `34791671857`, job `103816942293`). Build/distribution,
+- Verified runtime source: `c8c409265f271f2f35da48de62268fd07746645d`,
+  **CI #415 green** (run `34803346357`, job `103850253149`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
   compatibility smokes passed; logs inspected.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 3/11.
 - P7 input ABI, capped persistent region SSBO residency and diagnostic compute
-  plumbing are verified. Demand telemetry is ready; next, collect real modpack
-  section density before extending snapshot v4.
+  plumbing are verified. Compact output now has verified capacity/overflow safety.
+  Demand telemetry is ready; next, collect real modpack section density before
+  extending snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 
 See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for
