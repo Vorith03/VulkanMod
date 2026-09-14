@@ -273,6 +273,9 @@ Current lighting slice: the exact dense-lattice prototype in
 and an 18-cube plus sparse second shell as too large. Reusable canonical model
 templates and partial position/UV vertex generation are proven in diagnostic compute,
 but lighting metadata remains unresolved and CPU terrain output remains authoritative.
+The opt-in estimator in `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`
+now measures demand-driven point/brick density against actual CPU mesh bytes; real
+Create Chronicles section evidence is the next gate.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -339,15 +342,15 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `6b0e85141d46d04c085e2cb30b1731070580520d`,
-  **CI #412 green** (run `34790944136`, job `103814917365`). Build/distribution,
+- Verified runtime source: `2de36511134e48feb0ab9076d6a84bef64b1787e`,
+  **CI #414 green** (run `34791671857`, job `103816942293`). Build/distribution,
   both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
   compatibility smokes passed; logs inspected.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 3/11.
 - P7 input ABI, capped persistent region SSBO residency and diagnostic compute
-  plumbing are verified. Next, measure demand-driven lighting occupancy from actual
-  surviving canonical face candidates before extending snapshot v4.
+  plumbing are verified. Demand telemetry is ready; next, collect real modpack
+  section density before extending snapshot v4.
 - No new RX 6900 XT A/B measurement or performance claim.
 
 See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for

@@ -16,7 +16,32 @@ Use these together:
 
 ## Current checkpoint — 2026-09-12
 
-### Live continuation note — 2026-09-13
+### Live continuation note — 2026-09-14
+
+- Completed the follow-on real-section lighting-demand estimator in source commits
+  `9d64eb0c5c5ec7f41cc5e429df7656a5e6040b15`
+  (`gpu terrain: measure lighting demand density`) and
+  `2de36511134e48feb0ab9076d6a84bef64b1787e`
+  (`gpu terrain: correct maximum lighting demand`). The opt-in estimator uses the
+  current numeric snapshot and conservative face masks to count exact unique lighting
+  points and active 4-cube bricks, project both encoding sizes, and compare them with
+  the actual CPU terrain upload bytes for the same completed sections. It never calls
+  lighting hooks or retains lighting values. The exact worst-case reachable bound is
+  7,752 points: the 24 second-shell slab corners are unreachable. Projected worst-
+  case point/brick encodings are 65,012/65,040 bytes, so both require density fallback.
+- CI #413 correctly failed an initial 7,776-point test expectation. CI #414 (run
+  `34791671857`, job `103816942293`) is fully green after correcting the oracle:
+  build/distribution, both Vulkan startups, residency/model/lighting/compute tests,
+  post-chain, depth, screenshot, Crash Assistant, Chat Heads, Flywheel, logs and
+  artifacts all passed.
+- Next evidence gate requires the user's real Create Chronicles sections. Launch with
+  both `-Dvulkanmod.experimentalSectionVoxels=true` and
+  `-Dvulkanmod.debugGpuLightingDemand=true`, traverse new terrain and return every
+  `VULKANMOD_GPU_LIGHTING_DEMAND` line from `latest.log`. Do not choose a lighting
+  encoding or extend snapshot v4 until those density/byte ratios are favorable. See
+  `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`.
+
+### Prior continuation note — 2026-09-13
 
 - Completed the bounded lighting-lattice decision in source commit
   `6b0e85141d46d04c085e2cb30b1731070580520d`

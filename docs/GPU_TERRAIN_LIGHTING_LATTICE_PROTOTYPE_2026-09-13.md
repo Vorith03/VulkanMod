@@ -66,6 +66,10 @@ without yet capturing or retaining numeric lighting values in production. Contin
 only if representative sections reduce the retained points enough to remain clearly
 cheaper than their CPU terrain mesh.
 
+That estimator is now implemented and documented in
+`GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`. Its corrected exact maximum is
+7,752 reachable points; real Create Chronicles density evidence is still required.
+
 Production CPU meshing, arbitrary Forge callbacks, unsupported models, translucent
 and tripwire geometry, resource-generation ownership, and all existing fallback
 rules remain unchanged.
