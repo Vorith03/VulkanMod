@@ -25,7 +25,10 @@
     "debug.ChunkBorderRendererM",
     "debug.GlDebugInfoM",
     "debug.KeyboardHandlerM",
+    "debug.ResourceReloadLifecycleMemoryMixin",
     "debug.TerrainDebugOverlayMixin",
+    "debug.VulkanLifecycleMemoryMixin",
+    "debug.WorldRendererLifecycleMemoryMixin",
 
     "gui.GuiM",
 
