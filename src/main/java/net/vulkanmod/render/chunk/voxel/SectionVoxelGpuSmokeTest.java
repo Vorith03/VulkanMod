@@ -35,6 +35,8 @@ public final class SectionVoxelGpuSmokeTest {
         if(AreaUploadManager.INSTANCE == null)
             throw new AssertionError("GPU voxel smoke requires the terrain upload manager");
 
+        verifyLightingDemandFixtures();
+
         RegionVoxelGpuStore store = new RegionVoxelGpuStore();
         try {
             SectionVoxelSnapshot first = fixture(0x13579BDF);
@@ -79,6 +81,58 @@ public final class SectionVoxelGpuSmokeTest {
             Vulkan.waitIdle();
             store.close();
         }
+    }
+
+    private static void verifyLightingDemandFixtures() {
+        SectionVoxelSnapshot.Builder openBuilder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        SectionVoxelSnapshot.Builder occludedBuilder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        SectionVoxelSnapshot.Builder singleBuilder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        int center = SectionVoxelSnapshot.blockIndex(8, 8, 8);
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
+            openBuilder.add(1, SectionVoxelSnapshot.CPU_REQUIRED
+                    | SectionVoxelSnapshot.GPU_FULL_CUBE);
+            occludedBuilder.add(1, SectionVoxelSnapshot.CPU_REQUIRED
+                    | SectionVoxelSnapshot.GPU_FULL_CUBE | SectionVoxelSnapshot.SOLID_RENDER);
+            singleBuilder.add(i == center ? 1 : 0, SectionVoxelSnapshot.CPU_REQUIRED
+                    | (i == center ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
+
+            int x = i & 15;
+            int y = (i >>> 4) & 15;
+            int z = (i >>> 8) & 15;
+            if(y == 0) occludedBuilder.setBoundaryNeighborSolidRender(i, 0, true);
+            if(y == 15) occludedBuilder.setBoundaryNeighborSolidRender(i, 1, true);
+            if(z == 0) occludedBuilder.setBoundaryNeighborSolidRender(i, 2, true);
+            if(z == 15) occludedBuilder.setBoundaryNeighborSolidRender(i, 3, true);
+            if(x == 0) occludedBuilder.setBoundaryNeighborSolidRender(i, 4, true);
+            if(x == 15) occludedBuilder.setBoundaryNeighborSolidRender(i, 5, true);
+        }
+
+        GpuLightingDemandTelemetry.Demand open = GpuLightingDemandTelemetry.analyze(
+                openBuilder.finish());
+        require(open.qualifiedVoxels() == SectionVoxelSnapshot.BLOCK_COUNT
+                        && open.candidateFaces() == SectionVoxelSnapshot.BLOCK_COUNT * 6,
+                "Open qualified fixture must retain every canonical face candidate");
+        require(open.uniqueSamples() == CanonicalCubeLightingLattice.SPARSE_SAMPLE_COUNT
+                        && open.activeBricks() == 125,
+                "Worst-case canonical demand must cover every reachable sparse-shell point");
+        require(open.projectedPointBytes() >= 65_024
+                        && open.projectedBrickBytes() >= 65_024,
+                "Worst-case demand encodings must fall back before exceeding the dense reference");
+
+        GpuLightingDemandTelemetry.Demand occluded = GpuLightingDemandTelemetry.analyze(
+                occludedBuilder.finish());
+        require(occluded.candidateFaces() == 0 && occluded.uniqueSamples() == 0
+                        && occluded.projectedPointBytes() == 0
+                        && occluded.projectedBrickBytes() == 0,
+                "Fully occluded qualified fixture must require no lighting payload");
+
+        GpuLightingDemandTelemetry.Demand single = GpuLightingDemandTelemetry.analyze(
+                singleBuilder.finish());
+        require(single.qualifiedVoxels() == 1 && single.candidateFaces() == 6
+                        && single.uniqueSamples() > 0
+                        && single.uniqueSamples()
+                        < CanonicalCubeLightingLattice.RECTANGULAR_SAMPLE_COUNT,
+                "Single qualified voxel must produce bounded sparse lighting demand");
     }
 
     private static SectionVoxelSnapshot fixture(int salt) {

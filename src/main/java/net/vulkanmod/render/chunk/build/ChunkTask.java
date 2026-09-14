@@ -17,6 +17,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
+import net.vulkanmod.render.chunk.voxel.GpuLightingDemandTelemetry;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -244,6 +245,9 @@ public class ChunkTask {
                         if(renderedBuffer != null)
                             renderedBuffer.release();
                     }
+                    if(compileResults.voxels != null)
+                        GpuLightingDemandTelemetry.record(compileResults.voxels,
+                                cpuMeshBytes(compileResults.renderedLayers));
                 } finally {
                     ModelBlockRenderer.clearCache();
                 }
@@ -298,6 +302,17 @@ public class ChunkTask {
                                                      BlockPos pos) {
             var offset = state.getOffset(region, pos);
             return offset.x == 0.0D && offset.y == 0.0D && offset.z == 0.0D;
+        }
+
+        private static long cpuMeshBytes(Map<TerrainRenderType, UploadBuffer> layers) {
+            long bytes = 0L;
+            for(UploadBuffer upload : layers.values()) {
+                if(upload.getVertexBuffer() != null)
+                    bytes += upload.getVertexBuffer().remaining();
+                if(upload.getIndexBuffer() != null)
+                    bytes += upload.getIndexBuffer().remaining();
+            }
+            return bytes;
         }
 
         private RenderType compactRenderTypes(RenderType renderType) {
