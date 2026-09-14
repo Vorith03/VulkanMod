@@ -12,7 +12,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class LifecycleMemoryTelemetry {
     public static final String PROPERTY = "vulkanmod.debugLifecycleMemory";
     private static final long MIB = 1024L * 1024L;
-    private static final boolean ENABLED = Boolean.getBoolean(PROPERTY);
+    // Exercise the same snapshot path in the existing CI startup fixture without
+    // adding another workflow/script surface. Ordinary gameplay remains opt-in.
+    private static final boolean ENABLED = Boolean.getBoolean(PROPERTY)
+            || Boolean.getBoolean("vulkanmod.smokeTest");
     private static final AtomicLong SEQUENCE = new AtomicLong();
 
     private LifecycleMemoryTelemetry() {
