@@ -8,26 +8,26 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(WorldRenderer.class)
+@Mixin(value = WorldRenderer.class, remap = false)
 public abstract class WorldRendererLifecycleMemoryMixin {
-    @Inject(method = "setLevel", at = @At("HEAD"))
+    @Inject(method = "setLevel", at = @At("HEAD"), remap = false)
     private void vulkanmod$beforeSetLevel(ClientLevel level, CallbackInfo ci) {
         LifecycleMemoryTelemetry.snapshot(
                 "world-level-set-before target=" + (level == null ? "none" : "present"));
     }
 
-    @Inject(method = "setLevel", at = @At("RETURN"))
+    @Inject(method = "setLevel", at = @At("RETURN"), remap = false)
     private void vulkanmod$afterSetLevel(ClientLevel level, CallbackInfo ci) {
         LifecycleMemoryTelemetry.snapshot(
                 "world-level-set-after target=" + (level == null ? "none" : "present"));
     }
 
-    @Inject(method = "cleanUp", at = @At("HEAD"))
+    @Inject(method = "cleanUp", at = @At("HEAD"), remap = false)
     private void vulkanmod$beforeWorldRendererCleanup(CallbackInfo ci) {
         LifecycleMemoryTelemetry.snapshot("world-renderer-cleanup-before");
     }
 
-    @Inject(method = "cleanUp", at = @At("RETURN"))
+    @Inject(method = "cleanUp", at = @At("RETURN"), remap = false)
     private void vulkanmod$afterWorldRendererCleanup(CallbackInfo ci) {
         LifecycleMemoryTelemetry.snapshot("world-renderer-cleanup-after");
     }
