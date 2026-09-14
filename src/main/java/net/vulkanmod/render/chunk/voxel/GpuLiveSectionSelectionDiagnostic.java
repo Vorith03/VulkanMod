@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk.voxel;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.render.chunk.RegionBatchLayout;
 import net.vulkanmod.render.chunk.VFrustum;
 import net.vulkanmod.vulkan.Device;
@@ -125,7 +126,8 @@ public final class GpuLiveSectionSelectionDiagnostic {
         try {
             Comparison reconstructed = buildExpected(table, targetLayer, frustum);
             String predicateMismatch = compareExpectedSets(
-                    reconstructed.expectedPacked, cpuExpected);
+                    reconstructed.expectedPacked, cpuExpected, table,
+                    reconstructed.rowByPacked, targetLayer, frustum);
             int cpuCount = count(cpuExpected);
 
             if(table.candidateCount() == 0) {
@@ -185,6 +187,76 @@ public final class GpuLiveSectionSelectionDiagnostic {
         }
     }
 
+    /** CI-only execution of the live diagnostic command/readback path under validation. */
+    public static void verifyProbeReadbackForCi() {
+        if(!Boolean.getBoolean("vulkanmod.ciGpuLiveSelectionDiagnosticSmoke"))
+            return;
+
+        final int layer = 2;
+        final int regionX = -128;
+        final int regionY = -64;
+        final int regionZ = 256;
+        final long generation = 0x55aa_1020_3040_5060L;
+        final int candidates = 32;
+
+        GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
+                generation, regionX, regionY, regionZ);
+        for(int packed = 0; packed < candidates; ++packed) {
+            builder.add(6 + packed, 1, packed * 3, -packed * 2, packed,
+                    GpuRegionCandidateTable.flags(true, true, layer));
+        }
+        GpuRegionCandidateTable table = builder.finish();
+        GpuRegionCandidateGpuStore store = new GpuRegionCandidateGpuStore();
+        try {
+            require(store.upload(table), "Live diagnostic smoke candidate upload must queue");
+            AreaUploadManager.INSTANCE.submitUploads();
+            GpuRegionCandidateGpuStore.Residency residency = store.getResidency();
+            require(residency.valid() && residency.generation() == generation,
+                    "Live diagnostic smoke candidate residency must publish");
+
+            float[] planes = {
+                    1, 0, 0, 256, -1, 0, 0, 256,
+                    0, 1, 0, 256, 0, -1, 0, 256,
+                    0, 0, 1, 256, 0, 0, -1, 256
+            };
+            ProbeResult result;
+            try(Probe probe = new Probe()) {
+                result = probe.dispatch(residency, table, layer,
+                        0.0F, 0.0F, 0.0F, planes);
+            }
+            require(result.output[TABLE_VALID] == 1,
+                    "Live diagnostic smoke candidate table was rejected");
+            require(result.output[REQUESTED] == candidates
+                            && result.output[WRITTEN] == candidates
+                            && result.output[OVERFLOW] == 0,
+                    "Live diagnostic smoke selection count mismatch");
+
+            int[] expectedTable = {
+                    GpuRegionCandidateTable.MAGIC,
+                    GpuRegionCandidateTable.VERSION,
+                    (int)generation, (int)(generation >>> 32), candidates,
+                    regionX, regionY, regionZ
+            };
+            int[] expectedParameters = {
+                    (int)generation, (int)(generation >>> 32), layer,
+                    RegionBatchLayout.MAX_SECTIONS,
+                    regionX, regionY, regionZ, 0
+            };
+            require(describeWords("candidate", expectedTable, result.candidateHeader) == null,
+                    "Live diagnostic smoke candidate header readback mismatch");
+            require(describeWords("parameters", expectedParameters, result.parameterHeader) == null,
+                    "Live diagnostic smoke parameter header readback mismatch");
+
+            Device.getGraphicsQueue().waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_LIVE_DIAGNOSTIC_SMOKE_OK: candidate and parameter headers survived compute/readback with {} selected commands",
+                    candidates);
+        } finally {
+            store.close();
+        }
+    }
+
     private static Comparison buildExpected(GpuRegionCandidateTable table, int layer,
                                             VFrustum frustum) {
         boolean[] expectedPacked = new boolean[RegionBatchLayout.MAX_SECTIONS];
@@ -220,12 +292,43 @@ public final class GpuLiveSectionSelectionDiagnostic {
         return new Comparison(expectedPacked, rowByPacked, count);
     }
 
-    private static String compareExpectedSets(boolean[] reconstructed, boolean[] cpuExpected) {
+    private static String compareExpectedSets(boolean[] reconstructed,
+                                              boolean[] cpuExpected,
+                                              GpuRegionCandidateTable table,
+                                              int[] rowByPacked,
+                                              int targetLayer,
+                                              VFrustum frustum) {
         for(int packed = 0; packed < RegionBatchLayout.MAX_SECTIONS; ++packed) {
-            if(reconstructed[packed] != cpuExpected[packed])
-                return "CPU graph/frustum reconstruction differs at section " + packed
-                        + " reconstructed=" + reconstructed[packed]
-                        + " cpuQueue=" + cpuExpected[packed];
+            if(reconstructed[packed] == cpuExpected[packed])
+                continue;
+            int row = rowByPacked[packed];
+            String detail;
+            if(row < 0) {
+                detail = "candidate row missing";
+            } else {
+                int flags = table.recordWord(row, 5);
+                boolean ready = (flags & GpuRegionCandidateTable.READY) != 0;
+                boolean graphVisible = (flags & GpuRegionCandidateTable.GRAPH_VISIBLE) != 0;
+                int candidateLayer = (flags & GpuRegionCandidateTable.LAYER_MASK)
+                        >>> GpuRegionCandidateTable.LAYER_SHIFT;
+                int minX = table.regionX() + ((packed & 7) << 4);
+                int minY = table.regionY() + (((packed >>> 3) & 7) << 4);
+                int minZ = table.regionZ() + (((packed >>> 6) & 7) << 4);
+                int frustumResult = frustum.cubeInFrustum(minX, minY, minZ,
+                        minX + 16, minY + 16, minZ + 16);
+                detail = "row=" + row
+                        + " ready=" + ready
+                        + " graphVisible=" + graphVisible
+                        + " candidateLayer=" + candidateLayer
+                        + " targetLayer=" + targetLayer
+                        + " indexCount=" + table.recordWord(row, 0)
+                        + " instanceCount=" + table.recordWord(row, 1)
+                        + " frustumResult=" + frustumResult;
+            }
+            return "CPU graph/frustum reconstruction differs at section " + packed
+                    + " reconstructed=" + reconstructed[packed]
+                    + " cpuQueue=" + cpuExpected[packed]
+                    + " (" + detail + ")";
         }
         return null;
     }
@@ -235,6 +338,11 @@ public final class GpuLiveSectionSelectionDiagnostic {
         for(boolean value : values)
             if(value) count++;
         return count;
+    }
+
+    private static void require(boolean condition, String message) {
+        if(!condition)
+            throw new AssertionError(message);
     }
 
     private static String validateResult(int[] result, GpuRegionCandidateTable table,

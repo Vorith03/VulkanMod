@@ -66,9 +66,10 @@ case "$mode" in
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
-    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.smokeExitAtConstructor=true -Dvulkanmod.experimentalGpuIndirectCommands=true -Dvulkanmod.ciGpuIndirectShadowSmoke=true -Dvulkanmod.validation=true" vulkan-gpu-indirect-shadow-smoke.log
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.smokeExitAtConstructor=true -Dvulkanmod.experimentalGpuIndirectCommands=true -Dvulkanmod.ciGpuIndirectShadowSmoke=true -Dvulkanmod.ciGpuLiveSelectionDiagnosticSmoke=true -Dvulkanmod.validation=true" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_READY" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_LIVE_DIAGNOSTIC_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "Vulkan smoke test passed" vulkan-gpu-indirect-shadow-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-gpu-indirect-shadow-smoke.log; then
       echo "GPU indirect shadow smoke produced invalid Vulkan" >&2

@@ -108,6 +108,7 @@ public class MinecraftMixin {
             net.vulkanmod.render.chunk.SectionVoxelSmokeTest.verify();
             net.vulkanmod.render.chunk.build.PublicationDrainSmokeTest.verify();
             net.vulkanmod.render.chunk.voxel.GpuSectionSelectionShadowSmokeTest.verify();
+            net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic.verifyProbeReadbackForCi();
             net.vulkanmod.render.FlywheelCompatSmokeTest.verifyIfPresent();
 
             // Vanilla 1.20.1's Unihex glyph provider bypasses NativeImage and calls
