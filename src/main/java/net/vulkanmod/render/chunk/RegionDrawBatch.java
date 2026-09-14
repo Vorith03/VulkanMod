@@ -4,6 +4,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
+import net.vulkanmod.render.chunk.voxel.GpuSectionSelectionShadowStore;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -20,7 +21,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /** Opaque commands survive camera movement; each frame owns its writable copy. */
 final class RegionDrawBatch {
     private static final boolean LIVE_GPU_SECTION_SELECTION = Boolean.getBoolean(
-            "vulkanmod.experimentalGpuSectionSelection");
+            "vulkanmod.experimentalGpuSectionSelection")
+            || GpuSectionSelectionShadowStore.enabled();
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
 
@@ -28,11 +30,16 @@ final class RegionDrawBatch {
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
+    private final GpuRegionCandidateTable[] candidateTables =
+            new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] diagnosticTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
     private final boolean[][] diagnosticExpected =
             new boolean[TerrainRenderType.VALUES.length][];
     private final long[] diagnosticTokens = new long[TerrainRenderType.VALUES.length];
+    private final GpuSectionSelectionShadowStore[] shadowStores =
+            new GpuSectionSelectionShadowStore[TerrainRenderType.VALUES.length];
+    private final boolean[] shadowStoreAttempted = new boolean[TerrainRenderType.VALUES.length];
 
     void draw(DrawBuffers buffers, ChunkArea area, Pipeline pipeline, RenderType renderType,
               double camX, double camY, double camZ) {
@@ -51,6 +58,7 @@ final class RegionDrawBatch {
         batch.update(buffers, area, type);
         compareLiveCandidates(area, type);
         publishLiveCandidates(buffers, area, type);
+        dispatchShadowCandidates(area, type, frames);
         if (batch.drawCount == 0) return;
         RegionBatchStats.sections += batch.drawCount;
 
@@ -97,6 +105,37 @@ final class RegionDrawBatch {
             diagnosticExpected[layer] = null;
             diagnosticTokens[layer] = 0L;
         }
+    }
+
+    /**
+     * Generate persistent GPU indirect commands in shadow mode. The helper compute
+     * submission is outside the active render pass; production still executes the
+     * CPU FrameBatch below. The persistent output is therefore synchronization and
+     * lifecycle groundwork, not yet a rendering ownership switch.
+     */
+    private void dispatchShadowCandidates(ChunkArea area, TerrainRenderType type, int frames) {
+        if(!GpuSectionSelectionShadowStore.enabled())
+            return;
+        int layer = type.ordinal();
+        GpuRegionCandidateTable table = candidateTables[layer];
+        if(table == null)
+            return;
+        GpuRegionCandidateGpuStore.Residency residency = area.getGpuCandidateResidency(type);
+        if(residency == null || !residency.valid()
+                || residency.generation() != table.generation())
+            return;
+        VFrustum frustum = VFrustum.currentGpuSelectionFrustum();
+        if(frustum == null)
+            return;
+
+        GpuSectionSelectionShadowStore store = shadowStores[layer];
+        if(store == null && !shadowStoreAttempted[layer]) {
+            shadowStoreAttempted[layer] = true;
+            store = GpuSectionSelectionShadowStore.tryCreate(frames);
+            shadowStores[layer] = store;
+        }
+        if(store != null)
+            store.dispatch(residency, table, layer, frustum);
     }
 
     /**
@@ -162,6 +201,7 @@ final class RegionDrawBatch {
         candidateInitialized[layer] = true;
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
+        candidateTables[layer] = queued ? table : null;
 
         if(diagnosticToken != 0L) {
             if(queued) {
@@ -206,11 +246,17 @@ final class RegionDrawBatch {
         for(int layer = 0; layer < candidateInitialized.length; ++layer) {
             candidateInitialized[layer] = false;
             candidateFingerprints[layer] = 0L;
+            candidateTables[layer] = null;
             if(diagnosticTokens[layer] != 0L)
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticTokens[layer]);
             diagnosticTokens[layer] = 0L;
             diagnosticTables[layer] = null;
             diagnosticExpected[layer] = null;
+            if(shadowStores[layer] != null) {
+                shadowStores[layer].close();
+                shadowStores[layer] = null;
+            }
+            shadowStoreAttempted[layer] = false;
         }
     }
 

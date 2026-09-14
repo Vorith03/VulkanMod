@@ -3,12 +3,12 @@ package net.vulkanmod.render.chunk;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.voxel.GpuSectionSelectionShadowPipeline;
 import net.vulkanmod.render.vertex.CustomVertexFormat;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 public abstract class TerrainShaderManager {
@@ -81,6 +81,7 @@ public abstract class TerrainShaderManager {
     }
 
     public static void destroyPipelines() {
+        GpuSectionSelectionShadowPipeline.destroy();
         terrainIndirectShader.cleanUp();
         terrainDirectShader.cleanUp();
         if (terrainRegionShader != null) {
