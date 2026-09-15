@@ -105,6 +105,11 @@ public final class RegionVoxelGpuStore {
         this.lightingGenerations[slot] = generation;
         this.lightingPending[slot] = null;
 
+        if(!hasVoxelInput(slot, generation)) {
+            discardLightingResident(slot);
+            return false;
+        }
+
         if(this.closed || !uploadPathReady() || snapshot.byteSize() > PAGE_BYTES) {
             discardLightingResident(slot);
             return false;
