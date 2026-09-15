@@ -19,6 +19,7 @@ layout(push_constant) uniform ProbePushConstants {
     uint voxelByteLength;
     uint lightingBaseByteOffset;
     uint lightingByteLength;
+    uint blockIndex;
 } pc;
 
 const uint VOXEL_MAGIC = 0x56584c31u;
@@ -27,7 +28,6 @@ const uint VOXEL_BLOCK_COUNT = 4096u;
 const uint VOXEL_FLAG_PLANES = 5u;
 const uint VOXEL_PLANE_WORDS = 128u;
 const uint VOXEL_GPU_FULL_CUBE_PLANE = 4u;
-const uint PROBE_CUBE_INDEX = 8u | (8u << 4u) | (8u << 8u);
 
 const uint LIGHTING_MAGIC = 0x564b534cu;
 const uint LIGHTING_VERSION = 1u;
@@ -44,10 +44,8 @@ const uint RESULT_HEADER_WORDS = 12u;
 const uint RESULT_RECORD_WORDS = 4u;
 const uint FACE_COUNT = 6u;
 const uint FACE_RESULT_WORDS = 8u;
-// The first twelve lattice records map to y=-2,z=-2. Canonical cube AO can
-// never demand a point with two outer-shell axes, so those 48 words are a
-// lossless diagnostic sideband for six faces x four (color,light) vertices.
-const uint FACE_RESULT_BASE = RESULT_HEADER_WORDS;
+// Keep face output disjoint from all lattice records, including halo samples.
+const uint FACE_RESULT_BASE = RESULT_HEADER_WORDS + SAMPLE_COUNT * RESULT_RECORD_WORDS;
 
 bool validInputs(uint voxelBase, uint lightBase) {
     if (voxelPage.words[voxelBase] != VOXEL_MAGIC
@@ -110,7 +108,8 @@ uint latticeIndexFor(ivec3 localPos) {
 bool readSample(uint lightBase, ivec3 localPos,
                 out uint light, out float brightness, out uint pass) {
     uint latticeIndex = latticeIndexFor(localPos);
-    if (latticeIndex >= SAMPLE_COUNT) {
+    if (any(lessThan(localPos, ivec3(-2)))
+            || any(greaterThan(localPos, ivec3(17)))) {
         atomicOr(outputData.words[5], 4u);
         return false;
     }
@@ -210,13 +209,16 @@ uint packGray(float value) {
 }
 
 void writeFaceLighting(uint face, uint voxelBase, uint lightBase) {
-    if (!voxelHasGpuFullCube(voxelBase, PROBE_CUBE_INDEX)) {
+    if (pc.blockIndex >= VOXEL_BLOCK_COUNT
+            || !voxelHasGpuFullCube(voxelBase, pc.blockIndex)) {
         atomicOr(outputData.words[5], 8u);
         return;
     }
 
     ivec3 normal = faceStep(face);
-    ivec3 centerPos = ivec3(8) + normal;
+    ivec3 blockPos = ivec3(pc.blockIndex & 15u,
+            (pc.blockIndex >> 4u) & 15u, (pc.blockIndex >> 8u) & 15u);
+    ivec3 centerPos = blockPos + normal;
     float sideBrightness[4];
     uint sideLight[4];
     bool open[4];

@@ -24,7 +24,6 @@ import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 public final class GpuSparseLightingGpuSmokeTest {
     private static final int PROBE_CUBE_COORD = 8;
     private static final int FACE_RESULT_WORDS = 8;
-    private static final int FACE_SIDEBAND_RECORDS = 12;
 
     private GpuSparseLightingGpuSmokeTest() {}
 
@@ -57,7 +56,8 @@ public final class GpuSparseLightingGpuSmokeTest {
             require(nonOverlapping(firstVoxelResidency, firstLightingResidency),
                     "Shared terrain input page slices must not overlap");
             verifyReadback(store, firstLightingResidency, first);
-            verifyCompute(store, firstVoxelResidency, firstLightingResidency, first);
+            verifyCompute(store, firstVoxelResidency, firstLightingResidency, first,
+                    SectionVoxelSnapshot.blockIndex(8, 8, 8));
 
             GpuSparseLightingSnapshot replacement = lightingFixture(voxel, 0x2468ACE0);
             require(store.upload(0, voxel, 42L),
@@ -106,6 +106,20 @@ public final class GpuSparseLightingGpuSmokeTest {
             require(!invalidated.valid() && invalidated.generation() == 44L,
                     "Lighting invalidation before submission must prevent stale publication");
 
+            // Every corner exercises both outer halo shells on three axes.
+            for(int corner = 0; corner < 8; ++corner) {
+                int index = SectionVoxelSnapshot.blockIndex((corner & 1) * 15,
+                        ((corner >> 1) & 1) * 15, ((corner >> 2) & 1) * 15);
+                SectionVoxelSnapshot boundaryVoxel = voxelFixture(index);
+                GpuSparseLightingSnapshot boundaryLight = lightingFixture(boundaryVoxel, corner);
+                long generation = 50L + corner;
+                require(store.upload(0, boundaryVoxel, generation), "Boundary voxel upload");
+                require(store.uploadLighting(0, boundaryLight, generation), "Boundary lighting upload");
+                AreaUploadManager.INSTANCE.submitUploads();
+                verifyCompute(store, store.getResidency(0), store.getLightingResidency(0),
+                        boundaryLight, index);
+            }
+
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
         } finally {
@@ -122,9 +136,12 @@ public final class GpuSparseLightingGpuSmokeTest {
     }
 
     private static SectionVoxelSnapshot voxelFixture() {
-        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        int center = SectionVoxelSnapshot.blockIndex(
-                PROBE_CUBE_COORD, PROBE_CUBE_COORD, PROBE_CUBE_COORD);
+        return voxelFixture(SectionVoxelSnapshot.blockIndex(
+                PROBE_CUBE_COORD, PROBE_CUBE_COORD, PROBE_CUBE_COORD));
+    }
+
+    private static SectionVoxelSnapshot voxelFixture(int center) {
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(-16, 64, -32);
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             int flags = SectionVoxelSnapshot.CPU_REQUIRED;
             if(i == center)
@@ -206,7 +223,7 @@ public final class GpuSparseLightingGpuSmokeTest {
     private static void verifyCompute(RegionVoxelGpuStore store,
                                       RegionVoxelGpuStore.Residency voxelResidency,
                                       RegionVoxelGpuStore.Residency lightingResidency,
-                                      GpuSparseLightingSnapshot snapshot) {
+                                      GpuSparseLightingSnapshot snapshot, int blockIndex) {
         StorageBuffer voxelPage = store.getPageBuffer(voxelResidency.pageIndex());
         StorageBuffer lightingPage = store.getPageBuffer(lightingResidency.pageIndex());
         require(voxelPage != null && lightingPage != null,
@@ -214,14 +231,14 @@ public final class GpuSparseLightingGpuSmokeTest {
 
         int[] actual;
         try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
-            actual = probe.dispatch(voxelPage, voxelResidency, lightingPage, lightingResidency);
+            actual = probe.dispatch(voxelPage, voxelResidency, lightingPage, lightingResidency, blockIndex);
 
             RegionVoxelGpuStore.Residency mismatched = new RegionVoxelGpuStore.Residency(
                     lightingResidency.pageIndex(), lightingResidency.byteOffset(),
                     lightingResidency.byteLength(), lightingResidency.generation() + 1L, true);
             boolean rejected = false;
             try {
-                probe.dispatch(voxelPage, voxelResidency, lightingPage, mismatched);
+                probe.dispatch(voxelPage, voxelResidency, lightingPage, mismatched, blockIndex);
             } catch(IllegalArgumentException expected) {
                 rejected = true;
             }
@@ -265,7 +282,7 @@ public final class GpuSparseLightingGpuSmokeTest {
         for(Direction direction : Direction.values())
             expected[6 + direction.ordinal()] = snapshot.directionalShadeBits(direction);
 
-        writeExpectedFaceLighting(expected, snapshot);
+        writeExpectedFaceLighting(expected, snapshot, blockIndex);
         require(demanded == snapshot.sampleCount(),
                 "Every sparse-lighting compact record must map from exactly one demanded lattice point");
         for(int i = 0; i < expected.length; ++i) {
@@ -277,27 +294,17 @@ public final class GpuSparseLightingGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_SPARSE_LIGHTING_COMPUTE_OK: paired-generation host gate, exact sparse rank decode, {} demanded lattice records, packed light, shade brightness, light-passing predicates, six directional shade values, 24 exact canonical face-vertex color/light outputs",
-                demanded);
+                "VULKANMOD_GPU_SPARSE_LIGHTING_COMPUTE_OK: paired-generation host gate, exact sparse rank decode, {} demanded lattice records, packed light, shade brightness, light-passing predicates, six directional shade values, 24 exact canonical face-vertex color/light outputs at block {}",
+                demanded, blockIndex);
     }
 
     private static void writeExpectedFaceLighting(int[] expected,
-                                                  GpuSparseLightingSnapshot snapshot) {
-        for(int latticeIndex = 0; latticeIndex < FACE_SIDEBAND_RECORDS; ++latticeIndex) {
-            int localX = latticeIndex % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
-            int localY = (latticeIndex / GpuLightingDemandMap.DOMAIN_WIDTH)
-                    % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
-            int localZ = latticeIndex
-                    / (GpuLightingDemandMap.DOMAIN_WIDTH * GpuLightingDemandMap.DOMAIN_WIDTH) - 2;
-            require(!snapshot.demanded(localX, localY, localZ),
-                    "Canonical lighting face sideband must occupy permanently undemanded lattice records");
-        }
-
+                                                  GpuSparseLightingSnapshot snapshot, int blockIndex) {
         for(Direction face : Direction.values()) {
             Direction[] tangent = tangents(face);
-            int centerX = PROBE_CUBE_COORD + face.getStepX();
-            int centerY = PROBE_CUBE_COORD + face.getStepY();
-            int centerZ = PROBE_CUBE_COORD + face.getStepZ();
+            int centerX = (blockIndex & 15) + face.getStepX();
+            int centerY = ((blockIndex >> 4) & 15) + face.getStepY();
+            int centerZ = ((blockIndex >> 8) & 15) + face.getStepZ();
             float[] sideBrightness = new float[4];
             int[] sideLight = new int[4];
             boolean[] open = new boolean[4];
@@ -341,7 +348,7 @@ public final class GpuSparseLightingGpuSmokeTest {
 
             int[] remap = vertexRemap(face);
             float directionalShade = Float.intBitsToFloat(snapshot.directionalShadeBits(face));
-            int faceBase = SparseLightingComputeProbe.RESULT_HEADER_WORDS
+            int faceBase = SparseLightingComputeProbe.FACE_RESULT_BASE
                     + face.ordinal() * FACE_RESULT_WORDS;
             for(int corner = 0; corner < 4; ++corner) {
                 int vertex = remap[corner];

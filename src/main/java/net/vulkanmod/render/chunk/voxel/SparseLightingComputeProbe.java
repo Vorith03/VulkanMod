@@ -44,10 +44,11 @@ final class SparseLightingComputeProbe implements AutoCloseable {
     static final int RESULT_MAGIC = 0x4c495431; // LIT1
     static final int RESULT_HEADER_WORDS = 12;
     static final int RESULT_RECORD_WORDS = 4;
-    static final int RESULT_WORDS = RESULT_HEADER_WORDS
+    static final int FACE_RESULT_BASE = RESULT_HEADER_WORDS
             + GpuLightingDemandMap.SAMPLE_COUNT * RESULT_RECORD_WORDS;
+    static final int RESULT_WORDS = FACE_RESULT_BASE + 6 * 8;
 
-    private static final int PUSH_CONSTANT_BYTES = 4 * Integer.BYTES;
+    private static final int PUSH_CONSTANT_BYTES = 5 * Integer.BYTES;
     private static final int WORKGROUP_SIZE = 64;
     private static final int WORKGROUP_COUNT = (GpuLightingDemandMap.SAMPLE_COUNT
             + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
@@ -68,7 +69,10 @@ final class SparseLightingComputeProbe implements AutoCloseable {
     }
 
     int[] dispatch(StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxelResidency,
-                   StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lightingResidency) {
+                   StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lightingResidency,
+                   int blockIndex) {
+        if(blockIndex < 0 || blockIndex >= SectionVoxelSnapshot.BLOCK_COUNT)
+            throw new IllegalArgumentException("Probe block index must be inside the section");
         if(this.closed)
             throw new IllegalStateException("Sparse-lighting compute probe is closed");
         validateSlice(voxelPage, voxelResidency, SectionVoxelSnapshot.HEADER_WORDS * Integer.BYTES,
@@ -108,6 +112,7 @@ final class SparseLightingComputeProbe implements AutoCloseable {
             push.putInt(Integer.BYTES, voxelResidency.byteLength());
             push.putInt(2 * Integer.BYTES, lightingResidency.byteOffset());
             push.putInt(3 * Integer.BYTES, lightingResidency.byteLength());
+            push.putInt(4 * Integer.BYTES, blockIndex);
             vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
                     VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
             vkCmdDispatch(commandBuffer.getHandle(), WORKGROUP_COUNT, 1, 1);
