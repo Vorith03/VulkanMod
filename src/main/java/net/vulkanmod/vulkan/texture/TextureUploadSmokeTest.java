@@ -103,8 +103,9 @@ public final class TextureUploadSmokeTest {
 
             Initializer.LOGGER.info("TextureUtil raw-id Vulkan allocation smoke passed: 4x3 RGBA image bound for NativeImage upload");
         } finally {
-            if (image != null) image.doFree();
             TextureUtil.releaseTextureId(textureId);
+            Vulkan.waitIdle();
+            if (image != null) image.doFree();
             VTextureSelector.bindTexture(previous);
         }
     }

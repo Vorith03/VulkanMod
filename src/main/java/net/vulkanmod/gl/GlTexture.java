@@ -46,12 +46,16 @@ public class GlTexture {
     }
 
     public static void glDeleteTextures(int i) {
-        map.remove(i);
+        GlTexture texture = map.remove(i);
+
         if(boundTextureId == i) {
             boundTextureId = 0;
             boundTexture = null;
             VTextureSelector.bindTexture(null);
         }
+
+        if(texture != null && texture.vulkanImage != null)
+            texture.vulkanImage.free();
     }
 
     public static GlTexture getTexture(int id) {
