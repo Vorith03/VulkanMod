@@ -4,33 +4,41 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Branch integration checkpoint — 2026-09-15
 
-- User requested reviewing and safely merging the three active branches.
-- Local integration branch: `integrate-forge-branches-20260915`.
-- Reviewed source tips: Forge `1c6fccd7d83a4e9dad94a57960be500fbdd005d2`,
-  FTB `cfa58c6716d3458aafe2adf75b9ccb4b2fb1ea39`, telemetry
-  `5dabf64c00221b2a1b9310085c92e78bd1f54315`.
-- Merge commits: `988475a243ea9490e4488a4363c0ce4c65f1c9e6` (FTB),
-  `0a7421b645e88592ff874af092d5497843bd1dc0` (telemetry).
-- Sole conflict was additive mixin registration; retained both sets. All three
-  original tips are ancestors of the result. Scratch tip `2f9d17d` was already
-  in Forge history. Side-branch file contents are identical to their source tips
-  apart from the combined JSON registration list, which preserves every original
-  entry without duplicates. No terrain implementation was changed by integration.
-- Source CI verified live: Forge run `34829799821`, FTB `34832111538`, telemetry
-  `34829353714` all passed every build/runtime gate. Combined CI has NOT run.
-- Local whitespace, JSON registration integrity, history/content preservation,
-  and FTB shell syntax checks passed. Local Gradle cannot download uncached 8.1.1
-  because network access to the distribution is unavailable.
-- Remote integration push was blocked by automatic approval review, citing remote
-  publication without explicit destination authorization. Do not route around that
-  rejection. User approval is required to publish this branch to
-  `Vorith03/VulkanMod`, open an integration PR for full CI, and then update
-  `forge-1.20.1` only after green combined checks. Source branches remain intact.
-- Resume: obtain publication authorization, re-fetch/recheck all remote tips,
-  incorporate any concurrent work, run combined PR CI (including FTB and telemetry),
-  and fast-forward Forge to the tested integration history. Preserve original
-  branches. GPU gameplay and full-pack memory behavior still need user-machine
-  testing; this merge does not establish new roadmap milestones.
+- Integration is complete on `forge-1.20.1`; integration branch
+  `integrate-forge-branches-20260915` and draft PR `#3` preserve the reviewed
+  two-parent merge history. No new Forge commits landed after the requested baseline
+  `1c6fccd7d83a4e9dad94a57960be500fbdd005d2` before integration.
+- Exact remote merge commits: `5c24062e6b6fc06e5c07669b081883198c6f01ba`
+  (FTB `cfa58c6716d3458aafe2adf75b9ccb4b2fb1ea39`) and
+  `0f48d5916ce3ae2a71b062fc1f2371683cbc154a` (telemetry
+  `5dabf64c00221b2a1b9310085c92e78bd1f54315`). Scratch tip `2f9d17d` was already
+  contained in Forge. Both source tips and Forge are ancestors of the result.
+- Adversarial review found one merge-relevant production defect. FTB Library permits
+  partially/disjoint out-of-framebuffer OpenGL scissors, but Vulkan rejects negative
+  dynamic-scissor offsets. Commit `b3e2d82dedabfa920f004605688dba19e20d1408`
+  clips the raw framebuffer rectangle with overflow-safe endpoints before Vulkan Y
+  conversion. Its existing FTB 2001.2.13 smoke now runs under Vulkan validation and
+  covers partial out-of-bounds, nested empty, restore, and disable behavior.
+- No lifecycle-telemetry defect was established. Its hooks run after Vulkan setup;
+  reload completion is marshalled to the client thread; deferred lists use their
+  owning `MemoryManager` lock; teardown snapshots do not call destroyed native
+  resources. The telemetry remains observational and opt-in outside CI.
+- Source CI inspected live and green: Forge run `34829799821` / job `103930207813`,
+  FTB run `34832111538` / job `103937590005`, telemetry run `34829353714` / job
+  `103928760667`.
+- Combined draft-PR CI `#439`, run `34918044924`, job `104219841515`, passed the
+  complete suite at integration head `b3e2d82`; artifact `10376779648`.
+- Fast-forwarded Forge CI `#440`, run `34918542685`, job `104221320971`, passed the
+  complete suite at `b3e2d82`. Final tested artifact `10376369139` is
+  `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.440-gb3e2d82d-all.jar`, SHA-256
+  `30897380c5af19d8fe0fef24a3021c461949ee49f5d409ed39b9e51f15f926c7`.
+  Direct JAR inspection confirmed every FTB/telemetry mixin class and registration
+  exactly once, a valid refmap, and preserved unmapped target/method descriptors.
+- Dependency-free JSON, shell, whitespace, ancestry, tree/content-preservation checks
+  passed. Local Gradle was not retried because Gradle 8.1.1 is not cached here.
+- Still untested: real FTB Chunks map clipping on the RX 6900 XT, normal shutdown,
+  in-world F3+T reload completion, repeated world leave/re-enter, and full-modpack
+  lifecycle-memory trends. No performance or GPU-terrain milestone is claimed.
 
 ## Required planning documents
 
