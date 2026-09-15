@@ -120,6 +120,33 @@ public final class GpuSparseLightingGpuSmokeTest {
                         boundaryLight, index);
             }
 
+            try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
+                for(int mask = 0; mask < 16; ++mask) {
+                    var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask);
+                    long generation = 100L + mask;
+                    require(store.upload(0, fixture.voxel(), generation), "Captured voxel upload");
+                    require(store.uploadLighting(0, fixture.lighting(), generation),
+                            "Captured lighting upload");
+                    AreaUploadManager.INSTANCE.submitUploads();
+                    var voxelResidency = store.getResidency(0);
+                    var lightResidency = store.getLightingResidency(0);
+                    int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
+                            voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
+                            lightResidency, 0);
+                    require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
+                            "Captured lighting must decode without GPU errors");
+                    for(int word = 0; word < fixture.faceWords().length; ++word) {
+                        int actual = result[SparseLightingComputeProbe.FACE_RESULT_BASE + word];
+                        int expected = fixture.faceWords()[word];
+                        if(actual != expected)
+                            throw new AssertionError("Minecraft/GPU lighting mismatch mask=" + mask
+                                    + " word=" + word + " expected=" + expected + " actual=" + actual);
+                    }
+                }
+            }
+            Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
+                    + "384 exact captured face-vertex color/light pairs across 16 occluder masks");
+
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
         } finally {

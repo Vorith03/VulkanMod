@@ -79,6 +79,42 @@ final class CanonicalCubeLightingSmokeTest {
                 lattice.rectangularBytes - lattice.sparseBytes);
     }
 
+    /** Capture real lighting inputs and use Minecraft itself as the GPU oracle. */
+    static SparseGpuFixture sparseGpuFixture(int occluderMask) {
+        LightingLevel level = new LightingLevel();
+        for(Direction face : Direction.values()) {
+            Direction[] tangent = tangents(face);
+            for(int i = 0; i < 4; ++i) {
+                if((occluderMask & (1 << i)) != 0)
+                    level.setState(ORIGIN.relative(face).relative(tangent[i]).relative(face),
+                            Blocks.STONE.defaultBlockState());
+            }
+        }
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(
+                ORIGIN.getX(), ORIGIN.getY(), ORIGIN.getZ());
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
+            builder.add(i == 0 ? 1 : 0, SectionVoxelSnapshot.CPU_REQUIRED
+                    | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
+        SectionVoxelSnapshot voxel = builder.finish();
+        GpuSparseLightingSnapshot lighting = GpuSparseLightingSnapshot.tryCapture(level, ORIGIN, voxel);
+        require(lighting != null, "Canonical captured lighting must fit the sparse cap");
+        int[] faceWords = new int[6 * 8];
+        ReflectedAmbientOcclusion renderer = new ReflectedAmbientOcclusion();
+        for(Direction face : Direction.values()) {
+            FaceResult result = renderer.calculate(level, face);
+            for(int vertex = 0; vertex < 4; ++vertex) {
+                int offset = face.ordinal() * 8 + vertex * 2;
+                faceWords[offset] = result.colors[vertex];
+                faceWords[offset + 1] = result.lights[vertex];
+            }
+        }
+        ModelBlockRenderer.clearCache();
+        return new SparseGpuFixture(voxel, lighting, faceWords);
+    }
+
+    record SparseGpuFixture(SectionVoxelSnapshot voxel, GpuSparseLightingSnapshot lighting,
+                            int[] faceWords) {}
+
     private static LatticeResult verifyLatticePrototype() {
         verifyLayoutIndices(CanonicalCubeLightingLattice.Layout.RECTANGULAR_20,
                 CanonicalCubeLightingLattice.RECTANGULAR_SAMPLE_COUNT);
