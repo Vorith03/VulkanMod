@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
+import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
@@ -23,8 +24,12 @@ final class RegionDrawBatch {
     private static final boolean LIVE_GPU_SECTION_SELECTION = Boolean.getBoolean(
             "vulkanmod.experimentalGpuSectionSelection")
             || GpuSectionSelectionShadowStore.enabled();
+    private static final boolean GPU_INDIRECT_DRAW = Boolean.getBoolean(
+            "vulkanmod.experimentalGpuIndirectDraw")
+            && GpuSectionSelectionShadowStore.enabled();
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
+    private static boolean loggedGpuIndirectDraw;
 
     private FrameBatch[][] batches;
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
@@ -62,9 +67,17 @@ final class RegionDrawBatch {
         batch.update(buffers, area, type);
         compareLiveCandidates(area, type);
         publishLiveCandidates(buffers, area, type);
-        dispatchShadowCandidates(area, type, frames);
+        GpuSectionSelectionShadowStore shadowStore = dispatchShadowCandidates(area, type, frames);
         if (batch.drawCount == 0) return;
         RegionBatchStats.sections += batch.drawCount;
+
+        GpuRegionCandidateTable candidateTable = candidateTables[type.ordinal()];
+        boolean useGpuIndirect = canUseGpuIndirectDraw(area, shadowStore, candidateTable, batch);
+        long indirectBuffer = useGpuIndirect ? shadowStore.output().getId() : batch.commands.getId();
+        long indirectOffset = useGpuIndirect ? shadowStore.commandOffsetBytes() : 0L;
+        int indirectCount = useGpuIndirect ? candidateTable.candidateCount() : batch.drawCount;
+        if(useGpuIndirect)
+            logGpuIndirectDraw(area, type, candidateTable, batch.drawCount, indirectCount);
 
         type.setCutoutUniform();
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -77,12 +90,37 @@ final class RegionDrawBatch {
                             (float) (area.position.z - camZ)));
             pipeline.bindDescriptorSets(commandBuffer, frame);
             int limit = drawLimit(Device.deviceProperties.limits().maxDrawIndirectCount());
-            for (int first = 0; first < batch.drawCount; first += limit) {
+            for (int first = 0; first < indirectCount; first += limit) {
                 RegionBatchStats.calls++;
-                vkCmdDrawIndexedIndirect(commandBuffer, batch.commands.getId(), (long) first * STRIDE,
-                        Math.min(limit, batch.drawCount - first), STRIDE);
+                vkCmdDrawIndexedIndirect(commandBuffer, indirectBuffer,
+                        indirectOffset + (long) first * STRIDE,
+                        Math.min(limit, indirectCount - first), STRIDE);
             }
         }
+    }
+
+    private static boolean canUseGpuIndirectDraw(ChunkArea area,
+                                                  GpuSectionSelectionShadowStore store,
+                                                  GpuRegionCandidateTable table,
+                                                  FrameBatch cpuBatch) {
+        if(!GPU_INDIRECT_DRAW || store == null || table == null || cpuBatch == null)
+            return false;
+        if(table.candidateCount() < cpuBatch.drawCount
+                || table.candidateCount() > store.commandCapacity())
+            return false;
+        return store.isValidFor(table.generation(), area.position.x, area.position.y, area.position.z);
+    }
+
+    private static synchronized void logGpuIndirectDraw(ChunkArea area, TerrainRenderType type,
+                                                        GpuRegionCandidateTable table,
+                                                        int cpuDrawCount, int issuedCommands) {
+        if(loggedGpuIndirectDraw)
+            return;
+        loggedGpuIndirectDraw = true;
+        Initializer.LOGGER.info(
+                "VULKANMOD_GPU_INDIRECT_DRAW_ACTIVE: region=({}, {}, {}) layer={} generation={} cpuDraws={} boundedCommands={}; CPU batch remains built as fallback",
+                area.position.x, area.position.y, area.position.z, type.ordinal(), table.generation(),
+                cpuDrawCount, issuedCommands);
     }
 
     private void compareLiveCandidates(ChunkArea area, TerrainRenderType type) {
@@ -115,22 +153,23 @@ final class RegionDrawBatch {
 
     /**
      * Generate persistent GPU indirect commands in shadow mode. The helper compute
-     * submission is outside the active render pass; production still executes the
-     * CPU FrameBatch below. The persistent output is therefore synchronization and
-     * lifecycle groundwork, not yet a rendering ownership switch.
+     * submission is outside the active render pass. When the separate production
+     * draw gate is disabled, the CPU FrameBatch below remains the only consumer.
      */
-    private void dispatchShadowCandidates(ChunkArea area, TerrainRenderType type, int frames) {
+    private GpuSectionSelectionShadowStore dispatchShadowCandidates(ChunkArea area,
+                                                                     TerrainRenderType type,
+                                                                     int frames) {
         if(!GpuSectionSelectionShadowStore.enabled())
-            return;
+            return null;
         int layer = type.ordinal();
         GpuRegionCandidateTable table = candidateTables[layer];
         VFrustum frustum = candidateFrustums[layer];
         if(table == null || frustum == null)
-            return;
+            return null;
         GpuRegionCandidateGpuStore.Residency residency = area.getGpuCandidateResidency(type);
         if(residency == null || !residency.valid()
                 || residency.generation() != table.generation())
-            return;
+            return null;
 
         GpuSectionSelectionShadowStore store = shadowStores[layer];
         if(store == null && !shadowStoreAttempted[layer]) {
@@ -138,15 +177,16 @@ final class RegionDrawBatch {
             store = GpuSectionSelectionShadowStore.tryCreate(frames);
             shadowStores[layer] = store;
         }
-        if(store != null)
-            store.dispatch(residency, table, layer, frustum);
+        return store != null && store.dispatch(residency, table, layer, frustum) ? store : null;
     }
 
     /**
      * Diagnostic-only bridge from the full live region section set to the
      * generation-owned GPU candidate ABI. GRAPH_VISIBLE is the CPU graph/smart-cull
      * result before the frustum check; the GPU probe therefore owns the frustum
-     * decision over a true superset while production rendering stays CPU-driven.
+     * decision over a true superset while production rendering stays CPU-driven by
+     * default. The separate indirect-draw gate may consume only a successfully
+     * dispatched, generation-matched shadow result.
      */
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         if(!LIVE_GPU_SECTION_SELECTION)
