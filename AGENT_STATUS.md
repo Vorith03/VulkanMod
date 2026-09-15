@@ -13,14 +13,15 @@ session needs.
 - Production-consumer source commit immediately before it:
   `d91de023159f7a22a2b49f00392ca6e133cfd095`
   (`gpu terrain: gate GPU-selected indirect draws`).
-- Latest source CI: **#444**, run `34927562475`. Verify the live conclusion before
-  relying on this checkpoint; this document is intended to be committed only after
-  that workflow is green.
+- Latest source CI: **#444**, run `34927562475`, fully green at `67dafa92`.
 - Previous source CI **#443**, run `34925846288`, is fully green at `d91de023` across
   build/distribution, both Vulkan startups, persistent GPU indirect shadow, post/depth
   post-chain, screenshot, FTB Library, Crash Assistant, Chat Heads and Flywheel.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
 - Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**.
+- Phase 7 remains **5/11 verified gates**. The first real RX indirect-draw run is clean
+  but its eight comparator samples were exhausted during the first ~4 seconds after
+  world entry, so it is not enough to close the live visibility/selection gate yet.
 - User priority remains explicit: move repetitive terrain construction from CPU
   workers to the GPU while preserving conservative CPU fallback for arbitrary
   Minecraft/Forge semantics. Mesh shaders are optional/later.
@@ -36,7 +37,7 @@ Use these together:
 - `docs/GPU_TERRAIN_BOUNDARY.md` — CPU/GPU responsibility boundary;
 - `docs/GPU_VOXEL_RESIDENCY_PLAN_2026-09-12.md` — bounded section residency design;
 - `docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md` — live section-selection groundwork;
-- `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` — current indirect-draw handoff;
+- `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` — indirect-draw handoff;
 - `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md` — qualified baked-model subset;
 - `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md` — bounded compact face/vertex output;
 - `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md` — real-section lighting-demand gate.
@@ -58,17 +59,22 @@ The section-selection track is no longer synthetic-only.
 - Region candidate tables live in device-local storage with allocate-then-publish
   replacement, lifecycle invalidation and a global budget. Missing/stale/budget-failed
   residency leaves CPU rendering authoritative.
-- The rate-limited diagnostic can compare the live GPU-selected set and every five-word
+- The rate-limited diagnostic compares the live GPU-selected set and every five-word
   indirect command against the authoritative CPU `sectionQueue` without changing
   normal rendering.
 
-The **GPU visibility/section-selection roadmap gate remains open** until representative
-RX 6900 XT / Create Chronicles diagnostics show no unresolved mismatch, including the
-unusual camera-outside-build-height seed path.
+The first Create Chronicles/RX 6900 XT run on build #444 proved the production
+indirect path active and produced eight clean `VULKANMOD_GPU_LIVE_SECTION_SELECTION_OK`
+samples with selected counts from 0 through 45, plus no mismatch/error markers in the
+full log. However, those eight samples all occurred from 21:32:00.374 through
+21:32:04.478, mostly in region `(-128,-64,384)`. Because the diagnostic budget was
+consumed before the later movement/chunk-churn portion, the **GPU visibility/section-
+selection roadmap gate remains open** until a longer-spread sample covers actual
+movement/region churn and, if practical, the unusual camera-outside-build-height path.
 
 ### Persistent GPU indirect output
 
-The indirect-command mechanism now has a real persistent production-shaped output.
+The indirect-command mechanism has a real persistent production-shaped output.
 
 - `GpuSectionSelectionShadowStore` owns a device-local storage+indirect buffer with a
   four-word header and capacity for 512 indexed-indirect commands.
@@ -97,11 +103,12 @@ persistent output capacity. Otherwise the same draw uses the CPU indirect buffer
 
 `67dafa92` extracts that host decision into the production predicate and adds smoke
 assertions for disabled, stale/invalid, undersized, over-capacity and empty-CPU cases,
-plus exact/bounded-superset success cases.
+plus exact/bounded-superset success cases. CI #444 verifies the commit.
 
-After CI #444 is green, the **Phase 7 bounded GPU indirect-command + fallback gate is
-verified**. This does not close live selection correctness or the final RX evidence
-gate, and the production consumer stays default-off.
+The **Phase 7 bounded GPU indirect-command + fallback gate is verified**. The RX run
+also proves that the production consumer can become active on RADV/NAVI21 without an
+immediate visual/crash failure. This does not yet close live selection correctness or
+the final RX A/B gate, and the production consumer stays default-off.
 
 ### Hybrid GPU meshing groundwork
 
@@ -122,6 +129,13 @@ The larger CPU-meshing replacement remains separate from section-selection owner
   production geometry allocation/publication and hybrid fallback integration remain
   unresolved.
 
+The user's observation that chunks were still somewhat slow to appear during the
+indirect-draw test is expected at this checkpoint: the new path selects/submits
+already CPU-meshed geometry; it does not yet remove the block/model/lighting work in
+`ChunkTask.BuildTask.compile` that constructs new terrain meshes. Treat that
+observation as motivation for the hybrid-meshing track, not as evidence that the
+indirect path failed.
+
 ## Safety boundary
 
 Do not overclaim the current work.
@@ -133,65 +147,82 @@ Do not overclaim the current work.
   semantics stay on CPU.
 - Translucent/tripwire terrain stays on the established renderer until separately
   implemented and validated.
-- No FPS/frame-time improvement is claimed from CI. The bounded zero-tail draw plan
-  avoids a CPU readback but may have driver-dependent submission cost.
-- Do not enable GPU indirect draw or GPU meshing by default before RX 6900 XT visual
+- No FPS/frame-time improvement is claimed from the RX smoke. The bounded zero-tail
+  draw plan avoids a CPU readback but may have driver-dependent submission cost.
+- Do not enable GPU indirect draw or GPU meshing by default before broader RX visual
   correctness and comparable A/B evidence.
 
 ## Latest user runtime evidence
 
 Keep these observations separate from synthetic CI evidence:
 
-- On the integrated Create Chronicles build, F3+T completed normally.
-- Leaving and re-entering the world twice worked.
+- Build #444 / `67dafa92`, Create Chronicles on the RX 6900 XT: experimental GPU
+  indirect production consumption became active. Eight initial comparator samples
+  were all `...SELECTION_OK`; the full log contains no live selection mismatch/error
+  marker. The sampled selected counts progressed 0, 0, 1, 0, 14, 30, 36, 45.
+- The user reported that chunks were still a little slow to render. This is compatible
+  with the current design because terrain mesh construction remains CPU-authoritative.
+- On the integrated Create Chronicles build, F3+T completed normally and leaving/
+  re-entering the world twice worked.
 - FTB Chunks' large map opens and the minimap is present, but large-map terrain is
-  black; that compatibility issue remains open.
+  black. The #444 full log additionally records an FTB Chunks `MapTask` failure in
+  `HeightUtils.isWater` because a `BlockState` is null; keep that compatibility issue
+  parked unless it blocks active GPU work.
 - The previously reported center-screen/world-edge artifact disappeared when the
   death marker was removed. Treat death-marker/overlay behavior as the leading
-  explanation unless new evidence recreates the artifact without that marker; do not
-  resume terrain-vertex-overflow debugging by default.
+  explanation unless new evidence recreates the artifact without that marker.
 
-## RX 6900 XT test now useful
+## RX follow-up now useful — same build #444
 
-The next section-selection/indirect evidence genuinely requires the user's machine.
-Use the latest green CI artifact containing `67dafa92` with:
+No new JAR is required for the next evidence pass. Reuse build #444 and enable both
+the longer section-selection sample and the already-shipped lighting-demand estimator:
 
 ```text
 -Dvulkanmod.experimentalGpuIndirectCommands=true
 -Dvulkanmod.experimentalGpuIndirectDraw=true
 -Dvulkanmod.debugGpuSectionSelection=true
--Dvulkanmod.debugGpuSectionSelectionSamples=8
+-Dvulkanmod.debugGpuSectionSelectionSamples=64
+-Dvulkanmod.experimentalSectionVoxels=true
+-Dvulkanmod.debugGpuLightingDemand=true
 ```
+
+This run is **diagnostic, not a performance comparison**: the lighting-demand
+estimator deliberately adds worker work.
 
 In the normal Create Chronicles test world:
 
-1. move/rotate through ordinary terrain and cross several region boundaries;
-2. do a short fast spectator/chunk-churn pass;
-3. if practical, move above normal build height, rotate/move, then return;
-4. watch for missing terrain, holes, flicker, stale chunks, device loss or any
+1. spend at least ~35 seconds moving/rotating through ordinary terrain so the 500 ms
+   comparator cadence spans actual gameplay instead of only initial world entry;
+2. cross several region boundaries and do a short fast spectator/chunk-churn pass;
+3. if practical, briefly move above normal build height, rotate/move, then return;
+4. continue into previously unseen terrain long enough to build several hundred
+   sections so the lighting estimator emits multiple 128-section aggregate samples;
+5. watch for missing terrain, holes, flicker, stale chunks, device loss or any visible
    difference from CPU-driven rendering;
-5. return the relevant log lines:
+6. return the full `latest.log`, or at minimum:
 
 ```bash
-grep -E 'VULKANMOD_GPU_(INDIRECT_DRAW_ACTIVE|LIVE_SECTION_SELECTION_(OK|MISMATCH|ERROR)|INDIRECT_SHADOW)' latest.log
+grep -E 'VULKANMOD_GPU_(INDIRECT_DRAW_ACTIVE|LIVE_SECTION_SELECTION_(OK|MISMATCH|ERROR)|INDIRECT_SHADOW|LIGHTING_DEMAND)' latest.log
 ```
 
-Success requires the active marker, representative `...LIVE_SECTION_SELECTION_OK`
-samples, no unresolved mismatch/error, and no visible terrain regression. On failure,
-disable only `vulkanmod.experimentalGpuIndirectDraw` to restore CPU production draws
-while leaving the diagnostic shadow path available.
+Selection success requires the active marker, clean samples spread across movement/
+region churn, no unresolved mismatch/error and no visible terrain regression. The
+lighting lines decide whether sparse point/brick capture is materially cheaper than
+the corresponding CPU meshes; do not choose that ABI before seeing the real ratios.
 
 ## Current blockers / next actions
 
-1. **P7 visibility/selection:** obtain the RX 6900 XT live comparator + visual result
-   above. If mismatches occur, diagnose that exact predicate/seed case before further
-   production ownership expansion.
-2. **Performance:** if correctness is clean, run a fixed-route CPU-vs-GPU-indirect A/B
-   before considering default enablement or a count-indirect optimization.
-3. **Hybrid meshing:** collect real Create Chronicles
-   `VULKANMOD_GPU_LIGHTING_DEMAND` evidence with the existing estimator before choosing
-   a production lighting input encoding or clearing any CPU fallback.
-4. Keep Phase 4 compatibility work parked behind the user's terrain priority, except
+1. **P7 visibility/selection:** use the 64-sample follow-up above. If clean across
+   movement/churn, close the live selection gate and advance Phase 7 to 6/11.
+2. **Hybrid meshing:** use the same run's `VULKANMOD_GPU_LIGHTING_DEMAND` ratios to
+   choose a bounded sparse lighting input with explicit dense-demand CPU fallback, or
+   reject CPU-resolved lighting capture if the real sections are too dense.
+3. **Performance:** only after correctness is clean, run fixed-route CPU-vs-GPU
+   comparisons. Do not interpret the lighting-telemetry run as performance evidence.
+4. Continue production GPU terrain construction toward actually bypassing qualified
+   CPU model/face work; indirect draw submission by itself is not the chunk-appearance
+   bottleneck the user wants reduced.
+5. Keep Phase 4 compatibility work parked behind the user's terrain priority, except
    for regressions that make the active GPU work unsafe.
 
 Live Git/CI always supersedes commit/run numbers written here.
