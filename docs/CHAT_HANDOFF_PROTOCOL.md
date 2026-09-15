@@ -1,6 +1,6 @@
 # Chat Rollover and Handoff Protocol
 
-This protocol exists because long-running development chats eventually accumulate enough history, tool output, logs, and superseded hypotheses that continuing in the same chat becomes less reliable and less efficient.
+This protocol exists because long-running development chats eventually accumulate enough history, tool output, logs, and superseded hypotheses that continuing in the same chat becomes less reliable and less efficient. It also makes repository work resilient to an unexpected chat/session interruption: the repository should remain sufficient to resume useful work even if the current conversation disappears without a final handoff message.
 
 ## Recommended chat lifetime
 
@@ -21,6 +21,82 @@ Agents should proactively recommend starting a new chat when **any two** of the 
 - a clean handoff would be shorter and more reliable than carrying the existing conversation forward.
 
 Do **not** interrupt an active atomic operation merely because the nominal time/milestone threshold has been reached. Finish the immediate build/fix/verification loop first, leave the repository in a coherent state, and then recommend rollover.
+
+## Interruption and timeout resilience
+
+A planned rollover is not the only failure mode. A chat can end unexpectedly while an agent is editing, building, waiting on CI, or investigating a failure. Work should therefore be checkpointed **during** the session rather than relying on one final handoff at the end.
+
+The goal is that a new session can recover from Git, CI, `AGENT_STATUS.md`, and durable project documents without needing the old chat to have ended cleanly.
+
+### Mandatory checkpoint triggers
+
+Create or refresh a durable checkpoint whenever practical at these points:
+
+- after a coherent implementation milestone is reached;
+- before starting a long or failure-prone build/test/CI operation when valuable changes currently exist only in the working tree;
+- before asking the user for a runtime test whose result may arrive in a later chat;
+- after a new investigation materially changes the active hypothesis, blocker, or next action;
+- before opening a second independent workstream in the same session;
+- when the session has become unusually tool-heavy or context-heavy even if a planned rollover is not yet due;
+- before explicitly recommending a new chat.
+
+A checkpoint does **not** require committing knowingly broken or incoherent code merely to create activity. Prefer a small coherent commit. If the current experiment cannot safely be committed yet, preserve the recovery information in the appropriate status/design document and state exactly what remains uncommitted or incomplete.
+
+### Checkpoint contents
+
+A timeout-safe checkpoint should make the following recoverable with minimal inference:
+
+- branch and exact HEAD;
+- the coherent commits created so far;
+- whether meaningful work remains uncommitted or otherwise unpublished;
+- the active task/gate;
+- the current evidence-backed hypothesis or conclusion;
+- the exact next action;
+- validation already completed;
+- validation still outstanding;
+- any CI run or artifact that now owns the next piece of evidence;
+- any user-side test already requested and the success/failure signal expected from it.
+
+Do not turn `AGENT_STATUS.md` into a transcript. Record only state that changes what the next session should do.
+
+### Commit before expensive validation
+
+When a coherent change exists, prefer this ordering:
+
+1. make the smallest logical change;
+2. run the cheapest relevant local/static check available;
+3. commit the coherent change;
+4. push/publish it when repository policy permits;
+5. run or inspect expensive CI/runtime validation;
+6. update the durable checkpoint with the resulting evidence.
+
+This ensures a failed build, disconnected tool session, or chat timeout cannot erase the implementation that was being validated.
+
+Do not delay all commits until every possible validation stage is complete when doing so would leave substantial useful work only in ephemeral session state. Normal Git discipline still applies: checkpoints should be logically understandable and should not combine unrelated experiments.
+
+### Bound long tasks into resumable stages
+
+Large work items should be divided into recoverable stages such as:
+
+`investigate -> implement -> cheap check -> checkpoint -> expensive validation -> checkpoint -> integrate`
+
+An agent may continue through these stages without asking the user for permission when the work is already authorized. The boundaries exist so an interruption between stages loses little or no engineering state.
+
+Do not start another unrelated investigation merely to fill time while a critical state change is still unrecorded.
+
+### Long commands and CI waits
+
+Before starting an operation that may take a long time, ask whether an unexpected interruption would leave the next session unable to tell what was being tested. If yes, checkpoint first.
+
+For GitHub Actions specifically, the pushed commit and workflow run are durable evidence. Once a coherent change is pushed, record or retain enough information to identify the relevant run rather than depending on the current chat staying alive until the workflow completes.
+
+Avoid tying several independent changes to one enormous validation cycle when smaller, ordered checkpoints can isolate failures more clearly.
+
+### Proactive stabilization when a session is getting risky
+
+If the current session has become long, tool-heavy, or difficult to reason about, stop opening new workstreams. Finish the smallest coherent unit already in progress, checkpoint it, refresh the handoff/status information if needed, and only then continue or recommend rollover.
+
+The priority is **recoverability over squeezing one more unrelated task into the same conversation**.
 
 ## When rollover is due
 
@@ -67,6 +143,7 @@ If the outgoing chat discovered something future agents should know regardless o
 Examples:
 
 - `AGENTS.md` for standing development rules;
+- `AGENT_STATUS.md` for the current continuation checkpoint;
 - `docs/FORGE_PORT_AUDIT.md` for port-specific findings;
 - `docs/PERFORMANCE_AUDIT.md` for performance findings;
 - this file for chat/handoff policy.
@@ -90,16 +167,19 @@ A new agent resuming this project must:
 1. Read root `AGENTS.md` before making repository changes.
 2. Read this chat rollover protocol when the work is a continuation.
 3. Inspect `forge-1.20.1` HEAD and recent commits.
-4. Read the relevant durable project docs, especially current audits/handoffs.
+4. Read `AGENT_STATUS.md` and the relevant durable project docs.
 5. Inspect the latest CI/build evidence before predicting failures.
 6. Re-establish the highest **verified** milestone.
 7. Identify the exact next unresolved task.
-8. Continue from that task rather than repeating historical archaeology.
+8. Check whether the previous session left any documented incomplete/uncommitted experiment or pending user test.
+9. Continue from that task rather than repeating historical archaeology.
 
 The new agent should trust current repository state and evidence over prose from an older handoff if they conflict.
+
+If the previous chat ended unexpectedly, do not assume the absence of a final message means no progress was made. Recover from the branch tip, recent commits, CI, `AGENT_STATUS.md`, and referenced design/evidence documents first.
 
 ## Practical rule
 
 A chat is long enough when carrying its history is becoming more expensive or less reliable than reconstructing the current state from Git, CI, logs, and concise handoff notes.
 
-The goal is not frequent restarts for their own sake. The goal is to keep each agent working from a compact, high-confidence context while preserving continuous project progress.
+The repository should be able to survive the conversation disappearing at an inconvenient moment. The goal is not frequent restarts for their own sake; it is to keep each agent working from a compact, high-confidence context while preserving continuous project progress.
