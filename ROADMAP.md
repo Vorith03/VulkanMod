@@ -274,10 +274,14 @@ Current lighting slice: the exact dense-lattice prototype in
 `docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both a 20-cube
 and an 18-cube plus sparse second shell as too large. Reusable canonical model
 templates and partial position/UV vertex generation are proven in diagnostic compute,
-but lighting metadata remains unresolved and CPU terrain output remains authoritative.
+and bounded sparse lighting capture, decode and canonical AO/color/light reconstruction
+now exist diagnostically. CPU terrain output remains authoritative.
 The opt-in estimator in `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`
 now measures demand-driven point/brick density against actual CPU mesh bytes; real
-Create Chronicles section evidence is the next gate for the hybrid-meshing track.
+Create Chronicles logs recovered from prior tests reached 9,088 sections, with
+roughly 11–12% projected point/CPU-mesh bytes in larger samples (see `AGENT_STATUS.md`).
+Do not repeat this collection. Complete packed-vertex joining and bounded production
+publication remain open; this density evidence is not a measured speedup.
 
 The diagnostic compact face/vertex stream is now explicitly capacity-bounded as
 recorded in `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`: requested and written
@@ -381,11 +385,10 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `67dafa92c5a9f568616e10a54c504d9285f8f514`,
-  **CI #444** (run `34927562475`) is the verification run for the fallback-contract
-  commit and must be green before relying on this snapshot. Previous source CI #443
-  is fully green at `d91de023` across build/distribution, both Vulkan startups,
-  persistent GPU indirect shadow, post/depth, screenshot and compatibility smokes.
+- Current source: `7cbe402ae94b242bd0ab948ac7816ae9838c0439`, CI #467
+  (run `34960611507`, job `104353079945`) is fully green. Exact center/corner
+  sparse lighting and captured Minecraft AO comparisons passed, along with all
+  build, Vulkan, renderer and compatibility gates. Production meshing remains open.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 5/11.
 - P7 input ABI, capped persistent region SSBO residency, compute plumbing, reusable
@@ -393,8 +396,9 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   indirect-command generation with CPU fallback are verified. A live metadata
   producer and default-off production indirect consumer now exist. Live GPU selection
   correctness still needs representative RX 6900 XT/Create Chronicles evidence.
-- Hybrid GPU meshing still requires real lighting-demand density evidence before the
-  snapshot ABI is extended or any CPU geometry ownership is removed.
+- Recovered real lighting-demand density supports bounded sparse-input work. CPU
+  geometry ownership must remain until complete vertex/oracle and bounded production
+  publication/fallback evidence exists.
 - No new RX 6900 XT A/B performance measurement or performance claim.
 
 See `AGENT_STATUS.md` for current test instructions and
