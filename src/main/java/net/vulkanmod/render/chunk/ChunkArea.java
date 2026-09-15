@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelGpuStore;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshot;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
@@ -241,14 +242,42 @@ public class ChunkArea {
 
         boolean stored = voxels != null && voxels.put(slot, snapshot);
         if (!stored) {
-            if (gpuVoxels != null)
+            if (gpuVoxels != null) {
                 gpuVoxels.invalidate(slot, generation);
+                gpuVoxels.invalidateLighting(slot, generation);
+            }
             return;
         }
 
         if (gpuVoxels == null)
             gpuVoxels = new RegionVoxelGpuStore();
         gpuVoxels.upload(slot, snapshot, generation);
+    }
+
+    /**
+     * Publish lighting only for a section whose CPU voxel snapshot was accepted.
+     * Null or rejected lighting explicitly revokes the same generation so a future
+     * compute consumer can require matching voxel + lighting residency.
+     */
+    public synchronized void publishSparseLighting(int x, int y, int z,
+                                                   GpuSparseLightingSnapshot snapshot,
+                                                   long generation) {
+        int slot = voxelSlot(x, y, z);
+        if (slot < 0) return;
+        if (snapshot != null && (snapshot.x() != x || snapshot.y() != y || snapshot.z() != z))
+            throw new IllegalArgumentException("Sparse lighting origin does not match its section");
+
+        if (gpuVoxels == null || voxels == null || voxels.get(slot) == null) {
+            if (gpuVoxels != null)
+                gpuVoxels.invalidateLighting(slot, generation);
+            return;
+        }
+
+        if (snapshot == null) {
+            gpuVoxels.invalidateLighting(slot, generation);
+            return;
+        }
+        gpuVoxels.uploadLighting(slot, snapshot, generation);
     }
 
     public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
@@ -259,6 +288,11 @@ public class ChunkArea {
     public synchronized RegionVoxelGpuStore.Residency getGpuVoxelResidency(int x, int y, int z) {
         int slot = voxelSlot(x, y, z);
         return gpuVoxels == null || slot < 0 ? null : gpuVoxels.getResidency(slot);
+    }
+
+    public synchronized RegionVoxelGpuStore.Residency getGpuSparseLightingResidency(int x, int y, int z) {
+        int slot = voxelSlot(x, y, z);
+        return gpuVoxels == null || slot < 0 ? null : gpuVoxels.getLightingResidency(slot);
     }
 
     public synchronized StorageBuffer getGpuVoxelPage(int pageIndex) {
@@ -325,7 +359,10 @@ public class ChunkArea {
         int slot = voxelSlot(x, y, z);
         if (slot < 0) return;
         if (voxels != null) voxels.remove(slot);
-        if (gpuVoxels != null) gpuVoxels.invalidate(slot, generation);
+        if (gpuVoxels != null) {
+            gpuVoxels.invalidate(slot, generation);
+            gpuVoxels.invalidateLighting(slot, generation);
+        }
     }
 
     private int voxelSlot(int x, int y, int z) {
