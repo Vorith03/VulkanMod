@@ -1,0 +1,137 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer VoxelPage {
+    uint words[];
+} voxelPage;
+
+layout(set = 0, binding = 1, std430) readonly buffer LightingPage {
+    uint words[];
+} lightingPage;
+
+layout(set = 0, binding = 2, std430) buffer ProbeOutput {
+    uint words[];
+} outputData;
+
+layout(push_constant) uniform ProbePushConstants {
+    uint voxelBaseByteOffset;
+    uint voxelByteLength;
+    uint lightingBaseByteOffset;
+    uint lightingByteLength;
+} pc;
+
+const uint VOXEL_MAGIC = 0x56584c31u;
+const uint VOXEL_VERSION = 4u;
+const uint VOXEL_BLOCK_COUNT = 4096u;
+
+const uint LIGHTING_MAGIC = 0x564b534cu;
+const uint LIGHTING_VERSION = 1u;
+const uint LIGHTING_HEADER_WORDS = 16u;
+const uint DEMAND_WORDS = 250u;
+const uint RANK_WORDS = 250u;
+const uint DIRECTIONAL_SHADE_WORDS = 6u;
+const uint MAX_SAMPLES = 2000u;
+const uint SAMPLE_COUNT = 8000u;
+
+const uint RESULT_MAGIC = 0x4c495431u; // LIT1
+const uint RESULT_HEADER_WORDS = 12u;
+const uint RESULT_RECORD_WORDS = 4u;
+
+bool validInputs(uint voxelBase, uint lightBase) {
+    if (voxelPage.words[voxelBase] != VOXEL_MAGIC
+            || voxelPage.words[voxelBase + 1u] != VOXEL_VERSION
+            || voxelPage.words[voxelBase + 2u] != pc.voxelByteLength
+            || voxelPage.words[voxelBase + 3u] != VOXEL_BLOCK_COUNT)
+        return false;
+
+    if (lightingPage.words[lightBase] != LIGHTING_MAGIC
+            || lightingPage.words[lightBase + 1u] != LIGHTING_VERSION)
+        return false;
+
+    uint sampleCount = lightingPage.words[lightBase + 5u];
+    uint predicateWords = lightingPage.words[lightBase + 8u];
+    uint demandOffset = lightingPage.words[lightBase + 10u];
+    uint rankOffset = lightingPage.words[lightBase + 11u];
+    uint lightOffset = lightingPage.words[lightBase + 12u];
+    uint shadeOffset = lightingPage.words[lightBase + 13u];
+    uint predicateOffset = lightingPage.words[lightBase + 14u];
+    uint directionalOffset = lightingPage.words[lightBase + 15u];
+
+    if (sampleCount > MAX_SAMPLES
+            || lightingPage.words[lightBase + 6u] != DEMAND_WORDS
+            || lightingPage.words[lightBase + 7u] != RANK_WORDS
+            || predicateWords != ((sampleCount + 31u) >> 5u)
+            || lightingPage.words[lightBase + 9u] != DIRECTIONAL_SHADE_WORDS)
+        return false;
+
+    if (demandOffset != LIGHTING_HEADER_WORDS
+            || rankOffset != demandOffset + DEMAND_WORDS
+            || lightOffset != rankOffset + RANK_WORDS
+            || shadeOffset != lightOffset + sampleCount
+            || predicateOffset != shadeOffset + sampleCount
+            || directionalOffset != predicateOffset + predicateWords
+            || (directionalOffset + DIRECTIONAL_SHADE_WORDS) * 4u != pc.lightingByteLength)
+        return false;
+
+    return lightingPage.words[lightBase + 2u] == voxelPage.words[voxelBase + 4u]
+            && lightingPage.words[lightBase + 3u] == voxelPage.words[voxelBase + 5u]
+            && lightingPage.words[lightBase + 4u] == voxelPage.words[voxelBase + 6u];
+}
+
+void main() {
+    uint latticeIndex = gl_GlobalInvocationID.x;
+    if (latticeIndex >= SAMPLE_COUNT)
+        return;
+
+    uint voxelBase = pc.voxelBaseByteOffset >> 2u;
+    uint lightBase = pc.lightingBaseByteOffset >> 2u;
+    bool valid = validInputs(voxelBase, lightBase);
+    if (!valid) {
+        if (latticeIndex == 0u)
+            outputData.words[5] = 1u;
+        return;
+    }
+
+    uint sampleCount = lightingPage.words[lightBase + 5u];
+    uint demandOffset = lightingPage.words[lightBase + 10u];
+    uint rankOffset = lightingPage.words[lightBase + 11u];
+    uint lightOffset = lightingPage.words[lightBase + 12u];
+    uint shadeOffset = lightingPage.words[lightBase + 13u];
+    uint predicateOffset = lightingPage.words[lightBase + 14u];
+    uint directionalOffset = lightingPage.words[lightBase + 15u];
+
+    if (latticeIndex == 0u) {
+        outputData.words[0] = RESULT_MAGIC;
+        outputData.words[1] = sampleCount;
+        for (uint direction = 0u; direction < DIRECTIONAL_SHADE_WORDS; ++direction)
+            outputData.words[6u + direction] = lightingPage.words[lightBase + directionalOffset + direction];
+    }
+
+    uint wordIndex = latticeIndex >> 5u;
+    uint bit = latticeIndex & 31u;
+    uint demandWord = lightingPage.words[lightBase + demandOffset + wordIndex];
+    if (((demandWord >> bit) & 1u) == 0u)
+        return;
+
+    atomicAdd(outputData.words[2], 1u);
+    uint beforeMask = bit == 0u ? 0u : ((1u << bit) - 1u);
+    uint compactRank = lightingPage.words[lightBase + rankOffset + wordIndex]
+            + uint(bitCount(demandWord & beforeMask));
+    if (compactRank >= sampleCount) {
+        atomicOr(outputData.words[5], 2u);
+        return;
+    }
+
+    uint light = lightingPage.words[lightBase + lightOffset + compactRank];
+    uint shade = lightingPage.words[lightBase + shadeOffset + compactRank];
+    uint passWord = lightingPage.words[lightBase + predicateOffset + (compactRank >> 5u)];
+    uint pass = (passWord >> (compactRank & 31u)) & 1u;
+    uint outputBase = RESULT_HEADER_WORDS + latticeIndex * RESULT_RECORD_WORDS;
+    outputData.words[outputBase] = compactRank + 1u;
+    outputData.words[outputBase + 1u] = light;
+    outputData.words[outputBase + 2u] = shade;
+    outputData.words[outputBase + 3u] = pass;
+    atomicAdd(outputData.words[3], 1u);
+    atomicAdd(outputData.words[4], pass);
+}

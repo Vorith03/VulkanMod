@@ -52,6 +52,7 @@ public final class GpuSparseLightingGpuSmokeTest {
             require(nonOverlapping(firstVoxelResidency, firstLightingResidency),
                     "Shared terrain input page slices must not overlap");
             verifyReadback(store, firstLightingResidency, first);
+            verifyCompute(store, firstVoxelResidency, firstLightingResidency, first);
 
             GpuSparseLightingSnapshot replacement = lightingFixture(0x2468ACE0);
             require(store.upload(0, voxel, 42L),
@@ -198,6 +199,83 @@ public final class GpuSparseLightingGpuSmokeTest {
             if(readbackBuffer != 0L)
                 MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
         }
+    }
+
+    private static void verifyCompute(RegionVoxelGpuStore store,
+                                      RegionVoxelGpuStore.Residency voxelResidency,
+                                      RegionVoxelGpuStore.Residency lightingResidency,
+                                      GpuSparseLightingSnapshot snapshot) {
+        StorageBuffer voxelPage = store.getPageBuffer(voxelResidency.pageIndex());
+        StorageBuffer lightingPage = store.getPageBuffer(lightingResidency.pageIndex());
+        require(voxelPage != null && lightingPage != null,
+                "Sparse-lighting compute requires live paired input pages");
+
+        int[] actual;
+        try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
+            actual = probe.dispatch(voxelPage, voxelResidency, lightingPage, lightingResidency);
+
+            RegionVoxelGpuStore.Residency mismatched = new RegionVoxelGpuStore.Residency(
+                    lightingResidency.pageIndex(), lightingResidency.byteOffset(),
+                    lightingResidency.byteLength(), lightingResidency.generation() + 1L, true);
+            boolean rejected = false;
+            try {
+                probe.dispatch(voxelPage, voxelResidency, lightingPage, mismatched);
+            } catch(IllegalArgumentException expected) {
+                rejected = true;
+            }
+            require(rejected, "Sparse-lighting compute must reject mismatched input generations");
+        }
+
+        require(actual.length == SparseLightingComputeProbe.RESULT_WORDS,
+                "Sparse-lighting compute output size must cover the fixed 20-cube lattice");
+        int[] expected = new int[SparseLightingComputeProbe.RESULT_WORDS];
+        expected[0] = SparseLightingComputeProbe.RESULT_MAGIC;
+        expected[1] = snapshot.sampleCount();
+
+        int demanded = 0;
+        int passCount = 0;
+        for(int latticeIndex = 0; latticeIndex < GpuLightingDemandMap.SAMPLE_COUNT; ++latticeIndex) {
+            int localX = latticeIndex % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
+            int localY = (latticeIndex / GpuLightingDemandMap.DOMAIN_WIDTH)
+                    % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
+            int localZ = latticeIndex
+                    / (GpuLightingDemandMap.DOMAIN_WIDTH * GpuLightingDemandMap.DOMAIN_WIDTH) - 2;
+            if(!snapshot.demanded(localX, localY, localZ))
+                continue;
+
+            int rank = snapshot.compactRank(localX, localY, localZ);
+            require(rank == demanded,
+                    "Sparse-lighting rank prefix must remain monotonic in lattice order");
+            int outputBase = SparseLightingComputeProbe.RESULT_HEADER_WORDS
+                    + latticeIndex * SparseLightingComputeProbe.RESULT_RECORD_WORDS;
+            expected[outputBase] = rank + 1;
+            expected[outputBase + 1] = snapshot.packedLight(localX, localY, localZ);
+            expected[outputBase + 2] = snapshot.shadeBrightnessBits(localX, localY, localZ);
+            boolean passes = snapshot.lightPasses(localX, localY, localZ);
+            expected[outputBase + 3] = passes ? 1 : 0;
+            if(passes)
+                ++passCount;
+            ++demanded;
+        }
+        expected[2] = demanded;
+        expected[3] = demanded;
+        expected[4] = passCount;
+        for(Direction direction : Direction.values())
+            expected[6 + direction.ordinal()] = snapshot.directionalShadeBits(direction);
+
+        require(demanded == snapshot.sampleCount(),
+                "Every sparse-lighting compact record must map from exactly one demanded lattice point");
+        for(int i = 0; i < expected.length; ++i) {
+            if(actual[i] != expected[i]) {
+                throw new AssertionError("GPU sparse-lighting compute mismatch at result word " + i
+                        + ": expected=0x" + Integer.toHexString(expected[i])
+                        + " actual=0x" + Integer.toHexString(actual[i]));
+            }
+        }
+
+        Initializer.LOGGER.info(
+                "VULKANMOD_GPU_SPARSE_LIGHTING_COMPUTE_OK: paired-generation host gate, exact sparse rank decode, {} demanded lattice records, packed light, shade brightness, light-passing predicates, six directional shade values",
+                demanded);
     }
 
     private static void require(boolean condition, String message) {
