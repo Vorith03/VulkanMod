@@ -283,6 +283,7 @@ tasks.named('check').configure {
     dependsOn 'verifyDistribution'
     dependsOn 'testRegionBatchLayout'
     dependsOn 'testSectionVoxelSnapshot'
+    dependsOn 'testGpuSparseLightingSnapshot'
     dependsOn 'testResourceReloadGeneration'
     dependsOn 'testTextureUploadLayout'
     dependsOn 'testMemoryPressurePolicy'
@@ -334,4 +335,11 @@ tasks.register('testSectionVoxelSnapshot', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshotTest'
+}
+
+// Bounded sparse-lighting ABI and fail-closed density cap; does not require a GPU.
+tasks.register('testGpuSparseLightingSnapshot', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshotTest'
 }
