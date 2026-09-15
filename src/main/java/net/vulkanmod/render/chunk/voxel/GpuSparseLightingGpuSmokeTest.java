@@ -31,9 +31,9 @@ public final class GpuSparseLightingGpuSmokeTest {
         try {
             SectionVoxelSnapshot voxel = voxelFixture();
             GpuSparseLightingSnapshot first = lightingFixture(0x13579BDF);
-            require(store.upload(0, voxel, 7L), "Voxel upload must coexist with sparse lighting");
+            require(store.upload(0, voxel, 41L), "Voxel upload must coexist with sparse lighting");
             require(store.uploadLighting(0, first, 41L),
-                    "First sparse-lighting upload must be accepted");
+                    "Matching sparse-lighting generation must be accepted");
             require(!store.getResidency(0).valid(),
                     "Voxel residency must wait for shared-page submission");
             RegionVoxelGpuStore.Residency beforeSubmit = store.getLightingResidency(0);
@@ -43,8 +43,8 @@ public final class GpuSparseLightingGpuSmokeTest {
             AreaUploadManager.INSTANCE.submitUploads();
             RegionVoxelGpuStore.Residency voxelResidency = store.getResidency(0);
             RegionVoxelGpuStore.Residency firstResidency = store.getLightingResidency(0);
-            require(voxelResidency.valid() && voxelResidency.generation() == 7L,
-                    "Submitted voxel generation must remain independently resident");
+            require(voxelResidency.valid() && voxelResidency.generation() == 41L,
+                    "Submitted voxel generation must become resident");
             require(firstResidency.valid() && firstResidency.generation() == 41L,
                     "Submitted lighting generation must become resident");
             require(voxelResidency.pageIndex() == firstResidency.pageIndex(),
@@ -54,36 +54,45 @@ public final class GpuSparseLightingGpuSmokeTest {
             verifyReadback(store, firstResidency, first);
 
             GpuSparseLightingSnapshot replacement = lightingFixture(0x2468ACE0);
-            require(store.uploadLighting(0, replacement, 42L),
-                    "Replacement sparse-lighting upload must be accepted");
+            require(store.uploadLighting(0, replacement, 41L),
+                    "Same-generation sparse-lighting replacement must be accepted");
             RegionVoxelGpuStore.Residency replacing = store.getLightingResidency(0);
-            require(!replacing.valid() && replacing.generation() == 42L,
-                    "Lighting replacement must revoke old generation before new publication");
-            require(store.getResidency(0).valid() && store.getResidency(0).generation() == 7L,
+            require(!replacing.valid() && replacing.generation() == 41L,
+                    "Lighting replacement must revoke old residency before new publication");
+            require(store.getResidency(0).valid() && store.getResidency(0).generation() == 41L,
                     "Lighting replacement must not revoke voxel residency");
 
             AreaUploadManager.INSTANCE.submitUploads();
             RegionVoxelGpuStore.Residency secondResidency = store.getLightingResidency(0);
-            require(secondResidency.valid() && secondResidency.generation() == 42L,
-                    "Submitted lighting replacement generation must become resident");
+            require(secondResidency.valid() && secondResidency.generation() == 41L,
+                    "Submitted lighting replacement must become resident");
             require(firstResidency.pageIndex() != secondResidency.pageIndex()
                             || firstResidency.byteOffset() != secondResidency.byteOffset(),
                     "Lighting replacement must allocate-then-swap instead of overwriting a live slice");
             verifyReadback(store, secondResidency, replacement);
 
-            GpuSparseLightingSnapshot abandoned = lightingFixture(0x10203040);
-            require(store.uploadLighting(0, abandoned, 43L),
-                    "Pending stale lighting generation must queue");
-            store.invalidateLighting(0, 44L);
+            GpuSparseLightingSnapshot unpaired = lightingFixture(0x10203040);
+            require(!store.uploadLighting(0, unpaired, 42L),
+                    "Lighting without matching voxel generation must be rejected");
+            RegionVoxelGpuStore.Residency rejected = store.getLightingResidency(0);
+            require(!rejected.valid() && rejected.generation() == 42L,
+                    "Rejected unpaired lighting must revoke stale discoverable residency");
+
+            require(store.upload(0, voxel, 42L),
+                    "Next paired voxel generation must queue");
+            require(store.uploadLighting(0, unpaired, 42L),
+                    "Lighting may queue once its matching voxel generation exists");
+            store.invalidateLighting(0, 43L);
             AreaUploadManager.INSTANCE.submitUploads();
+            RegionVoxelGpuStore.Residency advancedVoxel = store.getResidency(0);
             RegionVoxelGpuStore.Residency invalidated = store.getLightingResidency(0);
-            require(!invalidated.valid() && invalidated.generation() == 44L,
+            require(advancedVoxel.valid() && advancedVoxel.generation() == 42L,
+                    "Lighting invalidation must not prevent matching voxel publication");
+            require(!invalidated.valid() && invalidated.generation() == 43L,
                     "Lighting invalidation before submission must prevent stale publication");
-            require(store.getResidency(0).valid() && store.getResidency(0).generation() == 7L,
-                    "Lighting invalidation must leave voxel generation untouched");
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, independent generation gating, fresh replacement, stale-generation rejection");
+                    "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired generations, fresh replacement, unpaired rejection, stale-generation rejection");
         } finally {
             Vulkan.waitIdle();
             store.close();
