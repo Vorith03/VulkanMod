@@ -355,17 +355,13 @@ public final class RegionVoxelGpuStore {
                 return false;
             }
             this.usedBytes += bytes;
-            this.entries++;
             return true;
         }
-
-        private int entries;
 
         synchronized void release(int bytes) {
             if(bytes <= 0 || bytes > this.usedBytes)
                 throw new IllegalStateException("GPU terrain input budget accounting underflow");
             this.usedBytes -= bytes;
-            this.entries--;
         }
 
         synchronized int usedBytes() {
