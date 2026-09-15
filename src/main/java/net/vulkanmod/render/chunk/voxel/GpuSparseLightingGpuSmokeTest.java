@@ -3,6 +3,7 @@ package net.vulkanmod.render.chunk.voxel;
 import net.minecraft.core.Direction;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.AreaUploadManager;
+import net.vulkanmod.render.vertex.VertexUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.Vulkan;
@@ -21,6 +22,10 @@ import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
 /** Real Vulkan oracle for sparse-lighting residency in the shared terrain input pages. */
 public final class GpuSparseLightingGpuSmokeTest {
+    private static final int PROBE_CUBE_COORD = 8;
+    private static final int FACE_RESULT_WORDS = 8;
+    private static final int FACE_SIDEBAND_RECORDS = 12;
+
     private GpuSparseLightingGpuSmokeTest() {}
 
     public static void verify() {
@@ -30,7 +35,7 @@ public final class GpuSparseLightingGpuSmokeTest {
         RegionVoxelGpuStore store = new RegionVoxelGpuStore();
         try {
             SectionVoxelSnapshot voxel = voxelFixture();
-            GpuSparseLightingSnapshot first = lightingFixture(0x13579BDF);
+            GpuSparseLightingSnapshot first = lightingFixture(voxel, 0x13579BDF);
             require(store.upload(0, voxel, 41L), "Voxel upload must coexist with sparse lighting");
             require(store.uploadLighting(0, first, 41L),
                     "Matching sparse-lighting generation must be accepted");
@@ -54,7 +59,7 @@ public final class GpuSparseLightingGpuSmokeTest {
             verifyReadback(store, firstLightingResidency, first);
             verifyCompute(store, firstVoxelResidency, firstLightingResidency, first);
 
-            GpuSparseLightingSnapshot replacement = lightingFixture(0x2468ACE0);
+            GpuSparseLightingSnapshot replacement = lightingFixture(voxel, 0x2468ACE0);
             require(store.upload(0, voxel, 42L),
                     "Replacement voxel generation must queue");
             RegionVoxelGpuStore.Residency replacingVoxel = store.getResidency(0);
@@ -74,13 +79,13 @@ public final class GpuSparseLightingGpuSmokeTest {
             require(secondVoxelResidency.valid() && secondVoxelResidency.generation() == 42L,
                     "Submitted replacement voxel generation must become resident");
             require(secondLightingResidency.valid() && secondLightingResidency.generation() == 42L,
-                    "Submitted replacement lighting must become resident");
+                    "Submitted replacement lighting generation must become resident");
             require(firstLightingResidency.pageIndex() != secondLightingResidency.pageIndex()
                             || firstLightingResidency.byteOffset() != secondLightingResidency.byteOffset(),
                     "Lighting replacement must allocate a fresh slice instead of overwriting a live slice");
             verifyReadback(store, secondLightingResidency, replacement);
 
-            GpuSparseLightingSnapshot unpaired = lightingFixture(0x10203040);
+            GpuSparseLightingSnapshot unpaired = lightingFixture(voxel, 0x10203040);
             require(!store.uploadLighting(0, unpaired, 43L),
                     "Lighting without matching voxel generation must be rejected");
             require(store.getResidency(0).valid() && store.getResidency(0).generation() == 42L,
@@ -118,22 +123,19 @@ public final class GpuSparseLightingGpuSmokeTest {
 
     private static SectionVoxelSnapshot voxelFixture() {
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
-            builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED);
-        return builder.finish();
-    }
-
-    private static GpuSparseLightingSnapshot lightingFixture(int salt) {
-        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        int center = SectionVoxelSnapshot.blockIndex(8, 8, 8);
+        int center = SectionVoxelSnapshot.blockIndex(
+                PROBE_CUBE_COORD, PROBE_CUBE_COORD, PROBE_CUBE_COORD);
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             int flags = SectionVoxelSnapshot.CPU_REQUIRED;
             if(i == center)
                 flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
             builder.add(i == center ? 1 : 0, flags);
         }
-        SectionVoxelSnapshot voxels = builder.finish();
+        return builder.finish();
+    }
 
+    private static GpuSparseLightingSnapshot lightingFixture(SectionVoxelSnapshot voxels,
+                                                              int salt) {
         int[] packedLight = new int[GpuLightingDemandMap.SAMPLE_COUNT];
         int[] shade = new int[GpuLightingDemandMap.SAMPLE_COUNT];
         boolean[] lightPasses = new boolean[GpuLightingDemandMap.SAMPLE_COUNT];
@@ -263,6 +265,7 @@ public final class GpuSparseLightingGpuSmokeTest {
         for(Direction direction : Direction.values())
             expected[6 + direction.ordinal()] = snapshot.directionalShadeBits(direction);
 
+        writeExpectedFaceLighting(expected, snapshot);
         require(demanded == snapshot.sampleCount(),
                 "Every sparse-lighting compact record must map from exactly one demanded lattice point");
         for(int i = 0; i < expected.length; ++i) {
@@ -274,9 +277,132 @@ public final class GpuSparseLightingGpuSmokeTest {
         }
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_SPARSE_LIGHTING_COMPUTE_OK: paired-generation host gate, exact sparse rank decode, {} demanded lattice records, packed light, shade brightness, light-passing predicates, six directional shade values",
+                "VULKANMOD_GPU_SPARSE_LIGHTING_COMPUTE_OK: paired-generation host gate, exact sparse rank decode, {} demanded lattice records, packed light, shade brightness, light-passing predicates, six directional shade values, 24 exact canonical face-vertex color/light outputs",
                 demanded);
     }
+
+    private static void writeExpectedFaceLighting(int[] expected,
+                                                  GpuSparseLightingSnapshot snapshot) {
+        for(int latticeIndex = 0; latticeIndex < FACE_SIDEBAND_RECORDS; ++latticeIndex) {
+            int localX = latticeIndex % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
+            int localY = (latticeIndex / GpuLightingDemandMap.DOMAIN_WIDTH)
+                    % GpuLightingDemandMap.DOMAIN_WIDTH - 2;
+            int localZ = latticeIndex
+                    / (GpuLightingDemandMap.DOMAIN_WIDTH * GpuLightingDemandMap.DOMAIN_WIDTH) - 2;
+            require(!snapshot.demanded(localX, localY, localZ),
+                    "Canonical lighting face sideband must occupy permanently undemanded lattice records");
+        }
+
+        for(Direction face : Direction.values()) {
+            Direction[] tangent = tangents(face);
+            int centerX = PROBE_CUBE_COORD + face.getStepX();
+            int centerY = PROBE_CUBE_COORD + face.getStepY();
+            int centerZ = PROBE_CUBE_COORD + face.getStepZ();
+            float[] sideBrightness = new float[4];
+            int[] sideLight = new int[4];
+            boolean[] open = new boolean[4];
+            for(int i = 0; i < 4; ++i) {
+                int sideX = centerX + tangent[i].getStepX();
+                int sideY = centerY + tangent[i].getStepY();
+                int sideZ = centerZ + tangent[i].getStepZ();
+                sideBrightness[i] = Float.intBitsToFloat(
+                        snapshot.shadeBrightnessBits(sideX, sideY, sideZ));
+                sideLight[i] = snapshot.packedLight(sideX, sideY, sideZ);
+                open[i] = snapshot.lightPasses(
+                        sideX + face.getStepX(),
+                        sideY + face.getStepY(),
+                        sideZ + face.getStepZ());
+            }
+
+            LightSample diagonal02 = diagonal(snapshot, face, tangent, centerX, centerY, centerZ,
+                    sideBrightness, sideLight, open, 0, 2);
+            LightSample diagonal03 = diagonal(snapshot, face, tangent, centerX, centerY, centerZ,
+                    sideBrightness, sideLight, open, 0, 3);
+            LightSample diagonal12 = diagonal(snapshot, face, tangent, centerX, centerY, centerZ,
+                    sideBrightness, sideLight, open, 1, 2);
+            LightSample diagonal13 = diagonal(snapshot, face, tangent, centerX, centerY, centerZ,
+                    sideBrightness, sideLight, open, 1, 3);
+            float centerBrightness = Float.intBitsToFloat(
+                    snapshot.shadeBrightnessBits(centerX, centerY, centerZ));
+            int centerLight = snapshot.packedLight(centerX, centerY, centerZ);
+
+            float[] cornerBrightness = {
+                    average(sideBrightness[3], sideBrightness[0], diagonal03.brightness, centerBrightness),
+                    average(sideBrightness[2], sideBrightness[0], diagonal02.brightness, centerBrightness),
+                    average(sideBrightness[2], sideBrightness[1], diagonal12.brightness, centerBrightness),
+                    average(sideBrightness[3], sideBrightness[1], diagonal13.brightness, centerBrightness)
+            };
+            int[] cornerLight = {
+                    blend(sideLight[3], sideLight[0], diagonal03.light, centerLight),
+                    blend(sideLight[2], sideLight[0], diagonal02.light, centerLight),
+                    blend(sideLight[2], sideLight[1], diagonal12.light, centerLight),
+                    blend(sideLight[3], sideLight[1], diagonal13.light, centerLight)
+            };
+
+            int[] remap = vertexRemap(face);
+            float directionalShade = Float.intBitsToFloat(snapshot.directionalShadeBits(face));
+            int faceBase = SparseLightingComputeProbe.RESULT_HEADER_WORDS
+                    + face.ordinal() * FACE_RESULT_WORDS;
+            for(int corner = 0; corner < 4; ++corner) {
+                int vertex = remap[corner];
+                float value = cornerBrightness[corner] * directionalShade;
+                expected[faceBase + vertex * 2] = VertexUtil.packColor(value, value, value, 1.0F);
+                expected[faceBase + vertex * 2 + 1] = cornerLight[corner];
+            }
+        }
+    }
+
+    private static LightSample diagonal(GpuSparseLightingSnapshot snapshot, Direction face,
+                                        Direction[] tangent, int centerX, int centerY, int centerZ,
+                                        float[] sideBrightness, int[] sideLight, boolean[] open,
+                                        int first, int second) {
+        if(!open[first] && !open[second])
+            return new LightSample(sideBrightness[0], sideLight[0]);
+        int x = centerX + tangent[first].getStepX() + tangent[second].getStepX();
+        int y = centerY + tangent[first].getStepY() + tangent[second].getStepY();
+        int z = centerZ + tangent[first].getStepZ() + tangent[second].getStepZ();
+        return new LightSample(Float.intBitsToFloat(snapshot.shadeBrightnessBits(x, y, z)),
+                snapshot.packedLight(x, y, z));
+    }
+
+    private static float average(float a, float b, float c, float d) {
+        return (a + b + c + d) * 0.25F;
+    }
+
+    private static int blend(int a, int b, int c, int center) {
+        if(a == 0) a = center;
+        if(b == 0) b = center;
+        if(c == 0) c = center;
+        return (a + b + c + center >> 2) & 0x00ff00ff;
+    }
+
+    private static Direction[] tangents(Direction face) {
+        return switch(face) {
+            case DOWN -> new Direction[] { Direction.WEST, Direction.EAST,
+                    Direction.NORTH, Direction.SOUTH };
+            case UP -> new Direction[] { Direction.EAST, Direction.WEST,
+                    Direction.NORTH, Direction.SOUTH };
+            case NORTH -> new Direction[] { Direction.UP, Direction.DOWN,
+                    Direction.EAST, Direction.WEST };
+            case SOUTH -> new Direction[] { Direction.WEST, Direction.EAST,
+                    Direction.DOWN, Direction.UP };
+            case WEST -> new Direction[] { Direction.UP, Direction.DOWN,
+                    Direction.NORTH, Direction.SOUTH };
+            case EAST -> new Direction[] { Direction.DOWN, Direction.UP,
+                    Direction.NORTH, Direction.SOUTH };
+        };
+    }
+
+    private static int[] vertexRemap(Direction face) {
+        return switch(face) {
+            case DOWN, SOUTH -> new int[] { 0, 1, 2, 3 };
+            case UP -> new int[] { 2, 3, 0, 1 };
+            case NORTH, WEST -> new int[] { 3, 0, 1, 2 };
+            case EAST -> new int[] { 1, 2, 3, 0 };
+        };
+    }
+
+    private record LightSample(float brightness, int light) {}
 
     private static void require(boolean condition, String message) {
         if(!condition) throw new AssertionError(message);

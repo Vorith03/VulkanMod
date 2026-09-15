@@ -24,6 +24,10 @@ layout(push_constant) uniform ProbePushConstants {
 const uint VOXEL_MAGIC = 0x56584c31u;
 const uint VOXEL_VERSION = 4u;
 const uint VOXEL_BLOCK_COUNT = 4096u;
+const uint VOXEL_FLAG_PLANES = 5u;
+const uint VOXEL_PLANE_WORDS = 128u;
+const uint VOXEL_GPU_FULL_CUBE_PLANE = 4u;
+const uint PROBE_CUBE_INDEX = 8u | (8u << 4u) | (8u << 8u);
 
 const uint LIGHTING_MAGIC = 0x564b534cu;
 const uint LIGHTING_VERSION = 1u;
@@ -33,16 +37,28 @@ const uint RANK_WORDS = 250u;
 const uint DIRECTIONAL_SHADE_WORDS = 6u;
 const uint MAX_SAMPLES = 2000u;
 const uint SAMPLE_COUNT = 8000u;
+const uint DOMAIN_WIDTH = 20u;
 
 const uint RESULT_MAGIC = 0x4c495431u; // LIT1
 const uint RESULT_HEADER_WORDS = 12u;
 const uint RESULT_RECORD_WORDS = 4u;
+const uint FACE_COUNT = 6u;
+const uint FACE_RESULT_WORDS = 8u;
+// The first twelve lattice records map to y=-2,z=-2. Canonical cube AO can
+// never demand a point with two outer-shell axes, so those 48 words are a
+// lossless diagnostic sideband for six faces x four (color,light) vertices.
+const uint FACE_RESULT_BASE = RESULT_HEADER_WORDS;
 
 bool validInputs(uint voxelBase, uint lightBase) {
     if (voxelPage.words[voxelBase] != VOXEL_MAGIC
             || voxelPage.words[voxelBase + 1u] != VOXEL_VERSION
             || voxelPage.words[voxelBase + 2u] != pc.voxelByteLength
-            || voxelPage.words[voxelBase + 3u] != VOXEL_BLOCK_COUNT)
+            || voxelPage.words[voxelBase + 3u] != VOXEL_BLOCK_COUNT
+            || voxelPage.words[voxelBase + 11u] != VOXEL_FLAG_PLANES)
+        return false;
+
+    uint flagsOffset = voxelPage.words[voxelBase + 10u];
+    if ((flagsOffset + VOXEL_FLAG_PLANES * VOXEL_PLANE_WORDS) * 4u > pc.voxelByteLength)
         return false;
 
     if (lightingPage.words[lightBase] != LIGHTING_MAGIC
@@ -79,6 +95,197 @@ bool validInputs(uint voxelBase, uint lightBase) {
             && lightingPage.words[lightBase + 4u] == voxelPage.words[voxelBase + 6u];
 }
 
+bool voxelHasGpuFullCube(uint voxelBase, uint blockIndex) {
+    uint flagsOffset = voxelPage.words[voxelBase + 10u];
+    uint word = voxelPage.words[voxelBase + flagsOffset
+            + VOXEL_GPU_FULL_CUBE_PLANE * VOXEL_PLANE_WORDS + (blockIndex >> 5u)];
+    return ((word >> (blockIndex & 31u)) & 1u) != 0u;
+}
+
+uint latticeIndexFor(ivec3 localPos) {
+    uvec3 p = uvec3(localPos + ivec3(2));
+    return p.x + DOMAIN_WIDTH * (p.y + DOMAIN_WIDTH * p.z);
+}
+
+bool readSample(uint lightBase, ivec3 localPos,
+                out uint light, out float brightness, out uint pass) {
+    uint latticeIndex = latticeIndexFor(localPos);
+    if (latticeIndex >= SAMPLE_COUNT) {
+        atomicOr(outputData.words[5], 4u);
+        return false;
+    }
+
+    uint demandOffset = lightingPage.words[lightBase + 10u];
+    uint rankOffset = lightingPage.words[lightBase + 11u];
+    uint lightOffset = lightingPage.words[lightBase + 12u];
+    uint shadeOffset = lightingPage.words[lightBase + 13u];
+    uint predicateOffset = lightingPage.words[lightBase + 14u];
+    uint sampleCount = lightingPage.words[lightBase + 5u];
+    uint wordIndex = latticeIndex >> 5u;
+    uint bit = latticeIndex & 31u;
+    uint demandWord = lightingPage.words[lightBase + demandOffset + wordIndex];
+    if (((demandWord >> bit) & 1u) == 0u) {
+        atomicOr(outputData.words[5], 4u);
+        return false;
+    }
+
+    uint beforeMask = bit == 0u ? 0u : ((1u << bit) - 1u);
+    uint compactRank = lightingPage.words[lightBase + rankOffset + wordIndex]
+            + uint(bitCount(demandWord & beforeMask));
+    if (compactRank >= sampleCount) {
+        atomicOr(outputData.words[5], 2u);
+        return false;
+    }
+
+    light = lightingPage.words[lightBase + lightOffset + compactRank];
+    brightness = uintBitsToFloat(lightingPage.words[lightBase + shadeOffset + compactRank]);
+    uint passWord = lightingPage.words[lightBase + predicateOffset + (compactRank >> 5u)];
+    pass = (passWord >> (compactRank & 31u)) & 1u;
+    return true;
+}
+
+ivec3 faceStep(uint face) {
+    if (face == 0u) return ivec3(0, -1, 0);
+    if (face == 1u) return ivec3(0, 1, 0);
+    if (face == 2u) return ivec3(0, 0, -1);
+    if (face == 3u) return ivec3(0, 0, 1);
+    if (face == 4u) return ivec3(-1, 0, 0);
+    return ivec3(1, 0, 0);
+}
+
+ivec3 tangentStep(uint face, uint tangent) {
+    if (face == 0u) {
+        if (tangent == 0u) return ivec3(-1, 0, 0);
+        if (tangent == 1u) return ivec3(1, 0, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (face == 1u) {
+        if (tangent == 0u) return ivec3(1, 0, 0);
+        if (tangent == 1u) return ivec3(-1, 0, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (face == 2u) {
+        if (tangent == 0u) return ivec3(0, 1, 0);
+        if (tangent == 1u) return ivec3(0, -1, 0);
+        if (tangent == 2u) return ivec3(1, 0, 0);
+        return ivec3(-1, 0, 0);
+    }
+    if (face == 3u) {
+        if (tangent == 0u) return ivec3(-1, 0, 0);
+        if (tangent == 1u) return ivec3(1, 0, 0);
+        if (tangent == 2u) return ivec3(0, -1, 0);
+        return ivec3(0, 1, 0);
+    }
+    if (face == 4u) {
+        if (tangent == 0u) return ivec3(0, 1, 0);
+        if (tangent == 1u) return ivec3(0, -1, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (tangent == 0u) return ivec3(0, -1, 0);
+    if (tangent == 1u) return ivec3(0, 1, 0);
+    if (tangent == 2u) return ivec3(0, 0, -1);
+    return ivec3(0, 0, 1);
+}
+
+uint vertexForCorner(uint face, uint corner) {
+    if (face == 0u || face == 3u) return corner;
+    if (face == 1u) return (corner + 2u) & 3u;
+    if (face == 2u || face == 4u) return (corner + 3u) & 3u;
+    return (corner + 1u) & 3u;
+}
+
+uint blendLight(uint a, uint b, uint c, uint center) {
+    if (a == 0u) a = center;
+    if (b == 0u) b = center;
+    if (c == 0u) c = center;
+    return ((a + b + c + center) >> 2u) & 0x00ff00ffu;
+}
+
+uint packGray(float value) {
+    uint channel = uint(int(value * 255.0)) & 0xffu;
+    return channel | (channel << 8u) | (channel << 16u) | 0xff000000u;
+}
+
+void writeFaceLighting(uint face, uint voxelBase, uint lightBase) {
+    if (!voxelHasGpuFullCube(voxelBase, PROBE_CUBE_INDEX)) {
+        atomicOr(outputData.words[5], 8u);
+        return;
+    }
+
+    ivec3 normal = faceStep(face);
+    ivec3 centerPos = ivec3(8) + normal;
+    float sideBrightness[4];
+    uint sideLight[4];
+    bool open[4];
+    for (uint i = 0u; i < 4u; ++i) {
+        ivec3 tangent = tangentStep(face, i);
+        ivec3 sidePos = centerPos + tangent;
+        uint ignoredPass;
+        if (!readSample(lightBase, sidePos, sideLight[i], sideBrightness[i], ignoredPass))
+            return;
+        uint ignoredLight;
+        float ignoredBrightness;
+        uint pass;
+        if (!readSample(lightBase, sidePos + normal, ignoredLight, ignoredBrightness, pass))
+            return;
+        open[i] = pass != 0u;
+    }
+
+    const uvec2 diagonalPairs[4] = uvec2[4](
+            uvec2(0u, 2u), uvec2(0u, 3u), uvec2(1u, 2u), uvec2(1u, 3u));
+    float diagonalBrightness[4];
+    uint diagonalLight[4];
+    for (uint d = 0u; d < 4u; ++d) {
+        uint first = diagonalPairs[d].x;
+        uint second = diagonalPairs[d].y;
+        if (!open[first] && !open[second]) {
+            // Vanilla substitutes tangent 0 for every fully blocked diagonal.
+            diagonalBrightness[d] = sideBrightness[0];
+            diagonalLight[d] = sideLight[0];
+        } else {
+            uint ignoredPass;
+            ivec3 diagonalPos = centerPos
+                    + tangentStep(face, first) + tangentStep(face, second);
+            if (!readSample(lightBase, diagonalPos,
+                    diagonalLight[d], diagonalBrightness[d], ignoredPass))
+                return;
+        }
+    }
+
+    uint centerLight;
+    float centerBrightness;
+    uint ignoredPass;
+    if (!readSample(lightBase, centerPos, centerLight, centerBrightness, ignoredPass))
+        return;
+
+    float cornerBrightness[4];
+    uint cornerLight[4];
+    cornerBrightness[0] = (sideBrightness[3] + sideBrightness[0]
+            + diagonalBrightness[1] + centerBrightness) * 0.25;
+    cornerBrightness[1] = (sideBrightness[2] + sideBrightness[0]
+            + diagonalBrightness[0] + centerBrightness) * 0.25;
+    cornerBrightness[2] = (sideBrightness[2] + sideBrightness[1]
+            + diagonalBrightness[2] + centerBrightness) * 0.25;
+    cornerBrightness[3] = (sideBrightness[3] + sideBrightness[1]
+            + diagonalBrightness[3] + centerBrightness) * 0.25;
+    cornerLight[0] = blendLight(sideLight[3], sideLight[0], diagonalLight[1], centerLight);
+    cornerLight[1] = blendLight(sideLight[2], sideLight[0], diagonalLight[0], centerLight);
+    cornerLight[2] = blendLight(sideLight[2], sideLight[1], diagonalLight[2], centerLight);
+    cornerLight[3] = blendLight(sideLight[3], sideLight[1], diagonalLight[3], centerLight);
+
+    uint directionalOffset = lightingPage.words[lightBase + 15u];
+    float shade = uintBitsToFloat(lightingPage.words[lightBase + directionalOffset + face]);
+    uint outputBase = FACE_RESULT_BASE + face * FACE_RESULT_WORDS;
+    for (uint corner = 0u; corner < 4u; ++corner) {
+        uint vertex = vertexForCorner(face, corner);
+        outputData.words[outputBase + vertex * 2u] = packGray(cornerBrightness[corner] * shade);
+        outputData.words[outputBase + vertex * 2u + 1u] = cornerLight[corner];
+    }
+}
+
 void main() {
     uint latticeIndex = gl_GlobalInvocationID.x;
     if (latticeIndex >= SAMPLE_COUNT)
@@ -89,7 +296,7 @@ void main() {
     bool valid = validInputs(voxelBase, lightBase);
     if (!valid) {
         if (latticeIndex == 0u)
-            outputData.words[5] = 1u;
+            atomicOr(outputData.words[5], 1u);
         return;
     }
 
@@ -107,6 +314,9 @@ void main() {
         for (uint direction = 0u; direction < DIRECTIONAL_SHADE_WORDS; ++direction)
             outputData.words[6u + direction] = lightingPage.words[lightBase + directionalOffset + direction];
     }
+
+    if (latticeIndex < FACE_COUNT)
+        writeFaceLighting(latticeIndex, voxelBase, lightBase);
 
     uint wordIndex = latticeIndex >> 5u;
     uint bit = latticeIndex & 31u;
