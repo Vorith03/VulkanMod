@@ -1,6 +1,8 @@
 package net.vulkanmod.vulkan.texture;
 
+import com.mojang.blaze3d.platform.TextureUtil;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
@@ -17,6 +19,8 @@ public final class TextureUploadSmokeTest {
     private TextureUploadSmokeTest() {}
 
     public static void verify() {
+        verifyTextureUtilAllocation();
+
         VulkanImage previous = VTextureSelector.getBoundTexture();
         VulkanImage image = VulkanImage.createTextureImage(VK_FORMAT_R8G8B8A8_UNORM, 1, 8, 6,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -78,6 +82,29 @@ public final class TextureUploadSmokeTest {
             Vulkan.waitIdle();
             if(readbackBuffer != 0) MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
             image.doFree();
+            VTextureSelector.bindTexture(previous);
+        }
+    }
+
+    private static void verifyTextureUtilAllocation() {
+        VulkanImage previous = VTextureSelector.getBoundTexture();
+        int textureId = TextureUtil.generateTextureId();
+        VulkanImage image = null;
+        try {
+            TextureUtil.prepareImage(textureId, 4, 3);
+            image = GlTexture.getVulkanImage(textureId);
+            if (image == null)
+                throw new AssertionError("TextureUtil.prepareImage did not allocate Vulkan backing");
+            if (image.width != 4 || image.height != 3 || image.mipLevels != 1)
+                throw new AssertionError("TextureUtil.prepareImage allocated unexpected image shape: "
+                        + image.width + "x" + image.height + " mips=" + image.mipLevels);
+            if (VTextureSelector.getBoundTexture() != image)
+                throw new AssertionError("TextureUtil.prepareImage did not bind allocated Vulkan backing");
+
+            Initializer.LOGGER.info("TextureUtil raw-id Vulkan allocation smoke passed: 4x3 RGBA image bound for NativeImage upload");
+        } finally {
+            if (image != null) image.doFree();
+            TextureUtil.releaseTextureId(textureId);
             VTextureSelector.bindTexture(previous);
         }
     }
