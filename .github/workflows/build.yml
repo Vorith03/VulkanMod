@@ -55,6 +55,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh depth-post-chain
       - name: Smoke-test Vulkan screenshot readback
         run: bash scripts/ci/vulkan-smoke.sh screenshot
+      - name: Smoke-test FTB Library 2001.2.13 scissor compatibility
+        run: bash scripts/ci/ftb-library-smoke.sh
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
       - name: Smoke-test Chat Heads 0.13.18 compatibility
@@ -73,6 +75,7 @@ jobs:
             vulkan-post-chain-smoke.log
             vulkan-depth-post-chain-smoke.log
             vulkan-screenshot-smoke.log
+            vulkan-smoke-ftb-library.log
             run/screenshot-smoke/screenshots/*.png
             vulkan-smoke-crash-assistant.log
             vulkan-smoke-chat-heads.log

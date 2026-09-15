@@ -17,6 +17,8 @@
     "compatibility.EffectInstanceM",
     "compatibility.PostPassM",
     "compatibility.FlywheelBackendMixin",
+    "compatibility.FTBLibraryGuiHelperMixin",
+    "compatibility.FTBLibraryScissorMixin",
     "compatibility.CrashAssistantCurrentGPUDetectorMixin",
     "compatibility.WatutRenderHelperMixin",
     "compatibility.ProgramM",
@@ -26,6 +28,7 @@
     "debug.GlDebugInfoM",
     "debug.KeyboardHandlerM",
     "debug.TerrainDebugOverlayMixin",
+    "debug.FTBLibraryCompatSmokeMixin",
 
     "gui.GuiM",
 
