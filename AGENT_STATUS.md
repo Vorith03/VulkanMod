@@ -2,6 +2,36 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale.
 
+## Branch integration checkpoint — 2026-09-15
+
+- User requested reviewing and safely merging the three active branches.
+- Local integration branch: `integrate-forge-branches-20260915`.
+- Reviewed source tips: Forge `1c6fccd7d83a4e9dad94a57960be500fbdd005d2`,
+  FTB `cfa58c6716d3458aafe2adf75b9ccb4b2fb1ea39`, telemetry
+  `5dabf64c00221b2a1b9310085c92e78bd1f54315`.
+- Merge commits: `988475a243ea9490e4488a4363c0ce4c65f1c9e6` (FTB),
+  `0a7421b645e88592ff874af092d5497843bd1dc0` (telemetry).
+- Sole conflict was additive mixin registration; retained both sets. All three
+  original tips are ancestors of the result. Scratch tip `2f9d17d` was already
+  in Forge history. Side-branch file contents are identical to their source tips
+  apart from the combined JSON registration list, which preserves every original
+  entry without duplicates. No terrain implementation was changed by integration.
+- Source CI verified live: Forge run `34829799821`, FTB `34832111538`, telemetry
+  `34829353714` all passed every build/runtime gate. Combined CI has NOT run.
+- Local whitespace, JSON registration integrity, history/content preservation,
+  and FTB shell syntax checks passed. Local Gradle cannot download uncached 8.1.1
+  because network access to the distribution is unavailable.
+- Remote integration push was blocked by automatic approval review, citing remote
+  publication without explicit destination authorization. Do not route around that
+  rejection. User approval is required to publish this branch to
+  `Vorith03/VulkanMod`, open an integration PR for full CI, and then update
+  `forge-1.20.1` only after green combined checks. Source branches remain intact.
+- Resume: obtain publication authorization, re-fetch/recheck all remote tips,
+  incorporate any concurrent work, run combined PR CI (including FTB and telemetry),
+  and fast-forward Forge to the tested integration history. Preserve original
+  branches. GPU gameplay and full-pack memory behavior still need user-machine
+  testing; this merge does not establish new roadmap milestones.
+
 ## Required planning documents
 
 Use these together:
