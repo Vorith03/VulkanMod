@@ -59,6 +59,7 @@ public final class GpuTerrainModelTableSmokeTest {
             require(resident.byteLength() == table.byteSize(),
                     "GPU model-table residency must expose the exact packed byte length");
             verifyReadback(resident, table);
+            GpuSparseLightingGpuSmokeTest.verifyCompleteVertexJoin(table, resident);
 
             SectionVoxelSnapshot voxelSnapshot = joinedVoxelFixture(table);
             voxelPage = uploadJoinedVoxelFixture(voxelSnapshot);

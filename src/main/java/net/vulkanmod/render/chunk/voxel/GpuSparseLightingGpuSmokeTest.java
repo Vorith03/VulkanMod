@@ -128,10 +128,31 @@ public final class GpuSparseLightingGpuSmokeTest {
                         boundaryLight, index);
             }
 
-            GpuTerrainModelTable modelTable = GpuTerrainModelTable.captureCurrent();
-            try(GpuTerrainModelGpuStore modelStore = new GpuTerrainModelGpuStore();
-                SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
-                require(modelStore.upload(modelTable), "Joined vertex model upload");
+            verifyCapturedFixtures(store, null, null);
+
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
+        } finally {
+            Vulkan.waitIdle();
+            store.close();
+        }
+    }
+
+    /** Runs from the post-model-bake hook, after qualified UV residency exists. */
+    public static void verifyCompleteVertexJoin(GpuTerrainModelTable table,
+                                               GpuTerrainModelGpuStore.Residency modelResidency) {
+        RegionVoxelGpuStore store = new RegionVoxelGpuStore();
+        try {
+            verifyCapturedFixtures(store, table, modelResidency);
+        } finally {
+            Vulkan.waitIdle();
+            store.close();
+        }
+    }
+
+    private static void verifyCapturedFixtures(RegionVoxelGpuStore store,
+            GpuTerrainModelTable modelTable, GpuTerrainModelGpuStore.Residency modelResidency) {
+        try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
                 for(int mask = 0; mask < 24; ++mask) {
                     int corner = mask - 16;
                     int blockIndex = corner < 0 ? 0 : SectionVoxelSnapshot.blockIndex(
@@ -146,14 +167,15 @@ public final class GpuSparseLightingGpuSmokeTest {
                     var lightResidency = store.getLightingResidency(0);
                     int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
                             voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                            lightResidency, blockIndex, modelStore.getResidency(), modelTable.templateCount());
+                            lightResidency, blockIndex, modelResidency, modelTable == null ? 0 : modelTable.templateCount());
                     require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
                             "Captured lighting must decode without GPU errors");
-                    verifyCompleteVertices(result, fixture, modelTable, mask);
+                    if(modelTable != null)
+                        verifyCompleteVertices(result, fixture, modelTable, mask);
                     if(mask == 0) {
                         int[] rejected = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
                                 voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                                lightResidency, 1, modelStore.getResidency(), modelTable.templateCount());
+                                lightResidency, 1, modelResidency, modelTable == null ? 0 : modelTable.templateCount());
                         require(rejected[5] == 8, "Unqualified voxel must reject complete vertex generation");
                         for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE;
                             word < rejected.length; ++word)
@@ -170,24 +192,20 @@ public final class GpuSparseLightingGpuSmokeTest {
                 var original = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0);
                 var distant = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0,
                         SectionVoxelSnapshot.blockIndex(15, 15, 15));
-                verifyRejectedJoin(probe, store, modelStore.getResidency(), modelTable,
+                verifyRejectedJoin(probe, store, modelResidency, modelTable,
                         original.voxel(), distant.lighting(), 200L, 4);
+                if(modelTable != null) {
                 SectionVoxelSnapshot.Builder unsupported = new SectionVoxelSnapshot.Builder(0, 64, 0);
                 for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
                     unsupported.add(0, SectionVoxelSnapshot.CPU_REQUIRED
                             | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
-                verifyRejectedJoin(probe, store, modelStore.getResidency(), modelTable,
+                verifyRejectedJoin(probe, store, modelResidency, modelTable,
                         unsupported.finish(), original.lighting(), 201L, 16);
-            }
-            Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
-                    + "576 exact captured face-vertex color/light pairs and complete CPU-writer vertices across 16 occluder masks plus eight section corners");
-
-            Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
-        } finally {
-            Vulkan.waitIdle();
-            store.close();
+                }
         }
+        Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
+                + "576 exact captured face-vertex color/light pairs; complete CPU-writer vertices={}; "
+                + "16 occluder masks plus eight section corners", modelTable != null);
     }
 
     private static void verifyRejectedJoin(SparseLightingComputeProbe probe,
@@ -200,7 +218,7 @@ public final class GpuSparseLightingGpuSmokeTest {
         var vr = store.getResidency(0);
         var lr = store.getLightingResidency(0);
         int[] result = probe.dispatch(store.getPageBuffer(vr.pageIndex()), vr,
-                store.getPageBuffer(lr.pageIndex()), lr, 0, model, table.templateCount());
+                store.getPageBuffer(lr.pageIndex()), lr, 0, model, table == null ? 0 : table.templateCount());
         require(result[5] == expectedError, "Incomplete join must report its exact failure");
         for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE; word < result.length; ++word)
             require(result[word] == 0, "Incomplete join must never emit complete vertices");
