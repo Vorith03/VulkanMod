@@ -12,12 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Region-owned, fixed-page GPU residency for serialized section voxel snapshots.
+ * Region-owned, fixed-page GPU residency for serialized section terrain inputs.
  *
- * <p>The CPU {@link RegionVoxelStore} remains authoritative. This store only
- * publishes a section as GPU-resident after its staged copy has been submitted in
- * graphics-queue order. Replacements always allocate a fresh slice; old slices are
- * retired through the frame fence domain before the allocator may reuse them.</p>
+ * <p>Voxel and sparse-lighting records share the same bounded page allocator but
+ * keep independent generation/publication state. A record is discoverable only
+ * after its staged copy has been submitted in graphics-queue order. Replacements
+ * always allocate a fresh slice; old slices retire through the frame fence domain
+ * before the allocator may reuse them.</p>
  */
 public final class RegionVoxelGpuStore {
     static final int PAGE_BYTES = 512 * 1024;
@@ -31,6 +32,9 @@ public final class RegionVoxelGpuStore {
     private final long[] generations = new long[RegionBatchLayout.MAX_SECTIONS];
     private final Resident[] resident = new Resident[RegionBatchLayout.MAX_SECTIONS];
     private final Pending[] pending = new Pending[RegionBatchLayout.MAX_SECTIONS];
+    private final long[] lightingGenerations = new long[RegionBatchLayout.MAX_SECTIONS];
+    private final Resident[] lightingResident = new Resident[RegionBatchLayout.MAX_SECTIONS];
+    private final Pending[] lightingPending = new Pending[RegionBatchLayout.MAX_SECTIONS];
     private boolean closed;
 
     public RegionVoxelGpuStore() {
@@ -42,9 +46,9 @@ public final class RegionVoxelGpuStore {
     }
 
     /**
-     * Queue a fresh GPU copy for this generation. The previous generation remains
-     * physically allocated until the replacement is submitted, but it is no longer
-     * discoverable as valid residency for the new generation.
+     * Queue a fresh GPU copy for this voxel generation. The previous generation
+     * remains physically allocated until the replacement is submitted, but it is
+     * no longer discoverable as valid residency for the new generation.
      */
     public synchronized boolean upload(int slot, SectionVoxelSnapshot snapshot, long generation) {
         checkSlot(slot);
@@ -89,30 +93,81 @@ public final class RegionVoxelGpuStore {
         return true;
     }
 
-    /** Immediately revoke discoverable residency while retaining GPU-safe lifetime. */
+    /** Queue a bounded sparse-lighting record into the same region input pages. */
+    public synchronized boolean uploadLighting(int slot, GpuSparseLightingSnapshot snapshot,
+                                               long generation) {
+        checkSlot(slot);
+        if(snapshot == null)
+            throw new IllegalArgumentException("Sparse lighting snapshot must be present");
+        if(generation < this.lightingGenerations[slot])
+            return false;
+
+        this.lightingGenerations[slot] = generation;
+        this.lightingPending[slot] = null;
+
+        if(this.closed || !uploadPathReady() || snapshot.byteSize() > PAGE_BYTES) {
+            discardLightingResident(slot);
+            return false;
+        }
+
+        Slice slice = allocateSlice(snapshot.byteSize());
+        if(slice == null) {
+            discardLightingResident(slot);
+            return false;
+        }
+
+        Pending token = new Pending(slice, generation);
+        this.lightingPending[slot] = token;
+
+        ByteBuffer bytes = MemoryUtil.memAlloc(snapshot.byteSize());
+        try {
+            snapshot.writeTo(bytes);
+            bytes.flip();
+            AreaUploadManager.INSTANCE.uploadStorageAsync(
+                    slice.page.buffer, slice.allocation.offset, bytes,
+                    () -> completeLightingUpload(slot, token));
+        } catch(RuntimeException | Error error) {
+            if(this.lightingPending[slot] == token)
+                this.lightingPending[slot] = null;
+            retire(slice);
+            throw error;
+        } finally {
+            MemoryUtil.memFree(bytes);
+        }
+
+        return true;
+    }
+
+    /** Immediately revoke discoverable voxel residency while retaining GPU-safe lifetime. */
     public synchronized void invalidate(int slot, long generation) {
         checkSlot(slot);
         if(generation < this.generations[slot])
             return;
 
         this.generations[slot] = generation;
-        // A queued upload cannot be recycled until its submission callback runs.
-        // Clearing the token makes that callback retire rather than publish it.
         this.pending[slot] = null;
         discardResident(slot);
     }
 
+    /** Immediately revoke discoverable lighting residency while retaining GPU-safe lifetime. */
+    public synchronized void invalidateLighting(int slot, long generation) {
+        checkSlot(slot);
+        if(generation < this.lightingGenerations[slot])
+            return;
+
+        this.lightingGenerations[slot] = generation;
+        this.lightingPending[slot] = null;
+        discardLightingResident(slot);
+    }
+
     public synchronized Residency getResidency(int slot) {
         checkSlot(slot);
-        long generation = this.generations[slot];
-        Resident current = this.resident[slot];
-        if(current == null || current.generation != generation)
-            return Residency.invalid(generation);
+        return residency(this.generations[slot], this.resident[slot]);
+    }
 
-        return new Residency(current.slice.page.index,
-                current.slice.allocation.offset,
-                current.slice.allocation.byteLength,
-                generation, true);
+    public synchronized Residency getLightingResidency(int slot) {
+        checkSlot(slot);
+        return residency(this.lightingGenerations[slot], this.lightingResident[slot]);
     }
 
     public synchronized StorageBuffer getPageBuffer(int pageIndex) {
@@ -138,6 +193,8 @@ public final class RegionVoxelGpuStore {
         for(int i = 0; i < this.resident.length; ++i) {
             this.resident[i] = null;
             this.pending[i] = null;
+            this.lightingResident[i] = null;
+            this.lightingPending[i] = null;
         }
 
         MemoryManager memoryManager = MemoryManager.getInstance();
@@ -173,9 +230,6 @@ public final class RegionVoxelGpuStore {
             buffer = new StorageBuffer(PAGE_BYTES, MemoryTypes.GPU_MEM);
         } catch(RuntimeException error) {
             this.budget.release(PAGE_BYTES);
-            // The fixed page is an optimization. A Vulkan allocation failure must
-            // leave the section on the existing CPU path instead of growing or
-            // turning ordinary memory pressure into a renderer crash.
             if(error.getMessage() != null && error.getMessage().startsWith("Failed to create buffer:"))
                 return null;
             throw error;
@@ -185,7 +239,7 @@ public final class RegionVoxelGpuStore {
         this.pages.add(page);
         RegionVoxelPageAllocator.Allocation allocation = page.allocator.allocate(byteLength);
         if(allocation == null)
-            throw new IllegalStateException("Fresh voxel page cannot fit one bounded snapshot");
+            throw new IllegalStateException("Fresh terrain input page cannot fit one bounded snapshot");
         return new Slice(page, allocation);
     }
 
@@ -202,11 +256,41 @@ public final class RegionVoxelGpuStore {
             retire(previous.slice);
     }
 
+    private synchronized void completeLightingUpload(int slot, Pending token) {
+        if(this.closed || this.lightingPending[slot] != token
+                || this.lightingGenerations[slot] != token.generation) {
+            retire(token.slice);
+            return;
+        }
+
+        this.lightingPending[slot] = null;
+        Resident previous = this.lightingResident[slot];
+        this.lightingResident[slot] = new Resident(token.slice, token.generation);
+        if(previous != null)
+            retire(previous.slice);
+    }
+
     private void discardResident(int slot) {
         Resident previous = this.resident[slot];
         this.resident[slot] = null;
         if(previous != null)
             retire(previous.slice);
+    }
+
+    private void discardLightingResident(int slot) {
+        Resident previous = this.lightingResident[slot];
+        this.lightingResident[slot] = null;
+        if(previous != null)
+            retire(previous.slice);
+    }
+
+    private static Residency residency(long generation, Resident current) {
+        if(current == null || current.generation != generation)
+            return Residency.invalid(generation);
+        return new Residency(current.slice.page.index,
+                current.slice.allocation.offset,
+                current.slice.allocation.byteLength,
+                generation, true);
     }
 
     private void retire(Slice slice) {
@@ -244,13 +328,13 @@ public final class RegionVoxelGpuStore {
 
         PageBudget(int maxBytes) {
             if(maxBytes <= 0)
-                throw new IllegalArgumentException("GPU voxel budget must be positive");
+                throw new IllegalArgumentException("GPU terrain input budget must be positive");
             this.maxBytes = maxBytes;
         }
 
         synchronized boolean tryReserve(int bytes) {
             if(bytes <= 0)
-                throw new IllegalArgumentException("GPU voxel reservation must be positive");
+                throw new IllegalArgumentException("GPU terrain input reservation must be positive");
             if(bytes > this.maxBytes - this.usedBytes) {
                 this.rejectedPages++;
                 return false;
@@ -261,7 +345,7 @@ public final class RegionVoxelGpuStore {
 
         synchronized void release(int bytes) {
             if(bytes <= 0 || bytes > this.usedBytes)
-                throw new IllegalStateException("GPU voxel budget accounting underflow");
+                throw new IllegalStateException("GPU terrain input budget accounting underflow");
             this.usedBytes -= bytes;
         }
 
@@ -274,7 +358,7 @@ public final class RegionVoxelGpuStore {
         }
 
         synchronized String describe() {
-            return "Terrain GPU voxel pages: " + this.usedBytes / 1024 + "/"
+            return "Terrain GPU input pages: " + this.usedBytes / 1024 + "/"
                     + this.maxBytes / 1024 + " KiB, rejected pages " + this.rejectedPages;
         }
     }

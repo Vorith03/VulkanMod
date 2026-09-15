@@ -188,8 +188,9 @@ public final class GpuSparseLightingSnapshot {
     }
 
     public void writeTo(ByteBuffer target) {
-        if(target == null || target.isReadOnly() || target.remaining() < this.byteSize())
-            throw new IllegalArgumentException("Destination cannot hold sparse lighting snapshot");
+        if(target == null || target.isReadOnly() || target.remaining() < this.byteSize()
+                || (target.position() & 3) != 0)
+            throw new IllegalArgumentException("Writable, aligned sparse lighting capacity required");
 
         int sampleCount = this.sampleCount();
         int predicateWords = this.lightPassWords.length;

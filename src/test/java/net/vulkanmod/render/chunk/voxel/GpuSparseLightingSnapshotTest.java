@@ -100,6 +100,7 @@ public final class GpuSparseLightingSnapshotTest {
         require(GpuSparseLightingSnapshot.MAX_BYTES == 18_340,
                 "Two-thousand-sample sparse ABI cap must remain explicit");
         reject(() -> sparse.writeTo(ByteBuffer.allocate(sparse.byteSize() - 1)));
+        reject(() -> sparse.writeTo(ByteBuffer.allocate(sparse.byteSize() + 1).position(1)));
         reject(() -> GpuSparseLightingSnapshot.bytesFor(GpuSparseLightingSnapshot.MAX_SAMPLES + 1));
 
         SectionVoxelSnapshot dense = allQualifiedOpen();
