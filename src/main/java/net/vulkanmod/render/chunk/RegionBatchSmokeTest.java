@@ -15,6 +15,8 @@ public final class RegionBatchSmokeTest {
     private RegionBatchSmokeTest() {}
 
     public static void verify() {
+        verifyGpuIndirectFallbackContract();
+
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
         ChunkArea recycleArea = new ChunkArea(1, new Vector3i(-128, -128, 128));
         DrawBuffers buffers = area.drawBuffers;
@@ -164,6 +166,23 @@ public final class RegionBatchSmokeTest {
             if (solid.commands != null) solid.commands.freeBuffer();
             RegionBatchStats.reset();
         }
+    }
+
+    private static void verifyGpuIndirectFallbackContract() {
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(false, true, 512, 99, 512),
+                "Disabled GPU indirect draw must retain CPU commands");
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, false, 512, 99, 512),
+                "Invalid or stale GPU output must retain CPU commands");
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 98, 99, 512),
+                "GPU candidate input smaller than the CPU draw set must fail closed");
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 513, 99, 512),
+                "GPU candidate input must not exceed persistent output capacity");
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 1, 0, 512),
+                "Empty authoritative CPU draw sets must not switch ownership");
+        require(RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 99, 99, 512),
+                "Exact bounded GPU candidate sets should be consumable");
+        require(RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 512, 99, 512),
+                "Bounded GPU supersets should be consumable with zero-tail commands");
     }
 
     private static void require(boolean condition, String message) {

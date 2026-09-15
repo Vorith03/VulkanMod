@@ -103,12 +103,19 @@ final class RegionDrawBatch {
                                                   GpuSectionSelectionShadowStore store,
                                                   GpuRegionCandidateTable table,
                                                   FrameBatch cpuBatch) {
-        if(!GPU_INDIRECT_DRAW || store == null || table == null || cpuBatch == null)
+        if(store == null || table == null || cpuBatch == null)
             return false;
-        if(table.candidateCount() < cpuBatch.drawCount
-                || table.candidateCount() > store.commandCapacity())
-            return false;
-        return store.isValidFor(table.generation(), area.position.x, area.position.y, area.position.z);
+        boolean outputValid = store.isValidFor(table.generation(),
+                area.position.x, area.position.y, area.position.z);
+        return isGpuIndirectPlanSafe(GPU_INDIRECT_DRAW, outputValid,
+                table.candidateCount(), cpuBatch.drawCount, store.commandCapacity());
+    }
+
+    static boolean isGpuIndirectPlanSafe(boolean enabled, boolean outputValid,
+                                         int candidateCount, int cpuDrawCount,
+                                         int capacity) {
+        return enabled && outputValid && cpuDrawCount > 0 && capacity > 0
+                && candidateCount >= cpuDrawCount && candidateCount <= capacity;
     }
 
     private static synchronized void logGpuIndirectDraw(ChunkArea area, TerrainRenderType type,
