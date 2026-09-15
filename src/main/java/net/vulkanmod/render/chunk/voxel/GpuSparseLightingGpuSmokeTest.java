@@ -1,6 +1,13 @@
 package net.vulkanmod.render.chunk.voxel;
 
 import net.minecraft.core.Direction;
+import net.minecraft.client.renderer.FaceInfo;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.vulkanmod.render.vertex.TerrainBufferBuilder;
+import net.vulkanmod.render.vertex.CustomVertexFormat;
+import net.vulkanmod.render.chunk.TerrainShaderManager;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.render.vertex.VertexUtil;
@@ -15,6 +22,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -120,7 +128,10 @@ public final class GpuSparseLightingGpuSmokeTest {
                         boundaryLight, index);
             }
 
-            try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
+            GpuTerrainModelTable modelTable = GpuTerrainModelTable.captureCurrent();
+            try(GpuTerrainModelGpuStore modelStore = new GpuTerrainModelGpuStore();
+                SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
+                require(modelStore.upload(modelTable), "Joined vertex model upload");
                 for(int mask = 0; mask < 16; ++mask) {
                     var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask);
                     long generation = 100L + mask;
@@ -132,9 +143,19 @@ public final class GpuSparseLightingGpuSmokeTest {
                     var lightResidency = store.getLightingResidency(0);
                     int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
                             voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                            lightResidency, 0);
+                            lightResidency, 0, modelStore.getResidency(), modelTable.templateCount());
                     require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
                             "Captured lighting must decode without GPU errors");
+                    verifyCompleteVertices(result, fixture, modelTable, mask);
+                    if(mask == 0) {
+                        int[] rejected = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
+                                voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
+                                lightResidency, 1, modelStore.getResidency(), modelTable.templateCount());
+                        require(rejected[5] == 8, "Unqualified voxel must reject complete vertex generation");
+                        for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE;
+                            word < rejected.length; ++word)
+                            require(rejected[word] == 0, "Rejected voxel must leave complete vertices empty");
+                    }
                     for(int word = 0; word < fixture.faceWords().length; ++word) {
                         int actual = result[SparseLightingComputeProbe.FACE_RESULT_BASE + word];
                         int expected = fixture.faceWords()[word];
@@ -145,13 +166,58 @@ public final class GpuSparseLightingGpuSmokeTest {
                 }
             }
             Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
-                    + "384 exact captured face-vertex color/light pairs across 16 occluder masks");
+                    + "384 exact captured face-vertex color/light pairs and complete CPU-writer vertices across 16 occluder masks");
 
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
         } finally {
             Vulkan.waitIdle();
             store.close();
+        }
+    }
+
+    private static void verifyCompleteVertices(int[] actual,
+            CanonicalCubeLightingSmokeTest.SparseGpuFixture fixture,
+            GpuTerrainModelTable table, int mask) {
+        require(TerrainShaderManager.TERRAIN_VERTEX_FORMAT == CustomVertexFormat.COMPRESSED_TERRAIN,
+                "Joined vertex oracle requires the production compressed writer");
+        int template = table.templateIndexForStateId(Block.getId(Blocks.STONE.defaultBlockState()));
+        require(template >= 0, "Stone must have a qualified UV template for the joined oracle");
+        TerrainBufferBuilder builder = new TerrainBufferBuilder(1024);
+        try {
+            builder.begin(VertexFormat.Mode.QUADS, CustomVertexFormat.COMPRESSED_TERRAIN);
+            for(Direction face : Direction.values()) {
+                for(int vertex = 0; vertex < 4; ++vertex) {
+                    var corner = FaceInfo.fromFacing(face).getVertexInfo(vertex);
+                    int color = fixture.faceWords()[face.ordinal() * 8 + vertex * 2];
+                    int light = fixture.faceWords()[face.ordinal() * 8 + vertex * 2 + 1];
+                    // Use bin centers so converting already-verified packed colors back
+                    // to float cannot introduce a second quantization rounding error.
+                    float gray = Math.min(255.0F, (color & 255) + 0.25F) / 255.0F;
+                    builder.vertex(corner.xFace == FaceInfo.Constants.MAX_X ? 1 : 0,
+                            corner.yFace == FaceInfo.Constants.MAX_Y ? 1 : 0,
+                            corner.zFace == FaceInfo.Constants.MAX_Z ? 1 : 0,
+                            gray, gray, gray, 1.0F,
+                            Float.intBitsToFloat(table.uBits(template, face.ordinal(), vertex)),
+                            Float.intBitsToFloat(table.vBits(template, face.ordinal(), vertex)),
+                            0, light, face.getStepX(), face.getStepY(), face.getStepZ());
+                }
+            }
+            var rendered = builder.end();
+            try {
+                ByteBuffer expected = rendered.vertexBuffer().order(ByteOrder.nativeOrder());
+                require(expected.remaining() == 24 * 20, "CPU writer must emit exactly 24 vertices");
+                for(int word = 0; word < 24 * 5; ++word) {
+                    int value = expected.getInt(word * 4);
+                    if(word % 5 == 1) value &= 65535; // Unused CPU padding is unspecified.
+                    if(actual[SparseLightingComputeProbe.VERTEX_RESULT_BASE + word] != value)
+                        throw new AssertionError("Complete GPU vertex mismatch mask=" + mask + " word=" + word);
+                }
+            } finally {
+                rendered.release();
+            }
+        } finally {
+            builder.free();
         }
     }
 

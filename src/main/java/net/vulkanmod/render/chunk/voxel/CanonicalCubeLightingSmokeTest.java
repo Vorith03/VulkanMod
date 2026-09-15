@@ -93,7 +93,7 @@ final class CanonicalCubeLightingSmokeTest {
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(
                 ORIGIN.getX(), ORIGIN.getY(), ORIGIN.getZ());
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
-            builder.add(i == 0 ? 1 : 0, SectionVoxelSnapshot.CPU_REQUIRED
+            builder.add(i == 0 ? Block.getId(SOURCE_STATE) : 0, SectionVoxelSnapshot.CPU_REQUIRED
                     | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
         SectionVoxelSnapshot voxel = builder.finish();
         GpuSparseLightingSnapshot lighting = GpuSparseLightingSnapshot.tryCapture(level, ORIGIN, voxel);

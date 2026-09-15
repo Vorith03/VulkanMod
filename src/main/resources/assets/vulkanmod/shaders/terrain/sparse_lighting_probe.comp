@@ -14,12 +14,15 @@ layout(set = 0, binding = 2, std430) buffer ProbeOutput {
     uint words[];
 } outputData;
 
+layout(set = 0, binding = 3, std430) readonly buffer ModelTable { uint words[]; } modelTable;
+
 layout(push_constant) uniform ProbePushConstants {
     uint voxelBaseByteOffset;
     uint voxelByteLength;
     uint lightingBaseByteOffset;
     uint lightingByteLength;
     uint blockIndex;
+    uint modelTemplateCount;
 } pc;
 
 const uint VOXEL_MAGIC = 0x56584c31u;
@@ -46,6 +49,8 @@ const uint FACE_COUNT = 6u;
 const uint FACE_RESULT_WORDS = 8u;
 // Keep face output disjoint from all lattice records, including halo samples.
 const uint FACE_RESULT_BASE = RESULT_HEADER_WORDS + SAMPLE_COUNT * RESULT_RECORD_WORDS;
+
+const uint VERTEX_RESULT_BASE = FACE_RESULT_BASE + 48u;
 
 bool validInputs(uint voxelBase, uint lightBase) {
     if (voxelPage.words[voxelBase] != VOXEL_MAGIC
@@ -208,6 +213,70 @@ uint packGray(float value) {
     return channel | (channel << 8u) | (channel << 16u) | 0xff000000u;
 }
 
+uint packCorner(uint x, uint y, uint z) {
+    return x | (y << 5u) | (z << 10u);
+}
+
+/*
+ * Expand one dense face-work item into the four corners of its unit-cube face.
+ * The sequence matches Minecraft FaceInfo's exact baked-quad vertex order for
+ * each direction. Model qualification now proves that positional order too;
+ * UV orientation, light, tint, AO, and material are still not GPU-qualified.
+ */
+void faceCorners(uint index, uint face, out uint corners[4]) {
+    uint x0 = index & 15u;
+    uint y0 = (index >> 4u) & 15u;
+    uint z0 = (index >> 8u) & 15u;
+    uint x1 = x0 + 1u;
+    uint y1 = y0 + 1u;
+    uint z1 = z0 + 1u;
+
+    if (face == 0u) {
+        corners[0] = packCorner(x0, y0, z1);
+        corners[1] = packCorner(x0, y0, z0);
+        corners[2] = packCorner(x1, y0, z0);
+        corners[3] = packCorner(x1, y0, z1);
+    } else if (face == 1u) {
+        corners[0] = packCorner(x0, y1, z0);
+        corners[1] = packCorner(x0, y1, z1);
+        corners[2] = packCorner(x1, y1, z1);
+        corners[3] = packCorner(x1, y1, z0);
+    } else if (face == 2u) {
+        corners[0] = packCorner(x1, y1, z0);
+        corners[1] = packCorner(x1, y0, z0);
+        corners[2] = packCorner(x0, y0, z0);
+        corners[3] = packCorner(x0, y1, z0);
+    } else if (face == 3u) {
+        corners[0] = packCorner(x0, y1, z1);
+        corners[1] = packCorner(x0, y0, z1);
+        corners[2] = packCorner(x1, y0, z1);
+        corners[3] = packCorner(x1, y1, z1);
+    } else if (face == 4u) {
+        corners[0] = packCorner(x0, y1, z0);
+        corners[1] = packCorner(x0, y0, z0);
+        corners[2] = packCorner(x0, y0, z1);
+        corners[3] = packCorner(x0, y1, z1);
+    } else {
+        corners[0] = packCorner(x1, y1, z1);
+        corners[1] = packCorner(x1, y0, z1);
+        corners[2] = packCorner(x1, y0, z0);
+        corners[3] = packCorner(x1, y1, z0);
+    }
+}
+
+bool modelFace(uint voxelBase, uint face, out uint faceBase) {
+    if (modelTable.words[0] != 0x47544d31u || modelTable.words[1] != 1u
+            || modelTable.words[5] != pc.modelTemplateCount) return false;
+    uint packed = voxelPage.words[voxelBase + voxelPage.words[voxelBase + 9u] + (pc.blockIndex >> 1u)];
+    uint paletteIndex = (packed >> ((pc.blockIndex & 1u) * 16u)) & 65535u;
+    uint state = voxelPage.words[voxelBase + voxelPage.words[voxelBase + 8u] + paletteIndex];
+    if (state >= modelTable.words[4]) return false;
+    uint dense = modelTable.words[8u + state];
+    if (dense == 0u || dense > pc.modelTemplateCount) return false;
+    faceBase = modelTable.words[7] + (dense - 1u) * 56u + 2u + face * 9u;
+    return true;
+}
+
 void writeFaceLighting(uint face, uint voxelBase, uint lightBase) {
     if (pc.blockIndex >= VOXEL_BLOCK_COUNT
             || !voxelHasGpuFullCube(voxelBase, pc.blockIndex)) {
@@ -280,11 +349,32 @@ void writeFaceLighting(uint face, uint voxelBase, uint lightBase) {
 
     uint directionalOffset = lightingPage.words[lightBase + 15u];
     float shade = uintBitsToFloat(lightingPage.words[lightBase + directionalOffset + face]);
+    uint modelBase = 0u;
+    uint corners[4];
+    if (pc.modelTemplateCount != 0u) {
+        if (!modelFace(voxelBase, face, modelBase)) {
+            atomicOr(outputData.words[5], 16u);
+            return;
+        }
+        faceCorners(pc.blockIndex, face, corners);
+    }
     uint outputBase = FACE_RESULT_BASE + face * FACE_RESULT_WORDS;
     for (uint corner = 0u; corner < 4u; ++corner) {
         uint vertex = vertexForCorner(face, corner);
         outputData.words[outputBase + vertex * 2u] = packGray(cornerBrightness[corner] * shade);
         outputData.words[outputBase + vertex * 2u + 1u] = cornerLight[corner];
+        if (pc.modelTemplateCount != 0u) {
+            uint c = corners[vertex];
+            uint x = c & 31u, y = (c >> 5u) & 31u, z = (c >> 10u) & 31u;
+            uint u = uint(int(uintBitsToFloat(modelTable.words[modelBase + 1u + vertex * 2u]) * 65536.0)) & 65535u;
+            uint v = uint(int(uintBitsToFloat(modelTable.words[modelBase + 2u + vertex * 2u]) * 65536.0)) & 65535u;
+            uint dest = VERTEX_RESULT_BASE + (face * 4u + vertex) * 5u;
+            outputData.words[dest] = x * 1900u | ((y * 1900u) << 16u);
+            outputData.words[dest + 1u] = z * 1900u;
+            outputData.words[dest + 2u] = packGray(cornerBrightness[corner] * shade);
+            outputData.words[dest + 3u] = u | (v << 16u);
+            outputData.words[dest + 4u] = cornerLight[corner];
+        }
     }
 }
 

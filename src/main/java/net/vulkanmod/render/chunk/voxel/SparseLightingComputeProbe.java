@@ -35,10 +35,11 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Diagnostic compute decoder for one generation-matched voxel + sparse-lighting pair.
  *
- * <p>The probe does not generate or publish terrain. It proves that a future terrain
+ * <p>The probe does not publish production terrain. It proves that a future terrain
  * compute consumer can bind the real region-owned input pages, validate both ABIs,
  * map every demanded 20-cube lattice point through the sparse rank table, and recover
- * the exact packed-light, shade-brightness and light-passing records.</p>
+ * the exact packed-light, shade-brightness and light-passing records. With a current
+ * qualified model table it emits 24 complete diagnostic terrain vertices.</p>
  */
 final class SparseLightingComputeProbe implements AutoCloseable {
     static final int RESULT_MAGIC = 0x4c495431; // LIT1
@@ -46,9 +47,10 @@ final class SparseLightingComputeProbe implements AutoCloseable {
     static final int RESULT_RECORD_WORDS = 4;
     static final int FACE_RESULT_BASE = RESULT_HEADER_WORDS
             + GpuLightingDemandMap.SAMPLE_COUNT * RESULT_RECORD_WORDS;
-    static final int RESULT_WORDS = FACE_RESULT_BASE + 6 * 8;
+    static final int VERTEX_RESULT_BASE = FACE_RESULT_BASE + 6 * 8;
+    static final int RESULT_WORDS = VERTEX_RESULT_BASE + 6 * 4 * 5;
 
-    private static final int PUSH_CONSTANT_BYTES = 5 * Integer.BYTES;
+    private static final int PUSH_CONSTANT_BYTES = 6 * Integer.BYTES;
     private static final int WORKGROUP_SIZE = 64;
     private static final int WORKGROUP_COUNT = (GpuLightingDemandMap.SAMPLE_COUNT
             + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
@@ -71,6 +73,20 @@ final class SparseLightingComputeProbe implements AutoCloseable {
     int[] dispatch(StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxelResidency,
                    StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lightingResidency,
                    int blockIndex) {
+        return dispatch(voxelPage, voxelResidency, lightingPage, lightingResidency,
+                blockIndex, null, 0);
+    }
+
+    int[] dispatch(StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxelResidency,
+                   StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lightingResidency,
+                   int blockIndex, GpuTerrainModelGpuStore.Residency modelResidency,
+                   int templateCount) {
+        boolean hasModel = modelResidency != null;
+        if(hasModel != (templateCount > 0) || hasModel && (!modelResidency.valid()
+                || modelResidency.buffer() == null
+                || modelResidency.generation() != GpuTerrainModelRegistry.generation()))
+            throw new IllegalArgumentException("Current qualified model residency required");
+        StorageBuffer modelBuffer = hasModel ? modelResidency.buffer() : voxelPage;
         if(blockIndex < 0 || blockIndex >= SectionVoxelSnapshot.BLOCK_COUNT)
             throw new IllegalArgumentException("Probe block index must be inside the section");
         if(this.closed)
@@ -96,12 +112,12 @@ final class SparseLightingComputeProbe implements AutoCloseable {
             readbackBuffer = pReadbackBuffer.get(0);
             readbackAllocation = pReadbackAllocation.get(0);
 
-            this.updateDescriptorSet(voxelPage, lightingPage, output, resultBytes);
+            this.updateDescriptorSet(voxelPage, lightingPage, output, resultBytes, modelBuffer);
 
             CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
             vkCmdFillBuffer(commandBuffer.getHandle(), output.getId(), 0L, resultBytes, 0);
             barrierTransferWritesToCompute(commandBuffer, voxelPage, lightingPage,
-                    output, resultBytes);
+                    output, resultBytes, hasModel ? modelBuffer : null);
 
             vkCmdBindPipeline(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE,
                     this.pipeline);
@@ -113,6 +129,7 @@ final class SparseLightingComputeProbe implements AutoCloseable {
             push.putInt(2 * Integer.BYTES, lightingResidency.byteOffset());
             push.putInt(3 * Integer.BYTES, lightingResidency.byteLength());
             push.putInt(4 * Integer.BYTES, blockIndex);
+            push.putInt(5 * Integer.BYTES, templateCount);
             vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
                     VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
             vkCmdDispatch(commandBuffer.getHandle(), WORKGROUP_COUNT, 1, 1);
@@ -142,8 +159,8 @@ final class SparseLightingComputeProbe implements AutoCloseable {
 
     private void createDescriptorResources() {
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(3, stack);
-            for(int i = 0; i < 3; ++i) {
+            VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(4, stack);
+            for(int i = 0; i < 4; ++i) {
                 bindings.get(i)
                         .binding(i)
                         .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
@@ -163,7 +180,7 @@ final class SparseLightingComputeProbe implements AutoCloseable {
             VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
             poolSizes.get(0)
                     .type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(3);
+                    .descriptorCount(4);
             VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
                     .sType$Default()
                     .pPoolSizes(poolSizes)
@@ -241,7 +258,7 @@ final class SparseLightingComputeProbe implements AutoCloseable {
     }
 
     private void updateDescriptorSet(StorageBuffer voxelPage, StorageBuffer lightingPage,
-                                     StorageBuffer output, int outputBytes) {
+                                     StorageBuffer output, int outputBytes, StorageBuffer modelBuffer) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorBufferInfo.Buffer voxelInfo = VkDescriptorBufferInfo.calloc(1, stack);
             voxelInfo.get(0)
@@ -259,7 +276,7 @@ final class SparseLightingComputeProbe implements AutoCloseable {
                     .offset(0L)
                     .range(outputBytes);
 
-            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(3, stack);
+            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(4, stack);
             writes.get(0)
                     .sType$Default()
                     .dstSet(this.descriptorSet)
@@ -284,6 +301,11 @@ final class SparseLightingComputeProbe implements AutoCloseable {
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .pBufferInfo(outputInfo);
+            VkDescriptorBufferInfo.Buffer modelInfo = VkDescriptorBufferInfo.calloc(1, stack);
+            modelInfo.get(0).buffer(modelBuffer.getId()).offset(0L).range(modelBuffer.getBufferSize());
+            writes.get(3).sType$Default().dstSet(this.descriptorSet).dstBinding(3)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1)
+                    .pBufferInfo(modelInfo);
             vkUpdateDescriptorSets(Device.device, writes, null);
         }
     }
@@ -292,10 +314,10 @@ final class SparseLightingComputeProbe implements AutoCloseable {
                                                         StorageBuffer voxelPage,
                                                         StorageBuffer lightingPage,
                                                         StorageBuffer output,
-                                                        int outputBytes) {
+                                                        int outputBytes, StorageBuffer modelBuffer) {
         boolean sharedPage = voxelPage.getId() == lightingPage.getId();
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(sharedPage ? 2 : 3, stack);
+            VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc((sharedPage ? 2 : 3) + (modelBuffer != null ? 1 : 0), stack);
             barriers.get(0)
                     .sType$Default()
                     .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
@@ -327,6 +349,11 @@ final class SparseLightingComputeProbe implements AutoCloseable {
                     .buffer(output.getId())
                     .offset(0L)
                     .size(outputBytes);
+            if(modelBuffer != null)
+                barriers.get(outputIndex + 1).sType$Default()
+                        .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(modelBuffer.getId()).offset(0L).size(modelBuffer.getBufferSize());
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                     0, null, barriers, null);
