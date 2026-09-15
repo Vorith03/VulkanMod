@@ -46,11 +46,17 @@ public abstract class FTBLibraryCompatSmokeMixin {
             Window window = ((Minecraft) (Object) this).getWindow();
 
             // Exercise every raw-GL site in FTB's stack path while Renderer has an
-            // active command buffer and bound swapchain framebuffer: first push
-            // enables and sets the scissor, nested push sets it again, first pop
-            // restores the outer rectangle, and final pop disables scissoring.
+            // active command buffer and bound swapchain framebuffer. FTB accepts
+            // partially off-screen rectangles under OpenGL, so cover the negative
+            // offset that Vulkan must clip before recording vkCmdSetScissor.
+            pushScissor.invoke(null, window, -4, -4, 16, 16);
+            popScissor.invoke(null, window);
+
+            // The disjoint nested rectangle crops to an empty rectangle whose
+            // retained origin is outside the window. This covers nested set,
+            // empty/out-of-bounds clipping, restore, and final disable.
             pushScissor.invoke(null, window, 1, 1, 16, 16);
-            pushScissor.invoke(null, window, 4, 4, 8, 8);
+            pushScissor.invoke(null, window, 1_000_000, 1_000_000, 1, 1);
             popScissor.invoke(null, window);
             popScissor.invoke(null, window);
         } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e) {

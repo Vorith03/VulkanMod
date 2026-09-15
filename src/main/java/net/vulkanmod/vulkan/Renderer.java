@@ -636,14 +636,35 @@ public class Renderer {
 
     public static void setScissor(int x, int y, int width, int height) {
         try(MemoryStack stack = stackPush()) {
-            int framebufferHeight = Renderer.getInstance().boundFramebuffer.getHeight();
+            Framebuffer framebuffer = Renderer.getInstance().boundFramebuffer;
+            int framebufferWidth = framebuffer.getWidth();
+            int framebufferHeight = framebuffer.getHeight();
+
+            // OpenGL accepts scissor rectangles outside the framebuffer and clips
+            // them to its bounds. Vulkan requires non-negative VkRect2D offsets,
+            // so preserve the OpenGL behavior before converting bottom-left Y to
+            // Vulkan's top-left framebuffer coordinates. Use long endpoints so a
+            // malformed compatibility caller cannot overflow x + width/y + height.
+            int clippedX = clampScissorCoordinate(x, framebufferWidth);
+            int clippedY = clampScissorCoordinate(y, framebufferHeight);
+            int clippedRight = clampScissorCoordinate(
+                    (long) x + Math.max(0L, (long) width), framebufferWidth);
+            int clippedTop = clampScissorCoordinate(
+                    (long) y + Math.max(0L, (long) height), framebufferHeight);
+            int clippedWidth = Math.max(0, clippedRight - clippedX);
+            int clippedHeight = Math.max(0, clippedTop - clippedY);
 
             VkRect2D.Buffer scissor = VkRect2D.malloc(1, stack);
-            scissor.offset(VkOffset2D.malloc(stack).set(x, framebufferHeight - (y + height)));
-            scissor.extent(VkExtent2D.malloc(stack).set(width, height));
+            scissor.offset(VkOffset2D.malloc(stack).set(
+                    clippedX, framebufferHeight - clippedTop));
+            scissor.extent(VkExtent2D.malloc(stack).set(clippedWidth, clippedHeight));
 
             vkCmdSetScissor(INSTANCE.currentCmdBuffer, 0, scissor);
         }
+    }
+
+    private static int clampScissorCoordinate(long value, int framebufferExtent) {
+        return (int) Math.max(0L, Math.min((long) framebufferExtent, value));
     }
 
     public static void resetScissor() {

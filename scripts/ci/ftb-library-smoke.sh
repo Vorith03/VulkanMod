@@ -48,9 +48,13 @@ fi
 
 export VK_ICD_FILENAMES="$lvp_icd"
 export LIBGL_ALWAYS_SOFTWARE=1
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true -Dvulkanmod.validation=true"
 
 timeout 240s xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-ftb-library.log
 
 grep -F "FTB Library scissor compatibility mixin smoke passed" vulkan-smoke-ftb-library.log
 grep -F "Vulkan smoke test passed" vulkan-smoke-ftb-library.log
+if grep -E 'Validation Error|SYNC-HAZARD' vulkan-smoke-ftb-library.log; then
+  echo "FTB Library scissor smoke produced invalid Vulkan" >&2
+  exit 1
+fi
