@@ -165,6 +165,21 @@ public final class RegionVoxelGpuStore {
         return residency(this.generations[slot], this.resident[slot]);
     }
 
+    /**
+     * True while this exact voxel generation is either queued for upload or already
+     * resident. Sparse lighting may only be queued while this contract is true.
+     */
+    public synchronized boolean hasVoxelInput(int slot, long generation) {
+        checkSlot(slot);
+        if(this.closed || this.generations[slot] != generation)
+            return false;
+        Pending queued = this.pending[slot];
+        if(queued != null && queued.generation == generation)
+            return true;
+        Resident current = this.resident[slot];
+        return current != null && current.generation == generation;
+    }
+
     public synchronized Residency getLightingResidency(int slot) {
         checkSlot(slot);
         return residency(this.lightingGenerations[slot], this.lightingResident[slot]);
@@ -340,13 +355,17 @@ public final class RegionVoxelGpuStore {
                 return false;
             }
             this.usedBytes += bytes;
+            this.entries++;
             return true;
         }
+
+        private int entries;
 
         synchronized void release(int bytes) {
             if(bytes <= 0 || bytes > this.usedBytes)
                 throw new IllegalStateException("GPU terrain input budget accounting underflow");
             this.usedBytes -= bytes;
+            this.entries--;
         }
 
         synchronized int usedBytes() {
