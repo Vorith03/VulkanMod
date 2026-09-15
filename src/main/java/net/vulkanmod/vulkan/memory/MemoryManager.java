@@ -356,4 +356,38 @@ public class MemoryManager {
     public int getNativeMemoryMB() { return (int) (nativeMemory / 1048576L); }
 
     public int getDeviceMemoryMB() { return (int) (deviceMemory / 1048576L); }
+
+    /**
+     * Diagnostic ownership counts. These deliberately expose counts rather than
+     * collections so lifecycle telemetry cannot mutate MemoryManager state.
+     */
+    public static synchronized int getTrackedBufferCount() {
+        return buffers.size();
+    }
+
+    public static synchronized int getTrackedImageCount() {
+        return images.size();
+    }
+
+    /**
+     * Snapshot the work that has been retired logically but is still waiting for a
+     * safe frame slot. The three values are diagnostic only and need not describe
+     * one globally atomic instant relative to Vulkan submission.
+     */
+    public synchronized DeferredResourceStats getDeferredResourceStats() {
+        int pendingBuffers = 0;
+        int pendingImages = 0;
+        int pendingFrameOps = 0;
+
+        for(int frame = 0; frame < Frames; ++frame) {
+            pendingBuffers += this.freeableBuffers[frame].size();
+            pendingImages += this.freeableImages[frame].size();
+            pendingFrameOps += this.frameOps[frame].size();
+        }
+
+        return new DeferredResourceStats(pendingBuffers, pendingImages, pendingFrameOps);
+    }
+
+    public record DeferredResourceStats(int buffers, int images, int frameOps) {
+    }
 }
