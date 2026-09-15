@@ -230,7 +230,10 @@ only if samples remain clean across movement/churn with no visible terrain regre
    final density buckets `4775/3736/575/2/0`. These are retrieved log facts, not
    freshly re-parsed raw files. Do not ask for duplicate density collection. They
    support continued bounded sparse-input work, not a performance claim.
-3. Next join the bounded model/position/UV
+3. Resume from `docs/GPU_TERRAIN_VERTEX_JOIN_CHECKPOINT_2026-09-15.md` for the
+   inspected five-word ABI, descriptor join key, padding caveat and test sequence.
+   No vertex-join implementation is pending in the working tree.
+   Next join the bounded model/position/UV
    stream with sparse lighting, prove complete packed vertices against the production
    renderer, then implement bounded allocation/publication and explicit fallback.
    Missing/stale samples, unsupported semantics and allocation/overflow failures must
