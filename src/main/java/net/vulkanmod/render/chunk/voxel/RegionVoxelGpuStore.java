@@ -14,11 +14,11 @@ import java.util.List;
 /**
  * Region-owned, fixed-page GPU residency for serialized section terrain inputs.
  *
- * <p>Voxel and sparse-lighting records share the same bounded page allocator but
- * keep independent generation/publication state. A record is discoverable only
- * after its staged copy has been submitted in graphics-queue order. Replacements
- * always allocate a fresh slice; old slices retire through the frame fence domain
- * before the allocator may reuse them.</p>
+ * <p>Voxel and sparse-lighting records share the same bounded page allocator and
+ * section generation while retaining independent staged publication/retirement
+ * state. A record is discoverable only after its staged copy has been submitted
+ * in graphics-queue order. Replacements always allocate a fresh slice; old slices
+ * retire through the frame fence domain before the allocator may reuse them.</p>
  */
 public final class RegionVoxelGpuStore {
     static final int PAGE_BYTES = 512 * 1024;
@@ -48,7 +48,8 @@ public final class RegionVoxelGpuStore {
     /**
      * Queue a fresh GPU copy for this voxel generation. The previous generation
      * remains physically allocated until the replacement is submitted, but it is
-     * no longer discoverable as valid residency for the new generation.
+     * no longer discoverable as valid residency for the new generation. Lighting
+     * tied to the prior voxel contents is revoked immediately.
      */
     public synchronized boolean upload(int slot, SectionVoxelSnapshot snapshot, long generation) {
         checkSlot(slot);
@@ -59,6 +60,7 @@ public final class RegionVoxelGpuStore {
 
         this.generations[slot] = generation;
         this.pending[slot] = null;
+        revokeLightingForVoxelChange(slot, generation);
 
         if(this.closed || !uploadPathReady() || snapshot.byteSize() > PAGE_BYTES) {
             discardResident(slot);
@@ -93,7 +95,7 @@ public final class RegionVoxelGpuStore {
         return true;
     }
 
-    /** Queue a bounded sparse-lighting record into the same region input pages. */
+    /** Queue a bounded sparse-lighting record paired with the same voxel generation. */
     public synchronized boolean uploadLighting(int slot, GpuSparseLightingSnapshot snapshot,
                                                long generation) {
         checkSlot(slot);
@@ -102,13 +104,14 @@ public final class RegionVoxelGpuStore {
         if(generation < this.lightingGenerations[slot])
             return false;
 
-        this.lightingGenerations[slot] = generation;
-        this.lightingPending[slot] = null;
-
         if(!hasVoxelInput(slot, generation)) {
+            this.lightingPending[slot] = null;
             discardLightingResident(slot);
             return false;
         }
+
+        this.lightingGenerations[slot] = generation;
+        this.lightingPending[slot] = null;
 
         if(this.closed || !uploadPathReady() || snapshot.byteSize() > PAGE_BYTES) {
             discardLightingResident(slot);
@@ -288,6 +291,13 @@ public final class RegionVoxelGpuStore {
         this.lightingResident[slot] = new Resident(token.slice, token.generation);
         if(previous != null)
             retire(previous.slice);
+    }
+
+    private void revokeLightingForVoxelChange(int slot, long generation) {
+        if(generation >= this.lightingGenerations[slot])
+            this.lightingGenerations[slot] = generation;
+        this.lightingPending[slot] = null;
+        discardLightingResident(slot);
     }
 
     private void discardResident(int slot) {
