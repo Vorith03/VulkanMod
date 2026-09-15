@@ -14,6 +14,8 @@ import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.CompiledSection;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingMode;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshot;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 
@@ -337,9 +339,19 @@ public class RenderSection {
     public synchronized long getVoxelGeneration() { return this.voxelGeneration; }
 
     public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
+        this.publishVoxels(snapshot, null, generation);
+    }
+
+    public synchronized void publishVoxels(SectionVoxelSnapshot snapshot,
+                                           GpuSparseLightingSnapshot sparseLighting,
+                                           long generation) {
         if (!RegionVoxelStore.ENABLED) return;
-        if (generation == this.voxelGeneration && this.chunkArea != null)
+        if (generation == this.voxelGeneration && this.chunkArea != null) {
             this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot, generation);
+            if (GpuSparseLightingMode.ENABLED)
+                this.chunkArea.publishSparseLighting(xOffset, yOffset, zOffset,
+                        sparseLighting, generation);
+        }
     }
 
     synchronized void invalidateVoxels() {
