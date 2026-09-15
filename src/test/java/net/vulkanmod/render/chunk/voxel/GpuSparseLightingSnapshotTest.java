@@ -9,6 +9,11 @@ import java.nio.ByteOrder;
 public final class GpuSparseLightingSnapshotTest {
     private GpuSparseLightingSnapshotTest() {}
 
+    public static void main(String[] args) {
+        verify();
+        System.out.println("Sparse lighting snapshot tests passed");
+    }
+
     public static void verify() {
         SectionVoxelSnapshot isolated = isolatedCube();
         GpuLightingDemandMap demand = GpuLightingDemandMap.analyze(isolated);
