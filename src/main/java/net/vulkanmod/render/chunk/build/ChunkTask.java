@@ -18,6 +18,8 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuLightingDemandTelemetry;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingMode;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshot;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -65,6 +67,9 @@ public class ChunkTask {
     }
 
     public static class BuildTask extends ChunkTask {
+        private static final AtomicBoolean SPARSE_LIGHTING_ACTIVE_LOGGED = new AtomicBoolean();
+        private static final AtomicBoolean SPARSE_LIGHTING_FAILURE_LOGGED = new AtomicBoolean();
+
         @Nullable
         protected RenderChunkRegion region;
         private final long voxelGeneration;
@@ -123,7 +128,8 @@ public class ChunkTask {
                         this.renderSection.setCompiledSection(compiledChunk);
                         this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
                         this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
-                        this.renderSection.publishVoxels(compileResults.voxels, this.voxelGeneration);
+                        this.renderSection.publishVoxels(compileResults.voxels,
+                                compileResults.sparseLighting, this.voxelGeneration);
                     });
 
                     this.buildTime = (System.nanoTime() - startTime) * 0.000001f;
@@ -225,7 +231,30 @@ public class ChunkTask {
                         }
                     }
 
-                    if (voxels != null) compileResults.voxels = voxels.finish();
+                    if (voxels != null) {
+                        compileResults.voxels = voxels.finish();
+                        if (GpuSparseLightingMode.ENABLED) {
+                            try {
+                                GpuSparseLightingSnapshot sparseLighting = GpuSparseLightingSnapshot.tryCapture(
+                                        renderChunkRegion, blockPos, compileResults.voxels);
+                                if (sparseLighting != null && sparseLighting.sampleCount() > 0) {
+                                    compileResults.sparseLighting = sparseLighting;
+                                    if (SPARSE_LIGHTING_ACTIVE_LOGGED.compareAndSet(false, true)) {
+                                        Initializer.LOGGER.info(
+                                                "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_ACTIVE: section=({}, {}, {}) samples={} bytes={}; CPU terrain mesh remains authoritative",
+                                                blockPos.getX(), blockPos.getY(), blockPos.getZ(),
+                                                sparseLighting.sampleCount(), sparseLighting.byteSize());
+                                    }
+                                }
+                            } catch (RuntimeException error) {
+                                if (SPARSE_LIGHTING_FAILURE_LOGGED.compareAndSet(false, true)) {
+                                    Initializer.LOGGER.warn(
+                                            "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_FAILED: retaining CPU terrain path",
+                                            error);
+                                }
+                            }
+                        }
+                    }
 
                     if (set.contains(RenderType.translucent())) {
                         TerrainBufferBuilder bufferBuilder2 = chunkBufferBuilderPack.builder(RenderType.translucent());
@@ -356,6 +385,7 @@ public class ChunkTask {
             public final EnumMap<TerrainRenderType, UploadBuffer> renderedLayers = new EnumMap<>(TerrainRenderType.class);
             public VisibilitySet visibilitySet = new VisibilitySet();
             public SectionVoxelSnapshot voxels;
+            public GpuSparseLightingSnapshot sparseLighting;
             @org.jetbrains.annotations.Nullable
             public TerrainBufferBuilder.SortState transparencyState;
 
