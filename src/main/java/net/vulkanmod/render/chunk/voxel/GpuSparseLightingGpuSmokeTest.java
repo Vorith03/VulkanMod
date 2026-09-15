@@ -132,8 +132,11 @@ public final class GpuSparseLightingGpuSmokeTest {
             try(GpuTerrainModelGpuStore modelStore = new GpuTerrainModelGpuStore();
                 SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
                 require(modelStore.upload(modelTable), "Joined vertex model upload");
-                for(int mask = 0; mask < 16; ++mask) {
-                    var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask);
+                for(int mask = 0; mask < 24; ++mask) {
+                    int corner = mask - 16;
+                    int blockIndex = corner < 0 ? 0 : SectionVoxelSnapshot.blockIndex(
+                            (corner & 1) * 15, ((corner >> 1) & 1) * 15, ((corner >> 2) & 1) * 15);
+                    var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask & 15, blockIndex);
                     long generation = 100L + mask;
                     require(store.upload(0, fixture.voxel(), generation), "Captured voxel upload");
                     require(store.uploadLighting(0, fixture.lighting(), generation),
@@ -143,7 +146,7 @@ public final class GpuSparseLightingGpuSmokeTest {
                     var lightResidency = store.getLightingResidency(0);
                     int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
                             voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                            lightResidency, 0, modelStore.getResidency(), modelTable.templateCount());
+                            lightResidency, blockIndex, modelStore.getResidency(), modelTable.templateCount());
                     require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
                             "Captured lighting must decode without GPU errors");
                     verifyCompleteVertices(result, fixture, modelTable, mask);
@@ -164,9 +167,20 @@ public final class GpuSparseLightingGpuSmokeTest {
                                     + " word=" + word + " expected=" + expected + " actual=" + actual);
                     }
                 }
+                var original = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0);
+                var distant = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0,
+                        SectionVoxelSnapshot.blockIndex(15, 15, 15));
+                verifyRejectedJoin(probe, store, modelStore.getResidency(), modelTable,
+                        original.voxel(), distant.lighting(), 200L, 4);
+                SectionVoxelSnapshot.Builder unsupported = new SectionVoxelSnapshot.Builder(0, 64, 0);
+                for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
+                    unsupported.add(0, SectionVoxelSnapshot.CPU_REQUIRED
+                            | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
+                verifyRejectedJoin(probe, store, modelStore.getResidency(), modelTable,
+                        unsupported.finish(), original.lighting(), 201L, 16);
             }
             Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
-                    + "384 exact captured face-vertex color/light pairs and complete CPU-writer vertices across 16 occluder masks");
+                    + "576 exact captured face-vertex color/light pairs and complete CPU-writer vertices across 16 occluder masks plus eight section corners");
 
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_SPARSE_LIGHTING_RESIDENCY_OK: shared terrain input page, exact bytes, paired turnover, voxel-driven light revocation, unpaired rejection, stale-generation rejection");
@@ -174,6 +188,22 @@ public final class GpuSparseLightingGpuSmokeTest {
             Vulkan.waitIdle();
             store.close();
         }
+    }
+
+    private static void verifyRejectedJoin(SparseLightingComputeProbe probe,
+            RegionVoxelGpuStore store, GpuTerrainModelGpuStore.Residency model,
+            GpuTerrainModelTable table, SectionVoxelSnapshot voxel,
+            GpuSparseLightingSnapshot lighting, long generation, int expectedError) {
+        require(store.upload(0, voxel, generation), "Rejected join voxel upload");
+        require(store.uploadLighting(0, lighting, generation), "Rejected join lighting upload");
+        AreaUploadManager.INSTANCE.submitUploads();
+        var vr = store.getResidency(0);
+        var lr = store.getLightingResidency(0);
+        int[] result = probe.dispatch(store.getPageBuffer(vr.pageIndex()), vr,
+                store.getPageBuffer(lr.pageIndex()), lr, 0, model, table.templateCount());
+        require(result[5] == expectedError, "Incomplete join must report its exact failure");
+        for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE; word < result.length; ++word)
+            require(result[word] == 0, "Incomplete join must never emit complete vertices");
     }
 
     private static void verifyCompleteVertices(int[] actual,
@@ -194,9 +224,9 @@ public final class GpuSparseLightingGpuSmokeTest {
                     // Use bin centers so converting already-verified packed colors back
                     // to float cannot introduce a second quantization rounding error.
                     float gray = Math.min(255.0F, (color & 255) + 0.25F) / 255.0F;
-                    builder.vertex(corner.xFace == FaceInfo.Constants.MAX_X ? 1 : 0,
-                            corner.yFace == FaceInfo.Constants.MAX_Y ? 1 : 0,
-                            corner.zFace == FaceInfo.Constants.MAX_Z ? 1 : 0,
+                    builder.vertex((fixture.blockIndex() & 15) + (corner.xFace == FaceInfo.Constants.MAX_X ? 1 : 0),
+                            ((fixture.blockIndex() >> 4) & 15) + (corner.yFace == FaceInfo.Constants.MAX_Y ? 1 : 0),
+                            ((fixture.blockIndex() >> 8) & 15) + (corner.zFace == FaceInfo.Constants.MAX_Z ? 1 : 0),
                             gray, gray, gray, 1.0F,
                             Float.intBitsToFloat(table.uBits(template, face.ordinal(), vertex)),
                             Float.intBitsToFloat(table.vBits(template, face.ordinal(), vertex)),

@@ -81,27 +81,34 @@ final class CanonicalCubeLightingSmokeTest {
 
     /** Capture real lighting inputs and use Minecraft itself as the GPU oracle. */
     static SparseGpuFixture sparseGpuFixture(int occluderMask) {
+        return sparseGpuFixture(occluderMask, 0);
+    }
+
+    static SparseGpuFixture sparseGpuFixture(int occluderMask, int blockIndex) {
+        BlockPos sourcePos = ORIGIN.offset(blockIndex & 15, (blockIndex >> 4) & 15,
+                (blockIndex >> 8) & 15);
         LightingLevel level = new LightingLevel();
+        level.setState(sourcePos, SOURCE_STATE);
         for(Direction face : Direction.values()) {
             Direction[] tangent = tangents(face);
             for(int i = 0; i < 4; ++i) {
                 if((occluderMask & (1 << i)) != 0)
-                    level.setState(ORIGIN.relative(face).relative(tangent[i]).relative(face),
+                    level.setState(sourcePos.relative(face).relative(tangent[i]).relative(face),
                             Blocks.STONE.defaultBlockState());
             }
         }
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(
                 ORIGIN.getX(), ORIGIN.getY(), ORIGIN.getZ());
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
-            builder.add(i == 0 ? Block.getId(SOURCE_STATE) : 0, SectionVoxelSnapshot.CPU_REQUIRED
-                    | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
+            builder.add(i == blockIndex ? Block.getId(SOURCE_STATE) : 0, SectionVoxelSnapshot.CPU_REQUIRED
+                    | (i == blockIndex ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
         SectionVoxelSnapshot voxel = builder.finish();
         GpuSparseLightingSnapshot lighting = GpuSparseLightingSnapshot.tryCapture(level, ORIGIN, voxel);
         require(lighting != null, "Canonical captured lighting must fit the sparse cap");
         int[] faceWords = new int[6 * 8];
         ReflectedAmbientOcclusion renderer = new ReflectedAmbientOcclusion();
         for(Direction face : Direction.values()) {
-            FaceResult result = renderer.calculate(level, face);
+            FaceResult result = renderer.calculate(level, face, sourcePos);
             for(int vertex = 0; vertex < 4; ++vertex) {
                 int offset = face.ordinal() * 8 + vertex * 2;
                 faceWords[offset] = result.colors[vertex];
@@ -109,11 +116,11 @@ final class CanonicalCubeLightingSmokeTest {
             }
         }
         ModelBlockRenderer.clearCache();
-        return new SparseGpuFixture(voxel, lighting, faceWords);
+        return new SparseGpuFixture(voxel, lighting, faceWords, blockIndex);
     }
 
     record SparseGpuFixture(SectionVoxelSnapshot voxel, GpuSparseLightingSnapshot lighting,
-                            int[] faceWords) {}
+                            int[] faceWords, int blockIndex) {}
 
     private static LatticeResult verifyLatticePrototype() {
         verifyLayoutIndices(CanonicalCubeLightingLattice.Layout.RECTANGULAR_20,
@@ -382,13 +389,17 @@ final class CanonicalCubeLightingSmokeTest {
         }
 
         private FaceResult calculate(LightingLevel level, Direction face) {
+            return calculate(level, face, ORIGIN);
+        }
+
+        private FaceResult calculate(LightingLevel level, Direction face, BlockPos sourcePos) {
             try {
                 ModelBlockRenderer.clearCache();
                 level.resetSampleDistance();
                 Object oracle = constructor.newInstance();
                 BitSet shapeFlags = new BitSet(3);
                 shapeFlags.set(0); // Canonical unit face lies on the block boundary.
-                calculate.invoke(oracle, level, SOURCE_STATE, ORIGIN, face,
+                calculate.invoke(oracle, level, SOURCE_STATE, sourcePos, face,
                         new float[Direction.values().length * 2], shapeFlags, true);
                 float[] rendererBrightness = (float[]) brightness.get(oracle);
                 int[] rendererLight = (int[]) lightmap.get(oracle);
