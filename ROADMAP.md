@@ -256,7 +256,7 @@ Mandatory gates:
 - [x] add bounded region-scoped voxel/state GPU residency and independent update/invalidation;
 - [x] add feature-gated compute plumbing with explicit barriers, ownership and fallback;
 - [ ] implement correct GPU visibility/section selection;
-- [ ] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
+- [x] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
 - [x] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
 - [ ] implement hybrid ordinary-cube meshing with halo/light/tint inputs and output-overflow fallback;
 - [ ] integrate rebuild/unload/world/resource-generation transitions without stale GPU data;
@@ -264,10 +264,11 @@ Mandatory gates:
 - [ ] preserve translucent/tripwire rendering until separately supported and validated;
 - [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 4/11 verified gates.** Input infrastructure, bounded region residency,
-diagnostic compute plumbing, and the fail-closed reusable model-instance contract
-are verified. Production GPU selection, indirect commands and hybrid terrain meshing
-remain unimplemented.
+**Progress: 5/11 verified gates.** Input infrastructure, bounded region residency,
+diagnostic compute plumbing, fail-closed reusable model instances, and bounded GPU
+indirect-command generation/fallback are verified. Live GPU selection correctness and
+hybrid terrain meshing remain open; GPU indirect production consumption is default-off
+pending representative RX 6900 XT evidence.
 
 Current lighting slice: the exact dense-lattice prototype in
 `docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both a 20-cube
@@ -276,7 +277,7 @@ templates and partial position/UV vertex generation are proven in diagnostic com
 but lighting metadata remains unresolved and CPU terrain output remains authoritative.
 The opt-in estimator in `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`
 now measures demand-driven point/brick density against actual CPU mesh bytes; real
-Create Chronicles section evidence is the next gate.
+Create Chronicles section evidence is the next gate for the hybrid-meshing track.
 
 The diagnostic compact face/vertex stream is now explicitly capacity-bounded as
 recorded in `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`: requested and written
@@ -286,26 +287,38 @@ gate because allocation/publication, lighting/color and CPU fallback integration
 not implemented.
 
 The reusable model/template gate is complete for the supported subset as recorded in
-`docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. The qualifier now exercises
+`docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. The qualifier exercises
 Forge's actual ModelData/render-type quad API, requires a singleton solid layer and
 rejects seed-varying geometry. Unsupported Forge callbacks and per-position offsets
 remain CPU-only rather than being approximated.
 
-The bounded selection probe in
-`docs/GPU_TERRAIN_SECTION_SELECTION_PROBE_2026-09-14.md` now proves GPU compaction of
-the existing five-word indexed-indirect ABI with exact metadata preservation and an
-explicit overflow fallback. It does not yet close either selection or indirect-command
-gate. Its versioned region candidate table and GPU predicate now cover generation,
-region identity, mesh readiness, CPU graph visibility, terrain layer, nonempty draws
-and six-plane frustum intersection with exact CPU-oracle agreement. The fixture is
-now exercised through region-owned, generation-safe device-local residency with a
-fixed allocation size, a global budget, allocate-then-publish replacement and
-`ChunkArea` lifecycle invalidation. No live region/layer producer exists yet and
-production region draws do not consume its output.
+The section-selection/indirect track is now live rather than synthetic-only. The
+versioned candidate table covers generation, region identity, mesh readiness, CPU
+graph visibility, terrain layer, nonempty draws and six-plane frustum intersection.
+A live producer builds each layer's table from the full region-owned fine-section
+superset, freezes the production frustum for that generation, and publishes through
+generation-safe device-local residency. The rate-limited diagnostic can compare live
+GPU selection and exact five-word commands with the authoritative CPU queue.
+
+Persistent GPU output is a bounded storage+indirect buffer with a 512-command
+capacity, zero-tail commands and explicit prior-indirect->transfer,
+transfer->compute, and compute->indirect synchronization. Commit `d91de023` adds a
+separate default-off production consumer; the CPU batch remains built and is used
+whenever the shadow generation/region is invalid, candidate input is smaller than the
+CPU draw set, capacity would be exceeded, or the experimental draw gate is disabled.
+Commit `67dafa92` adds direct host-side regression assertions for those fail-closed
+conditions and exact/bounded-superset success. CI #443 is fully green and CI #444 is
+the corresponding verification run for the fallback-contract commit. See
+`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`.
+
+This closes the bounded indirect-command/fallback mechanism, **not** the live
+visibility-selection gate. Representative Create Chronicles/RX 6900 XT diagnostics
+must still show no unresolved GPU-vs-CPU mismatch, including the unusual
+camera-outside-build-height seed path. No performance improvement is claimed.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
-or CPU fallback on the RX 6900 XT. Existing Phase 6 measurement gates remain open.
+or CPU fallback on the RX 6900 XT. Existing Phase 5/6 measurement gates remain open.
 
 ---
 
@@ -368,23 +381,23 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Verified runtime source: `10c6c46d55dfeca5cfd7d503d1ad57dcc3997e55`,
-  **CI #420 green** (run `34813758435`, job `103880076065`). Build/distribution,
-  both Vulkan startups, voxel/model/lighting compute oracles, render tests and all
-  compatibility smokes passed; logs inspected. The bounded section-selection oracle
-  repeatedly matched the exact 39/512 CPU frustum/readiness/graph/layer result. Its
-  region-owned residency also passed exact-byte readback, submission publication,
-  fresh replacement, invalidation and area-reposition cleanup.
+- Verified runtime source: `67dafa92c5a9f568616e10a54c504d9285f8f514`,
+  **CI #444** (run `34927562475`) is the verification run for the fallback-contract
+  commit and must be green before relying on this snapshot. Previous source CI #443
+  is fully green at `d91de023` across build/distribution, both Vulkan startups,
+  persistent GPU indirect shadow, post/depth, screenshot and compatibility smokes.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 4/11.
-- P7 input ABI, capped persistent region SSBO residency and diagnostic compute
-  plumbing are verified. Reusable Forge model instances and compact output
-  capacity/overflow safety are also verified for the supported subset. GPU command
-  selection now has a bounded, versioned CPU/GPU predicate and residency proof, but
-  a live metadata producer and production consumption remain open. Demand telemetry is ready;
-  collect real modpack section density before extending snapshot v4.
-- No new RX 6900 XT A/B measurement or performance claim.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 5/11.
+- P7 input ABI, capped persistent region SSBO residency, compute plumbing, reusable
+  Forge model instances, compact output capacity/overflow safety, and bounded GPU
+  indirect-command generation with CPU fallback are verified. A live metadata
+  producer and default-off production indirect consumer now exist. Live GPU selection
+  correctness still needs representative RX 6900 XT/Create Chronicles evidence.
+- Hybrid GPU meshing still requires real lighting-demand density evidence before the
+  snapshot ABI is extended or any CPU geometry ownership is removed.
+- No new RX 6900 XT A/B performance measurement or performance claim.
 
-See `AGENT_STATUS.md` for the build artifact and `docs/GPU_TERRAIN_BOUNDARY.md` for
-scope limits. Documentation-only follow-ups use `[skip ci]`. Recheck live source/CI
-before the next implementation step.
+See `AGENT_STATUS.md` for current test instructions and
+`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` for the bounded indirect-draw
+contract. Documentation-only follow-ups use `[skip ci]`. Recheck live source/CI before
+the next implementation step.
