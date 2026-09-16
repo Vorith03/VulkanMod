@@ -27,9 +27,12 @@ final class RegionDrawBatch {
     private static final boolean GPU_INDIRECT_DRAW = Boolean.getBoolean(
             "vulkanmod.experimentalGpuIndirectDraw")
             && GpuSectionSelectionShadowStore.enabled();
+    private static final boolean GPU_TERRAIN_DRAW_HANDOFF = Boolean.getBoolean(
+            "vulkanmod.experimentalGpuTerrainDrawHandoff");
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
     private static boolean loggedGpuIndirectDraw;
+    private static boolean loggedGpuTerrainDrawHandoff;
 
     private FrameBatch[][] batches;
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
@@ -65,6 +68,15 @@ final class RegionDrawBatch {
         // Renderer.beginFrame has waited this frame's fence. Other frames' command
         // buffers remain untouched, even during edits or visibility changes.
         batch.update(buffers, area, type);
+        if(batch.maxGpuVertexCount > 0) {
+            // WorldRenderer binds the auto-quad index buffer before entering the
+            // region path. Re-check capacity here and bind again so a future change
+            // to the bounded GPU face limit cannot leave a reallocated old handle
+            // bound in the current command buffer.
+            Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(batch.maxGpuVertexCount);
+            Renderer.getDrawer().bindAutoIndexBuffer(Renderer.getCommandBuffer(), 7);
+            logGpuTerrainDrawHandoff(area, type, batch.gpuDrawCount, batch.drawCount);
+        }
         compareLiveCandidates(area, type);
         publishLiveCandidates(buffers, area, type);
         GpuSectionSelectionShadowStore shadowStore = dispatchShadowCandidates(area, type, frames);
@@ -103,7 +115,7 @@ final class RegionDrawBatch {
                                                   GpuSectionSelectionShadowStore store,
                                                   GpuRegionCandidateTable table,
                                                   FrameBatch cpuBatch) {
-        if(store == null || table == null || cpuBatch == null)
+        if(store == null || table == null || cpuBatch == null || cpuBatch.gpuDrawCount != 0)
             return false;
         boolean outputValid = store.isValidFor(table.generation(),
                 area.position.x, area.position.y, area.position.z);
@@ -128,6 +140,19 @@ final class RegionDrawBatch {
                 "VULKANMOD_GPU_INDIRECT_DRAW_ACTIVE: region=({}, {}, {}) layer={} generation={} cpuDraws={} boundedCommands={}; CPU batch remains built as fallback",
                 area.position.x, area.position.y, area.position.z, type.ordinal(), table.generation(),
                 cpuDrawCount, issuedCommands);
+    }
+
+    private static synchronized void logGpuTerrainDrawHandoff(ChunkArea area,
+                                                               TerrainRenderType type,
+                                                               int gpuDrawCount,
+                                                               int totalDrawCount) {
+        if(loggedGpuTerrainDrawHandoff)
+            return;
+        loggedGpuTerrainDrawHandoff = true;
+        Initializer.LOGGER.info(
+                "VULKANMOD_GPU_TERRAIN_DRAW_HANDOFF_ACTIVE: region=({}, {}, {}) layer={} gpuDraws={} totalDraws={}; CPU meshes remain available for fallback",
+                area.position.x, area.position.y, area.position.z, type.ordinal(),
+                gpuDrawCount, totalDrawCount);
     }
 
     private void compareLiveCandidates(ChunkArea area, TerrainRenderType type) {
@@ -327,24 +352,44 @@ final class RegionDrawBatch {
         long visibilityRevision = -1;
         long meshRevision = -1;
         boolean pendingUploads;
+        boolean gpuTerrainHandoff;
         int drawCount;
+        int gpuDrawCount;
+        int maxGpuVertexCount;
 
         boolean update(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
+            return update(buffers, area, type, GPU_TERRAIN_DRAW_HANDOFF);
+        }
+
+        boolean update(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
+                       boolean gpuTerrainHandoff) {
             long currentVisibilityRevision = area.getVisibilityRevision();
             long currentMeshRevision = buffers.getMeshRevision(type);
-            if (visibilityRevision == currentVisibilityRevision && meshRevision == currentMeshRevision
+            if (visibilityRevision == currentVisibilityRevision
+                    && meshRevision == currentMeshRevision
+                    && this.gpuTerrainHandoff == gpuTerrainHandoff
                     && !pendingUploads) return false;
-            rebuild(buffers, area, type, currentVisibilityRevision, currentMeshRevision);
+            rebuild(buffers, area, type, currentVisibilityRevision, currentMeshRevision,
+                    gpuTerrainHandoff);
             return true;
         }
 
         void rebuild(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
                      long currentVisibilityRevision, long currentMeshRevision) {
+            rebuild(buffers, area, type, currentVisibilityRevision, currentMeshRevision,
+                    GPU_TERRAIN_DRAW_HANDOFF);
+        }
+
+        void rebuild(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
+                     long currentVisibilityRevision, long currentMeshRevision,
+                     boolean gpuTerrainHandoff) {
             if (area.sectionQueue.size() > MAX_SECTIONS) {
                 throw new IllegalStateException("Region contains more than 512 sections");
             }
             pendingUploads = false;
             drawCount = 0;
+            gpuDrawCount = 0;
+            maxGpuVertexCount = 0;
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 ByteBuffer data = stack.malloc(area.sectionQueue.size() * STRIDE);
                 var iterator = area.sectionQueue.iterator(false);
@@ -358,8 +403,23 @@ final class RegionDrawBatch {
                         pendingUploads = true;
                         continue;
                     }
-                    putCommand(data, parameters.indexCount, parameters.firstIndex, parameters.vertexOffset,
-                            packSection(section.xOffset - area.position.x, section.yOffset - area.position.y,
+
+                    GpuTerrainOutputStore.Residency residency = gpuTerrainHandoff
+                            ? area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
+                                    section.zOffset, type)
+                            : null;
+                    GpuTerrainDrawHandoff.DrawCommand command = GpuTerrainDrawHandoff.select(
+                            gpuTerrainHandoff, type, section.getVoxelGeneration(), residency,
+                            parameters.indexCount, parameters.firstIndex, parameters.vertexOffset);
+                    if(command.gpuResident()) {
+                        gpuDrawCount++;
+                        maxGpuVertexCount = Math.max(maxGpuVertexCount,
+                                command.indexCount() * 2 / 3);
+                    }
+
+                    putCommand(data, command.indexCount(), command.firstIndex(), command.vertexOffset(),
+                            packSection(section.xOffset - area.position.x,
+                                    section.yOffset - area.position.y,
                                     section.zOffset - area.position.z));
                     drawCount++;
                 }
@@ -374,6 +434,7 @@ final class RegionDrawBatch {
             }
             visibilityRevision = currentVisibilityRevision;
             meshRevision = currentMeshRevision;
+            this.gpuTerrainHandoff = gpuTerrainHandoff;
         }
     }
 
