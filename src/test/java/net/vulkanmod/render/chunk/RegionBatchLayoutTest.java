@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk;
 
+import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.vulkanmod.mixin.compatibility.EffectUniformBindingsTest;
 import net.vulkanmod.render.vertex.TerrainRenderType;
@@ -49,8 +50,9 @@ public final class RegionBatchLayoutTest {
 
     private static void verifyGpuTerrainDrawHandoff() {
         // TerrainRenderType owns vanilla RenderType instances. Standalone JavaExec tests
-        // do not pass through Minecraft's normal bootstrap, so initialize registries
-        // before touching that enum rather than weakening production layer checks.
+        // do not pass through Minecraft's normal version/bootstrap path, so establish
+        // the game version before bootstrapping registries and touching that enum.
+        SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
 
         var resident = new GpuTerrainOutputStore.Residency(7L, 160, 480, 6, 8, true);
