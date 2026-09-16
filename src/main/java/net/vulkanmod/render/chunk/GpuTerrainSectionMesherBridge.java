@@ -23,10 +23,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>The initial bridge is deliberately conservative: it accepts only sections whose
  * visible block-model geometry consists entirely of already-qualified GPU full cubes
- * (plus invisible states), and it requires the GPU face count to match the already
- * authoritative CPU quad count exactly. Mixed or unsupported sections remain CPU-only.
- * The bridge is default-off and runs from a later frame operation, after the input
- * upload submission has become generation-visible and outside any active render pass.</p>
+ * (plus invisible states), and it still cross-checks the independently planned GPU
+ * face count against the authoritative CPU quad count. Mixed or unsupported sections
+ * remain CPU-only. The bridge is default-off and runs from a later frame operation,
+ * after the input upload submission has become generation-visible and outside any
+ * active render pass.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
@@ -58,8 +59,9 @@ final class GpuTerrainSectionMesherBridge {
         int y = section.yOffset();
         int z = section.zOffset();
         SectionVoxelSnapshot snapshot = area.getVoxels(x, y, z);
+        Qualification qualification = qualify(snapshot);
         if(snapshot == null || snapshot.x() != x || snapshot.y() != y || snapshot.z() != z
-                || !fullyQualified(snapshot))
+                || qualification == null)
             return;
 
         TerrainRenderType layer = Initializer.CONFIG.uniqueOpaqueLayer
@@ -69,8 +71,14 @@ final class GpuTerrainSectionMesherBridge {
                 || !cpu.vertexBufferSegment.isReady())
             return;
 
-        int faceCapacity = cpu.indexCount / 6;
-        if(faceCapacity <= 0 || faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES)
+        int cpuFaces = cpu.indexCount / 6;
+        int faceCapacity = qualification.faceCount();
+        // Keep the CPU mesh as an independent semantic oracle while the GPU subset is
+        // still experimental. Capacity and expected GPU output are now derived only
+        // from immutable section inputs, so a future bypass no longer needs CPU output
+        // to size the dispatch; removing this cross-check is a separate safety gate.
+        if(faceCapacity <= 0 || faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES
+                || cpuFaces != faceCapacity)
             return;
 
         RegionVoxelGpuStore.Residency voxel = area.getGpuVoxelResidency(x, y, z);
@@ -86,6 +94,7 @@ final class GpuTerrainSectionMesherBridge {
 
         GpuTerrainModelGpuStore.Residency model = modelStore.getResidency();
         if(!model.valid() || modelTable == null
+                || model.generation() != qualification.modelGeneration()
                 || model.generation() != modelTable.generation()
                 || model.generation() != GpuTerrainModelRegistry.generation())
             return;
@@ -128,7 +137,20 @@ final class GpuTerrainSectionMesherBridge {
 
     /** Package-private for the baked-model smoke oracle; production callers use dispatch(). */
     static boolean fullyQualified(SectionVoxelSnapshot snapshot) {
+        return qualify(snapshot) != null;
+    }
+
+    /**
+     * Build the GPU work plan strictly from immutable section/model inputs. This is
+     * intentionally independent of TerrainBufferBuilder and DrawParameters: the CPU
+     * quad count remains only a temporary validation oracle in dispatch().
+     */
+    static Qualification qualify(SectionVoxelSnapshot snapshot) {
+        if(snapshot == null)
+            return null;
+
         long modelGeneration = GpuTerrainModelRegistry.generation();
+        int faceCount = 0;
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
             int stateId = snapshot.stateId(index);
             if((snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
@@ -137,17 +159,50 @@ final class GpuTerrainSectionMesherBridge {
                 // registry so a delayed frame operation cannot consume stale resource
                 // qualification after a reload.
                 if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null)
-                    return false;
+                    return null;
+                faceCount += candidateFaceCount(snapshot, index);
                 continue;
             }
 
             BlockState state = Block.stateById(stateId);
             if(state == null || !state.getFluidState().isEmpty()
                     || state.getRenderShape() != RenderShape.INVISIBLE)
-                return false;
+                return null;
         }
-        return modelGeneration == GpuTerrainModelRegistry.generation();
+        if(modelGeneration != GpuTerrainModelRegistry.generation())
+            return null;
+        return new Qualification(modelGeneration, faceCount);
     }
+
+    /** Mirrors section_mesher_probe.comp candidateFaceMask() without consulting CPU geometry. */
+    private static int candidateFaceCount(SectionVoxelSnapshot snapshot, int index) {
+        int x = index & 15;
+        int y = (index >>> 4) & 15;
+        int z = (index >>> 8) & 15;
+        int faces = 0;
+
+        if(y == 0) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 0)) faces++;
+        } else if((snapshot.flags(index - 16) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        if(y == 15) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 1)) faces++;
+        } else if((snapshot.flags(index + 16) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        if(z == 0) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 2)) faces++;
+        } else if((snapshot.flags(index - 256) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        if(z == 15) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 3)) faces++;
+        } else if((snapshot.flags(index + 256) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        if(x == 0) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 4)) faces++;
+        } else if((snapshot.flags(index - 1) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        if(x == 15) {
+            if(!snapshot.boundaryNeighborSolidRender(index, 5)) faces++;
+        } else if((snapshot.flags(index + 1) & SectionVoxelSnapshot.SOLID_RENDER) == 0) faces++;
+        return faces;
+    }
+
+    record Qualification(long modelGeneration, int faceCount) {}
 
     private static boolean ensureGpuResources() {
         if(!mesherAttempted) {

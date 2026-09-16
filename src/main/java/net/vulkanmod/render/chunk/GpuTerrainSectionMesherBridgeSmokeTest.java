@@ -17,31 +17,44 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         int qualifiedState = table.stateIdForTemplate(0);
         int unsupportedVisibleState = Block.getId(Blocks.OAK_SLAB.defaultBlockState());
 
-        require(GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, -1, 0, false)),
+        SectionVoxelSnapshot isolatedCube = fixture(qualifiedState, -1, 0, false, false);
+        require(GpuTerrainSectionMesherBridge.fullyQualified(isolatedCube),
                 "Qualified cubes plus invisible air must be bridge-safe");
+        GpuTerrainSectionMesherBridge.Qualification isolatedPlan =
+                GpuTerrainSectionMesherBridge.qualify(isolatedCube);
+        require(isolatedPlan != null && isolatedPlan.faceCount() == 6,
+                "Input-only qualification must size an isolated cube as six faces");
+
+        SectionVoxelSnapshot boundaryOccludedCube = fixture(
+                qualifiedState, -1, 0, false, true);
+        GpuTerrainSectionMesherBridge.Qualification boundaryPlan =
+                GpuTerrainSectionMesherBridge.qualify(boundaryOccludedCube);
+        require(boundaryPlan != null && boundaryPlan.faceCount() == 3,
+                "Input-only qualification must mirror boundary-halo face rejection");
+
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1, unsupportedVisibleState, false)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, false, false)),
                 "Visible unsupported block geometry must retain CPU fallback");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
                         fixture(qualifiedState, 1,
-                                Block.getId(Blocks.WATER.defaultBlockState()), false)),
+                                Block.getId(Blocks.WATER.defaultBlockState()), false, false)),
                 "Fluid geometry must retain CPU fallback");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 0, qualifiedState, false)),
+                        fixture(qualifiedState, 0, qualifiedState, false, false)),
                 "A visible qualified state without its captured GPU_FULL_CUBE bit must fail closed");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1, unsupportedVisibleState, true)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, true, false)),
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: qualified-only accepted; unsupported visible, fluid, missing-bit and stale/forged qualification cases retain CPU fallback");
+                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; unsupported visible, fluid, missing-bit and stale/forged qualification cases retain CPU fallback");
     }
 
     private static SectionVoxelSnapshot fixture(int qualifiedState,
                                                 int replacementIndex,
                                                 int replacementState,
-                                                boolean replacementGpuFlag) {
+                                                boolean replacementGpuFlag,
+                                                boolean occludeCubeBoundary) {
         int airState = Block.getId(Blocks.AIR.defaultBlockState());
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 64, 0);
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
@@ -57,6 +70,11 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                         | (replacementGpuFlag ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0);
             }
             builder.add(stateId, flags);
+        }
+        if(occludeCubeBoundary) {
+            builder.setBoundaryNeighborSolidRender(0, 0, true);
+            builder.setBoundaryNeighborSolidRender(0, 2, true);
+            builder.setBoundaryNeighborSolidRender(0, 4, true);
         }
         return builder.finish();
     }
