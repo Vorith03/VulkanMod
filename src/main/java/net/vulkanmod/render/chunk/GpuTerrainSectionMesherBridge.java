@@ -128,16 +128,25 @@ final class GpuTerrainSectionMesherBridge {
 
     /** Package-private for the baked-model smoke oracle; production callers use dispatch(). */
     static boolean fullyQualified(SectionVoxelSnapshot snapshot) {
+        long modelGeneration = GpuTerrainModelRegistry.generation();
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
-            if((snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
+            int stateId = snapshot.stateId(index);
+            if((snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
+                // GPU_FULL_CUBE is captured by a worker from a particular baked-model
+                // generation. Revalidate the state against the current immutable
+                // registry so a delayed frame operation cannot consume stale resource
+                // qualification after a reload.
+                if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null)
+                    return false;
                 continue;
+            }
 
-            BlockState state = Block.stateById(snapshot.stateId(index));
+            BlockState state = Block.stateById(stateId);
             if(state == null || !state.getFluidState().isEmpty()
                     || state.getRenderShape() != RenderShape.INVISIBLE)
                 return false;
         }
-        return true;
+        return modelGeneration == GpuTerrainModelRegistry.generation();
     }
 
     private static boolean ensureGpuResources() {
