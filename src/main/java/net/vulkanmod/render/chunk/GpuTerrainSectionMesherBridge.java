@@ -126,7 +126,8 @@ final class GpuTerrainSectionMesherBridge {
         }
     }
 
-    private static boolean fullyQualified(SectionVoxelSnapshot snapshot) {
+    /** Package-private for the baked-model smoke oracle; production callers use dispatch(). */
+    static boolean fullyQualified(SectionVoxelSnapshot snapshot) {
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
             if((snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0)
                 continue;
