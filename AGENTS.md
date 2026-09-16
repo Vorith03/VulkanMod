@@ -706,3 +706,28 @@ When the rollover criteria in that document are met, the agent should explicitly
 Before recommending the rollover, finish the current atomic fix/build/test cycle when practical, commit coherent work, and leave the repository and handoff information in the state required by `docs/CHAT_HANDOFF_PROTOCOL.md` and Section 28 above.
 
 The user should not be required to reconstruct the project history manually when Git, CI, repository documentation, and the handoff can preserve it.
+
+---
+
+# 33. Living `AGENT_STATUS.md` Maintenance
+
+`AGENT_STATUS.md` is a **living continuation checkpoint**, not merely an end-of-session handoff. Keep it concise, but do not defer updates indefinitely while engineering continues.
+
+Review whether it needs an update whenever any of the following occurs:
+
+- CI turns green for a materially new capability, safety property, or roadmap gate;
+- a roadmap or milestone gate changes state;
+- the architecture, active blocker, safety boundary, or recommended next implementation slice materially changes;
+- new user-machine/runtime evidence changes what is known, invalidates an assumption, or satisfies an outstanding evidence gate;
+- a substantial workstream is completed and work is about to move to a different implementation slice;
+- the chat/session is about to roll over or end and the current file would omit meaningful completed work.
+
+Use this anti-drift bound: **do not allow `AGENT_STATUS.md` to remain more than three substantive commits behind the branch, or behind even one verified roadmap/milestone transition, whichever comes first.** Small typo-only, formatting-only, or immediately superseded repair commits do not by themselves require a checkpoint.
+
+A green CI result that validates a materially new capability is normally the preferred checkpoint boundary. Update the status **before beginning the next substantial implementation slice** when one of the triggers above has fired.
+
+Status maintenance must summarize the current continuation state rather than narrate every commit. Preserve important facts, evidence identifiers, safety boundaries, unresolved blockers, and the next useful action; let Git history and focused design/evidence documents retain detailed chronology.
+
+If a status update fails because of a stale blob SHA, branch movement, write conflict, or similar tooling race, **refetch the live branch and `AGENT_STATUS.md` and retry the update before resuming unrelated feature work**. Do not silently leave a known-stale checkpoint because the first write attempt failed. If another agent advanced the branch meanwhile, preserve that newer work and reapply the status update against the new live head rather than overwriting it.
+
+When concurrent work makes an immediate status write unsafe, record that fact in the current handoff and perform the status reconciliation at the next safe atomic boundary; this exception must not be used to bypass the anti-drift bound above.
