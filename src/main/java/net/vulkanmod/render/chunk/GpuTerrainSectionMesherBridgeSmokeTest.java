@@ -25,6 +25,32 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         require(isolatedPlan != null && isolatedPlan.faceCount() == 6,
                 "Input-only qualification must size an isolated cube as six faces");
 
+        RenderSection.GpuTerrainPreflight publicPlan = RenderSection.qualifyGpuTerrain(isolatedCube);
+        require(publicPlan != null
+                        && publicPlan.modelGeneration() == isolatedPlan.modelGeneration()
+                        && publicPlan.faceCount() == isolatedPlan.faceCount(),
+                "Worker-facing preflight must preserve the bridge qualification plan");
+
+        RenderSection stagedSection = new RenderSection(0, 0, 64, 0);
+        long generation = stagedSection.getVoxelGeneration();
+        stagedSection.stageGpuTerrainPreflight(publicPlan, generation);
+        require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        publicPlan.modelGeneration(), publicPlan.faceCount()),
+                "Same-generation worker preflight must become eligible for bridge dispatch");
+
+        stagedSection.stageGpuTerrainPreflight(
+                new RenderSection.GpuTerrainPreflight(
+                        publicPlan.modelGeneration(), publicPlan.faceCount() + 1),
+                generation + 1);
+        require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        publicPlan.modelGeneration(), publicPlan.faceCount()),
+                "Stale/future generation preflight must not replace current ownership");
+
+        stagedSection.stageGpuTerrainPreflight(null, generation);
+        require(!stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        publicPlan.modelGeneration(), publicPlan.faceCount()),
+                "Same-generation fallback must clear staged GPU ownership");
+
         SectionVoxelSnapshot boundaryOccludedCube = fixture(
                 qualifiedState, -1, 0, false, true);
         GpuTerrainSectionMesherBridge.Qualification boundaryPlan =
@@ -47,7 +73,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; unsupported visible, fluid, missing-bit and stale/forged qualification cases retain CPU fallback");
+                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation ownership is fail-closed; unsupported visible, fluid, missing-bit and stale/forged qualification cases retain CPU fallback");
     }
 
     private static SectionVoxelSnapshot fixture(int qualifiedState,
