@@ -76,6 +76,59 @@ If `AGENTS.md` itself changed since the last reliable checkpoint, read the chang
 
 ---
 
+# 3B. Execution Resilience and Failure Containment
+
+Long autonomous sessions must minimize both the probability of becoming stuck on one operation and the amount of valuable work exposed if the session fails. Apply these rules without replacing evidence-driven development with checkpoint ceremony.
+
+### Bound potentially blocking operations
+
+- When the available tool supports it, give commands, remote waits, and other potentially blocking operations a finite execution or observation bound.
+- Choose bounds from the operation's recent or expected behavior when evidence exists; do not impose one arbitrary timeout on every build or test.
+- When an operation exceeds its useful bound, inspect available partial state or output and decide whether to change approach, defer it, or leave it explicitly pending. Do not convert a timeout into an automatic retry loop.
+
+### Bound transient retries
+
+- An unexplained transient external failure may be retried once through the same mechanism.
+- If that retry also fails, try at most one materially different access path when one is available and useful, such as direct file/job retrieval instead of broad search.
+- After that budget is exhausted, treat the dependency as temporarily unavailable. Continue independent work when safe or preserve the exact pending operation for the next continuation.
+- Never keep a session alive by repeatedly issuing substantially identical failing requests.
+
+### Reach durable milestones before expensive validation
+
+Prefer this sequence for a coherent implementation slice:
+
+1. implement the bounded change;
+2. run focused/fast validation appropriate to that change;
+3. create and push a **logical milestone commit**;
+4. then start expensive, broad, or remote validation such as full CI.
+
+This is a failure-containment preference, not permission to create meaningless checkpoint commits. Section 14 still governs commit quality. If work is not coherent enough to commit, do not manufacture a commit merely to satisfy this section; instead avoid launching unrelated risky operations until a sensible durable boundary exists when practical.
+
+### Do not wait indefinitely on remote validation
+
+- Remote validation such as CI should not monopolize an otherwise productive session indefinitely.
+- Judge a stall from lack of meaningful state/step progress relative to recent observed behavior, not from wall-clock duration alone.
+- If a remote run materially exceeds its expected progress window without useful movement, preserve the commit and run identifiers, stop unproductive polling, and either perform safe independent work or leave the validation explicitly pending for continuation.
+- A pending remote result is preferable to spending the rest of a session repeatedly polling an apparently stalled dependency.
+
+### Bound retrieved data
+
+- Prefer targeted retrieval over unbounded output: inspect job/step metadata before full logs; use search, ranges, or focused excerpts for large files and logs when they answer the question.
+- For verbose local commands, capture output to a file when practical and inspect the relevant portions rather than forcing the entire stream through the active context.
+- Retrieve complete logs or files when complete context is genuinely required; do not truncate evidence merely to save tokens.
+
+### Make durable boundaries visible
+
+- Report progress at meaningful durability boundaries and before starting a potentially long external wait rather than on a fixed timer.
+- When useful, identify the durable commit, CI run, or other recoverable state and say what operation is about to become pending.
+- Progress messages supplement Git and CI; they are not a substitute for durable project state.
+
+### Recover from pathological session failures through live state
+
+After an unexplained long stall or failed autonomous execution, prefer starting a fresh work session and following Section 3A rather than repeatedly depending on the failed execution's transient state. Recover from live Git, CI, runtime evidence, and the documented checkpoint; inspect the delta before repeating work.
+
+---
+
 # 4. Never Redo Settled Archaeology Without Evidence
 
 The following have already been established and should not repeatedly consume development time:
