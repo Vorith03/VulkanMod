@@ -5,7 +5,6 @@ import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.AreaUploadManager;
-import net.vulkanmod.render.chunk.voxel.GpuTerrainCompleteVertexPreflightSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTableSmokeTest;
 import net.vulkanmod.vulkan.Renderer;
@@ -26,7 +25,6 @@ public abstract class BlockModelShaperMixin {
             // Model baking can finish after the renderer advances a frame but before
             // beginFrame gives terrain uploads their normal frame-domain callback.
             AreaUploadManager.INSTANCE.updateFrame(Renderer.getCurrentFrame());
-            GpuTerrainCompleteVertexPreflightSmokeTest.verify();
             GpuTerrainModelTableSmokeTest.verify();
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);

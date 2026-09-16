@@ -2,8 +2,6 @@ package net.vulkanmod.render.chunk.voxel;
 
 import net.minecraft.core.Direction;
 import net.minecraft.client.renderer.FaceInfo;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
 import net.vulkanmod.render.vertex.CustomVertexFormat;
@@ -153,59 +151,94 @@ public final class GpuSparseLightingGpuSmokeTest {
     private static void verifyCapturedFixtures(RegionVoxelGpuStore store,
             GpuTerrainModelTable modelTable, GpuTerrainModelGpuStore.Residency modelResidency) {
         try(SparseLightingComputeProbe probe = new SparseLightingComputeProbe()) {
-                for(int mask = 0; mask < 24; ++mask) {
-                    int corner = mask - 16;
-                    int blockIndex = corner < 0 ? 0 : SectionVoxelSnapshot.blockIndex(
-                            (corner & 1) * 15, ((corner >> 1) & 1) * 15, ((corner >> 2) & 1) * 15);
-                    var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask & 15, blockIndex);
-                    long generation = 100L + mask;
-                    require(store.upload(0, fixture.voxel(), generation), "Captured voxel upload");
-                    require(store.uploadLighting(0, fixture.lighting(), generation),
-                            "Captured lighting upload");
-                    AreaUploadManager.INSTANCE.submitUploads();
-                    var voxelResidency = store.getResidency(0);
-                    var lightResidency = store.getLightingResidency(0);
-                    int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
+            for(int mask = 0; mask < 24; ++mask) {
+                int corner = mask - 16;
+                int blockIndex = corner < 0 ? 0 : SectionVoxelSnapshot.blockIndex(
+                        (corner & 1) * 15, ((corner >> 1) & 1) * 15, ((corner >> 2) & 1) * 15);
+                var fixture = CanonicalCubeLightingSmokeTest.sparseGpuFixture(mask & 15, blockIndex);
+                if(modelTable != null)
+                    fixture = withQualifiedModelState(fixture, modelTable);
+                long generation = 100L + mask;
+                require(store.upload(0, fixture.voxel(), generation), "Captured voxel upload");
+                require(store.uploadLighting(0, fixture.lighting(), generation),
+                        "Captured lighting upload");
+                AreaUploadManager.INSTANCE.submitUploads();
+                var voxelResidency = store.getResidency(0);
+                var lightResidency = store.getLightingResidency(0);
+                int[] result = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
+                        voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
+                        lightResidency, blockIndex, modelResidency,
+                        modelTable == null ? 0 : modelTable.templateCount());
+                require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
+                        "Captured lighting must decode without GPU errors");
+                if(modelTable != null)
+                    verifyCompleteVertices(result, fixture, modelTable, mask);
+                if(mask == 0) {
+                    int[] rejected = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
                             voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                            lightResidency, blockIndex, modelResidency, modelTable == null ? 0 : modelTable.templateCount());
-                    require(result[0] == SparseLightingComputeProbe.RESULT_MAGIC && result[5] == 0,
-                            "Captured lighting must decode without GPU errors");
-                    if(modelTable != null)
-                        verifyCompleteVertices(result, fixture, modelTable, mask);
-                    if(mask == 0) {
-                        int[] rejected = probe.dispatch(store.getPageBuffer(voxelResidency.pageIndex()),
-                                voxelResidency, store.getPageBuffer(lightResidency.pageIndex()),
-                                lightResidency, 1, modelResidency, modelTable == null ? 0 : modelTable.templateCount());
-                        require(rejected[5] == 8, "Unqualified voxel must reject complete vertex generation");
-                        for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE;
-                            word < rejected.length; ++word)
-                            require(rejected[word] == 0, "Rejected voxel must leave complete vertices empty");
-                    }
-                    for(int word = 0; word < fixture.faceWords().length; ++word) {
-                        int actual = result[SparseLightingComputeProbe.FACE_RESULT_BASE + word];
-                        int expected = fixture.faceWords()[word];
-                        if(actual != expected)
-                            throw new AssertionError("Minecraft/GPU lighting mismatch mask=" + mask
-                                    + " word=" + word + " expected=" + expected + " actual=" + actual);
-                    }
+                            lightResidency, 1, modelResidency,
+                            modelTable == null ? 0 : modelTable.templateCount());
+                    require(rejected[5] == 8, "Unqualified voxel must reject complete vertex generation");
+                    for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE;
+                        word < rejected.length; ++word)
+                        require(rejected[word] == 0,
+                                "Rejected voxel must leave complete vertices empty");
                 }
-                var original = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0);
-                var distant = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0,
-                        SectionVoxelSnapshot.blockIndex(15, 15, 15));
-                verifyRejectedJoin(probe, store, modelResidency, modelTable,
-                        original.voxel(), distant.lighting(), 200L, 4);
-                if(modelTable != null) {
+                for(int word = 0; word < fixture.faceWords().length; ++word) {
+                    int actual = result[SparseLightingComputeProbe.FACE_RESULT_BASE + word];
+                    int expected = fixture.faceWords()[word];
+                    if(actual != expected)
+                        throw new AssertionError("Minecraft/GPU lighting mismatch mask=" + mask
+                                + " word=" + word + " expected=" + expected + " actual=" + actual);
+                }
+            }
+
+            var original = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0);
+            if(modelTable != null)
+                original = withQualifiedModelState(original, modelTable);
+            var distant = CanonicalCubeLightingSmokeTest.sparseGpuFixture(0,
+                    SectionVoxelSnapshot.blockIndex(15, 15, 15));
+            verifyRejectedJoin(probe, store, modelResidency, modelTable,
+                    original.voxel(), distant.lighting(), 200L, 4);
+            if(modelTable != null) {
                 SectionVoxelSnapshot.Builder unsupported = new SectionVoxelSnapshot.Builder(0, 64, 0);
                 for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
                     unsupported.add(0, SectionVoxelSnapshot.CPU_REQUIRED
                             | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
                 verifyRejectedJoin(probe, store, modelResidency, modelTable,
                         unsupported.finish(), original.lighting(), 201L, 16);
-                }
+            }
         }
         Initializer.LOGGER.info("VULKANMOD_GPU_SPARSE_LIGHTING_MINECRAFT_OK: "
                 + "576 exact captured face-vertex color/light pairs; complete CPU-writer vertices={}; "
                 + "16 occluder masks plus eight section corners", modelTable != null);
+    }
+
+    /**
+     * The captured Minecraft lighting record is independent of the baked model ID once
+     * capture has completed. For the model-enabled join, substitute only the source
+     * voxel state with a deterministic state that is actually qualified in this model
+     * generation instead of assuming a particular vanilla block (such as Stone) is
+     * always represented by the supported SimpleBakedModel subset.
+     */
+    private static CanonicalCubeLightingSmokeTest.SparseGpuFixture withQualifiedModelState(
+            CanonicalCubeLightingSmokeTest.SparseGpuFixture fixture,
+            GpuTerrainModelTable table) {
+        require(table.templateCount() > 0,
+                "Complete vertex join requires at least one qualified GPU model template");
+        int qualifiedStateId = table.stateIdForTemplate(0);
+        require(table.templateIndexForStateId(qualifiedStateId) == 0,
+                "First qualified GPU model state must round-trip through the table");
+
+        SectionVoxelSnapshot source = fixture.voxel();
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(
+                source.x(), source.y(), source.z());
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
+            int stateId = i == fixture.blockIndex() ? qualifiedStateId : source.stateId(i);
+            builder.add(stateId, source.flags(i));
+        }
+        return new CanonicalCubeLightingSmokeTest.SparseGpuFixture(
+                builder.finish(), fixture.lighting(), fixture.faceWords(), fixture.blockIndex());
     }
 
     private static void verifyRejectedJoin(SparseLightingComputeProbe probe,
@@ -218,7 +251,8 @@ public final class GpuSparseLightingGpuSmokeTest {
         var vr = store.getResidency(0);
         var lr = store.getLightingResidency(0);
         int[] result = probe.dispatch(store.getPageBuffer(vr.pageIndex()), vr,
-                store.getPageBuffer(lr.pageIndex()), lr, 0, model, table == null ? 0 : table.templateCount());
+                store.getPageBuffer(lr.pageIndex()), lr, 0, model,
+                table == null ? 0 : table.templateCount());
         require(result[5] == expectedError, "Incomplete join must report its exact failure");
         for(int word = SparseLightingComputeProbe.VERTEX_RESULT_BASE; word < result.length; ++word)
             require(result[word] == 0, "Incomplete join must never emit complete vertices");
@@ -229,8 +263,10 @@ public final class GpuSparseLightingGpuSmokeTest {
             GpuTerrainModelTable table, int mask) {
         require(TerrainShaderManager.TERRAIN_VERTEX_FORMAT == CustomVertexFormat.COMPRESSED_TERRAIN,
                 "Joined vertex oracle requires the production compressed writer");
-        int template = table.templateIndexForStateId(Block.getId(Blocks.STONE.defaultBlockState()));
-        require(template >= 0, "Stone must have a qualified UV template for the joined oracle");
+        int stateId = fixture.voxel().stateId(fixture.blockIndex());
+        int template = table.templateIndexForStateId(stateId);
+        require(template >= 0,
+                "Joined fixture source state must have a qualified UV template");
         TerrainBufferBuilder builder = new TerrainBufferBuilder(1024);
         try {
             builder.begin(VertexFormat.Mode.QUADS, CustomVertexFormat.COMPRESSED_TERRAIN);
