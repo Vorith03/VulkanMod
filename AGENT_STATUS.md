@@ -5,8 +5,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 ## Repository state
 
 - Branch: `forge-1.20.1`.
-- Current source commit before this documentation checkpoint: `63ac7e2328f1032fab96726cad9d1f6350282094` (`test: cover fail-closed GPU terrain draw handoff`).
-- CI #484, run `35108812056`, was in progress at handoff; its `Build and verify distributable` step had started. Last fully green source CI remains #482 at `943537d6`.
+- Current source commit before this documentation checkpoint: `d282b23d9541a1272a581639281f434a2f4ea65a` (`test: bootstrap terrain draw handoff regression`).
+- CI #484 failed only in `testRegionBatchLayout`: touching `TerrainRenderType` from the standalone JavaExec test initialized vanilla `RenderType`/registries before Minecraft bootstrap. `d282b23d` fixes the test harness by calling `Bootstrap.bootStrap()` immediately before the terrain-layer policy assertions, preserving the production layer checks. CI #485, run `35121486793`, is the verification run and was in progress at handoff. Last fully green source CI remains #482 at `943537d6` until #485 completes.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
 - Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. Do not check the hybrid-meshing gate merely from synthetic CI; production CPU bypass and RX correctness/performance evidence remain open.
 - User priority remains explicit: move repetitive terrain construction from CPU workers to the GPU while preserving conservative CPU fallback for arbitrary Minecraft/Forge semantics. Mesh shaders are optional/later.
@@ -19,7 +19,7 @@ Use `AGENTS.md`, `ROADMAP.md`, `docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md`, `
 
 A real Vulkan compute dispatch can classify a bounded section, compact qualified faces, reconstruct complete 20-byte terrain vertices (position, UV, Minecraft-matched AO/color/light), and write them directly into generation-owned persistent `ChunkArea` vertex storage. `GpuTerrainSectionMesherSmokeTest` at `943537d6` proves complete persistent publication and forced-overflow fallback without CPU readback/re-upload.
 
-The first production draw-handoff policy is now encoded in `GpuTerrainDrawHandoff` (`2ae2fdcb`). It is deliberately fail-closed and does not mutate CPU `DrawParameters`: only enabled, supported opaque layers with valid, nonempty, exact-generation `GpuTerrainOutputStore.Residency` produce an auto-quad GPU command; disabled, stale, missing, invalid/overflow, translucent and tripwire cases return the CPU command byte-for-byte. `RegionBatchLayoutTest` at `63ac7e23` covers those policy cases and the generated index/vertex offsets.
+The first production draw-handoff policy is encoded in `GpuTerrainDrawHandoff` (`2ae2fdcb`). It is deliberately fail-closed and does not mutate CPU `DrawParameters`: only enabled, supported opaque layers with valid, nonempty, exact-generation `GpuTerrainOutputStore.Residency` produce an auto-quad GPU command; disabled, stale, missing, invalid/overflow, translucent and tripwire cases return the CPU command byte-for-byte. `RegionBatchLayoutTest` at `63ac7e23` covers those policy cases and the generated index/vertex offsets; `d282b23d` makes that standalone regression bootstrap-safe after CI #484 exposed its vanilla registry initialization requirement.
 
 ### What is still not production
 
@@ -31,7 +31,7 @@ The first production draw-handoff policy is now encoded in `GpuTerrainDrawHandof
 
 ## Next implementation slice
 
-First inspect CI #484 and fix any regression before continuing. If green, wire the already-tested `GpuTerrainDrawHandoff` policy into `RegionDrawBatch.FrameBatch` under a new/default-off experimental gate:
+First inspect CI #485 and fix any remaining regression before continuing. If green, wire the already-tested `GpuTerrainDrawHandoff` policy into `RegionDrawBatch.FrameBatch` under a new/default-off experimental gate:
 
 1. For each visible supported opaque section, query `ChunkArea.getGpuTerrainOutputResidency(...)` and pass `RenderSection.getVoxelGeneration()` plus the untouched CPU command to the planner.
 2. When the planner returns `gpuResident=true`, record its command and ensure `Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3)` before drawing. Otherwise record the original CPU command unchanged.
