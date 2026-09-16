@@ -69,6 +69,7 @@ public class ChunkTask {
     public static class BuildTask extends ChunkTask {
         private static final AtomicBoolean SPARSE_LIGHTING_ACTIVE_LOGGED = new AtomicBoolean();
         private static final AtomicBoolean SPARSE_LIGHTING_FAILURE_LOGGED = new AtomicBoolean();
+        private static final AtomicBoolean GPU_PREFLIGHT_FAILURE_LOGGED = new AtomicBoolean();
 
         @Nullable
         protected RenderChunkRegion region;
@@ -128,6 +129,8 @@ public class ChunkTask {
                         this.renderSection.setCompiledSection(compiledChunk);
                         this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
                         this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
+                        this.renderSection.stageGpuTerrainPreflight(
+                                compileResults.gpuTerrainPreflight, this.voxelGeneration);
                         this.renderSection.publishVoxels(compileResults.voxels,
                                 compileResults.sparseLighting, this.voxelGeneration);
                     });
@@ -152,6 +155,32 @@ public class ChunkTask {
             if (renderChunkRegion != null) {
                 SectionVoxelSnapshot.Builder voxels = RegionVoxelStore.ENABLED
                         ? new SectionVoxelSnapshot.Builder(blockPos.getX(), blockPos.getY(), blockPos.getZ()) : null;
+
+                // The experimental GPU mesher needs a complete immutable work plan before
+                // ordinary block-model tessellation can eventually be skipped. Capture and
+                // qualify that plan first, but keep the CPU geometry loop authoritative in
+                // this staging slice. Any preflight failure falls back to the original
+                // single-pass CPU + voxel capture path below.
+                if(voxels != null && RenderSection.gpuTerrainMesherEnabled()) {
+                    try {
+                        compileResults.voxels = captureGpuTerrainInputs(
+                                renderChunkRegion, blockPos, blockPos2);
+                        compileResults.gpuTerrainPreflight =
+                                RenderSection.qualifyGpuTerrain(compileResults.voxels);
+                        captureSparseLighting(compileResults, renderChunkRegion, blockPos);
+                        voxels = null;
+                    } catch(RuntimeException error) {
+                        compileResults.voxels = null;
+                        compileResults.sparseLighting = null;
+                        compileResults.gpuTerrainPreflight = null;
+                        if(GPU_PREFLIGHT_FAILURE_LOGGED.compareAndSet(false, true)) {
+                            Initializer.LOGGER.warn(
+                                    "VULKANMOD_GPU_TERRAIN_PREFLIGHT_FAILED: retaining ordinary CPU terrain path",
+                                    error);
+                        }
+                    }
+                }
+
                 ModelBlockRenderer.enableCaching();
                 try {
                     Set<RenderType> set = new ReferenceArraySet<>(RenderType.chunkBufferLayers().size());
@@ -233,27 +262,7 @@ public class ChunkTask {
 
                     if (voxels != null) {
                         compileResults.voxels = voxels.finish();
-                        if (GpuSparseLightingMode.ENABLED) {
-                            try {
-                                GpuSparseLightingSnapshot sparseLighting = GpuSparseLightingSnapshot.tryCapture(
-                                        renderChunkRegion, blockPos, compileResults.voxels);
-                                if (sparseLighting != null && sparseLighting.sampleCount() > 0) {
-                                    compileResults.sparseLighting = sparseLighting;
-                                    if (SPARSE_LIGHTING_ACTIVE_LOGGED.compareAndSet(false, true)) {
-                                        Initializer.LOGGER.info(
-                                                "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_ACTIVE: section=({}, {}, {}) samples={} bytes={}; CPU terrain mesh remains authoritative",
-                                                blockPos.getX(), blockPos.getY(), blockPos.getZ(),
-                                                sparseLighting.sampleCount(), sparseLighting.byteSize());
-                                    }
-                                }
-                            } catch (RuntimeException error) {
-                                if (SPARSE_LIGHTING_FAILURE_LOGGED.compareAndSet(false, true)) {
-                                    Initializer.LOGGER.warn(
-                                            "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_FAILED: retaining CPU terrain path",
-                                            error);
-                                }
-                            }
-                        }
+                        captureSparseLighting(compileResults, renderChunkRegion, blockPos);
                     }
 
                     if (set.contains(RenderType.translucent())) {
@@ -284,6 +293,60 @@ public class ChunkTask {
 
             compileResults.visibilitySet = visGraph.resolve();
             return compileResults;
+        }
+
+        private static SectionVoxelSnapshot captureGpuTerrainInputs(RenderChunkRegion region,
+                                                                    BlockPos blockPos,
+                                                                    BlockPos blockPos2) {
+            SectionVoxelSnapshot.Builder voxels = new SectionVoxelSnapshot.Builder(
+                    blockPos.getX(), blockPos.getY(), blockPos.getZ());
+            for(BlockPos pos : BlockPos.betweenClosed(blockPos, blockPos2)) {
+                BlockState blockState = region.getBlockState(pos);
+                boolean solidRender = blockState.isSolidRender(region, pos);
+                boolean hasBlockEntity = blockState.hasBlockEntity();
+                FluidState fluidState = blockState.getFluidState();
+
+                int flags = SectionVoxelSnapshot.CPU_REQUIRED;
+                if(solidRender) flags |= SectionVoxelSnapshot.SOLID_RENDER;
+                if(hasBlockEntity) flags |= SectionVoxelSnapshot.HAS_BLOCK_ENTITY;
+                if(!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
+
+                boolean gpuFullCube = GpuTerrainModelRegistry.isFullCubeGeometry(blockState)
+                        && hasZeroPositionOffset(blockState, region, pos);
+                if(gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
+                voxels.add(Block.getId(blockState), flags);
+                if(gpuFullCube)
+                    captureSolidRenderBoundaryHalo(voxels, region, pos);
+            }
+            return voxels.finish();
+        }
+
+        private static void captureSparseLighting(CompileResults compileResults,
+                                                  RenderChunkRegion renderChunkRegion,
+                                                  BlockPos blockPos) {
+            if(!GpuSparseLightingMode.ENABLED || compileResults.voxels == null)
+                return;
+
+            try {
+                GpuSparseLightingSnapshot sparseLighting = GpuSparseLightingSnapshot.tryCapture(
+                        renderChunkRegion, blockPos, compileResults.voxels);
+                if (sparseLighting != null && sparseLighting.sampleCount() > 0) {
+                    compileResults.sparseLighting = sparseLighting;
+                    if (SPARSE_LIGHTING_ACTIVE_LOGGED.compareAndSet(false, true)) {
+                        Initializer.LOGGER.info(
+                                "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_ACTIVE: section=({}, {}, {}) samples={} bytes={}; CPU terrain mesh remains authoritative",
+                                blockPos.getX(), blockPos.getY(), blockPos.getZ(),
+                                sparseLighting.sampleCount(), sparseLighting.byteSize());
+                    }
+                }
+            } catch (RuntimeException error) {
+                compileResults.sparseLighting = null;
+                if (SPARSE_LIGHTING_FAILURE_LOGGED.compareAndSet(false, true)) {
+                    Initializer.LOGGER.warn(
+                            "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_FAILED: retaining CPU terrain path",
+                            error);
+                }
+            }
         }
 
         private static void captureSolidRenderBoundaryHalo(SectionVoxelSnapshot.Builder voxels,
@@ -386,6 +449,7 @@ public class ChunkTask {
             public VisibilitySet visibilitySet = new VisibilitySet();
             public SectionVoxelSnapshot voxels;
             public GpuSparseLightingSnapshot sparseLighting;
+            public RenderSection.GpuTerrainPreflight gpuTerrainPreflight;
             @org.jetbrains.annotations.Nullable
             public TerrainBufferBuilder.SortState transparencyState;
 
