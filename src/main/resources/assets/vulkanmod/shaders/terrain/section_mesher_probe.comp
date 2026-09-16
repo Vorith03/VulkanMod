@@ -1,0 +1,492 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer VoxelPage {
+    uint words[];
+} voxelPage;
+
+layout(set = 0, binding = 1, std430) readonly buffer LightingPage {
+    uint words[];
+} lightingPage;
+
+layout(set = 0, binding = 2, std430) readonly buffer ModelTable {
+    uint words[];
+} modelTable;
+
+layout(set = 0, binding = 3, std430) buffer TerrainOutput {
+    uint words[];
+} terrainOutput;
+
+layout(set = 0, binding = 4, std430) buffer ResultOutput {
+    uint words[];
+} resultOutput;
+
+layout(push_constant) uniform MesherPushConstants {
+    uint voxelBaseByteOffset;
+    uint voxelByteLength;
+    uint lightingBaseByteOffset;
+    uint lightingByteLength;
+    uint modelTemplateCount;
+    uint outputBaseWord;
+    uint faceCapacity;
+} pc;
+
+const uint VOXEL_MAGIC = 0x56584c31u;
+const uint VOXEL_VERSION = 4u;
+const uint VOXEL_BLOCK_COUNT = 4096u;
+const uint VOXEL_FLAG_PLANES = 5u;
+const uint VOXEL_PLANE_WORDS = 128u;
+const uint VOXEL_SOLID_RENDER_PLANE = 0u;
+const uint VOXEL_GPU_FULL_CUBE_PLANE = 4u;
+const uint VOXEL_HALO_FACE_WORDS = 8u;
+const uint VOXEL_HALO_WORDS = 48u;
+
+const uint LIGHTING_MAGIC = 0x564b534cu;
+const uint LIGHTING_VERSION = 1u;
+const uint LIGHTING_HEADER_WORDS = 16u;
+const uint DEMAND_WORDS = 250u;
+const uint RANK_WORDS = 250u;
+const uint DIRECTIONAL_SHADE_WORDS = 6u;
+const uint MAX_SAMPLES = 2000u;
+const uint SAMPLE_COUNT = 8000u;
+const uint DOMAIN_WIDTH = 20u;
+
+const uint MODEL_MAGIC = 0x47544d31u;
+const uint MODEL_VERSION = 1u;
+const uint MODEL_HEADER_WORDS = 8u;
+const uint MODEL_TEMPLATE_WORDS = 56u;
+const uint MODEL_FACE_WORDS = 9u;
+
+const uint RESULT_HEADER_WORDS = 6u;
+const uint ERROR_INPUT = 1u;
+const uint ERROR_LIGHTING = 2u;
+const uint ERROR_MODEL = 4u;
+
+const uint FACE_DOWN = 1u << 0u;
+const uint FACE_UP = 1u << 1u;
+const uint FACE_NORTH = 1u << 2u;
+const uint FACE_SOUTH = 1u << 3u;
+const uint FACE_WEST = 1u << 4u;
+const uint FACE_EAST = 1u << 5u;
+const uint VERTICES_PER_FACE = 4u;
+const uint WORDS_PER_VERTEX = 5u;
+const uint WORDS_PER_FACE = VERTICES_PER_FACE * WORDS_PER_VERTEX;
+
+bool validInputs(uint voxelBase, uint lightBase) {
+    if (voxelPage.words[voxelBase] != VOXEL_MAGIC
+            || voxelPage.words[voxelBase + 1u] != VOXEL_VERSION
+            || voxelPage.words[voxelBase + 2u] != pc.voxelByteLength
+            || voxelPage.words[voxelBase + 3u] != VOXEL_BLOCK_COUNT
+            || voxelPage.words[voxelBase + 11u] != VOXEL_FLAG_PLANES
+            || voxelPage.words[voxelBase + 13u] != VOXEL_HALO_WORDS)
+        return false;
+
+    uint flagsOffset = voxelPage.words[voxelBase + 10u];
+    uint haloOffset = voxelPage.words[voxelBase + 12u];
+    if ((flagsOffset + VOXEL_FLAG_PLANES * VOXEL_PLANE_WORDS) * 4u > pc.voxelByteLength
+            || (haloOffset + VOXEL_HALO_WORDS) * 4u > pc.voxelByteLength)
+        return false;
+
+    if (lightingPage.words[lightBase] != LIGHTING_MAGIC
+            || lightingPage.words[lightBase + 1u] != LIGHTING_VERSION)
+        return false;
+
+    uint sampleCount = lightingPage.words[lightBase + 5u];
+    uint predicateWords = lightingPage.words[lightBase + 8u];
+    uint demandOffset = lightingPage.words[lightBase + 10u];
+    uint rankOffset = lightingPage.words[lightBase + 11u];
+    uint lightOffset = lightingPage.words[lightBase + 12u];
+    uint shadeOffset = lightingPage.words[lightBase + 13u];
+    uint predicateOffset = lightingPage.words[lightBase + 14u];
+    uint directionalOffset = lightingPage.words[lightBase + 15u];
+
+    if (sampleCount > MAX_SAMPLES
+            || lightingPage.words[lightBase + 6u] != DEMAND_WORDS
+            || lightingPage.words[lightBase + 7u] != RANK_WORDS
+            || predicateWords != ((sampleCount + 31u) >> 5u)
+            || lightingPage.words[lightBase + 9u] != DIRECTIONAL_SHADE_WORDS)
+        return false;
+
+    if (demandOffset != LIGHTING_HEADER_WORDS
+            || rankOffset != demandOffset + DEMAND_WORDS
+            || lightOffset != rankOffset + RANK_WORDS
+            || shadeOffset != lightOffset + sampleCount
+            || predicateOffset != shadeOffset + sampleCount
+            || directionalOffset != predicateOffset + predicateWords
+            || (directionalOffset + DIRECTIONAL_SHADE_WORDS) * 4u != pc.lightingByteLength)
+        return false;
+
+    return lightingPage.words[lightBase + 2u] == voxelPage.words[voxelBase + 4u]
+            && lightingPage.words[lightBase + 3u] == voxelPage.words[voxelBase + 5u]
+            && lightingPage.words[lightBase + 4u] == voxelPage.words[voxelBase + 6u]
+            && modelTable.words[0] == MODEL_MAGIC
+            && modelTable.words[1] == MODEL_VERSION
+            && modelTable.words[5] == pc.modelTemplateCount;
+}
+
+bool hasFlagPlane(uint voxelBase, uint flagsOffset, uint index, uint plane) {
+    uint bits = voxelPage.words[voxelBase + flagsOffset
+            + plane * VOXEL_PLANE_WORDS + (index >> 5u)];
+    return ((bits >> (index & 31u)) & 1u) != 0u;
+}
+
+bool isGpuFullCube(uint voxelBase, uint flagsOffset, uint index) {
+    return hasFlagPlane(voxelBase, flagsOffset, index, VOXEL_GPU_FULL_CUBE_PLANE);
+}
+
+bool isSolidRender(uint voxelBase, uint flagsOffset, uint index) {
+    return hasFlagPlane(voxelBase, flagsOffset, index, VOXEL_SOLID_RENDER_PLANE);
+}
+
+uint haloBit(uint index, uint face) {
+    uint x = index & 15u;
+    uint y = (index >> 4u) & 15u;
+    uint z = (index >> 8u) & 15u;
+    if (face <= 1u)
+        return x | (z << 4u);
+    if (face <= 3u)
+        return x | (y << 4u);
+    return z | (y << 4u);
+}
+
+bool boundaryNeighborSolidRender(uint voxelBase, uint haloOffset,
+                                 uint index, uint face) {
+    uint bit = haloBit(index, face);
+    uint bits = voxelPage.words[voxelBase + haloOffset
+            + face * VOXEL_HALO_FACE_WORDS + (bit >> 5u)];
+    return ((bits >> (bit & 31u)) & 1u) != 0u;
+}
+
+uint candidateFaceMask(uint voxelBase, uint flagsOffset,
+                       uint haloOffset, uint index) {
+    if (!isGpuFullCube(voxelBase, flagsOffset, index))
+        return 0u;
+
+    uint x = index & 15u;
+    uint y = (index >> 4u) & 15u;
+    uint z = (index >> 8u) & 15u;
+    uint mask = 0u;
+
+    if (y == 0u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 0u)) mask |= FACE_DOWN;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index - 16u)) mask |= FACE_DOWN;
+    if (y == 15u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 1u)) mask |= FACE_UP;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index + 16u)) mask |= FACE_UP;
+    if (z == 0u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 2u)) mask |= FACE_NORTH;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index - 256u)) mask |= FACE_NORTH;
+    if (z == 15u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 3u)) mask |= FACE_SOUTH;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index + 256u)) mask |= FACE_SOUTH;
+    if (x == 0u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 4u)) mask |= FACE_WEST;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index - 1u)) mask |= FACE_WEST;
+    if (x == 15u) {
+        if (!boundaryNeighborSolidRender(voxelBase, haloOffset, index, 5u)) mask |= FACE_EAST;
+    } else if (!isSolidRender(voxelBase, flagsOffset, index + 1u)) mask |= FACE_EAST;
+    return mask;
+}
+
+uint encodeFaceDescriptor(uint index, uint face) {
+    return 0x80000000u | (face << 12u) | index;
+}
+
+uint latticeIndexFor(ivec3 localPos) {
+    uvec3 p = uvec3(localPos + ivec3(2));
+    return p.x + DOMAIN_WIDTH * (p.y + DOMAIN_WIDTH * p.z);
+}
+
+bool readSample(uint lightBase, ivec3 localPos,
+                out uint light, out float brightness, out uint pass) {
+    if (any(lessThan(localPos, ivec3(-2)))
+            || any(greaterThan(localPos, ivec3(17)))) {
+        atomicOr(resultOutput.words[3], ERROR_LIGHTING);
+        return false;
+    }
+
+    uint latticeIndex = latticeIndexFor(localPos);
+    uint demandOffset = lightingPage.words[lightBase + 10u];
+    uint rankOffset = lightingPage.words[lightBase + 11u];
+    uint lightOffset = lightingPage.words[lightBase + 12u];
+    uint shadeOffset = lightingPage.words[lightBase + 13u];
+    uint predicateOffset = lightingPage.words[lightBase + 14u];
+    uint sampleCount = lightingPage.words[lightBase + 5u];
+    uint wordIndex = latticeIndex >> 5u;
+    uint bit = latticeIndex & 31u;
+    uint demandWord = lightingPage.words[lightBase + demandOffset + wordIndex];
+    if (((demandWord >> bit) & 1u) == 0u) {
+        atomicOr(resultOutput.words[3], ERROR_LIGHTING);
+        return false;
+    }
+
+    uint beforeMask = bit == 0u ? 0u : ((1u << bit) - 1u);
+    uint compactRank = lightingPage.words[lightBase + rankOffset + wordIndex]
+            + uint(bitCount(demandWord & beforeMask));
+    if (compactRank >= sampleCount) {
+        atomicOr(resultOutput.words[3], ERROR_LIGHTING);
+        return false;
+    }
+
+    light = lightingPage.words[lightBase + lightOffset + compactRank];
+    brightness = uintBitsToFloat(lightingPage.words[lightBase + shadeOffset + compactRank]);
+    uint passWord = lightingPage.words[lightBase + predicateOffset + (compactRank >> 5u)];
+    pass = (passWord >> (compactRank & 31u)) & 1u;
+    return true;
+}
+
+ivec3 faceStep(uint face) {
+    if (face == 0u) return ivec3(0, -1, 0);
+    if (face == 1u) return ivec3(0, 1, 0);
+    if (face == 2u) return ivec3(0, 0, -1);
+    if (face == 3u) return ivec3(0, 0, 1);
+    if (face == 4u) return ivec3(-1, 0, 0);
+    return ivec3(1, 0, 0);
+}
+
+ivec3 tangentStep(uint face, uint tangent) {
+    if (face == 0u) {
+        if (tangent == 0u) return ivec3(-1, 0, 0);
+        if (tangent == 1u) return ivec3(1, 0, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (face == 1u) {
+        if (tangent == 0u) return ivec3(1, 0, 0);
+        if (tangent == 1u) return ivec3(-1, 0, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (face == 2u) {
+        if (tangent == 0u) return ivec3(0, 1, 0);
+        if (tangent == 1u) return ivec3(0, -1, 0);
+        if (tangent == 2u) return ivec3(1, 0, 0);
+        return ivec3(-1, 0, 0);
+    }
+    if (face == 3u) {
+        if (tangent == 0u) return ivec3(-1, 0, 0);
+        if (tangent == 1u) return ivec3(1, 0, 0);
+        if (tangent == 2u) return ivec3(0, -1, 0);
+        return ivec3(0, 1, 0);
+    }
+    if (face == 4u) {
+        if (tangent == 0u) return ivec3(0, 1, 0);
+        if (tangent == 1u) return ivec3(0, -1, 0);
+        if (tangent == 2u) return ivec3(0, 0, -1);
+        return ivec3(0, 0, 1);
+    }
+    if (tangent == 0u) return ivec3(0, -1, 0);
+    if (tangent == 1u) return ivec3(0, 1, 0);
+    if (tangent == 2u) return ivec3(0, 0, -1);
+    return ivec3(0, 0, 1);
+}
+
+uint vertexForCorner(uint face, uint corner) {
+    if (face == 0u || face == 3u) return corner;
+    if (face == 1u) return (corner + 2u) & 3u;
+    if (face == 2u || face == 4u) return (corner + 3u) & 3u;
+    return (corner + 1u) & 3u;
+}
+
+uint blendLight(uint a, uint b, uint c, uint center) {
+    if (a == 0u) a = center;
+    if (b == 0u) b = center;
+    if (c == 0u) c = center;
+    return ((a + b + c + center) >> 2u) & 0x00ff00ffu;
+}
+
+uint packGray(float value) {
+    uint channel = uint(int(value * 255.0)) & 0xffu;
+    return channel | (channel << 8u) | (channel << 16u) | 0xff000000u;
+}
+
+uint packCorner(uint x, uint y, uint z) {
+    return x | (y << 5u) | (z << 10u);
+}
+
+void faceCorners(uint index, uint face, out uint corners[4]) {
+    uint x0 = index & 15u;
+    uint y0 = (index >> 4u) & 15u;
+    uint z0 = (index >> 8u) & 15u;
+    uint x1 = x0 + 1u;
+    uint y1 = y0 + 1u;
+    uint z1 = z0 + 1u;
+
+    if (face == 0u) {
+        corners[0] = packCorner(x0, y0, z1);
+        corners[1] = packCorner(x0, y0, z0);
+        corners[2] = packCorner(x1, y0, z0);
+        corners[3] = packCorner(x1, y0, z1);
+    } else if (face == 1u) {
+        corners[0] = packCorner(x0, y1, z0);
+        corners[1] = packCorner(x0, y1, z1);
+        corners[2] = packCorner(x1, y1, z1);
+        corners[3] = packCorner(x1, y1, z0);
+    } else if (face == 2u) {
+        corners[0] = packCorner(x1, y1, z0);
+        corners[1] = packCorner(x1, y0, z0);
+        corners[2] = packCorner(x0, y0, z0);
+        corners[3] = packCorner(x0, y1, z0);
+    } else if (face == 3u) {
+        corners[0] = packCorner(x0, y1, z1);
+        corners[1] = packCorner(x0, y0, z1);
+        corners[2] = packCorner(x1, y0, z1);
+        corners[3] = packCorner(x1, y1, z1);
+    } else if (face == 4u) {
+        corners[0] = packCorner(x0, y1, z0);
+        corners[1] = packCorner(x0, y0, z0);
+        corners[2] = packCorner(x0, y0, z1);
+        corners[3] = packCorner(x0, y1, z1);
+    } else {
+        corners[0] = packCorner(x1, y1, z1);
+        corners[1] = packCorner(x1, y0, z1);
+        corners[2] = packCorner(x1, y0, z0);
+        corners[3] = packCorner(x1, y1, z0);
+    }
+}
+
+bool modelFace(uint voxelBase, uint index, uint face, out uint faceBase) {
+    uint packed = voxelPage.words[voxelBase + voxelPage.words[voxelBase + 9u]
+            + (index >> 1u)];
+    uint paletteIndex = (packed >> ((index & 1u) * 16u)) & 65535u;
+    uint state = voxelPage.words[voxelBase + voxelPage.words[voxelBase + 8u] + paletteIndex];
+    uint stateIndexCount = modelTable.words[4];
+    if (state >= stateIndexCount)
+        return false;
+    uint dense = modelTable.words[MODEL_HEADER_WORDS + state];
+    if (dense == 0u || dense > pc.modelTemplateCount)
+        return false;
+    faceBase = modelTable.words[7]
+            + (dense - 1u) * MODEL_TEMPLATE_WORDS + 2u + face * MODEL_FACE_WORDS;
+    return true;
+}
+
+bool writeCompleteFace(uint slot, uint index, uint face,
+                       uint voxelBase, uint lightBase) {
+    uint modelBase = 0u;
+    if (!modelFace(voxelBase, index, face, modelBase)) {
+        atomicOr(resultOutput.words[3], ERROR_MODEL);
+        return false;
+    }
+
+    ivec3 normal = faceStep(face);
+    ivec3 blockPos = ivec3(index & 15u,
+            (index >> 4u) & 15u, (index >> 8u) & 15u);
+    ivec3 centerPos = blockPos + normal;
+    float sideBrightness[4];
+    uint sideLight[4];
+    bool open[4];
+    for (uint i = 0u; i < 4u; ++i) {
+        ivec3 tangent = tangentStep(face, i);
+        ivec3 sidePos = centerPos + tangent;
+        uint ignoredPass;
+        if (!readSample(lightBase, sidePos,
+                sideLight[i], sideBrightness[i], ignoredPass))
+            return false;
+        uint ignoredLight;
+        float ignoredBrightness;
+        uint pass;
+        if (!readSample(lightBase, sidePos + normal,
+                ignoredLight, ignoredBrightness, pass))
+            return false;
+        open[i] = pass != 0u;
+    }
+
+    const uvec2 diagonalPairs[4] = uvec2[4](
+            uvec2(0u, 2u), uvec2(0u, 3u), uvec2(1u, 2u), uvec2(1u, 3u));
+    float diagonalBrightness[4];
+    uint diagonalLight[4];
+    for (uint d = 0u; d < 4u; ++d) {
+        uint first = diagonalPairs[d].x;
+        uint second = diagonalPairs[d].y;
+        if (!open[first] && !open[second]) {
+            diagonalBrightness[d] = sideBrightness[0];
+            diagonalLight[d] = sideLight[0];
+        } else {
+            uint ignoredPass;
+            ivec3 diagonalPos = centerPos
+                    + tangentStep(face, first) + tangentStep(face, second);
+            if (!readSample(lightBase, diagonalPos,
+                    diagonalLight[d], diagonalBrightness[d], ignoredPass))
+                return false;
+        }
+    }
+
+    uint centerLight;
+    float centerBrightness;
+    uint ignoredPass;
+    if (!readSample(lightBase, centerPos, centerLight, centerBrightness, ignoredPass))
+        return false;
+
+    float cornerBrightness[4];
+    uint cornerLight[4];
+    cornerBrightness[0] = (sideBrightness[3] + sideBrightness[0]
+            + diagonalBrightness[1] + centerBrightness) * 0.25;
+    cornerBrightness[1] = (sideBrightness[2] + sideBrightness[0]
+            + diagonalBrightness[0] + centerBrightness) * 0.25;
+    cornerBrightness[2] = (sideBrightness[2] + sideBrightness[1]
+            + diagonalBrightness[2] + centerBrightness) * 0.25;
+    cornerBrightness[3] = (sideBrightness[3] + sideBrightness[1]
+            + diagonalBrightness[3] + centerBrightness) * 0.25;
+    cornerLight[0] = blendLight(sideLight[3], sideLight[0], diagonalLight[1], centerLight);
+    cornerLight[1] = blendLight(sideLight[2], sideLight[0], diagonalLight[0], centerLight);
+    cornerLight[2] = blendLight(sideLight[2], sideLight[1], diagonalLight[2], centerLight);
+    cornerLight[3] = blendLight(sideLight[3], sideLight[1], diagonalLight[3], centerLight);
+
+    uint directionalOffset = lightingPage.words[lightBase + 15u];
+    float shade = uintBitsToFloat(lightingPage.words[lightBase + directionalOffset + face]);
+    uint corners[4];
+    faceCorners(index, face, corners);
+    uint outputBase = pc.outputBaseWord + slot * WORDS_PER_FACE;
+
+    for (uint corner = 0u; corner < 4u; ++corner) {
+        uint vertex = vertexForCorner(face, corner);
+        uint c = corners[vertex];
+        uint x = c & 31u;
+        uint y = (c >> 5u) & 31u;
+        uint z = (c >> 10u) & 31u;
+        uint u = uint(int(uintBitsToFloat(modelTable.words[modelBase + 1u + vertex * 2u])
+                * 65536.0)) & 65535u;
+        uint v = uint(int(uintBitsToFloat(modelTable.words[modelBase + 2u + vertex * 2u])
+                * 65536.0)) & 65535u;
+        uint dest = outputBase + vertex * WORDS_PER_VERTEX;
+        terrainOutput.words[dest] = x * 1900u | ((y * 1900u) << 16u);
+        terrainOutput.words[dest + 1u] = z * 1900u;
+        terrainOutput.words[dest + 2u] = packGray(cornerBrightness[corner] * shade);
+        terrainOutput.words[dest + 3u] = u | (v << 16u);
+        terrainOutput.words[dest + 4u] = cornerLight[corner];
+    }
+    return true;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= VOXEL_BLOCK_COUNT)
+        return;
+
+    uint voxelBase = pc.voxelBaseByteOffset >> 2u;
+    uint lightBase = pc.lightingBaseByteOffset >> 2u;
+    if (!validInputs(voxelBase, lightBase)) {
+        atomicOr(resultOutput.words[3], ERROR_INPUT);
+        return;
+    }
+
+    uint flagsOffset = voxelPage.words[voxelBase + 10u];
+    uint haloOffset = voxelPage.words[voxelBase + 12u];
+    uint faceMask = candidateFaceMask(voxelBase, flagsOffset, haloOffset, index);
+    for (uint face = 0u; face < 6u; ++face) {
+        if ((faceMask & (1u << face)) == 0u)
+            continue;
+
+        uint slot = atomicAdd(resultOutput.words[0], 1u);
+        if (slot >= pc.faceCapacity) {
+            atomicOr(resultOutput.words[2], 1u);
+            continue;
+        }
+
+        resultOutput.words[RESULT_HEADER_WORDS + slot] = encodeFaceDescriptor(index, face);
+        if (writeCompleteFace(slot, index, face, voxelBase, lightBase))
+            atomicAdd(resultOutput.words[1], 1u);
+    }
+}

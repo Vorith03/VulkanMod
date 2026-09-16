@@ -10,6 +10,7 @@ import net.vulkanmod.render.chunk.GpuTerrainOutputStoreSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTableSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainPersistentVertexSmokeTest;
+import net.vulkanmod.render.chunk.voxel.GpuTerrainSectionMesherSmokeTest;
 import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,6 +33,7 @@ public abstract class BlockModelShaperMixin {
             GpuTerrainOutputComputeSmokeTest.verify();
             GpuTerrainModelTableSmokeTest.verify();
             GpuTerrainPersistentVertexSmokeTest.verify();
+            GpuTerrainSectionMesherSmokeTest.verify();
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
         }

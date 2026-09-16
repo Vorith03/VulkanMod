@@ -3,6 +3,7 @@ package net.vulkanmod.render.chunk;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 
 import java.util.Arrays;
+import java.util.function.Function;
 
 /**
  * Non-consuming ownership for bounded GPU-generated terrain vertices.
@@ -79,14 +80,49 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         if(token == 0L)
             token = nextToken++;
         entry.pending = new Pending(token, generation, faceCapacity, segment);
-        return new Reservation(ownerId, token, packedSection, type, generation, faceCapacity);
+        return new Reservation(this, ownerId, token, packedSection, type,
+                generation, faceCapacity);
     }
 
-    /** Resolve the current backing-buffer handle immediately before a future dispatch. */
+    /**
+     * Resolve a snapshot of the current backing-buffer handle. Callers that will
+     * submit GPU work must prefer {@link Reservation#withTarget(Function)} so an
+     * AreaBuffer grow cannot replace/free the VkBuffer between lookup and submit.
+     */
     public synchronized Target target(Reservation reservation) {
         Pending pending = pendingFor(reservation);
         if(pending == null || !drawBuffers.isAllocated())
             return null;
+        return targetFor(pending);
+    }
+
+    /**
+     * Run a target operation while holding the same AreaBuffer monitor used by CPU
+     * uploads and backing-buffer growth. The operation must submit any command buffer
+     * that references the supplied VkBuffer before it returns. Once submitted, later
+     * growth copies are ordered after that work on the graphics queue and may safely
+     * clone then retire the old allocation.
+     */
+    private synchronized <T> T withTarget(Reservation reservation,
+                                          Function<Target, T> operation) {
+        if(operation == null)
+            throw new IllegalArgumentException("GPU terrain target operation must be present");
+        Pending pending = pendingFor(reservation);
+        if(pending == null || !drawBuffers.isAllocated() || drawBuffers.vertexBuffer == null)
+            return null;
+
+        synchronized(drawBuffers.vertexBuffer) {
+            // Store -> AreaBuffer is the same lock order used by reserve/discard.
+            // Re-check while both locks are held so a stale token never obtains a
+            // dispatchable handle.
+            pending = pendingFor(reservation);
+            if(pending == null)
+                return null;
+            return operation.apply(targetFor(pending));
+        }
+    }
+
+    private Target targetFor(Pending pending) {
         int offset = pending.segment.getOffset();
         if(offset < 0 || offset % VERTEX_BYTES != 0)
             throw new IllegalStateException("GPU terrain output reservation lost vertex alignment");
@@ -104,7 +140,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         Pending pending = pendingFor(reservation);
         if(pending == null)
             return false;
-        Entry entry = entry(reservation.packedSection, reservation.type, false);
+        Entry entry = entry(reservation.packedSection(), reservation.type(), false);
 
         if(overflow || writtenFaces <= 0 || writtenFaces > pending.faceCapacity) {
             discardPending(entry);
@@ -173,7 +209,8 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     private Pending pendingFor(Reservation reservation) {
-        if(closed || reservation == null || reservation.ownerId != ownerId)
+        if(closed || reservation == null || reservation.owner != this
+                || reservation.ownerId != ownerId)
             return null;
         if(reservation.type == null || !supported(reservation.type))
             return null;
@@ -268,9 +305,38 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private record Resident(long generation, int faceCount, int byteLength,
                             AreaBuffer.Segment segment) {}
 
-    public record Reservation(long ownerId, long token, int packedSection,
-                              TerrainRenderType type, long generation,
-                              int faceCapacity) {}
+    public static final class Reservation {
+        private final GpuTerrainOutputStore owner;
+        private final long ownerId;
+        private final long token;
+        private final int packedSection;
+        private final TerrainRenderType type;
+        private final long generation;
+        private final int faceCapacity;
+
+        private Reservation(GpuTerrainOutputStore owner, long ownerId, long token,
+                            int packedSection, TerrainRenderType type,
+                            long generation, int faceCapacity) {
+            this.owner = owner;
+            this.ownerId = ownerId;
+            this.token = token;
+            this.packedSection = packedSection;
+            this.type = type;
+            this.generation = generation;
+            this.faceCapacity = faceCapacity;
+        }
+
+        public long ownerId() { return ownerId; }
+        public long token() { return token; }
+        public int packedSection() { return packedSection; }
+        public TerrainRenderType type() { return type; }
+        public long generation() { return generation; }
+        public int faceCapacity() { return faceCapacity; }
+
+        public <T> T withTarget(Function<Target, T> operation) {
+            return owner.withTarget(this, operation);
+        }
+    }
 
     /** Whole-buffer descriptor binding is intentional; byteOffset is a shader base. */
     public record Target(long bufferId, int byteOffset, int byteCapacity,
