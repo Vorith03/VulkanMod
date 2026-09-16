@@ -4,8 +4,10 @@ import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTableSmokeTest;
+import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,6 +22,9 @@ public abstract class BlockModelShaperMixin {
     private void vulkanmod$replaceGpuTerrainModelRegistry(Map<BlockState, BakedModel> models, CallbackInfo ci) {
         GpuTerrainModelRegistry.replaceModels(models);
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
+            // Model baking can finish after the renderer advances a frame but before
+            // beginFrame gives terrain uploads their normal frame-domain callback.
+            AreaUploadManager.INSTANCE.updateFrame(Renderer.getCurrentFrame());
             GpuTerrainModelTableSmokeTest.verify();
             Initializer.LOGGER.info("Vulkan smoke test passed");
             System.exit(0);
