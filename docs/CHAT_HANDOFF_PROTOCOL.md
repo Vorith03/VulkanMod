@@ -2,6 +2,8 @@
 
 This protocol exists because long-running development chats eventually accumulate enough history, tool output, logs, and superseded hypotheses that continuing in the same chat becomes less reliable and less efficient. It also makes repository work resilient to an unexpected chat/session interruption: the repository should remain sufficient to resume useful work even if the current conversation disappears without a final handoff message.
 
+Session startup and live-state recovery are defined once, in `AGENTS.md` Section 3A. This document governs when and how to checkpoint or roll over a conversation; it does not define a second startup procedure.
+
 ## Recommended chat lifetime
 
 A development chat should normally be rolled over after roughly **one substantial milestone or 2–4 hours of active repository work**, whichever comes first.
@@ -24,30 +26,32 @@ Do **not** interrupt an active atomic operation merely because the nominal time/
 
 ## Interruption and timeout resilience
 
-A planned rollover is not the only failure mode. A chat can end unexpectedly while an agent is editing, building, waiting on CI, or investigating a failure. Work should therefore be checkpointed **during** the session rather than relying on one final handoff at the end.
+A planned rollover is not the only failure mode. A chat can end unexpectedly while an agent is editing, building, waiting on CI, or investigating a failure. Work should therefore be checkpointed during the session when losing the conversation would otherwise lose information needed to resume safely.
 
 The goal is that a new session can recover from Git, CI, `AGENT_STATUS.md`, and durable project documents without needing the old chat to have ended cleanly.
 
-### Mandatory checkpoint triggers
+### Checkpoint triggers
 
-Create or refresh a durable checkpoint whenever practical at these points:
+Create or refresh a durable checkpoint when practical if any of the following is true:
 
-- after a coherent implementation milestone is reached;
-- before starting a long or failure-prone build/test/CI operation when valuable changes currently exist only in the working tree;
-- before asking the user for a runtime test whose result may arrive in a later chat;
-- after a new investigation materially changes the active hypothesis, blocker, or next action;
-- before opening a second independent workstream in the same session;
-- when the session has become unusually tool-heavy or context-heavy even if a planned rollover is not yet due;
-- before explicitly recommending a new chat.
+- valuable coherent changes or recovery information exist only in the working tree/chat;
+- a new investigation materially changes the active hypothesis, blocker, safety boundary, or next action;
+- a roadmap/milestone gate or other durable capability changes state;
+- important user-machine evidence arrives or a user-side test is being requested for a later session;
+- work is about to move to a meaningfully different implementation slice or independent workstream;
+- the session has become unusually tool/context heavy and an interruption would make recovery ambiguous;
+- a rollover is about to be recommended and the existing durable checkpoint would materially misdirect the next session.
 
-A checkpoint does **not** require committing knowingly broken or incoherent code merely to create activity. Prefer a small coherent commit. If the current experiment cannot safely be committed yet, preserve the recovery information in the appropriate status/design document and state exactly what remains uncommitted or incomplete.
+Do **not** checkpoint merely because an expensive operation is about to run when the code and the identity of that operation are already durable. A coherent pushed commit plus its identifiable CI workflow is normally sufficient recovery state while that CI is running. Likewise, do not rewrite `AGENT_STATUS.md` merely to mirror every commit.
+
+A checkpoint does **not** require committing knowingly broken or incoherent code merely to create activity. Prefer a small coherent commit. If an experiment cannot safely be committed yet and losing it would matter, preserve the recovery information in the appropriate status/design document and state exactly what remains uncommitted or incomplete.
 
 ### Checkpoint contents
 
 A timeout-safe checkpoint should make the following recoverable with minimal inference:
 
-- branch and exact HEAD;
-- the coherent commits created so far;
+- branch and checkpoint/HEAD identity where relevant;
+- coherent commits created so far;
 - whether meaningful work remains uncommitted or otherwise unpublished;
 - the active task/gate;
 - the current evidence-backed hypothesis or conclusion;
@@ -68,9 +72,9 @@ When a coherent change exists, prefer this ordering:
 3. commit the coherent change;
 4. push/publish it when repository policy permits;
 5. run or inspect expensive CI/runtime validation;
-6. update the durable checkpoint with the resulting evidence.
+6. refresh durable status only if the resulting evidence changes the continuation state.
 
-This ensures a failed build, disconnected tool session, or chat timeout cannot erase the implementation that was being validated.
+This ensures a failed build, disconnected tool session, or chat timeout cannot erase the implementation that was being validated without forcing a documentation write for every validation run.
 
 Do not delay all commits until every possible validation stage is complete when doing so would leave substantial useful work only in ephemeral session state. Normal Git discipline still applies: checkpoints should be logically understandable and should not combine unrelated experiments.
 
@@ -78,7 +82,7 @@ Do not delay all commits until every possible validation stage is complete when 
 
 Large work items should be divided into recoverable stages such as:
 
-`investigate -> implement -> cheap check -> checkpoint -> expensive validation -> checkpoint -> integrate`
+`investigate -> implement -> cheap check -> durable code checkpoint -> expensive validation -> status checkpoint if state changed -> integrate`
 
 An agent may continue through these stages without asking the user for permission when the work is already authorized. The boundaries exist so an interruption between stages loses little or no engineering state.
 
@@ -86,7 +90,7 @@ Do not start another unrelated investigation merely to fill time while a critica
 
 ### Long commands and CI waits
 
-Before starting an operation that may take a long time, ask whether an unexpected interruption would leave the next session unable to tell what was being tested. If yes, checkpoint first.
+Before starting an operation that may take a long time, ask whether an unexpected interruption would leave the next session unable to tell what was being tested. If yes, checkpoint first. If the coherent change is already pushed and the workflow/run identifies the test, avoid adding redundant documentation solely because the operation is long.
 
 For GitHub Actions specifically, the pushed commit and workflow run are durable evidence. Once a coherent change is pushed, record or retain enough information to identify the relevant run rather than depending on the current chat staying alive until the workflow completes.
 
@@ -94,7 +98,7 @@ Avoid tying several independent changes to one enormous validation cycle when sm
 
 ### Proactive stabilization when a session is getting risky
 
-If the current session has become long, tool-heavy, or difficult to reason about, stop opening new workstreams. Finish the smallest coherent unit already in progress, checkpoint it, refresh the handoff/status information if needed, and only then continue or recommend rollover.
+If the current session has become long, tool-heavy, or difficult to reason about, stop opening new workstreams. Finish the smallest coherent unit already in progress, make its recovery state durable, refresh handoff/status information only if needed, and only then continue or recommend rollover.
 
 The priority is **recoverability over squeezing one more unrelated task into the same conversation**.
 
@@ -111,30 +115,16 @@ Before handoff when practical:
 - finish the current atomic edit;
 - commit coherent changes to `forge-1.20.1`;
 - do not leave unexplained half-edits;
-- record whether the latest CI/build is green, red, pending, or not run;
+- record whether the latest CI/build is green, red, pending, or not run when that affects the next action;
 - record any artifact that the user still needs to test.
 
 If work genuinely must stop with an incomplete experiment, say exactly what is incomplete and do not represent it as a finished fix.
 
 ### 2. Produce a concise handoff
 
-The handoff must include at least:
+The handoff must include enough information to recover anything not already obvious from the durable checkpoint and live Git/CI. At minimum, include the current task/blocker, important work completed in the outgoing chat, any validation or user test whose result still matters, and the next recommended action. Include exact HEAD/run/artifact identifiers when they are needed to disambiguate mutable state.
 
-- repository and branch;
-- exact current HEAD SHA and commit title;
-- important commits made in the outgoing chat;
-- highest verified milestone;
-- what is known to work;
-- what has failed and the exact evidence/root cause where known;
-- current unresolved blocker or investigation;
-- latest CI run/result and artifact, if relevant;
-- user-side runtime configuration required for testing;
-- any pending user test and exactly what log/output is needed;
-- next recommended repository action;
-- important hypotheses that are **not yet proven**, clearly labeled as such;
-- files/docs that the next agent should read first.
-
-Prefer durable repository facts over a narrative transcript. Do not copy large logs into the handoff when an error signature, run ID, file name, or commit is enough to recover the evidence.
+Prefer durable repository facts over a narrative transcript. Do not repeat long lists of known-good history or copy large logs when an error signature, run ID, file name, commit, or focused evidence document is enough to recover the evidence.
 
 ### 3. Put durable knowledge in the repository
 
@@ -144,39 +134,28 @@ Examples:
 
 - `AGENTS.md` for standing development rules;
 - `AGENT_STATUS.md` for the current continuation checkpoint;
-- `docs/FORGE_PORT_AUDIT.md` for port-specific findings;
-- `docs/PERFORMANCE_AUDIT.md` for performance findings;
+- a focused design/evidence document for subsystem-specific conclusions;
 - this file for chat/handoff policy.
 
-Do not use the handoff as the only storage location for important architectural conclusions that should survive many chats.
+Do not use the chat handoff as the only storage location for important architectural conclusions that should survive many chats.
 
 ### 4. Tell the user what to do
 
 When ready, recommend that the user open a new chat/work session and use a short continuation request such as:
 
-> Continue work on `Vorith03/VulkanMod`, branch `forge-1.20.1`. Read `AGENTS.md` and the current handoff/project docs first, inspect current HEAD and recent CI, then continue from the documented next action. Do not redo settled investigation without new evidence.
+> Continue work on `Vorith03/VulkanMod`, branch `forge-1.20.1`, from the current repository checkpoint and roadmap.
 
 If the environment supports direct access to the same connected GitHub repository, the user should **not** be asked to paste the entire old conversation.
 
-If there is critical state that exists only in the current conversation (for example, a runtime log that was never committed and cannot otherwise be retrieved), the outgoing agent must identify it explicitly and tell the user what needs to be carried into the new chat.
+If there is critical state that exists only in the current conversation (for example, a runtime observation or log that was never made durable and cannot otherwise be retrieved), the outgoing agent must identify it explicitly and tell the user what needs to be carried into the new chat.
 
 ## Starting a new chat
 
-A new agent resuming this project must:
+A new session follows the canonical session-start and continuation procedure in `AGENTS.md` Section 3A.
 
-1. Read root `AGENTS.md` before making repository changes.
-2. Read this chat rollover protocol when the work is a continuation.
-3. Inspect `forge-1.20.1` HEAD and recent commits.
-4. Read `AGENT_STATUS.md` and the relevant durable project docs.
-5. Inspect the latest CI/build evidence before predicting failures.
-6. Re-establish the highest **verified** milestone.
-7. Identify the exact next unresolved task.
-8. Check whether the previous session left any documented incomplete/uncommitted experiment or pending user test.
-9. Continue from that task rather than repeating historical archaeology.
+If the previous chat ended unexpectedly, do not assume the absence of a final message means no progress was made. Inspect live Git and CI first, then recover additional Project conversation context only when important user-side evidence or unfinished state cannot be recovered from the repository.
 
-The new agent should trust current repository state and evidence over prose from an older handoff if they conflict.
-
-If the previous chat ended unexpectedly, do not assume the absence of a final message means no progress was made. Recover from the branch tip, recent commits, CI, `AGENT_STATUS.md`, and referenced design/evidence documents first.
+The new session should trust current repository/CI/runtime evidence over prose from an older handoff when they conflict and should continue from the resulting live task rather than repeating historical archaeology.
 
 ## Practical rule
 

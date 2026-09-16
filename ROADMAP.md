@@ -14,17 +14,11 @@ Live Git/CI/runtime evidence remains authoritative for facts. This roadmap is au
 
 ## Roadmap governance
 
-### Required session-start behavior
+### Session continuation
 
-Before substantial work, an agent should inspect:
+Session startup, live-state recovery, and continuation are governed by the canonical procedure in `AGENTS.md` Section 3A. This file does not define a second startup checklist.
 
-1. current `forge-1.20.1` HEAD;
-2. latest CI result;
-3. `AGENTS.md`;
-4. `AGENT_STATUS.md`;
-5. this `ROADMAP.md`.
-
-Start from the first unsatisfied mandatory gate in the **ACTIVE** phase unless a live regression or blocker makes another task necessary.
+Once live state is established, start from the first unsatisfied mandatory gate in the **ACTIVE** phase unless a live regression, prerequisite blocker, correctness issue, or explicit user priority makes a documented detour necessary.
 
 ### No silent roadmap drift
 
@@ -273,18 +267,21 @@ pending representative RX 6900 XT evidence.
 Current lighting/output work has advanced beyond the earlier dense-lattice prototype.
 Reusable canonical model templates, bounded sparse lighting capture/decode, exact
 Minecraft-matched AO/color/light reconstruction, and complete packed 20-byte terrain
-vertex generation are now proven for the qualified subset. The recovered Create
-Chronicles density sample still supports bounded sparse input; do not repeat that
-collection. CPU terrain output remains authoritative in normal gameplay because there
-is still no production section-mesher dispatcher.
+vertex generation are proven for the qualified subset. The recovered Create Chronicles
+density sample still supports bounded sparse input; do not repeat that collection.
+CPU terrain output remains authoritative in normal gameplay even though a production-owned
+section-mesher dispatcher and bridge now exist, because the bridge is default-off and
+runs only after the authoritative CPU mesh has already been produced.
 
-The bounded-output contract now includes real generation-owned persistent area-buffer
-publication rather than only a diagnostic compact stream. `GpuTerrainSectionMesherSmokeTest`
-proves whole-section classification/compaction, complete persistent vertex output,
-exact-generation publication, and forced-overflow fallback. `GpuTerrainOutputStore`
-provides bounded/no-growth reservations and section-generation invalidation. This is
-production-shaped ownership, but it does not close the hybrid-meshing gate while the
-full mesher remains smoke-only and normal rebuilds still perform CPU geometry work.
+The bounded-output contract includes generation-owned persistent area-buffer publication.
+`GpuTerrainSectionMesher` is now a reusable production-owned compute dispatcher rather
+than living only inside the smoke test. `GpuTerrainSectionMesherBridge` can, when the
+experimental property is enabled, consume exact-generation voxel + sparse-lighting
+residency and the current qualified model table, reserve bounded output, dispatch outside
+an active render pass, and publish only an exact, non-overflow result for a section whose
+visible block-model geometry is fully qualified. Missing/stale input, unsupported visible
+geometry, fluids, allocation/dispatch failure, generation turnover, or count mismatch
+leave the CPU mesh authoritative. CI #503 is green for this bridge state.
 
 The reusable model/template gate is complete for the supported subset as recorded in
 `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. The qualifier exercises
@@ -306,19 +303,25 @@ default-off production indirect consumer retains the CPU batch whenever generati
 region, candidate-superset, capacity, or feature-gate checks fail. See
 `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`.
 
-A second default-off production consumer now exists for generated terrain geometry.
-`RegionDrawBatch.FrameBatch` can substitute an exact-generation
-`GpuTerrainOutputStore.Residency`, invalidation advances mesh revision so cached frame
-batches cannot retain stale offsets, and the handoff falls back above the shared
-uint16 auto-quad index limit. `RegionBatchSmokeTest` covers CPU command -> GPU
-substitution -> generation invalidation -> CPU fallback. Ordinary gameplay still does
-not create this residency because the production section-mesher dispatch bridge is the
-next required implementation slice.
+The default-off generated-geometry consumer remains fail-closed. `RegionDrawBatch.FrameBatch`
+can substitute exact-generation `GpuTerrainOutputStore.Residency`; publication and
+invalidation advance mesh revision so cached frame batches cannot retain stale offsets,
+and the handoff falls back above the shared uint16 auto-quad index limit. With the new
+bridge, ordinary production code can now create such residency for a fully-qualified
+section when explicitly enabled, but it does so only after CPU geometry exists and the
+first dispatcher deliberately waits for completion on the render thread. This proves
+production ownership/plumbing, not CPU-time savings.
 
-This closes additional output-ownership and draw-consumer plumbing, **not** the live
-visibility-selection or hybrid-meshing gates. Representative Create Chronicles/RX
-6900 XT visibility diagnostics are still needed, and production GPU meshing must be
-wired fail-closed before any CPU meshing bypass can be considered. No performance
+The next hybrid-meshing work must separate qualification/input capture from CPU geometry
+emission and establish a completion/ownership design that does not replace worker CPU
+meshing with a blocking Vulkan wait. Only after a same-generation GPU result can safely
+own a completely-qualified subset should `CPU_REQUIRED`/`renderBatched(...)` bypass be
+attempted. Preserve arbitrary Forge callbacks, unsupported/mixed models, fluids,
+translucent/tripwire paths, overflow, and all failure cases on CPU.
+
+This additional bridge plumbing does **not** close the live visibility-selection or
+hybrid-meshing gates. Representative Create Chronicles/RX 6900 XT correctness evidence
+is still needed before accelerated behavior can become a default, and no performance
 improvement is claimed.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
@@ -386,25 +389,27 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `3946269ec17c783f34f2576135e8e9ad98eede15`, CI #493
-  (run `35130177665`) is fully green. Later documentation-only commits do not alter
-  executable state.
+- Latest executable checkpoint: `91f825d1a83cf297ca48ba422e7f40c66126bb3b`, CI #503
+  (run `35153213009`) is fully green.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 5/11.
 - P7 input ABI, capped persistent region SSBO residency, compute plumbing, reusable
   Forge model instances, bounded indirect-command generation/fallback, complete
-  packed-vertex reconstruction, bounded generation-owned persistent output, and a
-  default-off frame-batch GPU-geometry draw consumer are now verified by CI/smokes.
-- The hybrid-meshing gate remains open because there is still no production
-  section-mesher dispatcher and `ChunkTask.BuildTask.compile` still emits ordinary CPU
-  geometry. Do not clear `CPU_REQUIRED` or bypass `renderBatched(...)` until the
-  fail-closed production dispatch/completion path is green.
+  packed-vertex reconstruction, generation-owned persistent output, a default-off
+  frame-batch GPU-geometry consumer, and the first default-off production section-mesher
+  dispatch bridge are now present and covered by current CI/smokes.
+- The hybrid-meshing gate remains open because `ChunkTask.BuildTask.compile` still emits
+  ordinary CPU geometry before the bridge runs, and the initial bridge deliberately waits
+  for compute completion on the render thread. Do not clear `CPU_REQUIRED` or bypass
+  `renderBatched(...)` until a fail-closed staged/completion path can actually replace CPU
+  work without turning it into synchronization stalls.
 - Live GPU visibility correctness still needs representative RX 6900 XT/Create
   Chronicles evidence. No new RX 6900 XT A/B performance measurement or performance
   claim exists.
 
-See `AGENT_STATUS.md` for the current continuation checkpoint,
-`docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md` for persistent output ownership,
-and `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` for the bounded indirect
-contract. Documentation-only follow-ups use `[skip ci]`. Recheck live source/CI before
-the next implementation step.
+See `AGENT_STATUS.md` for the current continuation checkpoint. Read task-specific GPU
+terrain contract documents only when the active change touches those contracts;
+`docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md` and
+`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` remain the main ownership and
+indirect-handoff references. Documentation-only follow-ups use `[skip ci]`. Recheck live
+source/CI before the next implementation step.

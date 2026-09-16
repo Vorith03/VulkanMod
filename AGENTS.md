@@ -53,6 +53,29 @@ Do not restore old code merely because it differs from upstream Fabric.
 
 ---
 
+# 3A. Canonical Session Start and Continuation
+
+This section is the single repository procedure for starting or resuming substantial work. Other project documents should refer here instead of defining parallel startup checklists.
+
+Before making repository changes:
+
+1. Inspect the live `forge-1.20.1` HEAD and the relevant recent commits.
+2. Inspect the latest relevant CI/build state. Read failure logs when CI is red; a green run normally needs only enough inspection to establish that it covers the live executable state.
+3. Read `AGENT_STATUS.md` and identify its checkpoint commit and documented next action.
+4. Inspect the delta from that checkpoint to live HEAD. Pay particular attention to changes in `AGENTS.md`, `ROADMAP.md`, `AGENT_STATUS.md`, or a contract document relevant to the active subsystem.
+5. Consult the ACTIVE phase/gate in `ROADMAP.md` for sequencing and completion criteria.
+6. Read task-specific design/evidence documents when the code about to be changed depends on their contract, ownership, safety, or validation conclusions.
+7. Check for a documented incomplete experiment, pending CI/runtime result, or user-side test when the checkpoint or delta indicates one exists.
+8. Continue from the resulting live state.
+
+Use the delta to recover mutable state rather than reconstructing the project from scratch. Do not reread unrelated historical documents or repeat settled archaeology merely because a new chat or work session started.
+
+A fuller reconstruction is warranted when live Git/CI/runtime evidence conflicts with the checkpoint, authoritative instructions changed materially, concurrent work makes ownership unclear, or the next safe action remains ambiguous after inspecting the delta.
+
+If `AGENTS.md` itself changed since the last reliable checkpoint, read the changed standing instructions before editing code. Efficiency must come from avoiding redundant work, not from skipping relevant safety or validation requirements.
+
+---
+
 # 4. Never Redo Settled Archaeology Without Evidence
 
 The following have already been established and should not repeatedly consume development time:
@@ -280,11 +303,7 @@ All development work goes to:
 
 Do not modify the default branch.
 
-Before editing:
-
-- inspect the current branch HEAD;
-- inspect recent commits;
-- verify another agent has not already solved the issue.
+Before editing, follow the canonical live-state procedure in Section 3A. In particular, never edit from an assumed branch tip or skip checking whether intervening work already solved or changed the active problem.
 
 Commits should represent logical milestones.
 
@@ -711,7 +730,7 @@ The user should not be required to reconstruct the project history manually when
 
 # 33. Living `AGENT_STATUS.md` Maintenance
 
-`AGENT_STATUS.md` is a **living continuation checkpoint**, not merely an end-of-session handoff. Keep it concise, but do not defer updates indefinitely while engineering continues.
+`AGENT_STATUS.md` is a **living continuation checkpoint**, not a branch-tip mirror or commit diary. Keep it concise and update it when its existing contents would materially misdirect a future session.
 
 Review whether it needs an update whenever any of the following occurs:
 
@@ -720,14 +739,10 @@ Review whether it needs an update whenever any of the following occurs:
 - the architecture, active blocker, safety boundary, or recommended next implementation slice materially changes;
 - new user-machine/runtime evidence changes what is known, invalidates an assumption, or satisfies an outstanding evidence gate;
 - a substantial workstream is completed and work is about to move to a different implementation slice;
-- the chat/session is about to roll over or end and the current file would omit meaningful completed work.
+- the chat/session is about to roll over or end and the current file would otherwise give the next session a materially stale picture.
 
-Use this anti-drift bound: **do not allow `AGENT_STATUS.md` to remain more than three substantive commits behind the branch, or behind even one verified roadmap/milestone transition, whichever comes first.** Small typo-only, formatting-only, or immediately superseded repair commits do not by themselves require a checkpoint.
+There is **no fixed commit-count freshness requirement**. `AGENT_STATUS.md` may legitimately trail live HEAD when intervening commits do not change the continuation state. Git records commit-level implementation history; the status file records the durable engineering checkpoint. A green CI run does not by itself require a status commit unless it changes what is known or what should happen next.
 
-A green CI result that validates a materially new capability is normally the preferred checkpoint boundary. Update the status **before beginning the next substantial implementation slice** when one of the triggers above has fired.
+When a trigger above fires, update the status at the next safe atomic boundary, preferably after the relevant evidence is durable. Preserve important facts, evidence identifiers, safety boundaries, unresolved blockers, and the next useful action; let Git history and focused design/evidence documents retain detailed chronology.
 
-Status maintenance must summarize the current continuation state rather than narrate every commit. Preserve important facts, evidence identifiers, safety boundaries, unresolved blockers, and the next useful action; let Git history and focused design/evidence documents retain detailed chronology.
-
-If a status update fails because of a stale blob SHA, branch movement, write conflict, or similar tooling race, **refetch the live branch and `AGENT_STATUS.md` and retry the update before resuming unrelated feature work**. Do not silently leave a known-stale checkpoint because the first write attempt failed. If another agent advanced the branch meanwhile, preserve that newer work and reapply the status update against the new live head rather than overwriting it.
-
-When concurrent work makes an immediate status write unsafe, record that fact in the current handoff and perform the status reconciliation at the next safe atomic boundary; this exception must not be used to bypass the anti-drift bound above.
+If a status update encounters a stale blob SHA, branch movement, write conflict, or similar tooling race, refetch the live branch and status file before retrying. Never overwrite newer work. An immediate retry is required only when leaving the stale status in place would materially misdirect the next session; otherwise reconcile it at the next safe atomic boundary rather than blocking useful unrelated work.
