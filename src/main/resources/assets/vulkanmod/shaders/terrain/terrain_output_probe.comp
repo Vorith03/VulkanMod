@@ -1,0 +1,20 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) buffer TerrainOutput {
+    uint words[];
+} terrainOutput;
+
+layout(push_constant) uniform TerrainOutputPushConstants {
+    uint baseWord;
+    uint wordCount;
+    uint seed;
+} pc;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= pc.wordCount)
+        return;
+    terrainOutput.words[pc.baseWord + index] = pc.seed ^ (index * 0x9e3779b9u);
+}
