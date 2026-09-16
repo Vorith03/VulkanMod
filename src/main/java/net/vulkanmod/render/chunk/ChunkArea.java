@@ -278,7 +278,18 @@ public class ChunkArea {
             gpuVoxels.invalidateLighting(slot, generation);
             return;
         }
-        gpuVoxels.uploadLighting(slot, snapshot, generation);
+
+        boolean queued = gpuVoxels.uploadLighting(slot, snapshot, generation);
+        if(queued && GpuTerrainSectionMesherBridge.enabled()) {
+            RenderSection section = getOwnedSection(slot);
+            if(section != null) {
+                // Run only after this frame slot's upload submission/fence lifecycle.
+                // The bridge revalidates section ownership and generation, so a
+                // moved/dirty section becomes a no-op rather than publishing stale output.
+                AreaUploadManager.INSTANCE.enqueueFrameOp(() ->
+                        GpuTerrainSectionMesherBridge.dispatch(this, section, generation));
+            }
+        }
     }
 
     public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
