@@ -128,6 +128,61 @@ public final class RegionBatchSmokeTest {
             require(!solid.update(buffers, area, TerrainRenderType.SOLID),
                     "Editing one terrain layer must not invalidate another layer's command cache");
 
+            // Prove the first real draw consumer, not only the pure handoff planner.
+            // Publication must invalidate the cached CPU command, the opt-in path must
+            // substitute the exact-generation GPU slice, and generation turnover must
+            // immediately rebuild back to the untouched CPU DrawParameters before the
+            // released GPU slice can be reused.
+            long publishRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED);
+            GpuTerrainOutputStore.Reservation reservation = area.reserveGpuTerrainOutput(
+                    section.xOffset, section.yOffset, section.zOffset,
+                    TerrainRenderType.CUTOUT_MIPPED, section.getVoxelGeneration(), 3);
+            require(reservation != null, "GPU handoff smoke reservation must fit");
+            require(area.publishGpuTerrainOutput(reservation, 3, false),
+                    "GPU handoff smoke residency must publish");
+            require(buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED)
+                            == publishRevision + 1,
+                    "GPU publication must invalidate the affected FrameBatch cache");
+            GpuTerrainOutputStore.Residency residency = area.getGpuTerrainOutputResidency(
+                    section.xOffset, section.yOffset, section.zOffset,
+                    TerrainRenderType.CUTOUT_MIPPED);
+            require(residency != null && residency.valid()
+                            && residency.generation() == section.getVoxelGeneration(),
+                    "GPU handoff smoke residency must match the section generation");
+
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, false),
+                    "GPU publication must rebuild even while the draw handoff is disabled");
+            require(first.gpuDrawCount == 0
+                            && first.commands.getByteBuffer().getInt(0) == 12
+                            && first.commands.getByteBuffer().getInt(8) == parameters.firstIndex
+                            && first.commands.getByteBuffer().getInt(12) == parameters.vertexOffset,
+                    "Disabled handoff must preserve the CPU FrameBatch command byte-for-byte");
+
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
+                    "Enabling the GPU terrain handoff must rebuild the frame-local cache");
+            require(first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
+                    "Exact-generation residency must be counted as one bounded GPU draw");
+            require(first.commands.getByteBuffer().getInt(0) == 18
+                            && first.commands.getByteBuffer().getInt(8) == 0
+                            && first.commands.getByteBuffer().getInt(12) == residency.vertexOffset()
+                            && first.commands.getByteBuffer().getInt(16)
+                            == (7 | (2 << 3) | (3 << 6)),
+                    "FrameBatch must substitute GPU quad geometry while retaining section identity");
+
+            long invalidateRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED);
+            area.removeVoxels(section.xOffset, section.yOffset, section.zOffset,
+                    section.getVoxelGeneration() + 1L);
+            require(buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED)
+                            == invalidateRevision + 1,
+                    "GPU generation turnover must invalidate cached resident commands");
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
+                    "Stale GPU residency must force a FrameBatch rebuild");
+            require(first.gpuDrawCount == 0
+                            && first.commands.getByteBuffer().getInt(0) == 12
+                            && first.commands.getByteBuffer().getInt(8) == parameters.firstIndex
+                            && first.commands.getByteBuffer().getInt(12) == parameters.vertexOffset,
+                    "Generation turnover must fall back to the untouched CPU command");
+
             area.resetQueue();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
                     "Visibility removal must clear draws");
