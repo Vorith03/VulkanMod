@@ -40,7 +40,10 @@ public class AreaBuffer {
 
     private Buffer allocateBuffer(int size) {
         if(this.usage == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
-            return new VertexBuffer(size, memoryType);
+            // Terrain vertices are also a future compute destination. Restrict the
+            // storage usage bit to this persistent area buffer instead of changing
+            // every generic VertexBuffer allocation in the renderer.
+            return new TerrainVertexBuffer(size, memoryType);
         }
         if(this.usage == VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
             return new IndexBuffer(size, memoryType);
@@ -95,27 +98,60 @@ public class AreaBuffer {
         RegionBatchStats.recordMeshUpload(uploadSize, reused);
     }
 
-    public Segment findSegment(int size) {
-        Segment segment = null;
-        int i = 0;
-        int idx = 0;
-        int t = Integer.MAX_VALUE;
-        for(Segment segment1 : freeSegments) {
+    /**
+     * Reserve existing area-buffer space without growing the backing Vulkan buffer.
+     * GPU terrain output is optional, so ordinary allocation pressure must leave the
+     * already-built CPU mesh authoritative instead of forcing a synchronous grow/copy.
+     */
+    public synchronized boolean tryReserve(int reserveSize, Segment reservation) {
+        if(reservation == null)
+            throw new IllegalArgumentException("Area-buffer reservation token must be present");
+        if(reserveSize <= 0 || reserveSize % elementSize != 0)
+            throw new IllegalArgumentException("Area-buffer reservation must be positive and element-aligned");
+        if(this.usedSegments.containsKey(reservation) || reservation.offset != -1)
+            throw new IllegalStateException("Area-buffer reservation token is already live");
 
-            if(segment1.size >= size && segment1.size < t) {
-                segment = segment1;
-                t = segment1.size;
-                idx = i;
-            }
-            ++i;
+        Segment freeSegment = takeFreeSegment(reserveSize);
+        if(freeSegment == null)
+            return false;
+
+        int dstOffset = freeSegment.offset;
+        if(freeSegment.size - reserveSize > 0) {
+            addFreeSegment(new Segment(freeSegment.offset + reserveSize,
+                    freeSegment.size - reserveSize));
         }
 
+        this.usedSegments.put(reservation, new Segment(dstOffset, reserveSize));
+        this.used += reserveSize;
+        reservation.offset = dstOffset;
+        reservation.size = reserveSize;
+        reservation.status = Segment.PENDING_BIT;
+        return true;
+    }
+
+    public Segment findSegment(int size) {
+        Segment segment = takeFreeSegment(size);
         if(segment == null) {
             return this.reallocate(size);
         }
+        return segment;
+    }
 
-        freeSegments.remove(idx);
+    private Segment takeFreeSegment(int size) {
+        Segment segment = null;
+        int idx = -1;
+        int bestSize = Integer.MAX_VALUE;
+        for(int i = 0; i < freeSegments.size(); ++i) {
+            Segment candidate = freeSegments.get(i);
+            if(candidate.size >= size && candidate.size < bestSize) {
+                segment = candidate;
+                bestSize = candidate.size;
+                idx = i;
+            }
+        }
 
+        if(idx >= 0)
+            freeSegments.remove(idx);
         return segment;
     }
 
