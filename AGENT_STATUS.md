@@ -5,8 +5,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 ## Repository state
 
 - Branch: `forge-1.20.1`.
-- Current source commit before this documentation checkpoint: `d282b23d9541a1272a581639281f434a2f4ea65a` (`test: bootstrap terrain draw handoff regression`).
-- CI #484 failed only in `testRegionBatchLayout`: touching `TerrainRenderType` from the standalone JavaExec test initialized vanilla `RenderType`/registries before Minecraft bootstrap. `d282b23d` fixes the test harness by calling `Bootstrap.bootStrap()` immediately before the terrain-layer policy assertions, preserving the production layer checks. CI #485, run `35121486793`, is the verification run and was in progress at handoff. Last fully green source CI remains #482 at `943537d6` until #485 completes.
+- Current source commit before this documentation checkpoint: `83763f697521a12c9aada7fe984eda28c91d9c59` (`test: initialize game version before terrain bootstrap`).
+- CI #486 exposed a second standalone-test bootstrap prerequisite after `d282b23d`: `Bootstrap.bootStrap()` reached `DataFixers` with `SharedConstants.getCurrentVersion()` unset and failed with `IllegalStateException: Game version not set`. `83763f69` now calls `SharedConstants.tryDetectVersion()` immediately before `Bootstrap.bootStrap()`. CI #487, run `35127777126`, has passed the complete Gradle build/test stage (including `testRegionBatchLayout`) and normal Vulkan startup smokes; remaining smoke stages were still running at this checkpoint. Last fully green source CI remains #482 at `943537d6` until #487 completes.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
 - Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. Do not check the hybrid-meshing gate merely from synthetic CI; production CPU bypass and RX correctness/performance evidence remain open.
 - User priority remains explicit: move repetitive terrain construction from CPU workers to the GPU while preserving conservative CPU fallback for arbitrary Minecraft/Forge semantics. Mesh shaders are optional/later.
@@ -19,7 +19,7 @@ Use `AGENTS.md`, `ROADMAP.md`, `docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md`, `
 
 A real Vulkan compute dispatch can classify a bounded section, compact qualified faces, reconstruct complete 20-byte terrain vertices (position, UV, Minecraft-matched AO/color/light), and write them directly into generation-owned persistent `ChunkArea` vertex storage. `GpuTerrainSectionMesherSmokeTest` at `943537d6` proves complete persistent publication and forced-overflow fallback without CPU readback/re-upload.
 
-The first production draw-handoff policy is encoded in `GpuTerrainDrawHandoff` (`2ae2fdcb`). It is deliberately fail-closed and does not mutate CPU `DrawParameters`: only enabled, supported opaque layers with valid, nonempty, exact-generation `GpuTerrainOutputStore.Residency` produce an auto-quad GPU command; disabled, stale, missing, invalid/overflow, translucent and tripwire cases return the CPU command byte-for-byte. `RegionBatchLayoutTest` at `63ac7e23` covers those policy cases and the generated index/vertex offsets; `d282b23d` makes that standalone regression bootstrap-safe after CI #484 exposed its vanilla registry initialization requirement.
+The first production draw-handoff policy is encoded in `GpuTerrainDrawHandoff` (`2ae2fdcb`). It is deliberately fail-closed and does not mutate CPU `DrawParameters`: only enabled, supported opaque layers with valid, nonempty, exact-generation `GpuTerrainOutputStore.Residency` produce an auto-quad GPU command; disabled, stale, missing, invalid/overflow, translucent and tripwire cases return the CPU command byte-for-byte. `RegionBatchLayoutTest` covers those policy cases and generated index/vertex offsets. The standalone test now explicitly performs the same minimal version/bootstrap prerequisites needed before touching vanilla `RenderType`: `SharedConstants.tryDetectVersion()` then `Bootstrap.bootStrap()`.
 
 ### What is still not production
 
@@ -31,12 +31,12 @@ The first production draw-handoff policy is encoded in `GpuTerrainDrawHandoff` (
 
 ## Next implementation slice
 
-First inspect CI #485 and fix any remaining regression before continuing. If green, wire the already-tested `GpuTerrainDrawHandoff` policy into `RegionDrawBatch.FrameBatch` under a new/default-off experimental gate:
+First inspect the final result of CI #487; its Gradle build/test stage already passed, so only investigate further if a later smoke fails. If green, wire the already-tested `GpuTerrainDrawHandoff` policy into `RegionDrawBatch.FrameBatch` under a new/default-off experimental gate:
 
 1. For each visible supported opaque section, query `ChunkArea.getGpuTerrainOutputResidency(...)` and pass `RenderSection.getVoxelGeneration()` plus the untouched CPU command to the planner.
-2. When the planner returns `gpuResident=true`, record its command and ensure `Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3)` before drawing. Otherwise record the original CPU command unchanged.
+2. When the planner returns `gpuResident=true`, record its command and ensure `Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3)` before drawing. `WorldRenderer.renderSectionLayer` already binds the auto-index buffer before the region-batching path, so GPU quad commands can share that binding with ordinary auto-indexed terrain commands. Otherwise record the original CPU command unchanged.
 3. Keep GPU section-selection/candidate generation based on CPU `DrawParameters` for this first slice; do not mix GPU-substituted geometry into the existing CPU-vs-GPU selection safety comparison.
-4. Make successful GPU output publication invalidate the affected terrain-layer command cache (mesh revision), so a newly published residency cannot remain invisible behind a cached CPU `FrameBatch`.
+4. Make successful GPU output publication invalidate the affected terrain-layer command cache via the existing `DrawBuffers` mesh-revision mechanism, so a newly published residency cannot remain invisible behind a cached CPU `FrameBatch`.
 5. Extend the Vulkan region smoke to prove exact-generation substitution and stale/missing/unsupported fallback through the actual `FrameBatch` path. Keep the gate default-off.
 
 Only after that draw handoff is green should a later slice move GPU dispatch earlier enough to let qualified blocks skip CPU `renderBatched`; until then this remains draw-path correctness plumbing, not a performance feature.
