@@ -24,6 +24,7 @@ public class ChunkArea {
     DrawBuffers drawBuffers;
     private RegionVoxelStore voxels;
     private RegionVoxelGpuStore gpuVoxels;
+    private GpuTerrainOutputStore gpuTerrainOutputs;
     private final GpuRegionCandidateGpuStore[] gpuCandidates =
             new GpuRegionCandidateGpuStore[TerrainRenderType.VALUES.length];
     private final RenderSection[] ownedSections =
@@ -301,6 +302,41 @@ public class ChunkArea {
 
     public synchronized long getVoxelRevision() { return voxels == null ? 0L : voxels.revision(); }
 
+    /**
+     * Reserve optional GPU-generated terrain output for one section generation.
+     * The store deliberately wraps the existing DrawBuffers without forcing an
+     * allocation here; unsupported layers and stale generations can therefore fail
+     * without creating a terrain buffer merely to discover that CPU fallback wins.
+     */
+    public synchronized GpuTerrainOutputStore.Reservation reserveGpuTerrainOutput(
+            int x, int y, int z, TerrainRenderType type, long generation, int faceCapacity) {
+        int slot = voxelSlot(x, y, z);
+        if(slot < 0)
+            return null;
+        if(gpuTerrainOutputs == null)
+            gpuTerrainOutputs = new GpuTerrainOutputStore(this.drawBuffers);
+        return gpuTerrainOutputs.reserve(slot, type, generation, faceCapacity);
+    }
+
+    public synchronized GpuTerrainOutputStore.Target getGpuTerrainOutputTarget(
+            GpuTerrainOutputStore.Reservation reservation) {
+        return gpuTerrainOutputs == null ? null : gpuTerrainOutputs.target(reservation);
+    }
+
+    public synchronized boolean publishGpuTerrainOutput(
+            GpuTerrainOutputStore.Reservation reservation, int writtenFaces,
+            boolean overflow) {
+        return gpuTerrainOutputs != null
+                && gpuTerrainOutputs.publish(reservation, writtenFaces, overflow);
+    }
+
+    public synchronized GpuTerrainOutputStore.Residency getGpuTerrainOutputResidency(
+            int x, int y, int z, TerrainRenderType type) {
+        int slot = voxelSlot(x, y, z);
+        return gpuTerrainOutputs == null || slot < 0
+                ? null : gpuTerrainOutputs.getResidency(slot, type);
+    }
+
     public synchronized boolean publishGpuCandidates(TerrainRenderType type,
                                                      GpuRegionCandidateTable table) {
         if(type == null)
@@ -349,9 +385,13 @@ public class ChunkArea {
     public synchronized void removeVoxels(int x, int y, int z) {
         int slot = voxelSlot(x, y, z);
         if(slot < 0) return;
-        long generation = gpuVoxels == null
-                ? 0L
-                : gpuVoxels.getResidency(slot).generation() + 1L;
+        long generation = 0L;
+        if(gpuVoxels != null)
+            generation = Math.max(generation,
+                    nextGeneration(gpuVoxels.getResidency(slot).generation()));
+        if(gpuTerrainOutputs != null)
+            generation = Math.max(generation,
+                    nextGeneration(gpuTerrainOutputs.getSectionGeneration(slot)));
         this.removeVoxels(x, y, z, generation);
     }
 
@@ -363,6 +403,12 @@ public class ChunkArea {
             gpuVoxels.invalidate(slot, generation);
             gpuVoxels.invalidateLighting(slot, generation);
         }
+        if(gpuTerrainOutputs != null)
+            gpuTerrainOutputs.invalidateSection(slot, generation);
+    }
+
+    private static long nextGeneration(long generation) {
+        return generation == Long.MAX_VALUE ? Long.MAX_VALUE : generation + 1L;
     }
 
     private int voxelSlot(int x, int y, int z) {
@@ -373,6 +419,13 @@ public class ChunkArea {
     }
 
     private void clearVoxels() {
+        // GPU-generated output suballocates the area vertex buffer, so release those
+        // reservations before deciding whether the region draw buffers are empty and
+        // reusable at new world coordinates.
+        if(gpuTerrainOutputs != null) {
+            gpuTerrainOutputs.close();
+            gpuTerrainOutputs = null;
+        }
         if (voxels != null) voxels.clear();
         if (gpuVoxels != null) {
             gpuVoxels.close();

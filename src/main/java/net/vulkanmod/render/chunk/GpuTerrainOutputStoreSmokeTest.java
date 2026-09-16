@@ -3,6 +3,7 @@ package net.vulkanmod.render.chunk;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Vulkan;
+import org.joml.Vector3i;
 
 /** CI-only lifecycle oracle for non-consuming GPU terrain output ownership. */
 public final class GpuTerrainOutputStoreSmokeTest {
@@ -106,13 +107,78 @@ public final class GpuTerrainOutputStoreSmokeTest {
                     "GPU terrain pressure must never grow the area vertex buffer");
             store.invalidateSection(8, 21L);
 
+            verifyChunkAreaLifecycle();
+
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, section-global generation revocation, same-generation retry fallback, translucent/tripwire CPU fallback");
+                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, section-global generation revocation, ChunkArea teardown/reuse, same-generation retry fallback, translucent/tripwire CPU fallback");
         } finally {
             Vulkan.waitIdle();
             if(store != null)
                 store.close();
             drawBuffers.releaseBuffers();
+        }
+    }
+
+    private static void verifyChunkAreaLifecycle() {
+        int x = -128;
+        int y = -64;
+        int z = 256;
+        ChunkArea area = new ChunkArea(37, new Vector3i(x, y, z));
+        try {
+            var first = requireReservation(area.reserveGpuTerrainOutput(
+                            x, y, z, TerrainRenderType.SOLID, 30L, 8),
+                    "ChunkArea GPU terrain reservation must fit");
+            var firstTarget = area.getGpuTerrainOutputTarget(first);
+            require(firstTarget != null && firstTarget.bufferId() != 0L,
+                    "ChunkArea GPU terrain reservation must resolve the area buffer");
+            require(area.publishGpuTerrainOutput(first, 8, false),
+                    "ChunkArea GPU terrain result must publish");
+            var resident = area.getGpuTerrainOutputResidency(
+                    x, y, z, TerrainRenderType.SOLID);
+            require(resident != null && resident.valid() && resident.generation() == 30L,
+                    "ChunkArea GPU terrain residency mismatch");
+
+            // Exercise the compatibility invalidation path with no voxel GPU store.
+            // It must derive generation from the output owner rather than defaulting
+            // to zero and accidentally leaving generation-30 geometry discoverable.
+            area.removeVoxels(x, y, z);
+            resident = area.getGpuTerrainOutputResidency(x, y, z, TerrainRenderType.SOLID);
+            require(resident != null && !resident.valid() && resident.generation() == 31L,
+                    "ChunkArea compatibility invalidation must advance GPU output generation");
+            require(area.reserveGpuTerrainOutput(
+                            x, y, z, TerrainRenderType.CUTOUT_MIPPED, 30L, 4) == null,
+                    "ChunkArea must reject stale output work on another terrain layer");
+
+            var current = requireReservation(area.reserveGpuTerrainOutput(
+                            x, y, z, TerrainRenderType.CUTOUT, 31L, 4),
+                    "Current ChunkArea GPU terrain generation must reserve");
+            var currentTarget = area.getGpuTerrainOutputTarget(current);
+            require(currentTarget != null,
+                    "Current ChunkArea GPU terrain generation must resolve a target");
+            require(area.publishGpuTerrainOutput(current, 4, false),
+                    "Current ChunkArea GPU terrain generation must publish");
+            long reusableBuffer = currentTarget.bufferId();
+
+            // Coarse-area reuse must close the output owner before hasLiveGeometry()
+            // decides whether persistent draw buffers can be retained. With no CPU
+            // geometry in this smoke, the same physical vertex buffer should survive.
+            area.repositionForReuse(0, y, z);
+            require(area.getGpuTerrainOutputResidency(0, y, z, TerrainRenderType.CUTOUT) == null,
+                    "ChunkArea reposition must discard old-coordinate GPU output ownership");
+            var reused = requireReservation(area.reserveGpuTerrainOutput(
+                            0, y, z, TerrainRenderType.SOLID, 40L, 4),
+                    "Repositioned ChunkArea must accept fresh GPU terrain ownership");
+            var reusedTarget = area.getGpuTerrainOutputTarget(reused);
+            require(reusedTarget != null && reusedTarget.bufferId() == reusableBuffer,
+                    "GPU-only output must not prevent safe persistent area-buffer reuse");
+            require(area.publishGpuTerrainOutput(reused, 4, false),
+                    "Repositioned ChunkArea GPU terrain output must publish");
+
+            area.releaseBuffers();
+            require(area.getGpuTerrainOutputResidency(0, y, z, TerrainRenderType.SOLID) == null,
+                    "ChunkArea release must discard GPU terrain output ownership");
+        } finally {
+            area.releaseBuffers();
         }
     }
 
