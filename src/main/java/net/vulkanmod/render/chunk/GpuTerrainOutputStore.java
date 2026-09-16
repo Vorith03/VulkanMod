@@ -154,6 +154,10 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
                 pending.segment);
         entry.pending = null;
         discard(previous);
+        // A cached FrameBatch may still contain the CPU command for this section.
+        // Publication must therefore make the affected terrain layer observable on
+        // the next frame before the new GPU residency can be consumed.
+        drawBuffers.markMeshChanged(reservation.type());
         return true;
     }
 
@@ -198,10 +202,16 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         if(closed)
             return;
         closed = true;
-        for(Entry entry : entries) {
+        for(int index = 0; index < entries.length; ++index) {
+            Entry entry = entries[index];
             if(entry == null)
                 continue;
             discardPending(entry);
+            if(entry.resident != null) {
+                TerrainRenderType type = TerrainRenderType.VALUES[
+                        index / RegionBatchLayout.MAX_SECTIONS];
+                drawBuffers.markMeshChanged(type);
+            }
             discardResident(entry);
         }
         Arrays.fill(entries, null);
@@ -235,6 +245,11 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             if(entry == null)
                 continue;
             discardPending(entry);
+            // Once a resident slice is released, no cached indirect command may
+            // retain its vertex offset. Rebuild that layer from the untouched CPU
+            // DrawParameters on the next frame.
+            if(entry.resident != null)
+                drawBuffers.markMeshChanged(type);
             discardResident(entry);
         }
     }
