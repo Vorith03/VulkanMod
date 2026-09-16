@@ -62,6 +62,20 @@ public final class RegionBatchLayoutTest {
         require(gpu.indexCount() == 36 && gpu.firstIndex() == 0 && gpu.vertexOffset() == 8,
                 "GPU handoff must derive an auto-quad command from persistent residency");
 
+        int maxFaces = GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES;
+        var maxResident = new GpuTerrainOutputStore.Residency(7L, 160,
+                maxFaces * GpuTerrainOutputStore.BYTES_PER_FACE, maxFaces, 8, true);
+        var maxGpu = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                maxResident, 12, 4, 99);
+        require(maxGpu.gpuResident() && maxGpu.indexCount() == maxFaces * 6,
+                "Largest uint16-addressable GPU quad set should remain selectable");
+
+        var tooManyFaces = new GpuTerrainOutputStore.Residency(7L, 160,
+                (maxFaces + 1) * GpuTerrainOutputStore.BYTES_PER_FACE,
+                maxFaces + 1, 8, true);
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                tooManyFaces, 12, 4, 99), "uint16 index overflow");
+
         requireCpuFallback(GpuTerrainDrawHandoff.select(false, TerrainRenderType.SOLID, 7L,
                 resident, 12, 4, 99), "Disabled handoff");
         requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 8L,
