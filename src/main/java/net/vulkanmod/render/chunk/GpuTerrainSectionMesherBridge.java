@@ -17,24 +17,32 @@ import net.vulkanmod.vulkan.memory.StorageBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * First production bridge from generation-owned section inputs to persistent GPU
- * terrain output. CPU terrain remains fully built and resident; this helper only
- * publishes an optional replacement after every fail-closed check succeeds.
+ * Production bridge from generation-owned section inputs to persistent GPU terrain
+ * output. The ordinary path still builds CPU terrain. A separate stricter property
+ * may let an already-meshed section skip repeated CPU block-model tessellation while
+ * retaining its previous CPU draw as the fail-closed fallback until current GPU work
+ * publishes successfully.
  *
- * <p>The initial bridge is deliberately conservative: it accepts only sections whose
- * visible block-model geometry consists entirely of already-qualified GPU full cubes
- * (plus invisible states), and it still cross-checks the independently planned GPU
- * face count against the authoritative CPU quad count. Mixed or unsupported sections
- * remain CPU-only. The worker must also have staged the same model generation/face
- * plan before ordinary CPU geometry emission. The bridge is default-off and runs
- * from a later frame operation, after the input upload submission has become
- * generation-visible and outside any active render pass.</p>
+ * <p>The bridge accepts only sections whose visible block-model geometry consists
+ * entirely of qualified GPU full cubes (plus invisible states). For ordinary shadow
+ * dispatch it cross-checks the independently planned GPU face count against the new
+ * CPU mesh. For the rebuild-only CPU-bypass experiment that new CPU mesh intentionally
+ * does not exist, so the immutable worker plan becomes authoritative while the older
+ * ready CPU mesh remains resident for recovery. Mixed or unsupported sections remain
+ * CPU-only. Dispatch runs as a later render-thread operation after input upload and
+ * outside an active render pass.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
+    static final String CPU_BYPASS_PROPERTY = "vulkanmod.experimentalGpuTerrainCpuBypass";
+    static final String DRAW_HANDOFF_PROPERTY = "vulkanmod.experimentalGpuTerrainDrawHandoff";
     private static final boolean ENABLED = Boolean.getBoolean(PROPERTY);
+    private static final boolean CPU_BYPASS_ENABLED = ENABLED
+            && Boolean.getBoolean(CPU_BYPASS_PROPERTY)
+            && Boolean.getBoolean(DRAW_HANDOFF_PROPERTY);
     private static final AtomicBoolean ACTIVE_LOGGED = new AtomicBoolean();
     private static final AtomicBoolean FAILURE_LOGGED = new AtomicBoolean();
+    private static final AtomicBoolean RECOVERY_LOGGED = new AtomicBoolean();
 
     private static boolean mesherAttempted;
     private static GpuTerrainSectionMesher mesher;
@@ -48,6 +56,20 @@ final class GpuTerrainSectionMesherBridge {
         return ENABLED;
     }
 
+    static boolean cpuBypassEnabled() {
+        return CPU_BYPASS_ENABLED;
+    }
+
+    static TerrainRenderType outputLayer() {
+        return Initializer.CONFIG.uniqueOpaqueLayer
+                ? TerrainRenderType.CUTOUT_MIPPED : TerrainRenderType.CUTOUT;
+    }
+
+    static boolean supportsCpuBypass(int faceCount) {
+        return CPU_BYPASS_ENABLED && faceCount > 0
+                && faceCount <= GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES;
+    }
+
     static synchronized void dispatch(ChunkArea area, RenderSection section, long generation) {
         if(!ENABLED || area == null || section == null)
             return;
@@ -56,6 +78,7 @@ final class GpuTerrainSectionMesherBridge {
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation)
             return;
 
+        boolean cpuBypassed = section.stagedGpuTerrainCpuBypassed(generation);
         int x = section.xOffset();
         int y = section.yOffset();
         int z = section.zOffset();
@@ -64,48 +87,64 @@ final class GpuTerrainSectionMesherBridge {
         if(snapshot == null || snapshot.x() != x || snapshot.y() != y || snapshot.z() != z
                 || qualification == null
                 || !section.matchesStagedGpuTerrainPreflight(generation,
-                        qualification.modelGeneration(), qualification.faceCount()))
+                        qualification.modelGeneration(), qualification.faceCount())) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
-        TerrainRenderType layer = Initializer.CONFIG.uniqueOpaqueLayer
-                ? TerrainRenderType.CUTOUT_MIPPED : TerrainRenderType.CUTOUT;
+        TerrainRenderType layer = outputLayer();
         DrawBuffers.DrawParameters cpu = section.getDrawParameters(layer);
         if(cpu.indexCount <= 0 || cpu.indexCount % 6 != 0
-                || !cpu.vertexBufferSegment.isReady())
+                || !cpu.vertexBufferSegment.isReady()) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
-        int cpuFaces = cpu.indexCount / 6;
         int faceCapacity = qualification.faceCount();
-        // Keep the CPU mesh as an independent semantic oracle while the GPU subset is
-        // still experimental. Capacity and expected GPU output are now derived only
-        // from immutable section inputs, so a future bypass no longer needs CPU output
-        // to size the dispatch; removing this cross-check is a separate safety gate.
-        if(faceCapacity <= 0 || faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES
-                || cpuFaces != faceCapacity)
+        if(faceCapacity <= 0 || faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
+
+        // Shadow/validation mode still has a newly-built CPU mesh, so retain the
+        // independent face-count oracle. A CPU-bypassed rebuild intentionally kept
+        // the previous generation's CPU fallback instead; comparing its face count
+        // with current inputs would reject legitimate edits and defeat the bypass.
+        if(!cpuBypassed && cpu.indexCount / 6 != faceCapacity) {
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
 
         RegionVoxelGpuStore.Residency voxel = area.getGpuVoxelResidency(x, y, z);
         RegionVoxelGpuStore.Residency lighting = area.getGpuSparseLightingResidency(x, y, z);
         if(voxel == null || lighting == null || !voxel.valid() || !lighting.valid()
-                || voxel.generation() != generation || lighting.generation() != generation)
+                || voxel.generation() != generation || lighting.generation() != generation) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
         StorageBuffer voxelPage = area.getGpuVoxelPage(voxel.pageIndex());
         StorageBuffer lightingPage = area.getGpuVoxelPage(lighting.pageIndex());
-        if(voxelPage == null || lightingPage == null || !ensureGpuResources())
+        if(voxelPage == null || lightingPage == null || !ensureGpuResources()) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
         GpuTerrainModelGpuStore.Residency model = modelStore.getResidency();
         if(!model.valid() || modelTable == null
                 || model.generation() != qualification.modelGeneration()
                 || model.generation() != modelTable.generation()
-                || model.generation() != GpuTerrainModelRegistry.generation())
+                || model.generation() != GpuTerrainModelRegistry.generation()) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
         GpuTerrainOutputStore.Reservation reservation = area.reserveGpuTerrainOutput(
                 x, y, z, layer, generation, faceCapacity);
-        if(reservation == null)
+        if(reservation == null) {
+            recoverCpuFallback(area, section, generation);
             return;
+        }
 
         try {
             GpuTerrainSectionMesher.DispatchResult result = reservation.withTarget(target ->
@@ -119,22 +158,48 @@ final class GpuTerrainSectionMesherBridge {
                     && result.writtenFaces() == faceCapacity;
             if(!exact || section.getVoxelGeneration() != generation) {
                 area.publishGpuTerrainOutput(reservation, 0, true);
+                recoverCpuFallback(area, section, generation);
                 return;
             }
 
-            if(area.publishGpuTerrainOutput(reservation, result.writtenFaces(), false)
-                    && ACTIVE_LOGGED.compareAndSet(false, true)) {
+            boolean published = area.publishGpuTerrainOutput(
+                    reservation, result.writtenFaces(), false);
+            if(!published) {
+                recoverCpuFallback(area, section, generation);
+                return;
+            }
+
+            if(ACTIVE_LOGGED.compareAndSet(false, true)) {
                 Initializer.LOGGER.info(
-                        "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={}; exact-generation CPU mesh remains resident as fallback",
-                        x, y, z, layer.ordinal(), result.writtenFaces());
+                        "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; ready CPU fallback remains resident",
+                        x, y, z, layer.ordinal(), result.writtenFaces(), cpuBypassed);
             }
         } catch(RuntimeException error) {
             area.publishGpuTerrainOutput(reservation, 0, true);
+            recoverCpuFallback(area, section, generation);
             if(FAILURE_LOGGED.compareAndSet(false, true)) {
                 Initializer.LOGGER.warn(
                         "GPU terrain section dispatch failed; preserving CPU terrain fallback",
                         error);
             }
+        }
+    }
+
+    /**
+     * Recover only a still-current build that deliberately skipped new CPU model
+     * tessellation. The old CPU draw remains resident while setDirty() schedules a
+     * normal rebuild; generation turnover makes delayed recovery a no-op.
+     */
+    static void recoverCpuFallback(ChunkArea area, RenderSection section, long generation) {
+        if(!CPU_BYPASS_ENABLED || area == null || section == null)
+            return;
+        RenderSystem.assertOnRenderThread();
+        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation)
+            return;
+        if(section.requestGpuTerrainCpuRecovery(generation)
+                && RECOVERY_LOGGED.compareAndSet(false, true)) {
+            Initializer.LOGGER.warn(
+                    "VULKANMOD_GPU_TERRAIN_CPU_RECOVERY: GPU rebuild could not publish; retained CPU geometry is active and one CPU rebuild was requested");
         }
     }
 
@@ -146,7 +211,7 @@ final class GpuTerrainSectionMesherBridge {
     /**
      * Build the GPU work plan strictly from immutable section/model inputs. This is
      * intentionally independent of TerrainBufferBuilder and DrawParameters: the CPU
-     * quad count remains only a temporary validation oracle in dispatch().
+     * quad count remains only a temporary validation oracle in non-bypass dispatch.
      */
     static Qualification qualify(SectionVoxelSnapshot snapshot) {
         if(snapshot == null)
