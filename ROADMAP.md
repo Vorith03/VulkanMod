@@ -270,25 +270,21 @@ indirect-command generation/fallback are verified. Live GPU selection correctnes
 hybrid terrain meshing remain open; GPU indirect production consumption is default-off
 pending representative RX 6900 XT evidence.
 
-Current lighting slice: the exact dense-lattice prototype in
-`docs/GPU_TERRAIN_LIGHTING_LATTICE_PROTOTYPE_2026-09-13.md` rejects both a 20-cube
-and an 18-cube plus sparse second shell as too large. Reusable canonical model
-templates and partial position/UV vertex generation are proven in diagnostic compute,
-and bounded sparse lighting capture, decode and canonical AO/color/light reconstruction
-now exist diagnostically. CPU terrain output remains authoritative.
-The opt-in estimator in `docs/GPU_TERRAIN_LIGHTING_DEMAND_TELEMETRY_2026-09-14.md`
-now measures demand-driven point/brick density against actual CPU mesh bytes; real
-Create Chronicles logs recovered from prior tests reached 9,088 sections, with
-roughly 11–12% projected point/CPU-mesh bytes in larger samples (see `AGENT_STATUS.md`).
-Do not repeat this collection. Complete packed-vertex joining and bounded production
-publication remain open; this density evidence is not a measured speedup.
+Current lighting/output work has advanced beyond the earlier dense-lattice prototype.
+Reusable canonical model templates, bounded sparse lighting capture/decode, exact
+Minecraft-matched AO/color/light reconstruction, and complete packed 20-byte terrain
+vertex generation are now proven for the qualified subset. The recovered Create
+Chronicles density sample still supports bounded sparse input; do not repeat that
+collection. CPU terrain output remains authoritative in normal gameplay because there
+is still no production section-mesher dispatcher.
 
-The diagnostic compact face/vertex stream is now explicitly capacity-bounded as
-recorded in `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`: requested and written
-counts plus overflow are verified without out-of-bounds writes. This establishes the
-fallback contract needed by hybrid meshing, but does not complete that production
-gate because allocation/publication, lighting/color and CPU fallback integration are
-not implemented.
+The bounded-output contract now includes real generation-owned persistent area-buffer
+publication rather than only a diagnostic compact stream. `GpuTerrainSectionMesherSmokeTest`
+proves whole-section classification/compaction, complete persistent vertex output,
+exact-generation publication, and forced-overflow fallback. `GpuTerrainOutputStore`
+provides bounded/no-growth reservations and section-generation invalidation. This is
+production-shaped ownership, but it does not close the hybrid-meshing gate while the
+full mesher remains smoke-only and normal rebuilds still perform CPU geometry work.
 
 The reusable model/template gate is complete for the supported subset as recorded in
 `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. The qualifier exercises
@@ -304,21 +300,26 @@ superset, freezes the production frustum for that generation, and publishes thro
 generation-safe device-local residency. The rate-limited diagnostic can compare live
 GPU selection and exact five-word commands with the authoritative CPU queue.
 
-Persistent GPU output is a bounded storage+indirect buffer with a 512-command
-capacity, zero-tail commands and explicit prior-indirect->transfer,
-transfer->compute, and compute->indirect synchronization. Commit `d91de023` adds a
-separate default-off production consumer; the CPU batch remains built and is used
-whenever the shadow generation/region is invalid, candidate input is smaller than the
-CPU draw set, capacity would be exceeded, or the experimental draw gate is disabled.
-Commit `67dafa92` adds direct host-side regression assertions for those fail-closed
-conditions and exact/bounded-superset success. CI #443 is fully green and CI #444 is
-the corresponding verification run for the fallback-contract commit. See
+Persistent GPU indirect output remains a bounded storage+indirect buffer with a
+512-command capacity, zero-tail commands and explicit synchronization. The separate
+default-off production indirect consumer retains the CPU batch whenever generation,
+region, candidate-superset, capacity, or feature-gate checks fail. See
 `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`.
 
-This closes the bounded indirect-command/fallback mechanism, **not** the live
-visibility-selection gate. Representative Create Chronicles/RX 6900 XT diagnostics
-must still show no unresolved GPU-vs-CPU mismatch, including the unusual
-camera-outside-build-height seed path. No performance improvement is claimed.
+A second default-off production consumer now exists for generated terrain geometry.
+`RegionDrawBatch.FrameBatch` can substitute an exact-generation
+`GpuTerrainOutputStore.Residency`, invalidation advances mesh revision so cached frame
+batches cannot retain stale offsets, and the handoff falls back above the shared
+uint16 auto-quad index limit. `RegionBatchSmokeTest` covers CPU command -> GPU
+substitution -> generation invalidation -> CPU fallback. Ordinary gameplay still does
+not create this residency because the production section-mesher dispatch bridge is the
+next required implementation slice.
+
+This closes additional output-ownership and draw-consumer plumbing, **not** the live
+visibility-selection or hybrid-meshing gates. Representative Create Chronicles/RX
+6900 XT visibility diagnostics are still needed, and production GPU meshing must be
+wired fail-closed before any CPU meshing bypass can be considered. No performance
+improvement is claimed.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -385,23 +386,25 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Current source: `7cbe402ae94b242bd0ab948ac7816ae9838c0439`, CI #467
-  (run `34960611507`, job `104353079945`) is fully green. Exact center/corner
-  sparse lighting and captured Minecraft AO comparisons passed, along with all
-  build, Vulkan, renderer and compatibility gates. Production meshing remains open.
+- Latest executable checkpoint: `3946269ec17c783f34f2576135e8e9ad98eede15`, CI #493
+  (run `35130177665`) is fully green. Later documentation-only commits do not alter
+  executable state.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 5/11.
 - P7 input ABI, capped persistent region SSBO residency, compute plumbing, reusable
-  Forge model instances, compact output capacity/overflow safety, and bounded GPU
-  indirect-command generation with CPU fallback are verified. A live metadata
-  producer and default-off production indirect consumer now exist. Live GPU selection
-  correctness still needs representative RX 6900 XT/Create Chronicles evidence.
-- Recovered real lighting-demand density supports bounded sparse-input work. CPU
-  geometry ownership must remain until complete vertex/oracle and bounded production
-  publication/fallback evidence exists.
-- No new RX 6900 XT A/B performance measurement or performance claim.
+  Forge model instances, bounded indirect-command generation/fallback, complete
+  packed-vertex reconstruction, bounded generation-owned persistent output, and a
+  default-off frame-batch GPU-geometry draw consumer are now verified by CI/smokes.
+- The hybrid-meshing gate remains open because there is still no production
+  section-mesher dispatcher and `ChunkTask.BuildTask.compile` still emits ordinary CPU
+  geometry. Do not clear `CPU_REQUIRED` or bypass `renderBatched(...)` until the
+  fail-closed production dispatch/completion path is green.
+- Live GPU visibility correctness still needs representative RX 6900 XT/Create
+  Chronicles evidence. No new RX 6900 XT A/B performance measurement or performance
+  claim exists.
 
-See `AGENT_STATUS.md` for current test instructions and
-`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` for the bounded indirect-draw
+See `AGENT_STATUS.md` for the current continuation checkpoint,
+`docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md` for persistent output ownership,
+and `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` for the bounded indirect
 contract. Documentation-only follow-ups use `[skip ci]`. Recheck live source/CI before
 the next implementation step.
