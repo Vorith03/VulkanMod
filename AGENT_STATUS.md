@@ -5,10 +5,10 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 ## Repository state
 
 - Branch: `forge-1.20.1`.
-- Current source commit before this documentation checkpoint: `83763f697521a12c9aada7fe984eda28c91d9c59` (`test: initialize game version before terrain bootstrap`).
-- CI #486 exposed a second standalone-test bootstrap prerequisite after `d282b23d`: `Bootstrap.bootStrap()` reached `DataFixers` with `SharedConstants.getCurrentVersion()` unset and failed with `IllegalStateException: Game version not set`. `83763f69` now calls `SharedConstants.tryDetectVersion()` immediately before `Bootstrap.bootStrap()`. CI #487, run `35127777126`, has passed the complete Gradle build/test stage (including `testRegionBatchLayout`) and normal Vulkan startup smokes; remaining smoke stages were still running at this checkpoint. Last fully green source CI remains #482 at `943537d6` until #487 completes.
+- Current source commit before this documentation checkpoint: `3946269ec17c783f34f2576135e8e9ad98eede15` (`test: cover uint16 GPU terrain draw bound`).
+- CI #493, run `35130177665`, is fully green for `3946269e`.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
-- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. Do not check the hybrid-meshing gate merely from synthetic CI; production CPU bypass and RX correctness/performance evidence remain open.
+- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. The new draw handoff is plumbing toward the hybrid-meshing gate; do not check that gate until production CPU bypass and RX correctness/performance evidence exist.
 - User priority remains explicit: move repetitive terrain construction from CPU workers to the GPU while preserving conservative CPU fallback for arbitrary Minecraft/Forge semantics. Mesh shaders are optional/later.
 
 ## Required planning/evidence documents
@@ -17,33 +17,41 @@ Use `AGENTS.md`, `ROADMAP.md`, `docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md`, `
 
 ## Current GPU-terrain checkpoint
 
-A real Vulkan compute dispatch can classify a bounded section, compact qualified faces, reconstruct complete 20-byte terrain vertices (position, UV, Minecraft-matched AO/color/light), and write them directly into generation-owned persistent `ChunkArea` vertex storage. `GpuTerrainSectionMesherSmokeTest` at `943537d6` proves complete persistent publication and forced-overflow fallback without CPU readback/re-upload.
+The bounded compute prototype can classify a section, compact qualified faces, reconstruct complete 20-byte terrain vertices (position, UV, Minecraft-matched AO/color/light), and write them directly into generation-owned persistent `ChunkArea` vertex storage. `GpuTerrainSectionMesherSmokeTest` proves complete persistent publication and forced-overflow fallback without CPU readback/re-upload.
 
-The first production draw-handoff policy is encoded in `GpuTerrainDrawHandoff` (`2ae2fdcb`). It is deliberately fail-closed and does not mutate CPU `DrawParameters`: only enabled, supported opaque layers with valid, nonempty, exact-generation `GpuTerrainOutputStore.Residency` produce an auto-quad GPU command; disabled, stale, missing, invalid/overflow, translucent and tripwire cases return the CPU command byte-for-byte. `RegionBatchLayoutTest` covers those policy cases and generated index/vertex offsets. The standalone test now explicitly performs the same minimal version/bootstrap prerequisites needed before touching vanilla `RenderType`: `SharedConstants.tryDetectVersion()` then `Bootstrap.bootStrap()`.
+The production draw path now has a real, default-off consumer. `RegionDrawBatch.FrameBatch` queries exact-generation `GpuTerrainOutputStore.Residency` and applies the fail-closed `GpuTerrainDrawHandoff` policy. Successful GPU output publication and invalidation advance the affected `DrawBuffers` mesh revision so cached frame batches cannot retain stale CPU/GPU commands. `RegionBatchSmokeTest` proves CPU command -> exact-generation GPU substitution -> generation invalidation -> CPU fallback through the actual Vulkan frame-batch path.
 
-### What is still not production
+The handoff also refuses GPU geometry above the shared uint16 auto-quad index limit (16,384 quads / 65,536 vertices) and falls back to the original CPU command. CI #493 covers that bound. GPU-terrain draw substitution remains opt-in via `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`.
 
-- `RegionDrawBatch.FrameBatch` does **not yet consume** `GpuTerrainDrawHandoff`; CPU commands remain authoritative in normal rendering.
-- Normal terrain geometry is still CPU-meshed. No qualified voxel bypasses `BlockRenderDispatcher.renderBatched(...)` yet.
-- `CPU_REQUIRED` must remain intact until a later handoff proves a complete qualified subset and preserves CPU geometry for every unsupported/failed case.
-- Arbitrary Forge callbacks, dynamic/unsupported models, block entities, translucent and tripwire terrain remain CPU-only.
-- GPU indirect draw remains opt-in/default-off pending broader RX movement/churn evidence.
+### Important architectural finding
+
+There is still **no production section-mesher dispatcher**. The full section compute mesher currently lives in `GpuTerrainSectionMesherSmokeTest` plus `section_mesher_probe.comp`; normal gameplay never reserves an output target and dispatches that shader for a rebuilt section. Therefore the new `FrameBatch` handoff can consume valid GPU geometry, but ordinary gameplay does not yet create that geometry.
+
+This means the next safe production step is **not** to clear `CPU_REQUIRED` or skip `BlockRenderDispatcher.renderBatched(...)` yet. Doing so before a production dispatch/failure-completion path exists could make terrain disappear when compute allocation, shader dispatch, generation matching, or overflow fails.
+
+### What is still CPU-authoritative
+
+- `ChunkTask.BuildTask.compile` still executes the ordinary block/model/lighting loop for every renderable block.
+- `CPU_REQUIRED` remains intact for all voxel entries.
+- Arbitrary Forge callbacks, dynamic/unsupported models, block entities, fluids, translucent and tripwire terrain remain CPU-only.
+- GPU indirect section-selection consumption and GPU terrain draw handoff are both default-off experimental paths.
+- No performance improvement is claimed.
 
 ## Next implementation slice
 
-First inspect the final result of CI #487; its Gradle build/test stage already passed, so only investigate further if a later smoke fails. If green, wire the already-tested `GpuTerrainDrawHandoff` policy into `RegionDrawBatch.FrameBatch` under a new/default-off experimental gate:
+Build the first production, fail-closed **GPU section-mesher dispatch bridge** before attempting CPU bypass:
 
-1. For each visible supported opaque section, query `ChunkArea.getGpuTerrainOutputResidency(...)` and pass `RenderSection.getVoxelGeneration()` plus the untouched CPU command to the planner.
-2. When the planner returns `gpuResident=true`, record its command and ensure `Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3)` before drawing. `WorldRenderer.renderSectionLayer` already binds the auto-index buffer before the region-batching path, so GPU quad commands can share that binding with ordinary auto-indexed terrain commands. Otherwise record the original CPU command unchanged.
-3. Keep GPU section-selection/candidate generation based on CPU `DrawParameters` for this first slice; do not mix GPU-substituted geometry into the existing CPU-vs-GPU selection safety comparison.
-4. Make successful GPU output publication invalidate the affected terrain-layer command cache via the existing `DrawBuffers` mesh-revision mechanism, so a newly published residency cannot remain invisible behind a cached CPU `FrameBatch`.
-5. Extend the Vulkan region smoke to prove exact-generation substitution and stale/missing/unsupported fallback through the actual `FrameBatch` path. Keep the gate default-off.
+1. Extract/reuse the already-proven section-mesher compute pipeline from `GpuTerrainSectionMesherSmokeTest` into a production-owned helper rather than duplicating the shader/descriptor contract.
+2. The bridge must accept exact-generation voxel + sparse-lighting residency and a qualified model table, reserve bounded `GpuTerrainOutputStore` space, dispatch outside an active render pass, and publish only after successful completion for the same section generation.
+3. On missing/stale input, unsupported model/layer, allocation failure, dispatch failure, overflow, cancellation, or generation turnover, invalidate/release the reservation and leave the CPU mesh untouched.
+4. Start default-off. Add a real Vulkan smoke that exercises production helper success, overflow, and stale-generation rejection.
+5. Only after that bridge is green should the compile path be split/staged so a completely qualified subset can avoid `renderBatched`. Preserve CPU geometry until the GPU result is known valid; do not introduce a worker-thread Vulkan wait that merely trades CPU meshing for synchronization stalls.
 
-Only after that draw handoff is green should a later slice move GPU dispatch earlier enough to let qualified blocks skip CPU `renderBatched`; until then this remains draw-path correctness plumbing, not a performance feature.
+A useful adversarial design constraint for the following CPU-bypass slice: the current `compile` loop discovers voxel qualification and emits CPU geometry in the same pass. True CPU savings will require staging qualification/input capture before geometry emission, or another asynchronous ownership scheme; simply dispatching after the current loop will not improve build time.
 
 ## Outstanding RX evidence
 
-The Phase 7 visibility/selection gate still needs a movement/churn sample. Prior user evidence remains valid: build #444 activated experimental GPU indirect consumption with eight clean initial comparator samples; F3+T and two world re-entries worked; FTB Chunks large-map terrain remained black due to its null `BlockState` map task; the center-screen/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
+The Phase 7 visibility/selection gate still needs a representative movement/churn sample. Prior user evidence remains valid: build #444 activated experimental GPU indirect consumption with eight clean initial comparator samples; F3+T and two world re-entries worked; FTB Chunks large-map terrain remained black due to its null `BlockState` map task; the center-screen/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
 
 ## Safety / performance boundary
 
