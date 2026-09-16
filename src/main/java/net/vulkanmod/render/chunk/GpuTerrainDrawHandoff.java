@@ -12,6 +12,11 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
  * output mechanically fall back to the already-proven CPU geometry.</p>
  */
 final class GpuTerrainDrawHandoff {
+    // Region terrain uses the renderer's uint16 auto-quad index buffer. A command's
+    // indices are local to its vertexOffset, so one command may address at most
+    // 65,536 vertices = 16,384 complete quads without wrapping an index.
+    static final int MAX_AUTO_INDEX_FACES = (1 << 16) / GpuTerrainOutputStore.VERTICES_PER_FACE;
+
     private GpuTerrainDrawHandoff() {}
 
     static DrawCommand select(boolean enabled,
@@ -27,6 +32,7 @@ final class GpuTerrainDrawHandoff {
                 || !residency.valid() || residency.generation() != sectionGeneration
                 || residency.faceCount() <= 0
                 || residency.faceCount() > GpuTerrainOutputStore.MAX_FACES
+                || residency.faceCount() > MAX_AUTO_INDEX_FACES
                 || residency.vertexOffset() < 0)
             return cpu;
 
