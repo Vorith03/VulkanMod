@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk;
 
 import net.vulkanmod.mixin.compatibility.EffectUniformBindingsTest;
+import net.vulkanmod.render.vertex.TerrainRenderType;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -40,8 +41,38 @@ public final class RegionBatchLayoutTest {
         require(RegionBatchLayout.drawLimit(128) == 128, "Device batch limit");
         require(RegionBatchLayout.drawLimit(1) == 1, "Single draw limit");
 
+        verifyGpuTerrainDrawHandoff();
         EffectUniformBindingsTest.run();
         System.out.println("Terrain region layout tests passed");
+    }
+
+    private static void verifyGpuTerrainDrawHandoff() {
+        var resident = new GpuTerrainOutputStore.Residency(7L, 160, 480, 6, 8, true);
+        var gpu = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                resident, 12, 4, 99);
+        require(gpu.gpuResident(), "Exact-generation opaque residency should be selectable");
+        require(gpu.indexCount() == 36 && gpu.firstIndex() == 0 && gpu.vertexOffset() == 8,
+                "GPU handoff must derive an auto-quad command from persistent residency");
+
+        requireCpuFallback(GpuTerrainDrawHandoff.select(false, TerrainRenderType.SOLID, 7L,
+                resident, 12, 4, 99), "Disabled handoff");
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 8L,
+                resident, 12, 4, 99), "Stale generation");
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.TRANSLUCENT, 7L,
+                resident, 12, 4, 99), "Translucent layer");
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.TRIPWIRE, 7L,
+                resident, 12, 4, 99), "Tripwire layer");
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                null, 12, 4, 99), "Missing residency");
+        var invalid = new GpuTerrainOutputStore.Residency(7L, -1, 0, 0, 0, false);
+        requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                invalid, 12, 4, 99), "Invalid/overflow publication");
+    }
+
+    private static void requireCpuFallback(GpuTerrainDrawHandoff.DrawCommand command, String caseName) {
+        require(!command.gpuResident(), caseName + " must retain CPU ownership");
+        require(command.indexCount() == 12 && command.firstIndex() == 4 && command.vertexOffset() == 99,
+                caseName + " must preserve the CPU command unchanged");
     }
 
     private static void reject(int x, int y, int z) {
