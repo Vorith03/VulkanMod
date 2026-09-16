@@ -25,9 +25,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * visible block-model geometry consists entirely of already-qualified GPU full cubes
  * (plus invisible states), and it still cross-checks the independently planned GPU
  * face count against the authoritative CPU quad count. Mixed or unsupported sections
- * remain CPU-only. The bridge is default-off and runs from a later frame operation,
- * after the input upload submission has become generation-visible and outside any
- * active render pass.</p>
+ * remain CPU-only. The worker must also have staged the same model generation/face
+ * plan before ordinary CPU geometry emission. The bridge is default-off and runs
+ * from a later frame operation, after the input upload submission has become
+ * generation-visible and outside any active render pass.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
@@ -61,7 +62,9 @@ final class GpuTerrainSectionMesherBridge {
         SectionVoxelSnapshot snapshot = area.getVoxels(x, y, z);
         Qualification qualification = qualify(snapshot);
         if(snapshot == null || snapshot.x() != x || snapshot.y() != y || snapshot.z() != z
-                || qualification == null)
+                || qualification == null
+                || !section.matchesStagedGpuTerrainPreflight(generation,
+                        qualification.modelGeneration(), qualification.faceCount()))
             return;
 
         TerrainRenderType layer = Initializer.CONFIG.uniqueOpaqueLayer
