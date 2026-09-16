@@ -41,6 +41,8 @@ public class RenderSection {
     private long gpuTerrainPreflightGeneration = Long.MIN_VALUE;
     private long gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
     private int gpuTerrainPreflightFaceCount = -1;
+    private boolean gpuTerrainPreflightCpuBypassed;
+    private boolean forceCpuTerrainUntilSuccess;
     private boolean playerChanged;
 
     private boolean completelyEmpty = true;
@@ -169,6 +171,9 @@ public class RenderSection {
 
     void release() {
         this.invalidateVoxels();
+        synchronized(this) {
+            this.forceCpuTerrainUntilSuccess = false;
+        }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
     }
@@ -315,6 +320,9 @@ public class RenderSection {
 
     private void reset() {
         this.invalidateVoxels();
+        synchronized(this) {
+            this.forceCpuTerrainUntilSuccess = false;
+        }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
@@ -345,6 +353,34 @@ public class RenderSection {
         return GpuTerrainSectionMesherBridge.enabled();
     }
 
+    public static boolean gpuTerrainCpuBypassEnabled() {
+        return GpuTerrainSectionMesherBridge.cpuBypassEnabled();
+    }
+
+    public static TerrainRenderType gpuTerrainOutputLayer() {
+        return GpuTerrainSectionMesherBridge.outputLayer();
+    }
+
+    public static boolean gpuTerrainCpuBypassEligible(@Nullable GpuTerrainPreflight preflight) {
+        return preflight != null && GpuTerrainSectionMesherBridge.supportsCpuBypass(preflight.faceCount());
+    }
+
+    public boolean hasReadyGpuTerrainCpuFallback() {
+        if(!this.isCompiled())
+            return false;
+        DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
+        return parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
+    }
+
+    public synchronized boolean gpuTerrainCpuRecoveryRequired() {
+        return this.forceCpuTerrainUntilSuccess;
+    }
+
+    public synchronized void completeGpuTerrainCpuRecovery(long generation) {
+        if(generation == this.voxelGeneration)
+            this.forceCpuTerrainUntilSuccess = false;
+    }
+
     @Nullable
     public static GpuTerrainPreflight qualifyGpuTerrain(SectionVoxelSnapshot snapshot) {
         GpuTerrainSectionMesherBridge.Qualification qualification =
@@ -353,8 +389,14 @@ public class RenderSection {
                 : new GpuTerrainPreflight(qualification.modelGeneration(), qualification.faceCount());
     }
 
+    public void stageGpuTerrainPreflight(@Nullable GpuTerrainPreflight preflight,
+                                         long generation) {
+        this.stageGpuTerrainPreflight(preflight, generation, false);
+    }
+
     public synchronized void stageGpuTerrainPreflight(@Nullable GpuTerrainPreflight preflight,
-                                                      long generation) {
+                                                      long generation,
+                                                      boolean cpuBypassed) {
         if(generation != this.voxelGeneration)
             return;
         if(preflight == null) {
@@ -364,6 +406,7 @@ public class RenderSection {
         this.gpuTerrainPreflightGeneration = generation;
         this.gpuTerrainPreflightModelGeneration = preflight.modelGeneration();
         this.gpuTerrainPreflightFaceCount = preflight.faceCount();
+        this.gpuTerrainPreflightCpuBypassed = cpuBypassed;
     }
 
     synchronized boolean matchesStagedGpuTerrainPreflight(long generation,
@@ -375,10 +418,31 @@ public class RenderSection {
                 && this.gpuTerrainPreflightFaceCount == faceCount;
     }
 
+    synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
+        return generation == this.voxelGeneration
+                && this.gpuTerrainPreflightGeneration == generation
+                && this.gpuTerrainPreflightCpuBypassed;
+    }
+
+    boolean requestGpuTerrainCpuRecovery(long generation) {
+        synchronized(this) {
+            if(generation != this.voxelGeneration
+                    || this.gpuTerrainPreflightGeneration != generation
+                    || !this.gpuTerrainPreflightCpuBypassed)
+                return false;
+            this.forceCpuTerrainUntilSuccess = true;
+        }
+        // Keep the previous CPU draw parameters resident. A normal rebuild will
+        // replace them; generation invalidation only revokes the failed GPU inputs.
+        this.setDirty(false);
+        return true;
+    }
+
     private void clearGpuTerrainPreflight() {
         this.gpuTerrainPreflightGeneration = Long.MIN_VALUE;
         this.gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
         this.gpuTerrainPreflightFaceCount = -1;
+        this.gpuTerrainPreflightCpuBypassed = false;
     }
 
     public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
