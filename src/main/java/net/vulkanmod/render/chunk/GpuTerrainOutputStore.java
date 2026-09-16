@@ -9,8 +9,9 @@ import java.util.Arrays;
  *
  * <p>The CPU mesh remains authoritative. Reservations use only already-free space in
  * the persistent area vertex buffer and never grow it. A newer section generation
- * immediately revokes older GPU output; same-generation replacement keeps the last
- * valid result discoverable until the replacement publishes successfully.</p>
+ * immediately revokes every terrain-layer result for that section; same-generation
+ * replacement keeps the last valid result discoverable until the replacement
+ * publishes successfully.</p>
  */
 public final class GpuTerrainOutputStore implements AutoCloseable {
     public static final int MAX_FACES = 4096 * 6;
@@ -23,6 +24,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private final DrawBuffers drawBuffers;
     private final Entry[] entries = new Entry[RegionBatchLayout.MAX_SECTIONS
             * TerrainRenderType.VALUES.length];
+    private final long[] sectionGenerations = new long[RegionBatchLayout.MAX_SECTIONS];
     private final long ownerId;
     private long nextToken = 1L;
     private boolean closed;
@@ -32,6 +34,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             throw new IllegalArgumentException("GPU terrain output requires area draw buffers");
         this.drawBuffers = drawBuffers;
         this.ownerId = claimOwnerId();
+        Arrays.fill(this.sectionGenerations, -1L);
     }
 
     /**
@@ -53,19 +56,16 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         if(closed)
             return null;
 
-        Entry entry = entry(packedSection, type, true);
-        if(generation < entry.generation)
+        long sectionGeneration = this.sectionGenerations[packedSection];
+        if(generation < sectionGeneration)
             return null;
+        if(generation > sectionGeneration)
+            advanceSectionGeneration(packedSection, generation);
 
-        if(generation > entry.generation) {
-            entry.generation = generation;
-            discardPending(entry);
-            discardResident(entry);
-        } else {
-            // Preserve an already-published same-generation result until a retry
-            // actually succeeds. Only the superseded pending reservation is dropped.
-            discardPending(entry);
-        }
+        Entry entry = entry(packedSection, type, true);
+        // Preserve an already-published same-generation result until a retry
+        // actually succeeds. Only the superseded pending reservation is dropped.
+        discardPending(entry);
 
         if(!drawBuffers.isAllocated())
             drawBuffers.allocateBuffers();
@@ -125,10 +125,13 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         checkSection(packedSection);
         if(type == null)
             throw new IllegalArgumentException("GPU terrain output layer must be present");
+        long generation = this.sectionGenerations[packedSection];
+        if(closed || !supported(type))
+            return Residency.invalid(generation);
+
         Entry entry = entry(packedSection, type, false);
-        long generation = entry == null ? -1L : entry.generation;
-        if(closed || entry == null || entry.resident == null
-                || entry.resident.generation != entry.generation)
+        if(entry == null || entry.resident == null
+                || entry.resident.generation != generation)
             return Residency.invalid(generation);
 
         Resident resident = entry.resident;
@@ -139,19 +142,19 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
                 resident.faceCount, offset / VERTEX_BYTES, true);
     }
 
+    public synchronized long getSectionGeneration(int packedSection) {
+        checkSection(packedSection);
+        return this.sectionGenerations[packedSection];
+    }
+
     /** Immediately make all terrain-layer output for this section generation stale. */
     public synchronized void invalidateSection(int packedSection, long generation) {
         checkSection(packedSection);
         if(generation < 0L)
             throw new IllegalArgumentException("GPU terrain output generation must be non-negative");
-        for(TerrainRenderType type : TerrainRenderType.VALUES) {
-            Entry entry = entry(packedSection, type, false);
-            if(entry == null || generation < entry.generation)
-                continue;
-            entry.generation = generation;
-            discardPending(entry);
-            discardResident(entry);
-        }
+        if(generation < this.sectionGenerations[packedSection])
+            return;
+        advanceSectionGeneration(packedSection, generation);
     }
 
     @Override
@@ -166,6 +169,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             discardResident(entry);
         }
         Arrays.fill(entries, null);
+        Arrays.fill(sectionGenerations, -1L);
     }
 
     private Pending pendingFor(Reservation reservation) {
@@ -176,14 +180,26 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         if(reservation.packedSection < 0
                 || reservation.packedSection >= RegionBatchLayout.MAX_SECTIONS)
             return null;
+        if(this.sectionGenerations[reservation.packedSection] != reservation.generation)
+            return null;
         Entry entry = entry(reservation.packedSection, reservation.type, false);
         Pending pending = entry == null ? null : entry.pending;
-        if(pending == null || entry.generation != reservation.generation
-                || pending.generation != reservation.generation
+        if(pending == null || pending.generation != reservation.generation
                 || pending.token != reservation.token
                 || pending.faceCapacity != reservation.faceCapacity)
             return null;
         return pending;
+    }
+
+    private void advanceSectionGeneration(int packedSection, long generation) {
+        this.sectionGenerations[packedSection] = generation;
+        for(TerrainRenderType type : TerrainRenderType.VALUES) {
+            Entry entry = entry(packedSection, type, false);
+            if(entry == null)
+                continue;
+            discardPending(entry);
+            discardResident(entry);
+        }
     }
 
     private Entry entry(int packedSection, TerrainRenderType type, boolean create) {
@@ -242,7 +258,6 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     private static final class Entry {
-        long generation = -1L;
         Pending pending;
         Resident resident;
     }

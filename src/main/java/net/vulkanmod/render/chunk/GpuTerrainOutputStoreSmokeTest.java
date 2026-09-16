@@ -51,26 +51,43 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && resident.faceCount() == 32,
                     "Overflowed retry must not displace valid same-generation output");
 
-            // A newer section generation immediately revokes the older result even
+            // Section generation is shared across terrain layers. Publish a peer
+            // layer at generation 10 so generation 11 on SOLID must revoke both.
+            var peer = requireReservation(store.reserve(7, TerrainRenderType.CUTOUT, 10L, 8),
+                    "Same-generation peer terrain layer reservation must fit");
+            require(store.publish(peer, 8, false),
+                    "Same-generation peer terrain layer must publish");
+            require(store.getResidency(7, TerrainRenderType.CUTOUT).valid(),
+                    "Peer terrain layer residency must be visible before turnover");
+
+            // A newer section generation immediately revokes every older layer even
             // when its replacement later fails, leaving the CPU mesh authoritative.
             var newer = requireReservation(store.reserve(7, TerrainRenderType.SOLID, 11L, 16),
                     "Newer-generation GPU terrain reservation must fit");
-            require(!store.getResidency(7, TerrainRenderType.SOLID).valid(),
-                    "Generation turnover must revoke stale GPU terrain output immediately");
+            require(!store.getResidency(7, TerrainRenderType.SOLID).valid()
+                            && !store.getResidency(7, TerrainRenderType.CUTOUT).valid(),
+                    "Generation turnover must revoke every stale terrain layer immediately");
+            require(store.getSectionGeneration(7) == 11L,
+                    "GPU terrain output must track one generation per section");
             require(!store.publish(newer, 0, false),
                     "Zero-face GPU terrain output must remain on CPU fallback");
             require(!store.getResidency(7, TerrainRenderType.SOLID).valid(),
                     "Failed newer generation must not resurrect stale GPU terrain output");
             require(store.reserve(7, TerrainRenderType.SOLID, 10L, 8) == null,
                     "Stale GPU terrain generation must be rejected");
+            require(store.reserve(7, TerrainRenderType.CUTOUT_MIPPED, 10L, 8) == null,
+                    "Never-published terrain layer must still reject stale section generation");
 
             var finalResult = requireReservation(store.reserve(7, TerrainRenderType.CUTOUT, 12L, 8),
                     "Independent supported terrain layer reservation must fit");
             require(store.publish(finalResult, 8, false),
                     "Supported cutout GPU terrain output must publish");
             store.invalidateSection(7, 12L);
-            require(!store.getResidency(7, TerrainRenderType.CUTOUT).valid(),
+            require(!store.getResidency(7, TerrainRenderType.CUTOUT).valid()
+                            && store.getSectionGeneration(7) == 12L,
                     "Section invalidation must revoke every terrain-layer output");
+            require(store.reserve(7, TerrainRenderType.CUTOUT_MIPPED, 11L, 8) == null,
+                    "Explicit invalidation must reject stale work on unused layers");
             require(store.reserve(7, TerrainRenderType.TRANSLUCENT, 13L, 8) == null
                             && store.reserve(7, TerrainRenderType.TRIPWIRE, 13L, 8) == null,
                     "Translucent and tripwire terrain must remain CPU-only");
@@ -90,7 +107,7 @@ public final class GpuTerrainOutputStoreSmokeTest {
             store.invalidateSection(8, 21L);
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, generation revocation, same-generation retry fallback, translucent/tripwire CPU fallback");
+                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, section-global generation revocation, same-generation retry fallback, translucent/tripwire CPU fallback");
         } finally {
             Vulkan.waitIdle();
             if(store != null)
