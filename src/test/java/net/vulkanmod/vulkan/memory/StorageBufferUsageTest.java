@@ -20,9 +20,15 @@ public final class StorageBufferUsageTest {
         RecordingMemory memory = new RecordingMemory();
         MemoryTypes.GPU_MEM = memory;
         try {
-            new AreaBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 256, Integer.BYTES);
+            new VertexBuffer(128, memory);
             require(memory.lastUsage == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                    "Vertex AreaBuffer must retain vertex usage");
+                    "Generic VertexBuffer must remain vertex-only");
+
+            new AreaBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 256, Integer.BYTES);
+            int expectedTerrainVertexUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                    | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            require(memory.lastUsage == expectedTerrainVertexUsage,
+                    "Terrain vertex AreaBuffer must be storage-writable without changing generic VertexBuffer usage");
 
             new AreaBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 256, Short.BYTES);
             require(memory.lastUsage == VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
