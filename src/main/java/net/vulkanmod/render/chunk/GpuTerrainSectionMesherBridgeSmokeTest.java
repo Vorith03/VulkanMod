@@ -15,13 +15,13 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         require(table.templateCount() > 0,
                 "GPU terrain bridge smoke requires a qualified baked model");
         int qualifiedState = table.stateIdForTemplate(0);
+        int unsupportedVisibleState = Block.getId(Blocks.OAK_SLAB.defaultBlockState());
 
         require(GpuTerrainSectionMesherBridge.fullyQualified(
                         fixture(qualifiedState, -1, 0, false)),
                 "Qualified cubes plus invisible air must be bridge-safe");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1,
-                                Block.getId(Blocks.CHEST.defaultBlockState()), false)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, false)),
                 "Visible unsupported block geometry must retain CPU fallback");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
                         fixture(qualifiedState, 1,
@@ -31,8 +31,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                         fixture(qualifiedState, 0, qualifiedState, false)),
                 "A visible qualified state without its captured GPU_FULL_CUBE bit must fail closed");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1,
-                                Block.getId(Blocks.CHEST.defaultBlockState()), true)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, true)),
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
