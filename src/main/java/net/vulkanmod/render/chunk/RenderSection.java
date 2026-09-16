@@ -38,6 +38,9 @@ public class RenderSection {
 
     private boolean dirty = true;
     private long voxelGeneration;
+    private long gpuTerrainPreflightGeneration = Long.MIN_VALUE;
+    private long gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
+    private int gpuTerrainPreflightFaceCount = -1;
     private boolean playerChanged;
 
     private boolean completelyEmpty = true;
@@ -338,6 +341,46 @@ public class RenderSection {
 
     public synchronized long getVoxelGeneration() { return this.voxelGeneration; }
 
+    public static boolean gpuTerrainMesherEnabled() {
+        return GpuTerrainSectionMesherBridge.enabled();
+    }
+
+    @Nullable
+    public static GpuTerrainPreflight qualifyGpuTerrain(SectionVoxelSnapshot snapshot) {
+        GpuTerrainSectionMesherBridge.Qualification qualification =
+                GpuTerrainSectionMesherBridge.qualify(snapshot);
+        return qualification == null ? null
+                : new GpuTerrainPreflight(qualification.modelGeneration(), qualification.faceCount());
+    }
+
+    public synchronized void stageGpuTerrainPreflight(@Nullable GpuTerrainPreflight preflight,
+                                                      long generation) {
+        if(generation != this.voxelGeneration)
+            return;
+        if(preflight == null) {
+            this.clearGpuTerrainPreflight();
+            return;
+        }
+        this.gpuTerrainPreflightGeneration = generation;
+        this.gpuTerrainPreflightModelGeneration = preflight.modelGeneration();
+        this.gpuTerrainPreflightFaceCount = preflight.faceCount();
+    }
+
+    synchronized boolean matchesStagedGpuTerrainPreflight(long generation,
+                                                          long modelGeneration,
+                                                          int faceCount) {
+        return generation == this.voxelGeneration
+                && this.gpuTerrainPreflightGeneration == generation
+                && this.gpuTerrainPreflightModelGeneration == modelGeneration
+                && this.gpuTerrainPreflightFaceCount == faceCount;
+    }
+
+    private void clearGpuTerrainPreflight() {
+        this.gpuTerrainPreflightGeneration = Long.MIN_VALUE;
+        this.gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
+        this.gpuTerrainPreflightFaceCount = -1;
+    }
+
     public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
         this.publishVoxels(snapshot, null, generation);
     }
@@ -357,6 +400,7 @@ public class RenderSection {
     synchronized void invalidateVoxels() {
         // The missing-neighbor BuildTask path also marks a section dirty from a
         // worker. Serialize generation + store invalidation with publication.
+        this.clearGpuTerrainPreflight();
         if (!RegionVoxelStore.ENABLED) return;
         this.voxelGeneration++;
         if (this.chunkArea != null)
@@ -384,6 +428,8 @@ public class RenderSection {
     public short getLastFrame() {
         return this.lastFrame;
     }
+
+    public record GpuTerrainPreflight(long modelGeneration, int faceCount) {}
 
     static class CompileStatus {
         CompiledSection compiledSection = CompiledSection.UNCOMPILED;
