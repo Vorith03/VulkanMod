@@ -30,9 +30,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * GPU-first sections may briefly have no draw until exact GPU output publishes, and
  * any dispatch/completion failure schedules a CPU recovery rebuild. Mixed or
  * unsupported sections remain CPU-only. Dispatch runs as a later render-thread
- * operation after input upload and outside an active render pass. Completion is
- * deferred until the frame fence covers the same-queue helper submission; no
- * production terrain dispatch waits its own Vulkan fence on the render thread.</p>
+ * operation after input upload and outside an active render pass. Completion can be
+ * consumed from a non-blocking helper-fence poll on a later render frame; the original
+ * frame-fence callback remains the guaranteed fallback, so production never waits a
+ * helper fence on the render thread.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
@@ -60,6 +61,13 @@ final class GpuTerrainSectionMesherBridge {
 
     static boolean cpuBypassEnabled() {
         return CPU_BYPASS_ENABLED;
+    }
+
+    static synchronized void pollCompletions() {
+        if(!ENABLED || mesher == null)
+            return;
+        RenderSystem.assertOnRenderThread();
+        mesher.pollCompletions();
     }
 
     static TerrainRenderType outputLayer() {
@@ -312,7 +320,7 @@ final class GpuTerrainSectionMesherBridge {
                 result.writtenFaces(), cpuBypassed);
         if(ACTIVE_LOGGED.compareAndSet(false, true)) {
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; completion published after frame-fence retirement without a helper fence wait",
+                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; completion published without a blocking helper fence wait",
                     section.xOffset(), section.yOffset(), section.zOffset(), layer.ordinal(),
                     result.writtenFaces(), cpuBypassed);
         }
