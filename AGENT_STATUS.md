@@ -11,41 +11,50 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Branch: `forge-1.20.1`.
-- **Code checkpoint:** `bc25dde8d296c8a55e40aa175978474093711f4c` (`terrain: pin GPU output until frame completion`). A future session should compare this checkpoint to live HEAD rather than expecting this file to mirror every docs-only commit.
-- CI #515, run `35175848665`, is fully green for `bc25dde8`; artifact: `vulkanmod-forge-1.20.1-bc25dde`.
+- Integration target: `forge-1.20.1`.
+- GPU-terrain production work is intentionally isolated on `gpu-terrain-continuation-20260917` while compatibility work proceeds concurrently on Forge.
+- Terrain-only recovery base: `e7db1ad4d23ebca93d35882f2e28c97a5bf774e3` (`test: restore terrain upload frame after retirement smoke`).
+- Current GPU-terrain branch head: `b0beef0ca8bca8871e26293813580a0a4a85daef` (`terrain: dispatch meshing after input upload submission`), plus the preceding lock-order and post-submit infrastructure commits.
+- Draft PR #4 targets live `forge-1.20.1` so CI validates the terrain work with the concurrent compatibility changes. At this checkpoint it is mergeable but must remain unmerged until combined CI is fully green and live Forge has been reconciled again.
+- CI #589 / run `35267716153` is in progress for `b0beef0`; the Gradle build and first Vulkan startup smoke have passed. Do not call the run green until the remaining smokes finish.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
-- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. The current experimental production path is ready for narrow real-driver correctness validation, but no Phase 7.4 performance or default-path gate is closed yet.
-- User priority remains explicit: move repetitive terrain construction from CPU workers to the GPU while preserving conservative CPU fallback for arbitrary Minecraft/Forge semantics. Mesh shaders are optional/later.
+- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**. No accelerated-default or performance gate is closed yet.
 
 ## Task-relevant references
 
-Always use `AGENTS.md` and the active `ROADMAP.md` gate. For the current GPU-terrain slice, the primary contracts are `docs/GPU_TERRAIN_BOUNDARY.md`, `docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md`, `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`, and `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. Consult the indirect-selection, lighting-demand, voxel-residency, performance, priority-override, or chat-handoff documents only when the active change actually touches those concerns. The ownership note predates the latest production dispatch/draw integration; live code and this checkpoint supersede any statement there that says production dispatch/draw consumption does not yet exist.
+Always use `AGENTS.md` and the active `ROADMAP.md` gate. For the current slice, the primary contracts are `docs/GPU_TERRAIN_BOUNDARY.md`, `docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md`, `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`, and `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. Live code supersedes older wording that says production GPU dispatch/draw consumption or fresh-section CPU bypass do not exist.
 
 ## Current GPU-terrain checkpoint
 
-The bounded compute path can classify a section, compact qualified faces, reconstruct complete 20-byte terrain vertices (position, UV, Minecraft-matched AO/color/light), and write them directly into generation-owned persistent `ChunkArea` vertex storage.
+The bounded compute path classifies qualified ordinary cubes, reconstructs complete 20-byte terrain vertices, and writes exact-generation output directly into persistent `ChunkArea` vertex storage. Unsupported/mixed Forge content remains on CPU.
 
-`GpuTerrainSectionMesher` is a production-owned dispatcher, and `GpuTerrainSectionMesherBridge` now has a genuinely asynchronous production completion path. Qualified rebuilds may skip ordinary CPU `renderBatched(...)` work for the supported SOLID/CUTOUT subset instead of first building the same geometry on the CPU. The earlier synchronous render-thread fence wait remains available only to the dedicated validation/smoke path; production submission no longer waits for GPU completion on the render thread.
+`GpuTerrainSectionMesher` has a non-blocking production dispatch path. `GpuTerrainSectionMesherBridge` can now make a fully-qualified **fresh section** GPU-first: the worker captures immutable voxel/lighting/preflight inputs, skips ordinary CPU `renderBatched(...)`, preserves the expected terrain layer in compiled metadata, and lets exact GPU residency become the section's first draw. Rebuilds may likewise bypass new CPU tessellation while retaining an older CPU mesh until replacement succeeds.
 
-The production draw consumer remains default-off and incremental. `RegionDrawBatch.FrameBatch` can substitute exact-generation `GpuTerrainOutputStore.Residency` once completion publishes it; while a qualified GPU rebuild is pending, the previous CPU mesh stays drawable. Output publication/invalidation advances mesh revision so cached frame batches cannot retain stale CPU/GPU commands. The shared uint16 auto-quad limit remains enforced.
+The synchronous fence-wait dispatcher remains validation/smoke-only. Production completion is consumed after fence-safe helper execution; output reservations and resident slices remain physically pinned across invalidation until GPU/frame retirement makes reuse safe.
 
-### Completion and allocation lifetime
+### Fresh-section fail-closed recovery
 
-The in-flight lifetime hole discovered while making completion non-blocking is fixed at `bc25dde8`: logical invalidation of a submitted output no longer makes its physical allocation reusable while GPU work may still write it. Submitted slices remain physically pinned until the frame-fence completion callback retires them. CI #515 includes focused coverage that invalidates a submitted generation, proves a competing maximum allocation cannot reuse/grow through that slice, completes the stale submission without publishing it, and only then permits the capacity to be allocated again.
+Fresh GPU-first sections no longer rely on a pre-existing CPU draw for safety. Instead, any current-generation input publication, qualification, reservation, submission, readback, output-count, overflow, or generation failure requests an ordinary CPU recovery rebuild. Recovery disables CPU bypass until that CPU rebuild succeeds.
 
-### Fail-closed CPU-bypass boundary
+The September 17 continuation found and fixed a real lock-order hazard in this recovery path. Normal publication holds `RenderSection -> ChunkArea`, while the original input-failure recovery attempted `ChunkArea -> RenderSection`. `08622966` now defers recovery onto the terrain frame queue so the `ChunkArea` monitor is released before section state is acquired. The same fix includes `RegionVoxelGpuStore` construction in the fail-closed upload exception path.
 
-CPU bypass is deliberately limited to rebuilds that already have a usable CPU terrain fallback:
+### Upload-to-compute latency
 
-- fresh/uncompiled sections cannot bypass CPU tessellation;
-- sections already requesting GPU-terrain recovery cannot bypass;
-- candidate sections must retain a compiled, ready CPU mesh while asynchronous GPU work is pending;
-- arbitrary Forge callbacks, dynamic/unsupported or mixed models, block entities, fluids, translucent and tripwire terrain remain CPU-only;
-- missing/stale residency, model-generation turnover, unsupported geometry, allocation/dispatch failure, overflow, cancellation, completion error, exact face-count mismatch, draw-residency mismatch, or invalid draw range fails closed;
-- a failed current-generation GPU attempt requests normal CPU recovery/rebuild while the previous CPU draw remains resident rather than exposing missing terrain.
+`b0beef0` removes an unnecessary same-frame-slot recycle delay before production meshing. Voxel and sparse-lighting residency is intentionally published once the upload command buffer has been **submitted** in graphics-queue order; it does not require device completion before a later same-queue consumer is submitted.
 
-All accelerated pieces remain opt-in. Production CPU bypass requires all three properties:
+`AreaUploadManager` now supports post-upload-submission consumers that are made ready only after the upload-residency callbacks run, then executes those consumers outside the manager monitor. `ChunkArea` uses this path for GPU-terrain dispatch. The resulting queue order is upload copy -> transfer-write/shader-read barrier -> compute dispatch, without a render-thread fence wait and without introducing `AreaUploadManager -> ChunkArea` lock inversion.
+
+The compute barrier has been rechecked: voxel, lighting and model inputs use `VK_ACCESS_TRANSFER_WRITE_BIT -> VK_ACCESS_SHADER_READ_BIT` with transfer/compute stages, so the same-queue handoff is explicit Vulkan synchronization rather than relying on submission order alone.
+
+### Remaining completion latency / bounded capacity
+
+Production compute completion is still guaranteed by a frame-slot `MemoryManager` callback. The helper compute command buffer also has its own fence, and `Synchronization.checkFenceStatus(...)` is available. A promising next production slice is to poll those helper fences non-blockingly at a render-frame safe point, publish completed output and release the 32 descriptor slots earlier, while retaining the existing frame-slot callback as the correctness fallback. Do not replace this with a blocking fence wait or an unbounded retry loop.
+
+The fixed `MAX_IN_FLIGHT = 32` pool should not be enlarged speculatively. Earlier completion may solve most transient saturation naturally; use diagnostics/validation evidence before changing the bound or adding a pending-dispatch queue.
+
+## Fail-closed boundary
+
+All accelerated pieces remain opt-in. CPU bypass requires all three properties:
 
 ```text
 -Dvulkanmod.experimentalGpuTerrainMesher=true
@@ -53,32 +62,16 @@ All accelerated pieces remain opt-in. Production CPU bypass requires all three p
 -Dvulkanmod.experimentalGpuTerrainDrawHandoff=true
 ```
 
-Sparse GPU lighting remains enabled by default unless explicitly disabled separately.
+Arbitrary Forge callbacks, unsupported or mixed models, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid draw ranges and failed GPU work must remain CPU/recovery paths. Sparse GPU lighting remains enabled by default unless explicitly disabled separately.
 
-## Validation state
+## Validation / parallel-work state
 
-CI #515 is the first checkpoint that covers both of the blockers that previously made a user-machine test premature: non-blocking production completion mechanics and submitted-output allocation pinning through GPU/frame completion. The full workflow is green, including build, renderer regression checks, Vulkan startup paths, indirect-draw smoke, post-chain/depth coverage, lavapipe renderer regression coverage, compatibility source smoke, and the focused GPU-terrain bridge/output-store tests.
+A separate user-authorized validation/CI thread is concurrently reviewing GPU-terrain synchronization, lifetime, race, fallback, allocation and publication hazards and may add focused tests/diagnostics. This production thread remains the owner of substantive GPU-terrain architecture. Treat findings from the validation thread as evidence to integrate, not as a competing implementation.
 
-This is **not** performance sign-off. No dense-terrain A/B result, CPU p99 reduction, frame-time acceptance, VRAM acceptance, or accelerated-default claim is implied by the green CI.
+Do not ask for another RX 6900 XT test merely because this checkpoint changed. First finish combined CI and consume any materially relevant validation-thread findings. A new user-machine test is warranted only when it answers a hardware/runtime question that CI and existing evidence cannot answer.
 
-## Next action — first RX 6900 XT functional test
+## Outstanding RX evidence / performance boundary
 
-The next useful evidence is now a deliberately narrow real-driver test on the user's RX 6900 XT using the exact CI #515 artifact `vulkanmod-forge-1.20.1-bc25dde`.
+Prior user evidence remains valid: experimental GPU-indirect consumption had clean initial comparator samples; F3+T and world re-entry worked; FTB Chunks large-map terrain remained black due to its null-`BlockState` map task; the prior center/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
 
-1. Enable the three experimental properties above; do not change unrelated GPU-terrain or sparse-lighting options.
-2. Enter a representative world and let nearby terrain finish its ordinary initial build. Initial/fresh sections are expected to remain CPU-built because they have no retained CPU fallback yet.
-3. In an already rendered section containing ordinary vanilla SOLID terrain, place and then break a simple full-cube block such as stone to force one or more rebuilds of a section that has an existing CPU fallback.
-4. Check that the edited section stays visually intact—no disappearing/corrupt geometry, persistent stale block face, device loss, hang, or crash—while the asynchronous replacement completes.
-5. Capture the `VULKANMOD_GPU_TERRAIN_` log lines. A successful exercised path should show `VULKANMOD_GPU_TERRAIN_CPU_BYPASS_SUBMITTED` followed by `VULKANMOD_GPU_TERRAIN_CPU_BYPASS_COMPLETE` for an applicable attempt. `..._FALLBACK` on unsupported geometry is acceptable and should remain visually correct; `..._FAIL` should trigger CPU recovery rather than missing terrain and is evidence to inspect, not a reason to hide the log.
-
-Do **not** collect FPS or performance A/B data in this first test. Establish real RADV completion/draw/lifetime correctness first; performance testing becomes meaningful only after that succeeds.
-
-## Outstanding RX evidence
-
-The Phase 7 visibility/selection gate still needs a representative movement/churn sample. Prior user evidence remains valid: build #444 activated experimental GPU indirect consumption with eight clean initial comparator samples; F3+T and two world re-entries worked; FTB Chunks large-map terrain remained black due to its null `BlockState` map task; the center-screen/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
-
-The first production CPU-bypass/draw-handoff RX 6900 XT test is now warranted because CI #515 removed the known synchronous-completion and in-flight-allocation blockers. Keep this first test functional and narrowly scoped; do not conflate it with the later Phase 7.4 performance gate.
-
-## Safety / performance boundary
-
-Do not claim a speedup yet. The accelerated path is still experimental and opt-in, and only a qualified subset can skip CPU geometry emission. The CPU path remains authoritative fallback for unsupported content and for recovery. Performance A/B work begins only after the first real-driver functional test confirms that asynchronous completion, draw handoff, and failure recovery behave correctly on the target RX 6900 XT/RADV stack. Existing Phase 5/6 measurement gates remain open.
+Do not claim a speedup yet. Fresh-section CPU tessellation can now be bypassed for the qualified subset and the upload-to-compute submission delay has been shortened, but representative RADV correctness plus comparable Phase 5/6 frame-time evidence are still required before any performance or accelerated-default conclusion.
