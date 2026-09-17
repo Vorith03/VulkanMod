@@ -21,6 +21,7 @@
     "compatibility.FTBLibraryScissorMixin",
     "compatibility.ImmersivePortalsCHelperMixin",
     "compatibility.ImmersivePortalsFrontClippingMixin",
+    "compatibility.ImmersivePortalsLevelRendererMixin",
     "compatibility.ImmersivePortalsMyRenderHelperMixin",
     "compatibility.ImmersivePortalsPortalRendererMixin",
     "compatibility.ImmersivePortalsQueryManagerMixin",
