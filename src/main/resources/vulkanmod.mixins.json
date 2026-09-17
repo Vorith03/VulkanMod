@@ -37,6 +37,7 @@
     "debug.TerrainDebugOverlayMixin",
     "debug.FTBLibraryCompatSmokeMixin",
     "debug.ImmersivePortalsCompatSmokeMixin",
+    "debug.PickupNotifierCompatSmokeMixin",
     "debug.VulkanLifecycleMemoryMixin",
     "debug.WorldRendererLifecycleMemoryMixin",
 
