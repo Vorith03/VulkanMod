@@ -15,7 +15,7 @@ import org.joml.Vector3i;
  * <p>The synchronous mesher oracle proves shader output. This smoke instead launches
  * real {@link GpuTerrainSectionMesher#dispatchAsync} submissions from a recording
  * frame, deliberately fills the bounded descriptor pool until it rejects another
- * submission, and waits for every accepted callback through either the non-blocking
+ * submission, and waits for every accepted callback through either a non-blocking
  * helper-fence poll or the original frame-slot retirement fallback. CI does not report
  * the Vulkan smoke as passed until that happens.</p>
  */
@@ -46,9 +46,15 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
         armed = true;
     }
 
-    /** Called only after Renderer.beginFrame has begun recording a real frame. */
+    /** Called after each Renderer.beginFrame has begun recording a real frame. */
     public static synchronized void onFrameStarted() {
-        if(!armed || started)
+        if(started) {
+            AsyncRun run = active;
+            if(run != null)
+                run.pollCompletions();
+            return;
+        }
+        if(!armed)
             return;
         if(Renderer.getInstance() == null || !Renderer.getInstance().isRecordingFrame())
             return;
@@ -184,6 +190,11 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
             require(pinned,
                     "Async section-mesher reservation must pin after submission");
             submissionReturned = true;
+        }
+
+        void pollCompletions() {
+            if(mesher != null)
+                mesher.pollCompletions();
         }
 
         private void completeOne(GpuTerrainSectionMesher.DispatchResult result,
