@@ -65,6 +65,7 @@
     "render.GlProgramManagerMixin",
     "render.GlStateManagerM",
     "render.GlStateManagerClearDepthMixin",
+    "render.GlStateManagerFramebufferQueryMixin",
     "render.vertex.IndexTypeMixin",
     "render.MinecraftMixin",
     "render.ResourceReloadMixin",
