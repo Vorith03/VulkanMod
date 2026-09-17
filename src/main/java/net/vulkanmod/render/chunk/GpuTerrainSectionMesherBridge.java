@@ -150,18 +150,18 @@ final class GpuTerrainSectionMesherBridge {
         }
 
         try {
-            Boolean submitted = reservation.withTarget(target -> mesher.dispatchAsync(
+            boolean submitted = reservation.submitWithTarget(target -> mesher.dispatchAsync(
                     voxelPage, voxel, lightingPage, lighting, model,
                     modelTable.templateCount(), target, faceCapacity,
                     (result, failure) -> completeDispatch(area, section, generation,
                             modelGeneration, faceCapacity, cpuBypassed, layer,
                             reservation, result, failure)));
-            if(!Boolean.TRUE.equals(submitted)) {
-                area.publishGpuTerrainOutput(reservation, 0, true);
+            if(!submitted) {
+                reservation.complete(0, true);
                 recoverCpuFallback(area, section, generation);
             }
         } catch(RuntimeException error) {
-            area.publishGpuTerrainOutput(reservation, 0, true);
+            reservation.complete(0, true);
             recoverCpuFallback(area, section, generation);
             reportDispatchFailure("GPU terrain section submission failed; preserving CPU terrain fallback",
                     error);
@@ -176,12 +176,12 @@ final class GpuTerrainSectionMesherBridge {
         RenderSystem.assertOnRenderThread();
 
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
-            area.publishGpuTerrainOutput(reservation, 0, true);
+            reservation.complete(0, true);
             return;
         }
 
         if(failure != null) {
-            area.publishGpuTerrainOutput(reservation, 0, true);
+            reservation.complete(0, true);
             recoverCpuFallback(area, section, generation);
             reportDispatchFailure("GPU terrain section completion readback failed; preserving CPU terrain fallback",
                     failure);
@@ -191,7 +191,7 @@ final class GpuTerrainSectionMesherBridge {
         if(GpuTerrainModelRegistry.generation() != modelGeneration
                 || !section.matchesStagedGpuTerrainPreflight(
                         generation, modelGeneration, faceCapacity)) {
-            area.publishGpuTerrainOutput(reservation, 0, true);
+            reservation.complete(0, true);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -202,13 +202,12 @@ final class GpuTerrainSectionMesherBridge {
                 && result.requestedFaces() == faceCapacity
                 && result.writtenFaces() == faceCapacity;
         if(!exact) {
-            area.publishGpuTerrainOutput(reservation, 0, true);
+            reservation.complete(0, true);
             recoverCpuFallback(area, section, generation);
             return;
         }
 
-        boolean published = area.publishGpuTerrainOutput(
-                reservation, result.writtenFaces(), false);
+        boolean published = reservation.complete(result.writtenFaces(), false);
         if(!published) {
             recoverCpuFallback(area, section, generation);
             return;
