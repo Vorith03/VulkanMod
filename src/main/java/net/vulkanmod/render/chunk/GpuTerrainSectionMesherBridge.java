@@ -77,19 +77,43 @@ final class GpuTerrainSectionMesherBridge {
             return;
 
         RenderSystem.assertOnRenderThread();
-        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation)
+        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
+            GpuTerrainDiagnostics.record("dispatch", "section_stale_before_dispatch",
+                    section, generation, null);
             return;
+        }
 
         boolean cpuBypassed = section.stagedGpuTerrainCpuBypassed(generation);
         int x = section.xOffset();
         int y = section.yOffset();
         int z = section.zOffset();
         SectionVoxelSnapshot snapshot = area.getVoxels(x, y, z);
+        if(snapshot == null) {
+            GpuTerrainDiagnostics.record("dispatch", "snapshot_missing",
+                    section, generation, null);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+        if(snapshot.x() != x || snapshot.y() != y || snapshot.z() != z) {
+            GpuTerrainDiagnostics.record("dispatch", "snapshot_origin_mismatch",
+                    section, generation,
+                    "snapshot=(" + snapshot.x() + "," + snapshot.y() + "," + snapshot.z() + ")");
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
         Qualification qualification = qualify(snapshot);
-        if(snapshot == null || snapshot.x() != x || snapshot.y() != y || snapshot.z() != z
-                || qualification == null
-                || !section.matchesStagedGpuTerrainPreflight(generation,
-                        qualification.modelGeneration(), qualification.faceCount())) {
+        if(qualification == null) {
+            GpuTerrainDiagnostics.recordQualificationFailure(snapshot, section, generation);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+        if(!section.matchesStagedGpuTerrainPreflight(generation,
+                qualification.modelGeneration(), qualification.faceCount())) {
+            GpuTerrainDiagnostics.record("dispatch", "staged_preflight_mismatch",
+                    section, generation,
+                    "modelGeneration=" + qualification.modelGeneration()
+                            + " faces=" + qualification.faceCount());
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -98,12 +122,26 @@ final class GpuTerrainSectionMesherBridge {
         DrawBuffers.DrawParameters cpu = section.getDrawParameters(layer);
         if(cpu.indexCount <= 0 || cpu.indexCount % 6 != 0
                 || !cpu.vertexBufferSegment.isReady()) {
+            GpuTerrainDiagnostics.record("dispatch", "cpu_fallback_not_ready",
+                    section, generation,
+                    "indexCount=" + cpu.indexCount
+                            + " segmentReady=" + cpu.vertexBufferSegment.isReady()
+                            + " cpuBypassed=" + cpuBypassed);
             recoverCpuFallback(area, section, generation);
             return;
         }
 
         int faceCapacity = qualification.faceCount();
-        if(faceCapacity <= 0 || faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES) {
+        if(faceCapacity <= 0) {
+            GpuTerrainDiagnostics.record("dispatch", "face_count_empty",
+                    section, generation, null);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+        if(faceCapacity > GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES) {
+            GpuTerrainDiagnostics.record("dispatch", "face_count_overflow",
+                    section, generation,
+                    "faces=" + faceCapacity + " limit=" + GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -113,21 +151,45 @@ final class GpuTerrainSectionMesherBridge {
         // the previous generation's CPU fallback instead; comparing its face count
         // with current inputs would reject legitimate edits and defeat the bypass.
         if(!cpuBypassed && cpu.indexCount / 6 != faceCapacity) {
+            GpuTerrainDiagnostics.record("dispatch", "shadow_face_count_mismatch",
+                    section, generation,
+                    "cpuFaces=" + (cpu.indexCount / 6) + " gpuFaces=" + faceCapacity);
             recoverCpuFallback(area, section, generation);
             return;
         }
 
         RegionVoxelGpuStore.Residency voxel = area.getGpuVoxelResidency(x, y, z);
         RegionVoxelGpuStore.Residency lighting = area.getGpuSparseLightingResidency(x, y, z);
-        if(voxel == null || lighting == null || !voxel.valid() || !lighting.valid()
+        if(voxel == null || lighting == null) {
+            GpuTerrainDiagnostics.record("dispatch", "input_residency_missing",
+                    section, generation,
+                    "voxel=" + (voxel != null) + " lighting=" + (lighting != null));
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+        if(!voxel.valid() || !lighting.valid()
                 || voxel.generation() != generation || lighting.generation() != generation) {
+            GpuTerrainDiagnostics.record("dispatch", "input_residency_stale",
+                    section, generation,
+                    "voxelValid=" + voxel.valid() + " voxelGeneration=" + voxel.generation()
+                            + " lightingValid=" + lighting.valid()
+                            + " lightingGeneration=" + lighting.generation());
             recoverCpuFallback(area, section, generation);
             return;
         }
 
         StorageBuffer voxelPage = area.getGpuVoxelPage(voxel.pageIndex());
         StorageBuffer lightingPage = area.getGpuVoxelPage(lighting.pageIndex());
-        if(voxelPage == null || lightingPage == null || !ensureGpuResources()) {
+        if(voxelPage == null || lightingPage == null) {
+            GpuTerrainDiagnostics.record("dispatch", "input_page_missing",
+                    section, generation,
+                    "voxelPage=" + (voxelPage != null) + " lightingPage=" + (lightingPage != null));
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+        if(!ensureGpuResources()) {
+            GpuTerrainDiagnostics.record("dispatch", "gpu_resources_unavailable",
+                    section, generation, null);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -138,6 +200,12 @@ final class GpuTerrainSectionMesherBridge {
                 || model.generation() != modelGeneration
                 || model.generation() != modelTable.generation()
                 || model.generation() != GpuTerrainModelRegistry.generation()) {
+            GpuTerrainDiagnostics.record("dispatch", "model_generation_mismatch",
+                    section, generation,
+                    "residentValid=" + model.valid()
+                            + " residentGeneration=" + model.generation()
+                            + " expectedGeneration=" + modelGeneration
+                            + " registryGeneration=" + GpuTerrainModelRegistry.generation());
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -145,6 +213,8 @@ final class GpuTerrainSectionMesherBridge {
         GpuTerrainOutputStore.Reservation reservation = area.reserveGpuTerrainOutput(
                 x, y, z, layer, generation, faceCapacity);
         if(reservation == null) {
+            GpuTerrainDiagnostics.record("dispatch", "output_reservation_failed",
+                    section, generation, "faces=" + faceCapacity);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -158,10 +228,14 @@ final class GpuTerrainSectionMesherBridge {
                             reservation, result, failure)));
             if(!submitted) {
                 reservation.complete(0, true);
+                GpuTerrainDiagnostics.record("dispatch", "submission_rejected",
+                        section, generation, "faces=" + faceCapacity);
                 recoverCpuFallback(area, section, generation);
             }
         } catch(RuntimeException error) {
             reservation.complete(0, true);
+            GpuTerrainDiagnostics.record("dispatch", "submission_exception",
+                    section, generation, error.getClass().getName() + ": " + error.getMessage());
             recoverCpuFallback(area, section, generation);
             reportDispatchFailure("GPU terrain section submission failed; preserving CPU terrain fallback",
                     error);
@@ -177,11 +251,15 @@ final class GpuTerrainSectionMesherBridge {
 
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
             reservation.complete(0, true);
+            GpuTerrainDiagnostics.record("completion", "section_stale",
+                    section, generation, null);
             return;
         }
 
         if(failure != null) {
             reservation.complete(0, true);
+            GpuTerrainDiagnostics.record("completion", "readback_failed",
+                    section, generation, failure.getClass().getName() + ": " + failure.getMessage());
             recoverCpuFallback(area, section, generation);
             reportDispatchFailure("GPU terrain section completion readback failed; preserving CPU terrain fallback",
                     failure);
@@ -192,6 +270,11 @@ final class GpuTerrainSectionMesherBridge {
                 || !section.matchesStagedGpuTerrainPreflight(
                         generation, modelGeneration, faceCapacity)) {
             reservation.complete(0, true);
+            GpuTerrainDiagnostics.record("completion", "generation_or_preflight_changed",
+                    section, generation,
+                    "modelGeneration=" + modelGeneration
+                            + " registryGeneration=" + GpuTerrainModelRegistry.generation()
+                            + " faces=" + faceCapacity);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -203,16 +286,28 @@ final class GpuTerrainSectionMesherBridge {
                 && result.writtenFaces() == faceCapacity;
         if(!exact) {
             reservation.complete(0, true);
+            String detail = result == null ? "result=null"
+                    : "overflow=" + result.overflow()
+                            + " errorFlags=0x" + Integer.toHexString(result.errorFlags())
+                            + " requested=" + result.requestedFaces()
+                            + " written=" + result.writtenFaces()
+                            + " expected=" + faceCapacity;
+            GpuTerrainDiagnostics.record("completion", "output_mismatch",
+                    section, generation, detail);
             recoverCpuFallback(area, section, generation);
             return;
         }
 
         boolean published = reservation.complete(result.writtenFaces(), false);
         if(!published) {
+            GpuTerrainDiagnostics.record("completion", "publication_rejected",
+                    section, generation, "faces=" + result.writtenFaces());
             recoverCpuFallback(area, section, generation);
             return;
         }
 
+        GpuTerrainDiagnostics.recordSuccess("published", section, generation,
+                result.writtenFaces(), cpuBypassed);
         if(ACTIVE_LOGGED.compareAndSet(false, true)) {
             Initializer.LOGGER.info(
                     "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; completion published after frame-fence retirement without a helper fence wait",
@@ -237,10 +332,13 @@ final class GpuTerrainSectionMesherBridge {
         RenderSystem.assertOnRenderThread();
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation)
             return;
-        if(section.requestGpuTerrainCpuRecovery(generation)
-                && RECOVERY_LOGGED.compareAndSet(false, true)) {
-            Initializer.LOGGER.warn(
-                    "VULKANMOD_GPU_TERRAIN_CPU_RECOVERY: GPU rebuild could not publish; retained CPU geometry is active and one CPU rebuild was requested");
+        if(section.requestGpuTerrainCpuRecovery(generation)) {
+            GpuTerrainDiagnostics.record("recovery", "cpu_rebuild_requested",
+                    section, generation, null);
+            if(RECOVERY_LOGGED.compareAndSet(false, true)) {
+                Initializer.LOGGER.warn(
+                        "VULKANMOD_GPU_TERRAIN_CPU_RECOVERY: GPU rebuild could not publish; retained CPU geometry is active and one CPU rebuild was requested");
+            }
         }
     }
 
