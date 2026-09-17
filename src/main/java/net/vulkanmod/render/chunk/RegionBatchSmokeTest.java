@@ -196,8 +196,11 @@ public final class RegionBatchSmokeTest {
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
                     "Section reset must invalidate cached geometry");
 
-            // If a coarse slot unexpectedly still owns geometry, keep the old safe
-            // behavior instead of reusing storage whose contents may still matter.
+            // If a coarse slot unexpectedly still owns geometry, detach the old
+            // DrawBuffers immediately so the recycled region can proceed, but keep
+            // that old backing allocation alive until every frame slot crosses its
+            // retirement boundary. RegionBatchLayoutTest separately proves that the
+            // all-slot callback cannot fire early.
             long fallbackBefore = RegionBatchStats.regionBufferFallbacks;
             try(MemoryStack stack = MemoryStack.stackPush()) {
                 AreaBuffer.Segment liveSegment = new AreaBuffer.Segment();
@@ -207,9 +210,22 @@ public final class RegionBatchSmokeTest {
             }
             require(recycleBuffers.hasLiveGeometry(), "Fallback probe must create live region geometry");
             recycleArea.repositionForReuse(384, -128, 128);
-            require(!recycleBuffers.isAllocated(), "Live region geometry must retain release/reallocate fallback");
+            DrawBuffers replacementBuffers = recycleArea.drawBuffers;
+            require(replacementBuffers != recycleBuffers,
+                    "Live region reuse must detach the old DrawBuffers immediately");
+            require(recycleBuffers.isAllocated(),
+                    "Detached live region buffers must remain allocated until all frame slots retire");
+            require(!replacementBuffers.isAllocated(),
+                    "Recycled region must receive fresh lazy DrawBuffers");
             require(RegionBatchStats.regionBufferFallbacks == fallbackBefore + 1,
                     "Live-region fallback must be observable in terrain stats");
+
+            Device.getGraphicsQueue().waitIdle();
+            for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame) {
+                AreaUploadManager.INSTANCE.updateFrame(frame);
+            }
+            require(!recycleBuffers.isAllocated(),
+                    "Detached live region buffers must release after every frame slot retires");
 
             Initializer.LOGGER.info("Terrain region cache smoke test passed");
         } finally {
