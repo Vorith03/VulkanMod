@@ -17,7 +17,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         int qualifiedState = table.stateIdForTemplate(0);
         int unsupportedVisibleState = Block.getId(Blocks.OAK_SLAB.defaultBlockState());
 
-        SectionVoxelSnapshot isolatedCube = fixture(qualifiedState, -1, 0, false, false);
+        SectionVoxelSnapshot isolatedCube = fixture(qualifiedState, -1, 0, false, 0, false);
         require(GpuTerrainSectionMesherBridge.fullyQualified(isolatedCube),
                 "Qualified cubes plus invisible air must be bridge-safe");
         GpuTerrainSectionMesherBridge.Qualification isolatedPlan =
@@ -52,34 +52,43 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                 "Same-generation fallback must clear staged GPU ownership");
 
         SectionVoxelSnapshot boundaryOccludedCube = fixture(
-                qualifiedState, -1, 0, false, true);
+                qualifiedState, -1, 0, false, 0, true);
         GpuTerrainSectionMesherBridge.Qualification boundaryPlan =
                 GpuTerrainSectionMesherBridge.qualify(boundaryOccludedCube);
         require(boundaryPlan != null && boundaryPlan.faceCount() == 3,
                 "Input-only qualification must mirror boundary-halo face rejection");
 
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1, unsupportedVisibleState, false, false)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, false, 0, false)),
                 "Visible unsupported block geometry must retain CPU fallback");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
                         fixture(qualifiedState, 1,
-                                Block.getId(Blocks.WATER.defaultBlockState()), false, false)),
+                                Block.getId(Blocks.WATER.defaultBlockState()), false, 0, false)),
                 "Fluid geometry must retain CPU fallback");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 0, qualifiedState, false, false)),
+                        fixture(qualifiedState, 1, qualifiedState, true,
+                                SectionVoxelSnapshot.HAS_FLUID, false)),
+                "A GPU-qualified waterlogged/full-cube state must retain CPU fallback");
+        require(!GpuTerrainSectionMesherBridge.fullyQualified(
+                        fixture(qualifiedState, 1, qualifiedState, true,
+                                SectionVoxelSnapshot.HAS_BLOCK_ENTITY, false)),
+                "A GPU-qualified block-entity-backed full cube must retain CPU fallback");
+        require(!GpuTerrainSectionMesherBridge.fullyQualified(
+                        fixture(qualifiedState, 0, qualifiedState, false, 0, false)),
                 "A visible qualified state without its captured GPU_FULL_CUBE bit must fail closed");
         require(!GpuTerrainSectionMesherBridge.fullyQualified(
-                        fixture(qualifiedState, 1, unsupportedVisibleState, true, false)),
+                        fixture(qualifiedState, 1, unsupportedVisibleState, true, 0, false)),
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation ownership is fail-closed; unsupported visible, fluid, missing-bit and stale/forged qualification cases retain CPU fallback");
+                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation ownership is fail-closed; unsupported visible, fluid, block-entity, waterlogged/full-cube, missing-bit and stale/forged qualification cases retain CPU fallback");
     }
 
     private static SectionVoxelSnapshot fixture(int qualifiedState,
                                                 int replacementIndex,
                                                 int replacementState,
                                                 boolean replacementGpuFlag,
+                                                int replacementExtraFlags,
                                                 boolean occludeCubeBoundary) {
         int airState = Block.getId(Blocks.AIR.defaultBlockState());
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 64, 0);
@@ -92,7 +101,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
             }
             if(index == replacementIndex) {
                 stateId = replacementState;
-                flags = SectionVoxelSnapshot.CPU_REQUIRED
+                flags = SectionVoxelSnapshot.CPU_REQUIRED | replacementExtraFlags
                         | (replacementGpuFlag ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0);
             }
             builder.add(stateId, flags);
