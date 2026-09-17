@@ -4,10 +4,12 @@ import net.vulkanmod.Initializer;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Restart-time gate for live sparse-lighting capture. CPU terrain remains authoritative. */
+/** Restart-time gate for live sparse-lighting capture. CPU terrain remains the fallback. */
 public final class GpuSparseLightingMode {
     public static final String PROPERTY = "vulkanmod.experimentalGpuSparseLighting";
-    public static final boolean ENABLED = Boolean.getBoolean(PROPERTY);
+    private static final String CPU_BYPASS_PROPERTY = "vulkanmod.experimentalGpuTerrainCpuBypass";
+    public static final boolean ENABLED = Boolean.getBoolean(PROPERTY)
+            || Boolean.getBoolean(CPU_BYPASS_PROPERTY);
     private static final AtomicBoolean CAPTURE_FAILURE_REPORTED = new AtomicBoolean();
 
     private GpuSparseLightingMode() {}

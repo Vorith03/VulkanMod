@@ -30,17 +30,19 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.util.ArrayDeque;
+import java.util.function.BiConsumer;
 
 import static org.lwjgl.vulkan.VK10.*;
 
 /**
  * Reusable Vulkan dispatcher for the bounded section terrain compute kernel.
  *
- * <p>The caller owns generation validation and output reservation/publication. This
- * class owns only the Vulkan pipeline contract and one synchronous dispatch. The
- * dispatch is intentionally synchronous for the first production bridge so success,
- * overflow and shader errors are known before publication; it must therefore run on
- * the render thread, never a chunk worker. CPU terrain remains authoritative.</p>
+ * <p>The caller owns generation validation and output reservation/publication. The
+ * production path can submit bounded compute without waiting on its helper fence:
+ * completion is consumed from a frame callback only after the main graphics fence
+ * has covered the same-queue helper submission. The validation oracle remains
+ * synchronous so CI can inspect complete generated payloads deterministically.</p>
  */
 public final class GpuTerrainSectionMesher implements AutoCloseable {
     static final int RESULT_HEADER_WORDS = 6;
@@ -48,13 +50,16 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
     static final int WORDS_PER_FACE = GpuTerrainOutputStore.BYTES_PER_FACE / Integer.BYTES;
     private static final int PUSH_CONSTANT_BYTES = 7 * Integer.BYTES;
     private static final int WORKGROUP_COUNT = SectionVoxelSnapshot.BLOCK_COUNT / 64;
+    private static final int MAX_IN_FLIGHT = 32;
 
     private long descriptorSetLayout;
     private long descriptorPool;
-    private long descriptorSet;
+    private final long[] descriptorSets = new long[MAX_IN_FLIGHT];
+    private final ArrayDeque<Integer> availableDescriptorSlots = new ArrayDeque<>(MAX_IN_FLIGHT);
     private long pipelineLayout;
     private long pipeline;
     private boolean closed;
+    private boolean resourcesDestroyed;
 
     public GpuTerrainSectionMesher() {
         if(!graphicsQueueSupportsCompute())
@@ -65,14 +70,102 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         createPipeline();
     }
 
-    /** Production path: read back only the six-word completion header. */
+    /**
+     * Compatibility/smoke path. Production callers should prefer dispatchAsync() so
+     * they never turn successful GPU offload into a render-thread fence wait.
+     */
     public DispatchResult dispatch(
             StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxel,
             StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lighting,
             GpuTerrainModelGpuStore.Residency model, int templateCount,
             GpuTerrainOutputStore.Target target, int faceCapacity) {
-        return dispatchInternal(voxelPage, voxel, lightingPage, lighting, model,
-                templateCount, target, faceCapacity, false).dispatch();
+        int slot = claimDescriptorSlot();
+        if(slot < 0)
+            throw new IllegalStateException("No section-mesher descriptor slot is available");
+        try {
+            return dispatchInternal(voxelPage, voxel, lightingPage, lighting, model,
+                    templateCount, target, faceCapacity, false, descriptorSets[slot]).dispatch();
+        } finally {
+            releaseDescriptorSlot(slot);
+        }
+    }
+
+    /**
+     * Production submission path. Returns false only when the bounded descriptor-slot
+     * pool is saturated. A true return means the helper work was submitted and the
+     * completion callback will run on the render thread after the main frame fence
+     * proves the compute/readback copy has completed. The callback receives either a
+     * result or a readback failure, never both.
+     */
+    public boolean dispatchAsync(
+            StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxel,
+            StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lighting,
+            GpuTerrainModelGpuStore.Residency model, int templateCount,
+            GpuTerrainOutputStore.Target target, int faceCapacity,
+            BiConsumer<DispatchResult, RuntimeException> completion) {
+        if(completion == null)
+            throw new IllegalArgumentException("Section mesher completion callback must be present");
+        validateDispatch(voxelPage, voxel, lightingPage, lighting, model,
+                templateCount, target, faceCapacity);
+
+        int slot = claimDescriptorSlot();
+        if(slot < 0)
+            return false;
+
+        int resultWords = Math.addExact(RESULT_HEADER_WORDS, faceCapacity);
+        int resultBytes = Math.multiplyExact(resultWords, Integer.BYTES);
+        int readbackBytes = RESULT_HEADER_WORDS * Integer.BYTES;
+        StorageBuffer result = null;
+        long readbackBuffer = VK_NULL_HANDLE;
+        long readbackAllocation = VK_NULL_HANDLE;
+        boolean completionScheduled = false;
+
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            result = new StorageBuffer(resultBytes, MemoryTypes.GPU_MEM);
+            LongBuffer pReadbackBuffer = stack.mallocLong(1);
+            var pReadbackAllocation = stack.mallocPointer(1);
+            MemoryManager memoryManager = MemoryManager.getInstance();
+            memoryManager.createBuffer(readbackBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pReadbackBuffer, pReadbackAllocation);
+            readbackBuffer = pReadbackBuffer.get(0);
+            readbackAllocation = pReadbackAllocation.get(0);
+
+            submitDispatch(voxelPage, voxel, lightingPage, lighting, model,
+                    templateCount, target, faceCapacity, descriptorSets[slot], result,
+                    resultBytes, readbackBuffer, false, 0);
+
+            StorageBuffer completedResult = result;
+            long completedReadbackBuffer = readbackBuffer;
+            long completedReadbackAllocation = readbackAllocation;
+            int completedSlot = slot;
+            memoryManager.addFrameOp(() -> {
+                DispatchResult dispatchResult = null;
+                RuntimeException readbackFailure = null;
+                try {
+                    dispatchResult = readDispatchResult(memoryManager,
+                            completedReadbackAllocation, readbackBytes);
+                } catch(RuntimeException error) {
+                    readbackFailure = error;
+                } finally {
+                    completedResult.freeBuffer();
+                    MemoryManager.freeBuffer(completedReadbackBuffer,
+                            completedReadbackAllocation);
+                    releaseDescriptorSlot(completedSlot);
+                }
+                completion.accept(dispatchResult, readbackFailure);
+            });
+            completionScheduled = true;
+            return true;
+        } finally {
+            if(!completionScheduled) {
+                if(result != null)
+                    result.freeBuffer();
+                if(readbackBuffer != VK_NULL_HANDLE)
+                    MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
+                releaseDescriptorSlot(slot);
+            }
+        }
     }
 
     /**
@@ -84,8 +177,15 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lighting,
             GpuTerrainModelGpuStore.Residency model, int templateCount,
             GpuTerrainOutputStore.Target target, int faceCapacity) {
-        return dispatchInternal(voxelPage, voxel, lightingPage, lighting, model,
-                templateCount, target, faceCapacity, true);
+        int slot = claimDescriptorSlot();
+        if(slot < 0)
+            throw new IllegalStateException("No section-mesher descriptor slot is available");
+        try {
+            return dispatchInternal(voxelPage, voxel, lightingPage, lighting, model,
+                    templateCount, target, faceCapacity, true, descriptorSets[slot]);
+        } finally {
+            releaseDescriptorSlot(slot);
+        }
     }
 
     private ValidationResult dispatchInternal(
@@ -93,7 +193,7 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lighting,
             GpuTerrainModelGpuStore.Residency model, int templateCount,
             GpuTerrainOutputStore.Target target, int faceCapacity,
-            boolean capturePayload) {
+            boolean capturePayload, long descriptorSet) {
         validateDispatch(voxelPage, voxel, lightingPage, lighting, model,
                 templateCount, target, faceCapacity);
 
@@ -118,7 +218,51 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             readbackBuffer = pReadbackBuffer.get(0);
             readbackAllocation = pReadbackAllocation.get(0);
 
-            updateDescriptorSet(voxelPage, lightingPage, model.buffer(),
+            CommandPool.CommandBuffer commandBuffer = submitDispatch(
+                    voxelPage, voxel, lightingPage, lighting, model, templateCount,
+                    target, faceCapacity, descriptorSet, result, resultBytes,
+                    readbackBuffer, capturePayload, vertexBytes);
+
+            Synchronization.waitFence(commandBuffer.getFence());
+            Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
+
+            int[] header = new int[RESULT_HEADER_WORDS];
+            int[] descriptors = capturePayload ? new int[faceCapacity] : new int[0];
+            int[] vertices = capturePayload ? new int[vertexWords] : new int[0];
+            long allocation = readbackAllocation;
+            memoryManager.MapAndCopy(allocation, readbackBytes, pointer -> {
+                ByteBuffer bytes = pointer.getByteBuffer(0, readbackBytes)
+                        .order(ByteOrder.nativeOrder());
+                for(int i = 0; i < header.length; ++i)
+                    header[i] = bytes.getInt(i * Integer.BYTES);
+                if(capturePayload) {
+                    for(int i = 0; i < descriptors.length; ++i)
+                        descriptors[i] = bytes.getInt((RESULT_HEADER_WORDS + i)
+                                * Integer.BYTES);
+                    for(int i = 0; i < vertices.length; ++i)
+                        vertices[i] = bytes.getInt(resultBytes + i * Integer.BYTES);
+                }
+            });
+
+            DispatchResult dispatch = new DispatchResult(
+                    header[0], header[1], header[2] != 0, header[3]);
+            return new ValidationResult(dispatch, descriptors, vertices);
+        } finally {
+            result.freeBuffer();
+            if(readbackBuffer != VK_NULL_HANDLE)
+                MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
+        }
+    }
+
+    private CommandPool.CommandBuffer submitDispatch(
+            StorageBuffer voxelPage, RegionVoxelGpuStore.Residency voxel,
+            StorageBuffer lightingPage, RegionVoxelGpuStore.Residency lighting,
+            GpuTerrainModelGpuStore.Residency model, int templateCount,
+            GpuTerrainOutputStore.Target target, int faceCapacity,
+            long descriptorSet, StorageBuffer result, int resultBytes,
+            long readbackBuffer, boolean capturePayload, int vertexBytes) {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            updateDescriptorSet(descriptorSet, voxelPage, lightingPage, model.buffer(),
                     target.bufferId(), result, resultBytes);
 
             CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().beginCommands();
@@ -154,39 +298,25 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
                         target.byteOffset(), readbackBuffer, resultBytes, vertexBytes);
             }
 
-            // Reservation.withTarget holds the AreaBuffer monitor until submission.
-            // Waiting here is deliberately render-thread-only and gives publication
-            // an unambiguous completion/error boundary for the first bridge.
+            // Reservation.withTarget keeps the AreaBuffer handle stable through this
+            // submission. Later area-buffer growth is submitted on the same graphics
+            // queue, so it observes these writes before copying/retiring the old buffer.
             Device.getGraphicsQueue().submitCommands(commandBuffer);
-            Synchronization.waitFence(commandBuffer.getFence());
-            Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(commandBuffer);
-
-            int[] header = new int[RESULT_HEADER_WORDS];
-            int[] descriptors = capturePayload ? new int[faceCapacity] : new int[0];
-            int[] vertices = capturePayload ? new int[vertexWords] : new int[0];
-            long allocation = readbackAllocation;
-            memoryManager.MapAndCopy(allocation, readbackBytes, pointer -> {
-                ByteBuffer bytes = pointer.getByteBuffer(0, readbackBytes)
-                        .order(ByteOrder.nativeOrder());
-                for(int i = 0; i < header.length; ++i)
-                    header[i] = bytes.getInt(i * Integer.BYTES);
-                if(capturePayload) {
-                    for(int i = 0; i < descriptors.length; ++i)
-                        descriptors[i] = bytes.getInt((RESULT_HEADER_WORDS + i)
-                                * Integer.BYTES);
-                    for(int i = 0; i < vertices.length; ++i)
-                        vertices[i] = bytes.getInt(resultBytes + i * Integer.BYTES);
-                }
-            });
-
-            DispatchResult dispatch = new DispatchResult(
-                    header[0], header[1], header[2] != 0, header[3]);
-            return new ValidationResult(dispatch, descriptors, vertices);
-        } finally {
-            result.freeBuffer();
-            if(readbackBuffer != VK_NULL_HANDLE)
-                MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
+            return commandBuffer;
         }
+    }
+
+    private static DispatchResult readDispatchResult(MemoryManager memoryManager,
+                                                     long readbackAllocation,
+                                                     int readbackBytes) {
+        int[] header = new int[RESULT_HEADER_WORDS];
+        memoryManager.MapAndCopy(readbackAllocation, readbackBytes, pointer -> {
+            ByteBuffer bytes = pointer.getByteBuffer(0, readbackBytes)
+                    .order(ByteOrder.nativeOrder());
+            for(int i = 0; i < header.length; ++i)
+                header[i] = bytes.getInt(i * Integer.BYTES);
+        });
+        return new DispatchResult(header[0], header[1], header[2] != 0, header[3]);
     }
 
     private void validateDispatch(
@@ -237,21 +367,27 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             descriptorSetLayout = pLayout.get(0);
 
             VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
-            poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(5);
+            poolSizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(MAX_IN_FLIGHT * 5);
             VkDescriptorPoolCreateInfo poolInfo = VkDescriptorPoolCreateInfo.calloc(stack)
-                    .sType$Default().pPoolSizes(poolSizes).maxSets(1);
+                    .sType$Default().pPoolSizes(poolSizes).maxSets(MAX_IN_FLIGHT);
             LongBuffer pPool = stack.mallocLong(1);
             check(vkCreateDescriptorPool(Device.device, poolInfo, null, pPool),
                     "create section mesher descriptor pool");
             descriptorPool = pPool.get(0);
 
+            LongBuffer layouts = stack.mallocLong(MAX_IN_FLIGHT);
+            for(int slot = 0; slot < MAX_IN_FLIGHT; ++slot)
+                layouts.put(slot, descriptorSetLayout);
+            LongBuffer sets = stack.mallocLong(MAX_IN_FLIGHT);
             VkDescriptorSetAllocateInfo allocateInfo = VkDescriptorSetAllocateInfo.calloc(stack)
-                    .sType$Default().descriptorPool(descriptorPool)
-                    .pSetLayouts(stack.longs(descriptorSetLayout));
-            LongBuffer pSet = stack.mallocLong(1);
-            check(vkAllocateDescriptorSets(Device.device, allocateInfo, pSet),
-                    "allocate section mesher descriptor set");
-            descriptorSet = pSet.get(0);
+                    .sType$Default().descriptorPool(descriptorPool).pSetLayouts(layouts);
+            check(vkAllocateDescriptorSets(Device.device, allocateInfo, sets),
+                    "allocate section mesher descriptor sets");
+            for(int slot = 0; slot < MAX_IN_FLIGHT; ++slot) {
+                descriptorSets[slot] = sets.get(slot);
+                availableDescriptorSlots.addLast(slot);
+            }
         }
     }
 
@@ -276,14 +412,14 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
                 SPIRVUtils.ShaderKind.COMPUTE_SHADER);
         long shaderModule = VK_NULL_HANDLE;
         try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkShaderModuleCreateInfo moduleInfo = VkShaderModuleCreateInfo.calloc(stack)
+            VkShaderModuleCreateInfo moduleInfo = VkShaderModuleCreateInfo.callocStack(stack)
                     .sType$Default().pCode(spirv.bytecode());
             LongBuffer pModule = stack.mallocLong(1);
             check(vkCreateShaderModule(Device.device, moduleInfo, null, pModule),
                     "create section mesher shader module");
             shaderModule = pModule.get(0);
 
-            VkPipelineShaderStageCreateInfo stageInfo = VkPipelineShaderStageCreateInfo.calloc(stack)
+            VkPipelineShaderStageCreateInfo stageInfo = VkPipelineShaderStageCreateInfo.callocStack(stack)
                     .sType$Default().stage(VK_SHADER_STAGE_COMPUTE_BIT)
                     .module(shaderModule).pName(stack.UTF8("main"));
             VkComputePipelineCreateInfo.Buffer pipelineInfo =
@@ -303,7 +439,8 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         }
     }
 
-    private void updateDescriptorSet(StorageBuffer voxelPage,
+    private void updateDescriptorSet(long targetDescriptorSet,
+                                     StorageBuffer voxelPage,
                                      StorageBuffer lightingPage,
                                      StorageBuffer modelBuffer,
                                      long targetBuffer,
@@ -322,7 +459,7 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
 
             VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(5, stack);
             for(int i = 0; i < 5; ++i) {
-                writes.get(i).sType$Default().dstSet(descriptorSet).dstBinding(i)
+                writes.get(i).sType$Default().dstSet(targetDescriptorSet).dstBinding(i)
                         .dstArrayElement(0).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                         .descriptorCount(1)
                         .pBufferInfo(VkDescriptorBufferInfo.create(infos.get(i).address(), 1));
@@ -440,16 +577,37 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         }
     }
 
+    private synchronized int claimDescriptorSlot() {
+        if(closed)
+            throw new IllegalStateException("Section mesher is closed");
+        Integer slot = availableDescriptorSlots.pollFirst();
+        return slot == null ? -1 : slot;
+    }
+
+    private synchronized void releaseDescriptorSlot(int slot) {
+        availableDescriptorSlots.addLast(slot);
+        if(closed && availableDescriptorSlots.size() == MAX_IN_FLIGHT)
+            destroyResources();
+    }
+
     private static void check(int result, String action) {
         if(result != VK_SUCCESS)
             throw new RuntimeException("Failed to " + action + ": " + result);
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if(closed)
             return;
         closed = true;
+        if(availableDescriptorSlots.size() == MAX_IN_FLIGHT)
+            destroyResources();
+    }
+
+    private void destroyResources() {
+        if(resourcesDestroyed)
+            return;
+        resourcesDestroyed = true;
         if(pipeline != VK_NULL_HANDLE)
             vkDestroyPipeline(Device.device, pipeline, null);
         if(pipelineLayout != VK_NULL_HANDLE)

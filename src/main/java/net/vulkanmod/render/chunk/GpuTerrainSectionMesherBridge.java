@@ -30,7 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * does not exist, so the immutable worker plan becomes authoritative while the older
  * ready CPU mesh remains resident for recovery. Mixed or unsupported sections remain
  * CPU-only. Dispatch runs as a later render-thread operation after input upload and
- * outside an active render pass.</p>
+ * outside an active render pass. Completion is deferred until the frame fence covers
+ * the same-queue helper submission; no production terrain dispatch waits its own
+ * Vulkan fence on the render thread.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
@@ -131,8 +133,9 @@ final class GpuTerrainSectionMesherBridge {
         }
 
         GpuTerrainModelGpuStore.Residency model = modelStore.getResidency();
+        long modelGeneration = qualification.modelGeneration();
         if(!model.valid() || modelTable == null
-                || model.generation() != qualification.modelGeneration()
+                || model.generation() != modelGeneration
                 || model.generation() != modelTable.generation()
                 || model.generation() != GpuTerrainModelRegistry.generation()) {
             recoverCpuFallback(area, section, generation);
@@ -147,42 +150,81 @@ final class GpuTerrainSectionMesherBridge {
         }
 
         try {
-            GpuTerrainSectionMesher.DispatchResult result = reservation.withTarget(target ->
-                    mesher.dispatch(voxelPage, voxel, lightingPage, lighting, model,
-                            modelTable.templateCount(), target, faceCapacity));
-
-            boolean exact = result != null
-                    && !result.overflow()
-                    && result.errorFlags() == 0
-                    && result.requestedFaces() == faceCapacity
-                    && result.writtenFaces() == faceCapacity;
-            if(!exact || section.getVoxelGeneration() != generation) {
+            Boolean submitted = reservation.withTarget(target -> mesher.dispatchAsync(
+                    voxelPage, voxel, lightingPage, lighting, model,
+                    modelTable.templateCount(), target, faceCapacity,
+                    (result, failure) -> completeDispatch(area, section, generation,
+                            modelGeneration, faceCapacity, cpuBypassed, layer,
+                            reservation, result, failure)));
+            if(!Boolean.TRUE.equals(submitted)) {
                 area.publishGpuTerrainOutput(reservation, 0, true);
                 recoverCpuFallback(area, section, generation);
-                return;
-            }
-
-            boolean published = area.publishGpuTerrainOutput(
-                    reservation, result.writtenFaces(), false);
-            if(!published) {
-                recoverCpuFallback(area, section, generation);
-                return;
-            }
-
-            if(ACTIVE_LOGGED.compareAndSet(false, true)) {
-                Initializer.LOGGER.info(
-                        "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; ready CPU fallback remains resident",
-                        x, y, z, layer.ordinal(), result.writtenFaces(), cpuBypassed);
             }
         } catch(RuntimeException error) {
             area.publishGpuTerrainOutput(reservation, 0, true);
             recoverCpuFallback(area, section, generation);
-            if(FAILURE_LOGGED.compareAndSet(false, true)) {
-                Initializer.LOGGER.warn(
-                        "GPU terrain section dispatch failed; preserving CPU terrain fallback",
-                        error);
-            }
+            reportDispatchFailure("GPU terrain section submission failed; preserving CPU terrain fallback",
+                    error);
         }
+    }
+
+    private static synchronized void completeDispatch(
+            ChunkArea area, RenderSection section, long generation,
+            long modelGeneration, int faceCapacity, boolean cpuBypassed,
+            TerrainRenderType layer, GpuTerrainOutputStore.Reservation reservation,
+            GpuTerrainSectionMesher.DispatchResult result, RuntimeException failure) {
+        RenderSystem.assertOnRenderThread();
+
+        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
+            area.publishGpuTerrainOutput(reservation, 0, true);
+            return;
+        }
+
+        if(failure != null) {
+            area.publishGpuTerrainOutput(reservation, 0, true);
+            recoverCpuFallback(area, section, generation);
+            reportDispatchFailure("GPU terrain section completion readback failed; preserving CPU terrain fallback",
+                    failure);
+            return;
+        }
+
+        if(GpuTerrainModelRegistry.generation() != modelGeneration
+                || !section.matchesStagedGpuTerrainPreflight(
+                        generation, modelGeneration, faceCapacity)) {
+            area.publishGpuTerrainOutput(reservation, 0, true);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        boolean exact = result != null
+                && !result.overflow()
+                && result.errorFlags() == 0
+                && result.requestedFaces() == faceCapacity
+                && result.writtenFaces() == faceCapacity;
+        if(!exact) {
+            area.publishGpuTerrainOutput(reservation, 0, true);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        boolean published = area.publishGpuTerrainOutput(
+                reservation, result.writtenFaces(), false);
+        if(!published) {
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        if(ACTIVE_LOGGED.compareAndSet(false, true)) {
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; completion published after frame-fence retirement without a helper fence wait",
+                    section.xOffset(), section.yOffset(), section.zOffset(), layer.ordinal(),
+                    result.writtenFaces(), cpuBypassed);
+        }
+    }
+
+    private static void reportDispatchFailure(String message, RuntimeException error) {
+        if(FAILURE_LOGGED.compareAndSet(false, true))
+            Initializer.LOGGER.warn(message, error);
     }
 
     /**
