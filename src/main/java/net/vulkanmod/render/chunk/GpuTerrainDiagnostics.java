@@ -7,6 +7,9 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,8 +30,11 @@ public final class GpuTerrainDiagnostics {
             "vulkanmod.experimentalGpuTerrainDiagnostics", "true"))
             && Boolean.getBoolean("vulkanmod.experimentalGpuTerrainMesher");
     private static final long SUMMARY_INTERVAL_NANOS = 10_000_000_000L;
+    private static final int MAX_BLOCKER_KEYS = 256;
+    private static final int BLOCKER_SUMMARY_LIMIT = 8;
 
     private static final ConcurrentHashMap<String, AtomicLong> COUNTS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, AtomicLong> BLOCKER_COUNTS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, AtomicBoolean> SAMPLE_LOGGED = new ConcurrentHashMap<>();
     private static final AtomicLong LAST_SUMMARY_NANOS = new AtomicLong(System.nanoTime());
 
@@ -154,6 +160,7 @@ public final class GpuTerrainDiagnostics {
                                     SectionVoxelSnapshot snapshot, RenderSection section,
                                     long generation, int index, int stateId, int flags) {
         BlockState state = Block.stateById(stateId);
+        recordBlocker(reason, stateId, state);
         int x = index & 15;
         int y = (index >>> 4) & 15;
         int z = (index >>> 8) & 15;
@@ -163,6 +170,21 @@ public final class GpuTerrainDiagnostics {
                 + " flags=0x" + Integer.toHexString(flags)
                 + " snapshot=(" + snapshot.x() + "," + snapshot.y() + "," + snapshot.z() + ")";
         record(stage, reason, section, generation, detail);
+    }
+
+    private static void recordBlocker(String reason, int stateId, BlockState state) {
+        String key = reason + "/stateId=" + stateId + "/state=" + String.valueOf(state);
+        AtomicLong existing = BLOCKER_COUNTS.get(key);
+        if(existing != null) {
+            existing.incrementAndGet();
+            return;
+        }
+        if(BLOCKER_COUNTS.size() >= MAX_BLOCKER_KEYS) {
+            COUNTS.computeIfAbsent("diagnostics/blocker_key_overflow", ignored -> new AtomicLong())
+                    .incrementAndGet();
+            return;
+        }
+        BLOCKER_COUNTS.computeIfAbsent(key, ignored -> new AtomicLong()).incrementAndGet();
     }
 
     private static void maybeLogSummary() {
@@ -182,5 +204,21 @@ public final class GpuTerrainDiagnostics {
         });
         Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_DIAGNOSTICS_SUMMARY: {}",
                 summary.length() == 0 ? "no-events" : summary);
+
+        List<Map.Entry<String, Long>> blockers = new ArrayList<>();
+        BLOCKER_COUNTS.forEach((key, value) -> blockers.add(Map.entry(key, value.get())));
+        blockers.sort(Comparator.<Map.Entry<String, Long>>comparingLong(Map.Entry::getValue)
+                .reversed().thenComparing(Map.Entry::getKey));
+        if(!blockers.isEmpty()) {
+            StringBuilder top = new StringBuilder();
+            int limit = Math.min(BLOCKER_SUMMARY_LIMIT, blockers.size());
+            for(int i = 0; i < limit; ++i) {
+                if(top.length() > 0)
+                    top.append(", ");
+                Map.Entry<String, Long> blocker = blockers.get(i);
+                top.append(blocker.getKey()).append('=').append(blocker.getValue());
+            }
+            Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_BLOCKER_SUMMARY: {}", top);
+        }
     }
 }
