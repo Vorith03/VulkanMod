@@ -291,6 +291,13 @@ public class TaskDispatcher {
     public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
                                       EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
                                       Runnable publishResult) {
+        this.scheduleSectionUpdate(task, section, uploadBuffers, null, publishResult);
+    }
+
+    public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
+                                      EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
+                                      @Nullable TerrainRenderType preservedLayer,
+                                      Runnable publishResult) {
         long queuedAt = System.nanoTime();
         this.pendingUploadBuffers.addAll(uploadBuffers.values());
         this.toUpload.add(() -> {
@@ -301,7 +308,7 @@ public class TaskDispatcher {
                 }
 
                 long publicationStart = System.nanoTime();
-                this.doSectionUpdate(section, uploadBuffers);
+                this.doSectionUpdate(section, uploadBuffers, preservedLayer);
                 publishResult.run();
                 this.acceptedResults.incrementAndGet();
                 this.publishedBuilds.incrementAndGet();
@@ -320,7 +327,9 @@ public class TaskDispatcher {
         uploadBuffers.values().forEach(UploadBuffer::release);
     }
 
-    private void doSectionUpdate(RenderSection section, EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers) {
+    private void doSectionUpdate(RenderSection section,
+                                 EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
+                                 @Nullable TerrainRenderType preservedLayer) {
         ChunkArea renderArea = section.getChunkArea();
         DrawBuffers drawBuffers = renderArea.getDrawBuffers();
 
@@ -329,7 +338,7 @@ public class TaskDispatcher {
 
             if(uploadBuffer != null) {
                 drawBuffers.upload(uploadBuffer, section.getDrawParameters(renderType));
-            } else {
+            } else if(renderType != preservedLayer) {
                 section.getDrawParameters(renderType).reset(renderArea);
             }
         }
