@@ -150,7 +150,7 @@ final class RegionDrawBatch {
             return;
         loggedGpuTerrainDrawHandoff = true;
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_DRAW_HANDOFF_ACTIVE: region=({}, {}, {}) layer={} gpuDraws={} totalDraws={}; CPU meshes remain available for fallback",
+                "VULKANMOD_GPU_TERRAIN_DRAW_HANDOFF_ACTIVE: region=({}, {}, {}) layer={} gpuDraws={} totalDraws={}; CPU fallback remains available when a CPU mesh exists",
                 area.position.x, area.position.y, area.position.z, type.ordinal(),
                 gpuDrawCount, totalDrawCount);
     }
@@ -396,14 +396,6 @@ final class RegionDrawBatch {
                 while (iterator.hasNext()) {
                     RenderSection section = iterator.next();
                     DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
-                    if (parameters.indexCount == 0) continue;
-                    // Do not cache the absence of a new upload indefinitely. Retry
-                    // until AreaUploadManager has observed its completion fence.
-                    if (!parameters.vertexBufferSegment.isReady()) {
-                        pendingUploads = true;
-                        continue;
-                    }
-
                     GpuTerrainOutputStore.Residency residency = gpuTerrainHandoff
                             ? area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
                                     section.zOffset, type)
@@ -411,10 +403,21 @@ final class RegionDrawBatch {
                     GpuTerrainDrawHandoff.DrawCommand command = GpuTerrainDrawHandoff.select(
                             gpuTerrainHandoff, type, section.getVoxelGeneration(), residency,
                             parameters.indexCount, parameters.firstIndex, parameters.vertexOffset);
+
                     if(command.gpuResident()) {
                         gpuDrawCount++;
                         maxGpuVertexCount = Math.max(maxGpuVertexCount,
                                 command.indexCount() * 2 / 3);
+                    } else {
+                        if(parameters.indexCount == 0)
+                            continue;
+                        // Do not cache the absence of a new CPU upload indefinitely.
+                        // Retry until AreaUploadManager has observed its completion
+                        // fence. Exact GPU residency does not need CPU readiness.
+                        if(!parameters.vertexBufferSegment.isReady()) {
+                            pendingUploads = true;
+                            continue;
+                        }
                     }
 
                     putCommand(data, command.indexCount(), command.firstIndex(), command.vertexOffset(),
