@@ -63,7 +63,8 @@ public final class GpuTerrainHybridMask {
             ownedCount++;
         }
 
-        return new Plan(owned, qualified, ownedCount, boundaryDemotions, exceptionDemotions);
+        return new Plan(snapshot, owned, qualified, ownedCount,
+                boundaryDemotions, exceptionDemotions);
     }
 
     private static boolean unsafeNeighbor(SectionVoxelSnapshot snapshot,
@@ -83,14 +84,17 @@ public final class GpuTerrainHybridMask {
     }
 
     public static final class Plan {
+        private final SectionVoxelSnapshot source;
         private final long[] owned;
         private final int qualifiedCount;
         private final int ownedCount;
         private final int boundaryDemotions;
         private final int exceptionDemotions;
 
-        private Plan(long[] owned, int qualifiedCount, int ownedCount,
+        private Plan(SectionVoxelSnapshot source, long[] owned,
+                     int qualifiedCount, int ownedCount,
                      int boundaryDemotions, int exceptionDemotions) {
+            this.source = source;
             this.owned = owned;
             this.qualifiedCount = qualifiedCount;
             this.ownedCount = ownedCount;
@@ -102,6 +106,46 @@ public final class GpuTerrainHybridMask {
             if(index < 0 || index >= SectionVoxelSnapshot.BLOCK_COUNT)
                 throw new IllegalArgumentException("Hybrid terrain index is outside its section");
             return ((owned[index >>> 6] >>> (index & 63)) & 1L) != 0L;
+        }
+
+        /**
+         * Produce the exact v4 payload that the existing GPU mesher can consume for
+         * this hybrid subset. All state IDs, semantic flags and boundary halo values
+         * are retained; only GPU_FULL_CUBE is cleared for CPU-owned cells. The shader
+         * therefore needs no ABI or descriptor change to emit exactly this subset.
+         */
+        public SectionVoxelSnapshot filteredSnapshot() {
+            SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(
+                    source.x(), source.y(), source.z());
+            for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
+                int flags = source.flags(index);
+                if(!owns(index))
+                    flags &= ~SectionVoxelSnapshot.GPU_FULL_CUBE;
+                builder.add(source.stateId(index), flags);
+
+                int x = index & 15;
+                int y = (index >>> 4) & 15;
+                int z = (index >>> 8) & 15;
+                if(y == 0)
+                    builder.setBoundaryNeighborSolidRender(index, 0,
+                            source.boundaryNeighborSolidRender(index, 0));
+                if(y == 15)
+                    builder.setBoundaryNeighborSolidRender(index, 1,
+                            source.boundaryNeighborSolidRender(index, 1));
+                if(z == 0)
+                    builder.setBoundaryNeighborSolidRender(index, 2,
+                            source.boundaryNeighborSolidRender(index, 2));
+                if(z == 15)
+                    builder.setBoundaryNeighborSolidRender(index, 3,
+                            source.boundaryNeighborSolidRender(index, 3));
+                if(x == 0)
+                    builder.setBoundaryNeighborSolidRender(index, 4,
+                            source.boundaryNeighborSolidRender(index, 4));
+                if(x == 15)
+                    builder.setBoundaryNeighborSolidRender(index, 5,
+                            source.boundaryNeighborSolidRender(index, 5));
+            }
+            return builder.finish();
         }
 
         public int qualifiedCount() {
