@@ -34,6 +34,8 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Mixin(ShaderInstance.class)
@@ -41,6 +43,7 @@ public class ShaderInstanceM implements ShaderMixed {
 
     @Shadow @Final private Map<String, Object> samplerMap;
     @Shadow @Final private Map<String, Uniform> uniformMap;
+    @Shadow @Final private List<Uniform> uniforms;
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
     @Shadow @Final @Nullable public Uniform PROJECTION_MATRIX;
@@ -169,7 +172,16 @@ public class ShaderInstanceM implements ShaderMixed {
                 converter.process(format, vshSrc, fshSrc);
             }
             UBO ubo = converter.getUBO();
-            this.vulkanmod$uniformBindings.bind(ubo, this.uniformMap);
+
+            // Other renderer mods may add Uniform objects dynamically during
+            // ShaderInstance.updateLocations() instead of declaring them in the
+            // shader JSON. Include those objects when resolving converted GLSL
+            // fields so their live values are not replaced by zero fallbacks.
+            Map<String, Uniform> bindingUniforms = new HashMap<>(this.uniformMap);
+            for(Uniform uniform : this.uniforms) {
+                bindingUniforms.putIfAbsent(uniform.getName(), uniform);
+            }
+            this.vulkanmod$uniformBindings.bind(ubo, bindingUniforms);
 
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
