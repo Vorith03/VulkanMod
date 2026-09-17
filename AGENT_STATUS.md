@@ -14,9 +14,11 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Integration target: `forge-1.20.1`; last checked live tip `39f9d9f2cc78b1ca6db193804f3a6bb6f976c6ac`.
 - GPU-terrain production work remains isolated on `gpu-terrain-continuation-20260917` while compatibility work proceeds concurrently.
 - Terrain-only recovery base: `e7db1ad4d23ebca93d35882f2e28c97a5bf774e3`.
-- **Code/test checkpoint:** `661efe514419ea7d0333c5b75cbf9d761a3a23df` (`test: validate polled GPU terrain completion lifecycle`).
-- Draft PR #4 targets `forge-1.20.1`. Keep it unmerged until current compatibility work is reconciled and any newer validation-thread findings are consumed.
-- CI #603 / run `35271183491` validated the code/test checkpoint through build, both Vulkan startup smokes, persistent GPU-indirect smoke, vanilla post/depth chains, screenshot, FTB Library, and Pick Up Notifier. The workflow is **not globally green**: it fails later at the independently owned Immersive Portals compatibility smoke; subsequent compatibility fixtures are skipped.
+- Fresh-hybrid implementation checkpoint before reconciliation: `8240768ae25c8800edd76be46795c3f36c9a1d05` (`terrain: omit qualified cubes on fresh hybrid builds`).
+- Compatibility reconciliation merge: `5327fe80fdbd1058a27ae84261642fc95dd3e490` (`merge: reconcile Forge compatibility with GPU terrain`), with parents `8240768a` and live Forge `39f9d9f2`. The only content conflict was `src/main/resources/vulkanmod.mixins.json`; the resolution preserves Forge's current compatibility registrations plus `debug.GpuTerrainAsyncCompletionSmokeMixin`.
+- Draft PR #4 targets `forge-1.20.1`. Keep it unmerged until the reconciled hybrid head is validated and any newer material validation-thread findings are consumed.
+- The last fully observed terrain validation before hybrid expansion was CI #603 / run `35271183491` at `661efe51`; it passed build, both Vulkan startup smokes, persistent GPU-indirect smoke, vanilla post/depth chains, screenshot, FTB Library, and Pick Up Notifier, then failed at the independently owned Immersive Portals compatibility smoke.
+- **The fresh-hybrid/reconciled head has not yet completed CI.** Do not treat `8240768a`, `5327fe80`, or later documentation-only descendants as validated until a new PR run exercises them.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. Active roadmap remains **Phase 7 — GPU-driven terrain and hybrid meshing**; no accelerated-default or performance gate is closed.
 
 ## Task-relevant references
@@ -25,11 +27,11 @@ Always use `AGENTS.md` and the active `ROADMAP.md` gate. For this subsystem, pri
 
 ## Current GPU-terrain checkpoint
 
-The bounded compute path classifies qualified ordinary cubes, reconstructs complete 20-byte terrain vertices, and writes exact-generation output directly into persistent `ChunkArea` vertex storage. Unsupported/mixed Forge content remains CPU-owned.
+The bounded compute path classifies qualified ordinary cubes, reconstructs complete 20-byte terrain vertices, and writes exact-generation output directly into persistent `ChunkArea` vertex storage. Unsupported Forge content remains CPU-owned.
 
 `GpuTerrainSectionMesherBridge` can make a fully-qualified **fresh section** GPU-first: workers capture immutable voxel/lighting/preflight inputs, skip ordinary CPU `renderBatched(...)`, preserve the expected terrain layer in compiled metadata, and allow exact GPU residency to become the first draw. Rebuilds may likewise bypass new CPU tessellation while retaining an older CPU mesh until replacement succeeds.
 
-The synchronous helper-fence wait remains validation/smoke-only. Production submission and completion are now both non-blocking on the render thread.
+The synchronous helper-fence wait remains validation/smoke-only. Production submission and completion are both non-blocking on the render thread.
 
 ### Fail-closed publication and lock order
 
@@ -53,9 +55,36 @@ Helper **command-buffer recycling remains owned by the existing main-frame retir
 
 The fixed `MAX_IN_FLIGHT = 32` descriptor pool remains unchanged. Do not enlarge it or add a pending-dispatch retry queue without evidence that saturation materially matters; earlier completion should first be evaluated on the target driver.
 
+## Fresh mixed-section hybrid contract
+
+The first hybrid implementation is deliberately restricted to **fresh/uncompiled sections**. Existing mixed-section rebuilds remain CPU-complete because publishing a new partial CPU mesh before its matching GPU half is ready would create transient holes; an atomic two-source replacement protocol is required before rebuild omission is safe.
+
+`GpuTerrainHybridMask` derives a conservative ownership plan over all 4096 section cells. A qualified ordinary cube can be GPU-owned only when it remains interior and is not adjacent to visible CPU-owned exception geometry. Visible unsupported block-model geometry, fluids, and block entities remain CPU-owned and conservatively demote neighboring GPU candidates where required. Invisible exceptions do not poison unrelated neighbors, and boundary demotion does not recursively propagate inward.
+
+The implementation intentionally avoids a voxel ABI bump. For APPEND ownership, the worker creates a filtered **v4** snapshot in which only the GPU-owned subset retains `GPU_FULL_CUBE`; state IDs, all non-ownership semantic flags, and the exact halo are preserved. Existing shader decoding therefore emits only the retained GPU subset without new descriptor/version plumbing. Sparse-lighting capture runs after filtering, so lighting demand follows the GPU-owned subset.
+
+`RenderSection` stages an explicit generation-scoped ownership mode:
+
+- `REPLACE`: existing whole-section GPU ownership; legacy/default preflights remain REPLACE.
+- `APPEND`: CPU exception geometry and GPU ordinary-cube geometry coexist for the same section generation.
+
+APPEND is never inferred from the presence of a CPU mesh. Generation invalidation clears/stales the ownership contract just like the other staged preflight data.
+
+The live region batch can emit CPU then GPU indirect commands for APPEND sections. Capacity is bounded at 1024 commands (at most two commands for each of 512 sections). If the CPU exception upload is still pending, the batch records **neither** half; both are retried together when ready. If exact GPU residency is stale/unavailable, the draw path retains/falls back to the CPU side rather than drawing an unmatched GPU half.
+
+The worker always prefers the stronger whole-section REPLACE qualification first. Hybrid APPEND is considered only when:
+
+1. the three existing experimental acceleration gates are enabled;
+2. `-Dvulkanmod.experimentalGpuTerrainHybrid=true` is also enabled;
+3. the section is fresh/uncompiled;
+4. full REPLACE qualification did not take ownership;
+5. the conservative hybrid planner produces a valid non-empty GPU subset and all subset-specific bridge/model/lighting checks pass.
+
+If hybrid planning, model qualification, filtered lighting capture, publication, dispatch, completion, or output validation fails, the path remains fail-closed: before CPU omission the worker restores the original snapshot and performs complete CPU tessellation; after GPU-first publication has been staged, failure requests a complete CPU recovery rebuild.
+
 ## Validation evidence
 
-`661efe51` incorporates focused validation derived from the parallel validation thread without importing unrelated compatibility work:
+`661efe51` incorporates focused asynchronous-completion validation derived from the parallel validation thread:
 
 - post-submit input publication precedes the consumer and the consumer runs outside the upload-manager monitor;
 - the bounded descriptor pool saturates and rejects the next submission rather than growing unboundedly;
@@ -64,19 +93,26 @@ The fixed `MAX_IN_FLIGHT = 32` descriptor pool remains unchanged. Do not enlarge
 - the later normal frame-slot callbacks drain without delivering duplicate completion;
 - the validation frame mixin is gated by `vulkanmod.smokeTest`, so normal gameplay pays no per-frame test-hook cost.
 
-CI #603 passed both startup variants containing this lifecycle proof, plus the renderer smokes listed above. Its later Immersive Portals failure is a separate compatibility problem, not evidence of terrain failure.
+Hybrid-focused tests added after that checkpoint cover:
 
-The parallel validation thread independently reached the same later-frame polling direction; no newer production hazard was identified in the latest consumed delta.
+- conservative cell ownership/demotion, including non-propagating boundary demotion and visible-vs-invisible CPU exceptions;
+- filtered-v4 projection preserving every state/semantic/halo value except `GPU_FULL_CUBE` ownership;
+- generation-scoped REPLACE/APPEND staging and invalidation;
+- the real mapped `FrameBatch` APPEND layout, CPU-before-GPU ordering, atomic suppression while the CPU upload is pending, retry when ready, and stale-GPU CPU fallback.
+
+These hybrid tests are committed but are **not yet backed by a completed reconciled CI run**. Treat them as implementation evidence, not a closed validation gate.
+
+The parallel validation thread independently reached the same later-frame polling direction; no newer production hazard had been identified at the latest consumed delta.
 
 ## Compatibility intersection
 
-The compatibility branch has added an Immersive Portals `LevelRenderer` opt-out that forces IP's `ip_allowOverrideTerrainSetup()` helper false, keeping VulkanMod terrain visibility/setup authoritative. That boundary is compatible with this GPU-terrain ownership model and does not alter section generations, compute completion, output residency, or CPU recovery.
+Live Forge compatibility changes through `39f9d9f2` are now present in the isolated terrain branch via the two-parent reconciliation merge. The merge graph has live Forge as its exact merge base and the resulting diff against Forge contains only the intended terrain files.
 
-Do not absorb unrelated Immersive Portals implementation into this terrain branch merely to make PR #4 globally green. Reconcile against live Forge once the compatibility work reaches its own durable/validated point.
+Immersive Portals compatibility remains independently owned by the compatibility workstream. Do not redesign or weaken terrain ownership merely to make an unrelated compatibility smoke pass. If the reconciled PR reaches the same later Immersive Portals failure after its terrain/build/Vulkan gates pass, classify that result against the live compatibility evidence rather than treating it as a terrain regression.
 
 ## Fail-closed boundary
 
-All accelerated pieces remain opt-in. CPU bypass requires all three properties:
+All accelerated pieces remain opt-in. Whole-section CPU bypass requires all three properties:
 
 ```text
 -Dvulkanmod.experimentalGpuTerrainMesher=true
@@ -84,16 +120,24 @@ All accelerated pieces remain opt-in. CPU bypass requires all three properties:
 -Dvulkanmod.experimentalGpuTerrainDrawHandoff=true
 ```
 
-Arbitrary Forge callbacks, unsupported or mixed models, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid draw ranges and failed GPU work must remain CPU/recovery paths. Sparse GPU lighting remains enabled by default unless explicitly disabled separately.
+Fresh mixed-section APPEND additionally requires:
+
+```text
+-Dvulkanmod.experimentalGpuTerrainHybrid=true
+```
+
+Arbitrary Forge callbacks, unsupported model work outside the filtered ordinary-cube subset, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid draw ranges and failed GPU work must remain CPU/recovery paths. Sparse GPU lighting remains enabled by default unless explicitly disabled separately.
 
 ## Next action
 
-Do not request a performance A/B yet. First consume any newer material finding from the validation thread and reconcile the terrain branch with the compatibility result when it is ready. Once a combined build can exercise the target modpack without the known Immersive Portals fixture failure, the next user-machine evidence should be a narrow RX 6900 XT/RADV **functional** test of fresh GPU-first publication, early completion, draw handoff, and CPU recovery—not an FPS benchmark.
+Restore and inspect combined PR CI for the reconciled fresh-hybrid head before adding another production architecture slice. Fix the smallest terrain-side compile/test/smoke failure if one appears. If all terrain/build/Vulkan gates pass and the run stops only at a known independently owned compatibility fixture, record that distinction rather than widening terrain scope.
 
-If independent production work continues before reconciliation, keep it bounded and evidence-driven. The most useful next architecture work is the remaining Phase 7 hybrid boundary: determine how qualified ordinary-cube GPU output can coexist with CPU-owned unsupported geometry inside a mixed section without weakening Forge callback semantics, output ownership, or fail-closed recovery. Do not begin by simply skipping qualified blocks inside mixed sections; define a safe two-source publication/merge contract first.
+After the fresh-hybrid path has a combined green terrain validation baseline, add any missing worker-level smoke/diagnostic coverage needed to prove fresh APPEND omission and fail-closed recovery. Do **not** expand APPEND to mixed rebuilds until an atomic CPU+GPU replacement/publication protocol is explicitly designed and regression-covered.
+
+Do not request a performance A/B yet. A user-machine test should be requested only when CI/validation leaves a genuinely hardware-specific correctness question. The first such RX 6900 XT/RADV test should be narrowly functional—fresh GPU-first/APPEND publication, early completion, draw handoff, and CPU recovery—not an FPS benchmark.
 
 ## Outstanding RX evidence / performance boundary
 
 Prior user evidence remains valid: experimental GPU-indirect consumption had clean initial comparator samples; F3+T and world re-entry worked; FTB Chunks large-map terrain remained black due to its null-`BlockState` map task; the prior center/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
 
-Do not claim a speedup yet. Fresh-section CPU tessellation can now be bypassed for the fully-qualified subset and both upload-to-compute and compute-to-publication latency are shortened, but representative RADV correctness plus comparable Phase 5/6 frame-time evidence remain required before any performance or accelerated-default conclusion.
+Do not claim a speedup yet. Fresh-section CPU tessellation can now be bypassed for the fully-qualified subset, a fresh mixed-section APPEND path exists behind an additional experimental gate, and both upload-to-compute and compute-to-publication latency are shortened. Representative RADV correctness plus comparable Phase 5/6 frame-time evidence remain required before any performance or accelerated-default conclusion.
