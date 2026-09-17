@@ -11,6 +11,7 @@ import net.vulkanmod.render.chunk.GpuTerrainSectionMesherBridgeSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTableSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainPersistentVertexSmokeTest;
+import net.vulkanmod.render.chunk.voxel.GpuTerrainSectionMesherAsyncSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainSectionMesherSmokeTest;
 import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -36,8 +37,12 @@ public abstract class BlockModelShaperMixin {
             GpuTerrainPersistentVertexSmokeTest.verify();
             GpuTerrainSectionMesherBridgeSmokeTest.verify();
             GpuTerrainSectionMesherSmokeTest.verify();
-            Initializer.LOGGER.info("Vulkan smoke test passed");
-            System.exit(0);
+            // dispatchAsync completion owns frame-domain resources. Arm the async
+            // smoke here, then launch it only once Renderer.beginFrame is recording a
+            // real frame whose later submission can retire the helper command buffers.
+            GpuTerrainSectionMesherAsyncSmokeTest.arm();
+            Initializer.LOGGER.info(
+                    "Vulkan synchronous smoke probes passed; awaiting async terrain completion validation");
         }
     }
 }

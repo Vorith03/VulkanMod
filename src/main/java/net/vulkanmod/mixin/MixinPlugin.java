@@ -15,8 +15,11 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     private static final String POST_CHAIN_SMOKE_MIXIN =
             "net.vulkanmod.mixin.render.GameRendererPostChainSmokeMixin";
+    private static final String GPU_TERRAIN_ASYNC_SMOKE_MIXIN =
+            "net.vulkanmod.mixin.debug.GpuTerrainAsyncCompletionSmokeMixin";
     private static final String POST_CHAIN_SMOKE_PROPERTY = "vulkanmod.ciPostChainSmoke";
     private static final String DEPTH_POST_CHAIN_SMOKE_PROPERTY = "vulkanmod.ciDepthPostChainSmoke";
+    private static final String VULKAN_SMOKE_PROPERTY = "vulkanmod.smokeTest";
     private static Config config;
 
     @Override
@@ -37,6 +40,11 @@ public class MixinPlugin implements IMixinConfigPlugin {
                 && !Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)
                 && !Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY)
                 && !Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) {
+            return false;
+        }
+
+        if(GPU_TERRAIN_ASYNC_SMOKE_MIXIN.equals(mixinClassName)
+                && !Boolean.getBoolean(VULKAN_SMOKE_PROPERTY)) {
             return false;
         }
 
