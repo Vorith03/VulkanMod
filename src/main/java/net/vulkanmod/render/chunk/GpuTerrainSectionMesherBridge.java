@@ -18,21 +18,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Production bridge from generation-owned section inputs to persistent GPU terrain
- * output. The ordinary path still builds CPU terrain. A separate stricter property
- * may let an already-meshed section skip repeated CPU block-model tessellation while
- * retaining its previous CPU draw as the fail-closed fallback until current GPU work
- * publishes successfully.
+ * output. Fully-qualified sections may skip CPU block-model tessellation, including
+ * fresh sections that do not yet have a CPU mesh; unsupported or failed work requests
+ * a normal CPU rebuild and remains on the conservative path thereafter until recovery.
  *
  * <p>The bridge accepts only sections whose visible block-model geometry consists
- * entirely of qualified GPU full cubes (plus invisible states). For ordinary shadow
- * dispatch it cross-checks the independently planned GPU face count against the new
- * CPU mesh. For the rebuild-only CPU-bypass experiment that new CPU mesh intentionally
- * does not exist, so the immutable worker plan becomes authoritative while the older
- * ready CPU mesh remains resident for recovery. Mixed or unsupported sections remain
- * CPU-only. Dispatch runs as a later render-thread operation after input upload and
- * outside an active render pass. Completion is deferred until the frame fence covers
- * the same-queue helper submission; no production terrain dispatch waits its own
- * Vulkan fence on the render thread.</p>
+ * entirely of qualified GPU full cubes (plus invisible states). Shadow/validation
+ * dispatch still cross-checks the independently planned GPU face count against the
+ * CPU mesh. A CPU-bypassed build instead treats the immutable worker plan as
+ * authoritative. Rebuilds retain their previous CPU mesh when one exists; fresh
+ * GPU-first sections may briefly have no draw until exact GPU output publishes, and
+ * any dispatch/completion failure schedules a CPU recovery rebuild. Mixed or
+ * unsupported sections remain CPU-only. Dispatch runs as a later render-thread
+ * operation after input upload and outside an active render pass. Completion is
+ * deferred until the frame fence covers the same-queue helper submission; no
+ * production terrain dispatch waits its own Vulkan fence on the render thread.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
@@ -120,13 +120,16 @@ final class GpuTerrainSectionMesherBridge {
 
         TerrainRenderType layer = outputLayer();
         DrawBuffers.DrawParameters cpu = section.getDrawParameters(layer);
-        if(cpu.indexCount <= 0 || cpu.indexCount % 6 != 0
-                || !cpu.vertexBufferSegment.isReady()) {
+        // Shadow/validation dispatch still requires its independently-built CPU mesh.
+        // A CPU-bypassed build may be a fresh section and therefore legitimately have
+        // no CPU command yet; exact GPU publication will become its first draw.
+        if(!cpuBypassed && (cpu.indexCount <= 0 || cpu.indexCount % 6 != 0
+                || !cpu.vertexBufferSegment.isReady())) {
             GpuTerrainDiagnostics.record("dispatch", "cpu_fallback_not_ready",
                     section, generation,
                     "indexCount=" + cpu.indexCount
                             + " segmentReady=" + cpu.vertexBufferSegment.isReady()
-                            + " cpuBypassed=" + cpuBypassed);
+                            + " cpuBypassed=false");
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -147,9 +150,8 @@ final class GpuTerrainSectionMesherBridge {
         }
 
         // Shadow/validation mode still has a newly-built CPU mesh, so retain the
-        // independent face-count oracle. A CPU-bypassed rebuild intentionally kept
-        // the previous generation's CPU fallback instead; comparing its face count
-        // with current inputs would reject legitimate edits and defeat the bypass.
+        // independent face-count oracle. A CPU-bypassed build intentionally has no
+        // new CPU mesh, so its immutable worker plan is authoritative.
         if(!cpuBypassed && cpu.indexCount / 6 != faceCapacity) {
             GpuTerrainDiagnostics.record("dispatch", "shadow_face_count_mismatch",
                     section, generation,
@@ -323,8 +325,9 @@ final class GpuTerrainSectionMesherBridge {
 
     /**
      * Recover only a still-current build that deliberately skipped new CPU model
-     * tessellation. The old CPU draw remains resident while setDirty() schedules a
-     * normal rebuild; generation turnover makes delayed recovery a no-op.
+     * tessellation. Rebuilds keep prior CPU geometry when available; fresh GPU-first
+     * sections may have no prior geometry and will become visible after the recovery
+     * rebuild publishes normally. Generation turnover makes delayed recovery a no-op.
      */
     static void recoverCpuFallback(ChunkArea area, RenderSection section, long generation) {
         if(!CPU_BYPASS_ENABLED || area == null || section == null)
@@ -337,7 +340,7 @@ final class GpuTerrainSectionMesherBridge {
                     section, generation, null);
             if(RECOVERY_LOGGED.compareAndSet(false, true)) {
                 Initializer.LOGGER.warn(
-                        "VULKANMOD_GPU_TERRAIN_CPU_RECOVERY: GPU rebuild could not publish; retained CPU geometry is active and one CPU rebuild was requested");
+                        "VULKANMOD_GPU_TERRAIN_CPU_RECOVERY: GPU terrain could not publish; a CPU recovery rebuild was requested and prior CPU geometry remains active when available");
             }
         }
     }
