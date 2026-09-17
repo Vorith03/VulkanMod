@@ -29,6 +29,7 @@ final class RegionDrawBatch {
             && GpuSectionSelectionShadowStore.enabled();
     private static final boolean GPU_TERRAIN_DRAW_HANDOFF = Boolean.getBoolean(
             "vulkanmod.experimentalGpuTerrainDrawHandoff");
+    private static final int MAX_DRAW_COMMANDS = MAX_SECTIONS * 2;
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
     private static boolean loggedGpuIndirectDraw;
@@ -391,40 +392,58 @@ final class RegionDrawBatch {
             gpuDrawCount = 0;
             maxGpuVertexCount = 0;
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                ByteBuffer data = stack.malloc(area.sectionQueue.size() * STRIDE);
+                ByteBuffer data = stack.malloc(area.sectionQueue.size() * 2 * STRIDE);
                 var iterator = area.sectionQueue.iterator(false);
                 while (iterator.hasNext()) {
                     RenderSection section = iterator.next();
+                    long generation = section.getVoxelGeneration();
                     DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
                     GpuTerrainOutputStore.Residency residency = gpuTerrainHandoff
                             ? area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
                                     section.zOffset, type)
                             : null;
-                    GpuTerrainDrawHandoff.DrawCommand command = GpuTerrainDrawHandoff.select(
-                            gpuTerrainHandoff, type, section.getVoxelGeneration(), residency,
-                            parameters.indexCount, parameters.firstIndex, parameters.vertexOffset);
+                    GpuTerrainDrawHandoff.Ownership ownership =
+                            section.stagedGpuTerrainOwnership(generation);
+                    GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(
+                            gpuTerrainHandoff, type, generation, residency,
+                            parameters.indexCount, parameters.firstIndex, parameters.vertexOffset,
+                            ownership);
 
-                    if(command.gpuResident()) {
-                        gpuDrawCount++;
-                        maxGpuVertexCount = Math.max(maxGpuVertexCount,
-                                command.indexCount() * 2 / 3);
-                    } else {
-                        if(parameters.indexCount == 0)
-                            continue;
-                        // Do not cache the absence of a new CPU upload indefinitely.
-                        // Retry until AreaUploadManager has observed its completion
-                        // fence. Exact GPU residency does not need CPU readiness.
-                        if(!parameters.vertexBufferSegment.isReady()) {
-                            pendingUploads = true;
-                            continue;
+                    boolean requiresCpuReady = false;
+                    for(int commandIndex = 0; commandIndex < plan.commandCount(); ++commandIndex) {
+                        GpuTerrainDrawHandoff.DrawCommand command = plan.command(commandIndex);
+                        if(!command.gpuResident() && command.indexCount() > 0) {
+                            requiresCpuReady = true;
+                            break;
                         }
                     }
+                    // APPEND is atomic at frame recording: never record the GPU half
+                    // without its CPU exception half merely because the CPU upload is
+                    // still pending. REPLACE/GPU-only output does not depend on CPU
+                    // readiness and retains the established low-latency path.
+                    if(requiresCpuReady && !parameters.vertexBufferSegment.isReady()) {
+                        pendingUploads = true;
+                        continue;
+                    }
 
-                    putCommand(data, command.indexCount(), command.firstIndex(), command.vertexOffset(),
-                            packSection(section.xOffset - area.position.x,
-                                    section.yOffset - area.position.y,
-                                    section.zOffset - area.position.z));
-                    drawCount++;
+                    int packedSection = packSection(section.xOffset - area.position.x,
+                            section.yOffset - area.position.y,
+                            section.zOffset - area.position.z);
+                    for(int commandIndex = 0; commandIndex < plan.commandCount(); ++commandIndex) {
+                        GpuTerrainDrawHandoff.DrawCommand command = plan.command(commandIndex);
+                        if(command.indexCount() <= 0)
+                            continue;
+                        if(command.gpuResident()) {
+                            gpuDrawCount++;
+                            maxGpuVertexCount = Math.max(maxGpuVertexCount,
+                                    command.indexCount() * 2 / 3);
+                        }
+                        if(drawCount >= MAX_DRAW_COMMANDS)
+                            throw new IllegalStateException("Region contains more than 1024 terrain draw commands");
+                        putCommand(data, command.indexCount(), command.firstIndex(),
+                                command.vertexOffset(), packedSection);
+                        drawCount++;
+                    }
                 }
                 if (drawCount != 0) {
                     if (commands == null) commands = new RegionCommands();
@@ -443,7 +462,7 @@ final class RegionDrawBatch {
 
     static final class RegionCommands extends IndirectBuffer {
         RegionCommands() {
-            super(MAX_SECTIONS * STRIDE, MemoryTypes.HOST_MEM);
+            super(MAX_DRAW_COMMANDS * STRIDE, MemoryTypes.HOST_MEM);
         }
     }
 }
