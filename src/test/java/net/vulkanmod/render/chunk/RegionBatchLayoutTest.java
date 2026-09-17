@@ -85,6 +85,49 @@ public final class RegionBatchLayoutTest {
         require(gpu.indexCount() == 36 && gpu.firstIndex() == 0 && gpu.vertexOffset() == 8,
                 "GPU handoff must derive an auto-quad command from persistent residency");
 
+        var replacePlan = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                resident, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.REPLACE);
+        require(replacePlan.commandCount() == 1 && replacePlan.gpuDrawCount() == 1,
+                "Replacement ownership must remain a single GPU draw");
+        require(replacePlan.command(0).equals(gpu),
+                "Replacement draw plan must preserve the established GPU command");
+
+        var appendPlan = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                resident, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(appendPlan.commandCount() == 2 && appendPlan.gpuDrawCount() == 1,
+                "Hybrid ownership must emit one CPU exception command plus one GPU command");
+        var appendCpu = appendPlan.command(0);
+        var appendGpu = appendPlan.command(1);
+        require(!appendCpu.gpuResident()
+                        && appendCpu.indexCount() == 12
+                        && appendCpu.firstIndex() == 4
+                        && appendCpu.vertexOffset() == 99,
+                "Hybrid ownership must preserve the CPU exception command byte-for-byte");
+        require(appendGpu.gpuResident()
+                        && appendGpu.indexCount() == 36
+                        && appendGpu.firstIndex() == 0
+                        && appendGpu.vertexOffset() == 8,
+                "Hybrid ownership must append the exact bounded GPU quad command");
+
+        var appendGpuOnly = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                resident, 0, 0, 0, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(appendGpuOnly.commandCount() == 1
+                        && appendGpuOnly.gpuDrawCount() == 1
+                        && appendGpuOnly.command(0).gpuResident(),
+                "Hybrid ownership with no CPU exceptions must collapse to one GPU draw");
+
+        var staleAppend = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 8L,
+                resident, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(staleAppend.commandCount() == 1 && staleAppend.gpuDrawCount() == 0,
+                "Stale hybrid output must fail closed to CPU-only");
+        requireCpuFallback(staleAppend.command(0), "Stale hybrid generation");
+
+        var missingAppend = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                null, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(missingAppend.commandCount() == 1 && missingAppend.gpuDrawCount() == 0,
+                "Missing hybrid output must fail closed to CPU-only");
+        requireCpuFallback(missingAppend.command(0), "Missing hybrid residency");
+
         var gpuOnly = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
                 resident, 0, 0, 0);
         require(gpuOnly.gpuResident(),
@@ -111,11 +154,22 @@ public final class RegionBatchLayoutTest {
         require(maxGpu.gpuResident() && maxGpu.indexCount() == maxFaces * 6,
                 "Largest uint16-addressable GPU quad set should remain selectable");
 
+        var maxAppend = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                maxResident, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(maxAppend.commandCount() == 2
+                        && maxAppend.command(1).indexCount() == maxFaces * 6,
+                "Largest uint16-addressable GPU quad set should remain appendable");
+
         var tooManyFaces = new GpuTerrainOutputStore.Residency(7L, 160,
                 (maxFaces + 1) * GpuTerrainOutputStore.BYTES_PER_FACE,
                 maxFaces + 1, 8, true);
         requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
                 tooManyFaces, 12, 4, 99), "uint16 index overflow");
+        var overflowAppend = GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                tooManyFaces, 12, 4, 99, GpuTerrainDrawHandoff.Ownership.APPEND);
+        require(overflowAppend.commandCount() == 1 && overflowAppend.gpuDrawCount() == 0,
+                "Hybrid uint16 overflow must fail closed to the CPU exception command");
+        requireCpuFallback(overflowAppend.command(0), "Hybrid uint16 index overflow");
 
         requireCpuFallback(GpuTerrainDrawHandoff.select(false, TerrainRenderType.SOLID, 7L,
                 resident, 12, 4, 99), "Disabled handoff");
@@ -130,6 +184,16 @@ public final class RegionBatchLayoutTest {
         var invalid = new GpuTerrainOutputStore.Residency(7L, -1, 0, 0, 0, false);
         requireCpuFallback(GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
                 invalid, 12, 4, 99), "Invalid/overflow publication");
+
+        boolean rejectedNullOwnership = false;
+        try {
+            GpuTerrainDrawHandoff.plan(true, TerrainRenderType.SOLID, 7L,
+                    resident, 12, 4, 99, null);
+        } catch(IllegalArgumentException expected) {
+            rejectedNullOwnership = true;
+        }
+        require(rejectedNullOwnership,
+                "Hybrid draw planning must reject an unspecified ownership mode");
     }
 
     private static void requireCpuFallback(GpuTerrainDrawHandoff.DrawCommand command, String caseName) {
