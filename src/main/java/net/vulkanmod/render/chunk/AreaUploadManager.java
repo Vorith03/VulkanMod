@@ -27,6 +27,7 @@ public class AreaUploadManager {
     CommandPool.CommandBuffer[] commandBuffers;
     long[] firstUploadNanos;
     long[] recordedUploadBytes;
+    private final ConcurrentLinkedQueue<Runnable> readyPostSubmitOps = new ConcurrentLinkedQueue<>();
 
     long completedUploadBatches;
     long totalReadyNanos;
@@ -76,28 +77,35 @@ public class AreaUploadManager {
                 drainFrameOps(queue);
             }
         }
+        drainReadyPostSubmitOps();
     }
 
-    public synchronized void submitUploads() {
-        Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
+    public void submitUploads() {
+        synchronized(this) {
+            Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
 
-        int frame = this.currentFrame;
-        CommandPool.CommandBuffer commandBuffer = this.commandBuffers[frame];
-        if(commandBuffer == null || commandBuffer.isSubmitted())
-            return;
+            int frame = this.currentFrame;
+            CommandPool.CommandBuffer commandBuffer = this.commandBuffers[frame];
+            if(commandBuffer != null && !commandBuffer.isSubmitted()) {
+                // Terrain buffers are consumed by the graphics queue. Transfer-capable
+                // buffers use concurrent family sharing when necessary, but that only
+                // handles queue-family ownership; it does not order an older graphics read
+                // against a transfer-queue overwrite of the same persistent slice. Submit
+                // terrain copies on graphics instead so queue order is old draw -> write ->
+                // new draw, with no cross-queue semaphore in the hot path.
+                Device.getGraphicsQueue().submitCommands(commandBuffer);
 
-        // Terrain buffers are consumed by the graphics queue. Transfer-capable
-        // buffers use concurrent family sharing when necessary, but that only
-        // handles queue-family ownership; it does not order an older graphics read
-        // against a transfer-queue overwrite of the same persistent slice. Submit
-        // terrain copies on graphics instead so queue order is old draw -> write ->
-        // new draw, with no cross-queue semaphore in the hot path.
-        Device.getGraphicsQueue().submitCommands(commandBuffer);
+                // This helper submission is ordered before the later main graphics submit.
+                // The main frame fence therefore owns command-buffer/staging retirement.
+                markUploadsReady(frame);
+                this.commandBuffers[frame] = null;
+            }
+        }
 
-        // This helper submission is ordered before the later main graphics submit.
-        // The main frame fence therefore owns command-buffer/staging retirement.
-        markUploadsReady(frame);
-        this.commandBuffers[frame] = null;
+        // Post-submit consumers may lock ChunkArea/AreaBuffer state. Run them only
+        // after releasing this manager monitor so upload publication never creates an
+        // AreaUploadManager -> ChunkArea lock-order edge.
+        drainReadyPostSubmitOps();
     }
 
     public void uploadAsync(AreaBuffer.Segment uploadSegment, long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
@@ -126,6 +134,20 @@ public class AreaUploadManager {
         recordUpload(buffer.getId(), dstOffset, bufferSize, src);
         if(submittedCallback != null)
             this.submittedUploadOps[this.currentFrame].add(submittedCallback);
+    }
+
+    /**
+     * Run a consumer as soon as the current terrain-upload command buffer has been
+     * submitted and all earlier submitted-upload callbacks have published their
+     * CPU-side residency metadata. The consumer runs outside this manager's monitor;
+     * same-graphics-queue consumers may therefore submit work immediately without a
+     * frame-fence wait while preserving copy -> consume queue order.
+     */
+    public void enqueuePostSubmitOp(Runnable runnable) {
+        Validate.isTrue(currentFrame == Renderer.getCurrentFrame());
+        if(runnable == null)
+            throw new IllegalArgumentException("Terrain post-submit operation must be present");
+        this.submittedUploadOps[this.currentFrame].add(() -> this.readyPostSubmitOps.add(runnable));
     }
 
     private void recordUpload(long bufferId, long dstOffset, long bufferSize, ByteBuffer src) {
@@ -217,6 +239,7 @@ public class AreaUploadManager {
     public void updateFrame(int frame) {
         this.currentFrame = frame;
         waitUploads(this.currentFrame);
+        drainReadyPostSubmitOps();
         executeFrameOps(frame);
     }
 
@@ -233,6 +256,13 @@ public class AreaUploadManager {
     private static void drainFrameOps(ConcurrentLinkedQueue<Runnable> queue) {
         Runnable runnable;
         while((runnable = queue.poll()) != null) {
+            runnable.run();
+        }
+    }
+
+    private void drainReadyPostSubmitOps() {
+        Runnable runnable;
+        while((runnable = this.readyPostSubmitOps.poll()) != null) {
             runnable.run();
         }
     }
@@ -283,10 +313,13 @@ public class AreaUploadManager {
         this.commandBuffers[frame] = null;
     }
 
-    public synchronized void waitAllUploads() {
-        for(int i = 0; i < this.commandBuffers.length; ++i) {
-            waitUploads(i);
+    public void waitAllUploads() {
+        synchronized(this) {
+            for(int i = 0; i < this.commandBuffers.length; ++i) {
+                waitUploads(i);
+            }
         }
+        drainReadyPostSubmitOps();
     }
 
     public void resetCopyStats() {
