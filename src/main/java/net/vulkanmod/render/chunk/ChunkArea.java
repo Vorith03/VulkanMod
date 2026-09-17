@@ -209,15 +209,23 @@ public class ChunkArea {
      * the normal wrap path reaches this method after the old region's sections have
      * left the fine grid and released their suballocations.
      *
-     * If that invariant is ever false, preserve the old safe behavior: retire the
-     * whole allocation and let the new region lazily allocate fresh storage.
+     * If that invariant is ever false, preserve the old safe behavior: detach the
+     * whole allocation, give the recycled region fresh storage immediately, and
+     * destroy the retired buffers only after every frame slot has crossed a safe
+     * fence boundary.
      */
     synchronized void repositionForReuse(int x, int y, int z) {
         this.clearVoxels();
         if(this.drawBuffers.isAllocated()) {
             if(this.drawBuffers.hasLiveGeometry()) {
                 RegionBatchStats.recordRegionBufferFallback();
-                this.drawBuffers.releaseBuffers();
+                DrawBuffers retired = this.drawBuffers;
+                this.drawBuffers = new DrawBuffers();
+                AreaUploadManager manager = AreaUploadManager.INSTANCE;
+                if(manager != null)
+                    manager.enqueueFrameRetirement(retired::releaseBuffers);
+                else
+                    retired.releaseBuffers();
             } else {
                 RegionBatchStats.recordRegionBufferReuse();
                 this.drawBuffers.prepareForRegionReuse();
