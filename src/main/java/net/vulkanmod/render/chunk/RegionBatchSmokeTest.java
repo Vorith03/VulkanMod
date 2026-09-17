@@ -224,6 +224,7 @@ public final class RegionBatchSmokeTest {
             for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame) {
                 AreaUploadManager.INSTANCE.updateFrame(frame);
             }
+            AreaUploadManager.INSTANCE.updateFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
             require(!recycleBuffers.isAllocated(),
                     "Detached live region buffers must release after every frame slot retires");
 
