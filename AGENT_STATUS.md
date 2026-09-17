@@ -15,7 +15,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - **Code checkpoint:** `bc25dde8d296c8a55e40aa175978474093711f4c` (`terrain: pin GPU output until frame completion`). A future session should compare this checkpoint to live HEAD rather than expecting this file to mirror every docs-only commit.
 - CI #515, run `35175848665`, is fully green for `bc25dde8`; artifact: `vulkanmod-forge-1.20.1-bc25dde`.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
-- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. The current experimental production path is ready for narrow real-driver correctness validation, but no Phase 7.4 performance or default-path gate is closed yet.
+- Active roadmap: **Phase 7 — GPU-driven terrain and hybrid meshing**, still **5/11 verified gates**. The current experimental production path is **not yet ready for RX 6900 XT correctness validation** because a later validation audit found a missing device-to-host memory dependency in terrain-result readback; no Phase 7.4 performance or default-path gate is closed yet.
 - User priority remains explicit: move repetitive terrain construction from CPU workers to the GPU while preserving conservative CPU fallback for arbitrary Minecraft/Forge semantics. Mesh shaders are optional/later.
 
 ## Task-relevant references
@@ -59,25 +59,26 @@ Sparse GPU lighting remains enabled by default unless explicitly disabled separa
 
 CI #515 is the first checkpoint that covers both of the blockers that previously made a user-machine test premature: non-blocking production completion mechanics and submitted-output allocation pinning through GPU/frame completion. The full workflow is green, including build, renderer regression checks, Vulkan startup paths, indirect-draw smoke, post-chain/depth coverage, lavapipe renderer regression coverage, compatibility source smoke, and the focused GPU-terrain bridge/output-store tests.
 
+**2026-09-17 validation correction:** a later synchronization audit found that `GpuTerrainSectionMesher.submitDispatch()` copies the GPU result into a `HOST_VISIBLE | HOST_COHERENT` readback buffer but does not record a final `VK_ACCESS_TRANSFER_WRITE_BIT -> VK_ACCESS_HOST_READ_BIT` memory dependency before fence completion and host mapping. Vulkan fence wait/status establishes execution completion but does not by itself make device writes visible to host accesses. `HOST_COHERENT` removes the separate invalidate requirement only after the device writes have been made available to the host domain. This affects the current `bc25dde8` base path as well as the in-progress terrain hardening branch. Existing CI does not detect this omission.
+
 This is **not** performance sign-off. No dense-terrain A/B result, CPU p99 reduction, frame-time acceptance, VRAM acceptance, or accelerated-default claim is implied by the green CI.
 
-## Next action — first RX 6900 XT functional test
+## Next action — close terrain readback host-visibility blocker
 
-The next useful evidence is now a deliberately narrow real-driver test on the user's RX 6900 XT using the exact CI #515 artifact `vulkanmod-forge-1.20.1-bc25dde`.
+Do **not** ask the user for the RX 6900 XT functional test yet. First add a narrow readback barrier in the terrain helper command buffer after all copies into the readback buffer and before submission/fence signal:
 
-1. Enable the three experimental properties above; do not change unrelated GPU-terrain or sparse-lighting options.
-2. Enter a representative world and let nearby terrain finish its ordinary initial build. Initial/fresh sections are expected to remain CPU-built because they have no retained CPU fallback yet.
-3. In an already rendered section containing ordinary vanilla SOLID terrain, place and then break a simple full-cube block such as stone to force one or more rebuilds of a section that has an existing CPU fallback.
-4. Check that the edited section stays visually intact—no disappearing/corrupt geometry, persistent stale block face, device loss, hang, or crash—while the asynchronous replacement completes.
-5. Capture the `VULKANMOD_GPU_TERRAIN_` log lines. A successful exercised path should show `VULKANMOD_GPU_TERRAIN_CPU_BYPASS_SUBMITTED` followed by `VULKANMOD_GPU_TERRAIN_CPU_BYPASS_COMPLETE` for an applicable attempt. `..._FALLBACK` on unsupported geometry is acceptable and should remain visually correct; `..._FAIL` should trigger CPU recovery rather than missing terrain and is evidence to inspect, not a reason to hide the log.
+- source access/stage: `VK_ACCESS_TRANSFER_WRITE_BIT` / `VK_PIPELINE_STAGE_TRANSFER_BIT`;
+- destination access/stage: `VK_ACCESS_HOST_READ_BIT` / `VK_PIPELINE_STAGE_HOST_BIT`;
+- cover the entire readback range, including the validation path's optional copied vertex payload;
+- preserve the existing non-blocking fence-poll/frame-callback completion design; this fix must not add a CPU wait.
 
-Do **not** collect FPS or performance A/B data in this first test. Establish real RADV completion/draw/lifetime correctness first; performance testing becomes meaningful only after that succeeds.
+Then rerun the focused terrain lifecycle/readback coverage plus the relevant Vulkan startup smokes. After that is green, the first RX 6900 XT test should remain deliberately functional rather than performance-oriented: enable the three experimental properties, let nearby terrain build normally, place/break a simple full-cube block in an already rendered qualified section, verify the section remains visually intact, and capture the `VULKANMOD_GPU_TERRAIN_` lines. Only after real RADV completion/draw/lifetime correctness succeeds should Phase 7.4 performance A/B work begin.
 
 ## Outstanding RX evidence
 
 The Phase 7 visibility/selection gate still needs a representative movement/churn sample. Prior user evidence remains valid: build #444 activated experimental GPU indirect consumption with eight clean initial comparator samples; F3+T and two world re-entries worked; FTB Chunks large-map terrain remained black due to its null `BlockState` map task; the center-screen/world-edge artifact disappeared when the death marker was removed. Do not repeat already-collected sparse-lighting density telemetry.
 
-The first production CPU-bypass/draw-handoff RX 6900 XT test is now warranted because CI #515 removed the known synchronous-completion and in-flight-allocation blockers. Keep this first test functional and narrowly scoped; do not conflate it with the later Phase 7.4 performance gate.
+The first production CPU-bypass/draw-handoff RX 6900 XT test is **temporarily blocked** by the host-readback synchronization issue above. CI #515 still proves the earlier non-blocking completion and in-flight-allocation lifetime fixes, but it is no longer sufficient evidence by itself to warrant the user-machine test.
 
 ## Safety / performance boundary
 
