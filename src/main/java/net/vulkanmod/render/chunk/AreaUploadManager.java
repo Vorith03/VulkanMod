@@ -11,6 +11,7 @@ import org.apache.commons.lang3.Validate;
 import java.nio.ByteBuffer;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class AreaUploadManager {
     public static AreaUploadManager INSTANCE;
@@ -37,7 +38,16 @@ public class AreaUploadManager {
 
     volatile int currentFrame;
 
-    public void createLists(int frames) {
+    public synchronized void createLists(int frames) {
+        // Renderer only replaces existing frame lists after Vulkan.waitIdle() during
+        // swapchain recreation. At that point every queued retirement is safe to run,
+        // and draining here prevents a frame-count change from orphaning callbacks.
+        if(this.frameOps != null) {
+            for(ConcurrentLinkedQueue<Runnable> queue : this.frameOps) {
+                drainFrameOps(queue);
+            }
+        }
+
         this.commandBuffers = new CommandPool.CommandBuffer[frames];
         this.recordedUploads = new ObjectArrayList[frames];
         this.updatedParameters = new ObjectArrayList[frames];
@@ -145,6 +155,29 @@ public class AreaUploadManager {
         this.frameOps[this.currentFrame].add(runnable);
     }
 
+    /**
+     * Run a retirement only after every frame slot has crossed its next safe
+     * updateFrame boundary. Each slot is drained after its fence wait. If a slot has
+     * already begun recording when this is queued, its callback remains queued until
+     * that slot cycles again, thereby covering the not-yet-submitted command buffer.
+     */
+    public synchronized void enqueueFrameRetirement(Runnable runnable) {
+        if(runnable == null)
+            throw new IllegalArgumentException("Terrain frame retirement must be present");
+        if(this.frameOps == null || this.frameOps.length == 0) {
+            runnable.run();
+            return;
+        }
+
+        AtomicInteger remaining = new AtomicInteger(this.frameOps.length);
+        for(ConcurrentLinkedQueue<Runnable> queue : this.frameOps) {
+            queue.add(() -> {
+                if(remaining.decrementAndGet() == 0)
+                    runnable.run();
+            });
+        }
+    }
+
     public void copy(Buffer src, Buffer dst) {
         if(dst.getBufferSize() < src.getBufferSize()) {
             throw new IllegalArgumentException("dst buffer is smaller than src buffer.");
@@ -184,12 +217,16 @@ public class AreaUploadManager {
             parametersUpdate.setDrawParameters();
         }
 
-        Runnable runnable;
-        while((runnable = this.frameOps[frame].poll()) != null) {
-            runnable.run();
-        }
+        drainFrameOps(this.frameOps[frame]);
 
         this.updatedParameters[frame].clear();
+    }
+
+    private static void drainFrameOps(ConcurrentLinkedQueue<Runnable> queue) {
+        Runnable runnable;
+        while((runnable = queue.poll()) != null) {
+            runnable.run();
+        }
     }
 
     private void markUploadsReady(int frame) {

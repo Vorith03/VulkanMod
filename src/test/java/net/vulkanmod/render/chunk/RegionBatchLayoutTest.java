@@ -43,9 +43,32 @@ public final class RegionBatchLayoutTest {
         require(RegionBatchLayout.drawLimit(128) == 128, "Device batch limit");
         require(RegionBatchLayout.drawLimit(1) == 1, "Single draw limit");
 
+        verifyFrameRetirementBarrier();
         verifyGpuTerrainDrawHandoff();
         EffectUniformBindingsTest.run();
         System.out.println("Terrain region layout tests passed");
+    }
+
+    private static void verifyFrameRetirementBarrier() {
+        AreaUploadManager manager = new AreaUploadManager();
+        manager.createLists(3);
+        int[] retired = {0};
+        manager.enqueueFrameRetirement(() -> retired[0]++);
+
+        manager.updateFrame(0);
+        require(retired[0] == 0,
+                "Terrain retirement must wait for every frame slot");
+        manager.updateFrame(2);
+        require(retired[0] == 0,
+                "Terrain retirement must remain pinned until the final frame slot");
+        manager.updateFrame(1);
+        require(retired[0] == 1,
+                "Terrain retirement must run exactly after all frame slots cross their boundary");
+        manager.updateFrame(0);
+        manager.updateFrame(1);
+        manager.updateFrame(2);
+        require(retired[0] == 1,
+                "Terrain retirement callback must execute only once");
     }
 
     private static void verifyGpuTerrainDrawHandoff() {

@@ -17,9 +17,9 @@ import java.util.function.Function;
  * replacement keeps the last valid result discoverable until the replacement
  * publishes successfully. Successfully submitted reservations remain physically
  * pinned until their completion callback retires, even after logical invalidation.
- * Published resident slices are likewise kept physically pinned until the current
- * frame slot retires, because older in-flight/cached draw commands may still retain
- * their vertex offsets after logical invalidation.</p>
+ * Published resident slices are likewise kept physically pinned until every frame
+ * slot has crossed a fence-safe retirement boundary, because older in-flight/cached
+ * draw commands may still retain their vertex offsets after logical invalidation.</p>
  */
 public final class GpuTerrainOutputStore implements AutoCloseable {
     public static final int MAX_FACES = 4096 * 6;
@@ -61,10 +61,10 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
                 runnable.run();
                 return;
             }
-            // Renderer.beginFrame waits the frame-slot fence before updateFrame()
-            // drains this queue. The queue is concurrent because section invalidation
-            // may originate on a terrain worker while the render thread advances it.
-            manager.enqueueFrameOp(runnable);
+            // A stale draw may exist in any submitted frame slot, or in the command
+            // buffer currently being recorded. Wait for every slot to cross a
+            // fence-safe updateFrame boundary before physically reusing the slice.
+            manager.enqueueFrameRetirement(runnable);
         };
     }
 
@@ -340,9 +340,9 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
                 continue;
             discardPending(entry);
             // Logical invalidation is immediate, but the retired resident remains
-            // physically pinned until the current frame-slot fence retires. Mark the
-            // mesh revision now so every cached FrameBatch stops using its old offset
-            // before that slot can be submitted again.
+            // physically pinned until every frame slot has crossed a fence-safe
+            // boundary. Mark the mesh revision now so later recordings cannot add
+            // another stale command while that retirement barrier is outstanding.
             if(entry.resident != null)
                 drawBuffers.markMeshChanged(type);
             discardResident(entry);
@@ -385,9 +385,8 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             segment.reset();
             return;
         }
-        // Capture the exact allocator that owns this segment. The deferred terrain
-        // frame-op queue executes without holding an output-store or allocator lock,
-        // so the callback only needs to return this exact segment to its owner.
+        // Capture the exact allocator that owns this segment. Retirement callbacks
+        // execute from the terrain frame queue without holding this store's monitor.
         residentRetirement.accept(() -> releaseResidentSegment(vertexBuffer, segment));
     }
 
