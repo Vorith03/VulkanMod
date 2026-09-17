@@ -19,30 +19,31 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Production bridge from generation-owned section inputs to persistent GPU terrain
  * output. Fully-qualified sections may skip CPU block-model tessellation, including
- * fresh sections that do not yet have a CPU mesh; unsupported or failed work requests
- * a normal CPU rebuild and remains on the conservative path thereafter until recovery.
+ * fresh sections that do not yet have a CPU mesh. Explicit hybrid APPEND ownership may
+ * accelerate a conservative filtered cube subset while CPU exception geometry remains
+ * present; unsupported or failed work requests a normal CPU rebuild.
  *
- * <p>The bridge accepts only sections whose visible block-model geometry consists
- * entirely of qualified GPU full cubes (plus invisible states). Shadow/validation
- * dispatch still cross-checks the independently planned GPU face count against the
- * CPU mesh. A CPU-bypassed build instead treats the immutable worker plan as
- * authoritative. Rebuilds retain their previous CPU mesh when one exists; fresh
- * GPU-first sections may briefly have no draw until exact GPU output publishes, and
- * any dispatch/completion failure schedules a CPU recovery rebuild. Mixed or
- * unsupported sections remain CPU-only. Dispatch runs as a later render-thread
- * operation after input upload and outside an active render pass. Completion can be
- * consumed from a non-blocking helper-fence poll on a later render frame; the original
- * frame-fence callback remains the guaranteed fallback, so production never waits a
- * helper fence on the render thread.</p>
+ * <p>REPLACE accepts only sections whose visible block-model geometry consists entirely
+ * of qualified GPU full cubes (plus invisible states). APPEND accepts the worker's
+ * filtered v4 subset: only retained GPU_FULL_CUBE cells are validated and emitted,
+ * while every other cell remains CPU-owned. Hybrid candidates are required to be
+ * interior cells; the worker planner additionally excludes adjacency to visible CPU
+ * exceptions because v4 boundary/occlusion data is intentionally conservative.
+ * Dispatch runs after input upload and outside an active render pass. Completion can
+ * be consumed from a non-blocking helper-fence poll; the frame-fence callback remains
+ * the guaranteed exactly-once fallback.</p>
  */
 final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
     static final String CPU_BYPASS_PROPERTY = "vulkanmod.experimentalGpuTerrainCpuBypass";
     static final String DRAW_HANDOFF_PROPERTY = "vulkanmod.experimentalGpuTerrainDrawHandoff";
+    static final String HYBRID_PROPERTY = "vulkanmod.experimentalGpuTerrainHybrid";
     private static final boolean ENABLED = Boolean.getBoolean(PROPERTY);
     private static final boolean CPU_BYPASS_ENABLED = ENABLED
             && Boolean.getBoolean(CPU_BYPASS_PROPERTY)
             && Boolean.getBoolean(DRAW_HANDOFF_PROPERTY);
+    private static final boolean HYBRID_ENABLED = CPU_BYPASS_ENABLED
+            && Boolean.getBoolean(HYBRID_PROPERTY);
     private static final AtomicBoolean ACTIVE_LOGGED = new AtomicBoolean();
     private static final AtomicBoolean FAILURE_LOGGED = new AtomicBoolean();
     private static final AtomicBoolean RECOVERY_LOGGED = new AtomicBoolean();
@@ -61,6 +62,10 @@ final class GpuTerrainSectionMesherBridge {
 
     static boolean cpuBypassEnabled() {
         return CPU_BYPASS_ENABLED;
+    }
+
+    static boolean hybridEnabled() {
+        return HYBRID_ENABLED;
     }
 
     static synchronized void pollCompletions() {
@@ -92,6 +97,14 @@ final class GpuTerrainSectionMesherBridge {
         }
 
         boolean cpuBypassed = section.stagedGpuTerrainCpuBypassed(generation);
+        GpuTerrainDrawHandoff.Ownership ownership = section.stagedGpuTerrainOwnership(generation);
+        if(ownership == GpuTerrainDrawHandoff.Ownership.APPEND && !HYBRID_ENABLED) {
+            GpuTerrainDiagnostics.record("dispatch", "hybrid_gate_disabled",
+                    section, generation, null);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
         int x = section.xOffset();
         int y = section.yOffset();
         int z = section.zOffset();
@@ -110,18 +123,20 @@ final class GpuTerrainSectionMesherBridge {
             return;
         }
 
-        Qualification qualification = qualify(snapshot);
+        Qualification qualification = ownership == GpuTerrainDrawHandoff.Ownership.APPEND
+                ? qualifyHybrid(snapshot) : qualify(snapshot);
         if(qualification == null) {
             GpuTerrainDiagnostics.recordQualificationFailure(snapshot, section, generation);
             recoverCpuFallback(area, section, generation);
             return;
         }
         if(!section.matchesStagedGpuTerrainPreflight(generation,
-                qualification.modelGeneration(), qualification.faceCount())) {
+                qualification.modelGeneration(), qualification.faceCount(), ownership)) {
             GpuTerrainDiagnostics.record("dispatch", "staged_preflight_mismatch",
                     section, generation,
                     "modelGeneration=" + qualification.modelGeneration()
-                            + " faces=" + qualification.faceCount());
+                            + " faces=" + qualification.faceCount()
+                            + " ownership=" + ownership);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -129,8 +144,8 @@ final class GpuTerrainSectionMesherBridge {
         TerrainRenderType layer = outputLayer();
         DrawBuffers.DrawParameters cpu = section.getDrawParameters(layer);
         // Shadow/validation dispatch still requires its independently-built CPU mesh.
-        // A CPU-bypassed build may be a fresh section and therefore legitimately have
-        // no CPU command yet; exact GPU publication will become its first draw.
+        // CPU-omitting REPLACE and APPEND builds use their immutable worker plans as
+        // authoritative; APPEND's draw consumer separately waits for CPU exceptions.
         if(!cpuBypassed && (cpu.indexCount <= 0 || cpu.indexCount % 6 != 0
                 || !cpu.vertexBufferSegment.isReady())) {
             GpuTerrainDiagnostics.record("dispatch", "cpu_fallback_not_ready",
@@ -157,9 +172,8 @@ final class GpuTerrainSectionMesherBridge {
             return;
         }
 
-        // Shadow/validation mode still has a newly-built CPU mesh, so retain the
-        // independent face-count oracle. A CPU-bypassed build intentionally has no
-        // new CPU mesh, so its immutable worker plan is authoritative.
+        // Shadow/validation mode still has a newly-built complete CPU mesh, so retain
+        // the independent face-count oracle. CPU-omitting plans intentionally differ.
         if(!cpuBypassed && cpu.indexCount / 6 != faceCapacity) {
             GpuTerrainDiagnostics.record("dispatch", "shadow_face_count_mismatch",
                     section, generation,
@@ -234,7 +248,7 @@ final class GpuTerrainSectionMesherBridge {
                     voxelPage, voxel, lightingPage, lighting, model,
                     modelTable.templateCount(), target, faceCapacity,
                     (result, failure) -> completeDispatch(area, section, generation,
-                            modelGeneration, faceCapacity, cpuBypassed, layer,
+                            modelGeneration, faceCapacity, ownership, cpuBypassed, layer,
                             reservation, result, failure)));
             if(!submitted) {
                 reservation.complete(0, true);
@@ -254,7 +268,8 @@ final class GpuTerrainSectionMesherBridge {
 
     private static synchronized void completeDispatch(
             ChunkArea area, RenderSection section, long generation,
-            long modelGeneration, int faceCapacity, boolean cpuBypassed,
+            long modelGeneration, int faceCapacity,
+            GpuTerrainDrawHandoff.Ownership ownership, boolean cpuBypassed,
             TerrainRenderType layer, GpuTerrainOutputStore.Reservation reservation,
             GpuTerrainSectionMesher.DispatchResult result, RuntimeException failure) {
         RenderSystem.assertOnRenderThread();
@@ -278,13 +293,14 @@ final class GpuTerrainSectionMesherBridge {
 
         if(GpuTerrainModelRegistry.generation() != modelGeneration
                 || !section.matchesStagedGpuTerrainPreflight(
-                        generation, modelGeneration, faceCapacity)) {
+                        generation, modelGeneration, faceCapacity, ownership)) {
             reservation.complete(0, true);
             GpuTerrainDiagnostics.record("completion", "generation_or_preflight_changed",
                     section, generation,
                     "modelGeneration=" + modelGeneration
                             + " registryGeneration=" + GpuTerrainModelRegistry.generation()
-                            + " faces=" + faceCapacity);
+                            + " faces=" + faceCapacity
+                            + " ownership=" + ownership);
             recoverCpuFallback(area, section, generation);
             return;
         }
@@ -320,9 +336,9 @@ final class GpuTerrainSectionMesherBridge {
                 result.writtenFaces(), cpuBypassed);
         if(ACTIVE_LOGGED.compareAndSet(false, true)) {
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} cpuBypassed={}; completion published without a blocking helper fence wait",
+                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} ownership={} cpuBypassed={}; completion published without a blocking helper fence wait",
                     section.xOffset(), section.yOffset(), section.zOffset(), layer.ordinal(),
-                    result.writtenFaces(), cpuBypassed);
+                    result.writtenFaces(), ownership, cpuBypassed);
         }
     }
 
@@ -332,10 +348,10 @@ final class GpuTerrainSectionMesherBridge {
     }
 
     /**
-     * Recover only a still-current build that deliberately skipped new CPU model
-     * tessellation. Rebuilds keep prior CPU geometry when available; fresh GPU-first
-     * sections may have no prior geometry and will become visible after the recovery
-     * rebuild publishes normally. Generation turnover makes delayed recovery a no-op.
+     * Recover only a still-current build that deliberately skipped CPU model
+     * tessellation. REPLACE rebuilds keep prior CPU geometry when available; fresh
+     * REPLACE/APPEND sections may be incomplete until the recovery rebuild publishes.
+     * Generation turnover makes delayed recovery a no-op.
      */
     static void recoverCpuFallback(ChunkArea area, RenderSection section, long generation) {
         if(!CPU_BYPASS_ENABLED || area == null || section == null)
@@ -359,9 +375,8 @@ final class GpuTerrainSectionMesherBridge {
     }
 
     /**
-     * Build the GPU work plan strictly from immutable section/model inputs. This is
-     * intentionally independent of TerrainBufferBuilder and DrawParameters: the CPU
-     * quad count remains only a temporary validation oracle in non-bypass dispatch.
+     * Build the full-section GPU work plan strictly from immutable section/model
+     * inputs. Every visible block model must be a qualified GPU full cube.
      */
     static Qualification qualify(SectionVoxelSnapshot snapshot) {
         if(snapshot == null)
@@ -380,10 +395,6 @@ final class GpuTerrainSectionMesherBridge {
                 return null;
 
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
-                // GPU_FULL_CUBE is captured by a worker from a particular baked-model
-                // generation. Revalidate the state against the current immutable
-                // registry so a delayed frame operation cannot consume stale resource
-                // qualification after a reload.
                 if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null)
                     return null;
                 faceCount += candidateFaceCount(snapshot, index);
@@ -394,6 +405,42 @@ final class GpuTerrainSectionMesherBridge {
             if(state == null || !state.getFluidState().isEmpty()
                     || state.getRenderShape() != RenderShape.INVISIBLE)
                 return null;
+        }
+        if(modelGeneration != GpuTerrainModelRegistry.generation())
+            return null;
+        return new Qualification(modelGeneration, faceCount);
+    }
+
+    /**
+     * Validate a worker-filtered v4 subset for APPEND ownership. Non-GPU cells are
+     * deliberately ignored because their geometry remains CPU-owned. Retained GPU
+     * cells must still match the current immutable model generation, remain free of
+     * fluid/block-entity semantics, and stay away from section boundaries where v4
+     * lacks enough neighboring qualification information for hybrid ownership.
+     */
+    static Qualification qualifyHybrid(SectionVoxelSnapshot snapshot) {
+        if(snapshot == null || !HYBRID_ENABLED)
+            return null;
+
+        long modelGeneration = GpuTerrainModelRegistry.generation();
+        int faceCount = 0;
+        for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
+            int flags = snapshot.flags(index);
+            if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) == 0)
+                continue;
+            if((flags & (SectionVoxelSnapshot.HAS_FLUID
+                    | SectionVoxelSnapshot.HAS_BLOCK_ENTITY)) != 0)
+                return null;
+
+            int x = index & 15;
+            int y = (index >>> 4) & 15;
+            int z = (index >>> 8) & 15;
+            if(x == 0 || x == 15 || y == 0 || y == 15 || z == 0 || z == 15)
+                return null;
+
+            if(GpuTerrainModelRegistry.getFullCubeTemplate(snapshot.stateId(index)) == null)
+                return null;
+            faceCount += candidateFaceCount(snapshot, index);
         }
         if(modelGeneration != GpuTerrainModelRegistry.generation())
             return null;
