@@ -111,10 +111,86 @@ public final class SectionVoxelSnapshotTest {
         require(countStore.put(0, small) && !countStore.put(1, small), "Entry limit independently enforced");
         countStore.clear();
 
+        testHybridOwnershipMask();
         testPageAllocator();
         testGpuPageBudget();
         StorageBufferUsageTest.verify();
         System.out.println("Terrain voxel snapshot tests passed");
+    }
+
+    private static void testHybridOwnershipMask() {
+        boolean[] allVisible = new boolean[SectionVoxelSnapshot.BLOCK_COUNT];
+        java.util.Arrays.fill(allVisible, true);
+        int qualifiedFlags = SectionVoxelSnapshot.CPU_REQUIRED | SectionVoxelSnapshot.GPU_FULL_CUBE;
+
+        var allQualified = snapshotWithOverride(qualifiedFlags, -1, qualifiedFlags);
+        var allQualifiedPlan = GpuTerrainHybridMask.plan(allQualified, allVisible);
+        require(allQualifiedPlan.qualifiedCount() == 4096,
+                "Hybrid planner must count every qualified full cube");
+        require(allQualifiedPlan.boundaryDemotions() == 4096 - 14 * 14 * 14,
+                "Hybrid v4 planner must conservatively demote the entire section boundary");
+        require(allQualifiedPlan.exceptionDemotions() == 0
+                        && allQualifiedPlan.ownedCount() == 14 * 14 * 14,
+                "Interior qualified cubes with only qualified neighbors should remain GPU-owned");
+        require(!allQualifiedPlan.owns(SectionVoxelSnapshot.blockIndex(0, 8, 8))
+                        && allQualifiedPlan.owns(SectionVoxelSnapshot.blockIndex(1, 8, 8)),
+                "A boundary-demoted qualified cube must remain a safe neighbor for an interior qualified cube");
+
+        int center = SectionVoxelSnapshot.blockIndex(8, 8, 8);
+        var visibleException = snapshotWithOverride(qualifiedFlags, center,
+                SectionVoxelSnapshot.CPU_REQUIRED);
+        var visibleExceptionPlan = GpuTerrainHybridMask.plan(visibleException, allVisible);
+        require(visibleExceptionPlan.qualifiedCount() == 4095,
+                "Visible exception must not count as a qualified cube");
+        require(visibleExceptionPlan.exceptionDemotions() == 6,
+                "Each qualified face-neighbor of one visible CPU exception must be demoted");
+        require(visibleExceptionPlan.ownedCount() == 14 * 14 * 14 - 7,
+                "Visible CPU exception must remove itself plus its six qualified neighbors from GPU ownership");
+        require(!visibleExceptionPlan.owns(SectionVoxelSnapshot.blockIndex(7, 8, 8))
+                        && !visibleExceptionPlan.owns(SectionVoxelSnapshot.blockIndex(9, 8, 8))
+                        && visibleExceptionPlan.owns(SectionVoxelSnapshot.blockIndex(6, 8, 8)),
+                "Exception adjacency demotion must remain one cell wide");
+
+        boolean[] invisibleCenter = allVisible.clone();
+        invisibleCenter[center] = false;
+        var invisibleExceptionPlan = GpuTerrainHybridMask.plan(visibleException, invisibleCenter);
+        require(invisibleExceptionPlan.exceptionDemotions() == 0
+                        && invisibleExceptionPlan.ownedCount() == 14 * 14 * 14 - 1,
+                "Invisible non-fluid CPU states must not poison adjacent qualified cubes");
+
+        var fluidException = snapshotWithOverride(qualifiedFlags, center,
+                SectionVoxelSnapshot.CPU_REQUIRED | SectionVoxelSnapshot.HAS_FLUID);
+        var hiddenFlags = new boolean[SectionVoxelSnapshot.BLOCK_COUNT];
+        var fluidPlan = GpuTerrainHybridMask.plan(fluidException, hiddenFlags);
+        require(fluidPlan.exceptionDemotions() == 6,
+                "Fluid ownership must demote adjacent GPU cubes even without block-model geometry");
+
+        var blockEntityException = snapshotWithOverride(qualifiedFlags, center,
+                SectionVoxelSnapshot.CPU_REQUIRED | SectionVoxelSnapshot.HAS_BLOCK_ENTITY);
+        var blockEntityPlan = GpuTerrainHybridMask.plan(blockEntityException, hiddenFlags);
+        require(blockEntityPlan.exceptionDemotions() == 6,
+                "Block-entity ownership must demote adjacent GPU cubes conservatively");
+
+        boolean[] noVisibleModels = new boolean[SectionVoxelSnapshot.BLOCK_COUNT];
+        var noQualified = GpuTerrainHybridMask.plan(uniform(), noVisibleModels);
+        require(noQualified.qualifiedCount() == 0 && noQualified.ownedCount() == 0,
+                "Sections without qualified cubes must remain entirely CPU-owned");
+
+        reject(() -> GpuTerrainHybridMask.plan(null, noVisibleModels));
+        reject(() -> GpuTerrainHybridMask.plan(allQualified, null));
+        reject(() -> GpuTerrainHybridMask.plan(allQualified, new boolean[1]));
+        reject(() -> allQualifiedPlan.owns(-1));
+        reject(() -> allQualifiedPlan.owns(SectionVoxelSnapshot.BLOCK_COUNT));
+    }
+
+    private static SectionVoxelSnapshot snapshotWithOverride(int defaultFlags,
+                                                             int overrideIndex,
+                                                             int overrideFlags) {
+        var builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
+            builder.add(i == overrideIndex ? 2 : 1,
+                    i == overrideIndex ? overrideFlags : defaultFlags);
+        return builder.finish();
     }
 
     private static void verifyHalo(ByteBuffer gpu, SectionVoxelSnapshot snapshot, int index, int face) {
