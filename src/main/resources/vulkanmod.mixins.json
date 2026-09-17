@@ -61,6 +61,7 @@
     "render.MinecraftMixin",
     "render.ResourceReloadMixin",
     "render.RenderSystemMixin",
+    "render.RenderSystemTextureIdMixin",
     "render.ShaderInstanceM",
     "render.MainTargetMixin",
     "render.LevelRendererMixin",
