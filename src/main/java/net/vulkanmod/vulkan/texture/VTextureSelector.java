@@ -187,14 +187,20 @@ public abstract class VTextureSelector {
             return whiteTexture;
         }
 
-        // Converted mod/legacy ShaderInstances own named sampler suppliers in the
-        // same way as EffectInstance. Resolve those before the fixed core-shader
-        // slots so names such as Immersive Portals' DiffuseSampler can sample an
-        // off-screen RenderTarget without an OpenGL program applying the binding.
+        // Converted mod/legacy ShaderInstances may own arbitrary named sampler
+        // objects, but they can also keep using Minecraft's standard SamplerN
+        // slots. Prefer an explicit shader-owned sampler, then retain the normal
+        // fixed selector contract before falling back to white.
         if(ShaderRenderState.isActive()) {
             VulkanImage shaderTexture = ShaderRenderState.resolveTexture(name);
             if(shaderTexture != null)
                 return shaderTexture;
+
+            if(isFixedSamplerName(name)) {
+                VulkanImage fixedTexture = resolveFixedTexture(name);
+                if(fixedTexture != null)
+                    return fixedTexture;
+            }
 
             if(missingSamplerWarnings.add("shader:" + name)) {
                 Initializer.LOGGER.warn("Legacy shader sampler {} has no bound Vulkan texture; using white fallback", name);
@@ -202,17 +208,11 @@ public abstract class VTextureSelector {
             return whiteTexture;
         }
 
-        VulkanImage texture = switch (name) {
-            case "Sampler0" -> getBoundTexture();
-            case "Sampler1" -> getOverlayTexture();
-            case "Sampler2" -> getLightTexture();
-            case "Sampler3" -> boundTexture2;
-            case "Sampler4" -> boundTexture3;
-            case "Framebuffer0" -> framebufferTexture;
-            case "Framebuffer1" -> framebufferTexture2;
-            default -> throw new RuntimeException("unknown sampler name: " + name);
-        };
+        if(!isFixedSamplerName(name)) {
+            throw new RuntimeException("unknown sampler name: " + name);
+        }
 
+        VulkanImage texture = resolveFixedTexture(name);
         if(texture == null) {
             if(missingSamplerWarnings.add(name)) {
                 Initializer.LOGGER.warn("Sampler {} has no bound Vulkan texture; using white fallback", name);
@@ -221,6 +221,27 @@ public abstract class VTextureSelector {
         }
 
         return texture;
+    }
+
+    private static boolean isFixedSamplerName(String name) {
+        return switch (name) {
+            case "Sampler0", "Sampler1", "Sampler2", "Sampler3", "Sampler4",
+                    "Framebuffer0", "Framebuffer1" -> true;
+            default -> false;
+        };
+    }
+
+    private static VulkanImage resolveFixedTexture(String name) {
+        return switch (name) {
+            case "Sampler0" -> getBoundTexture();
+            case "Sampler1" -> getOverlayTexture();
+            case "Sampler2" -> getLightTexture();
+            case "Sampler3" -> boundTexture2;
+            case "Sampler4" -> boundTexture3;
+            case "Framebuffer0" -> framebufferTexture;
+            case "Framebuffer1" -> framebufferTexture2;
+            default -> null;
+        };
     }
 
     public static void setLightTexture(VulkanImage texture) {
