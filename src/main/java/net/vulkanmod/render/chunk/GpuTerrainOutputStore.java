@@ -1,10 +1,12 @@
 package net.vulkanmod.render.chunk;
 
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -15,7 +17,10 @@ import java.util.function.Function;
  * immediately revokes every terrain-layer result for that section; same-generation
  * replacement keeps the last valid result discoverable until the replacement
  * publishes successfully. Successfully submitted reservations remain physically
- * pinned until their completion callback retires, even after logical invalidation.</p>
+ * pinned until their completion callback retires, even after logical invalidation.
+ * Published resident slices are likewise kept physically pinned until the current
+ * frame slot retires, because older in-flight/cached draw commands may still retain
+ * their vertex offsets after logical invalidation.</p>
  */
 public final class GpuTerrainOutputStore implements AutoCloseable {
     public static final int MAX_FACES = 4096 * 6;
@@ -26,6 +31,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private static long nextOwnerId = 1L;
 
     private final DrawBuffers drawBuffers;
+    private final Consumer<Runnable> residentRetirement;
     private final Entry[] entries = new Entry[RegionBatchLayout.MAX_SECTIONS
             * TerrainRenderType.VALUES.length];
     private final long[] sectionGenerations = new long[RegionBatchLayout.MAX_SECTIONS];
@@ -35,11 +41,32 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private boolean closed;
 
     public GpuTerrainOutputStore(DrawBuffers drawBuffers) {
+        this(drawBuffers, defaultResidentRetirement());
+    }
+
+    GpuTerrainOutputStore(DrawBuffers drawBuffers, Consumer<Runnable> residentRetirement) {
         if(drawBuffers == null)
             throw new IllegalArgumentException("GPU terrain output requires area draw buffers");
+        if(residentRetirement == null)
+            throw new IllegalArgumentException("GPU terrain resident retirement scheduler must be present");
         this.drawBuffers = drawBuffers;
+        this.residentRetirement = residentRetirement;
         this.ownerId = claimOwnerId();
         Arrays.fill(this.sectionGenerations, -1L);
+    }
+
+    private static Consumer<Runnable> defaultResidentRetirement() {
+        return runnable -> {
+            MemoryManager manager = MemoryManager.getInstance();
+            if(manager == null) {
+                runnable.run();
+                return;
+            }
+            // MemoryManager frame operations run only after the current frame-slot
+            // fence has retired. Graphics-queue order means that fence also covers
+            // every older frame that could still reference this resident slice.
+            manager.addFrameOp(runnable);
+        };
     }
 
     /**
@@ -313,9 +340,10 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             if(entry == null)
                 continue;
             discardPending(entry);
-            // Once a resident slice is released, no cached indirect command may
-            // retain its vertex offset. Rebuild that layer from the untouched CPU
-            // DrawParameters on the next frame.
+            // Logical invalidation is immediate, but the retired resident remains
+            // physically pinned until the current frame-slot fence retires. Mark the
+            // mesh revision now so every cached FrameBatch stops using its old offset
+            // before that slot can be submitted again.
             if(entry.resident != null)
                 drawBuffers.markMeshChanged(type);
             discardResident(entry);
@@ -350,8 +378,14 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     private void discard(Resident resident) {
-        if(resident != null)
-            discard(resident.segment);
+        if(resident == null)
+            return;
+        AreaBuffer.Segment segment = resident.segment;
+        residentRetirement.accept(() -> releaseResidentSegment(segment));
+    }
+
+    private synchronized void releaseResidentSegment(AreaBuffer.Segment segment) {
+        discard(segment);
     }
 
     private void discard(AreaBuffer.Segment segment) {
