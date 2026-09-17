@@ -72,10 +72,17 @@ public final class GpuTerrainDiagnostics {
     public static void recordQualificationFailure(SectionVoxelSnapshot snapshot,
                                                   RenderSection section,
                                                   long generation) {
+        recordQualificationFailure("preflight", snapshot, section, generation);
+    }
+
+    public static void recordQualificationFailure(String stage,
+                                                  SectionVoxelSnapshot snapshot,
+                                                  RenderSection section,
+                                                  long generation) {
         if(!ENABLED)
             return;
         if(snapshot == null) {
-            record("preflight", "snapshot_missing", section, generation, null);
+            record(stage, "snapshot_missing", section, generation, null);
             return;
         }
 
@@ -84,7 +91,7 @@ public final class GpuTerrainDiagnostics {
             int flags = snapshot.flags(index);
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
                 if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null) {
-                    recordState("preflight", "qualified_template_stale", snapshot, section,
+                    recordState(stage, "qualified_template_stale", snapshot, section,
                             generation, index, stateId, flags);
                     return;
                 }
@@ -93,23 +100,23 @@ public final class GpuTerrainDiagnostics {
 
             BlockState state = Block.stateById(stateId);
             if(state == null) {
-                recordState("preflight", "state_missing", snapshot, section,
+                recordState(stage, "state_missing", snapshot, section,
                         generation, index, stateId, flags);
                 return;
             }
             if(!state.getFluidState().isEmpty()) {
-                recordState("preflight", "fluid", snapshot, section,
+                recordState(stage, "fluid", snapshot, section,
                         generation, index, stateId, flags);
                 return;
             }
             if(state.getRenderShape() != RenderShape.INVISIBLE) {
-                recordState("preflight", "unsupported_visible_model", snapshot, section,
+                recordState(stage, "unsupported_visible_model", snapshot, section,
                         generation, index, stateId, flags);
                 return;
             }
         }
 
-        record("preflight", "qualification_generation_changed", section, generation,
+        record(stage, "qualification_generation_changed", section, generation,
                 "snapshot passed state scan but production qualifier rejected it");
     }
 
