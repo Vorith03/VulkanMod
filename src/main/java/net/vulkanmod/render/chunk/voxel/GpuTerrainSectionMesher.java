@@ -332,6 +332,10 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
                 TransferQueue.uploadBufferCmd(commandBuffer, target.bufferId(),
                         target.byteOffset(), readbackBuffer, resultBytes, vertexBytes);
             }
+            int readbackBytes = capturePayload
+                    ? Math.addExact(resultBytes, vertexBytes)
+                    : RESULT_HEADER_WORDS * Integer.BYTES;
+            barrierReadbackToHost(commandBuffer, readbackBuffer, readbackBytes);
 
             // Reservation.withTarget keeps the AreaBuffer handle stable through this
             // submission. Later area-buffer growth is submitted on the same graphics
@@ -584,6 +588,23 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                     VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     0, null, barriers, null);
+        }
+    }
+
+    private static void barrierReadbackToHost(CommandPool.CommandBuffer commandBuffer,
+                                              long readbackBuffer, int readbackBytes) {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.calloc(1, stack);
+            barrier.get(0).sType$Default()
+                    .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_HOST_READ_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(readbackBuffer).offset(0L).size(readbackBytes);
+            vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_HOST_BIT,
+                    0, null, barrier, null);
         }
     }
 
