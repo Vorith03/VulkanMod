@@ -381,11 +381,21 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         if(resident == null)
             return;
         AreaBuffer.Segment segment = resident.segment;
-        residentRetirement.accept(() -> releaseResidentSegment(segment));
+        AreaBuffer vertexBuffer = drawBuffers.vertexBuffer;
+        if(vertexBuffer == null) {
+            segment.reset();
+            return;
+        }
+        // Capture the exact allocator that owns this segment. The deferred callback
+        // runs while MemoryManager owns its frame-op monitor, so it must not re-enter
+        // this store and create a MemoryManager <-> output-store lock inversion.
+        residentRetirement.accept(() -> releaseResidentSegment(vertexBuffer, segment));
     }
 
-    private synchronized void releaseResidentSegment(AreaBuffer.Segment segment) {
-        discard(segment);
+    private static void releaseResidentSegment(AreaBuffer vertexBuffer,
+                                               AreaBuffer.Segment segment) {
+        vertexBuffer.setSegmentFree(segment);
+        segment.reset();
     }
 
     private void discard(AreaBuffer.Segment segment) {
