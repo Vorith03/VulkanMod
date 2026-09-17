@@ -28,6 +28,7 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VisibilitySetExtended;
+import net.vulkanmod.render.chunk.GpuTerrainDiagnostics;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
@@ -75,6 +76,8 @@ public class ChunkTask {
         @Nullable
         protected RenderChunkRegion region;
         private final long voxelGeneration;
+        private final boolean gpuTerrainCpuRecoveryRequired;
+        private final boolean gpuTerrainHadReadyCpuFallback;
         private final boolean gpuTerrainCpuBypassCandidate;
 
         //debug
@@ -85,9 +88,11 @@ public class ChunkTask {
             super(renderSection);
             this.region = renderChunkRegion;
             this.voxelGeneration = renderSection.getVoxelGeneration();
+            this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
+            this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
-                    && !renderSection.gpuTerrainCpuRecoveryRequired()
-                    && renderSection.hasReadyGpuTerrainCpuFallback();
+                    && !this.gpuTerrainCpuRecoveryRequired
+                    && this.gpuTerrainHadReadyCpuFallback;
             this.highPriority = highPriority;
         }
 
@@ -188,6 +193,39 @@ public class ChunkTask {
                                 && compileResults.sparseLighting != null
                                 && RenderSection.gpuTerrainCpuBypassEligible(
                                         compileResults.gpuTerrainPreflight);
+
+                        if(RenderSection.gpuTerrainCpuBypassEnabled()) {
+                            if(compileResults.gpuTerrainCpuBypassed) {
+                                GpuTerrainDiagnostics.recordSuccess("worker_bypass", this.renderSection,
+                                        this.voxelGeneration,
+                                        compileResults.gpuTerrainPreflight.faceCount(), true);
+                            } else if(this.gpuTerrainCpuRecoveryRequired) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "cpu_recovery_required",
+                                        this.renderSection, this.voxelGeneration, null);
+                            } else if(!this.gpuTerrainHadReadyCpuFallback) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "no_prior_cpu_fallback",
+                                        this.renderSection, this.voxelGeneration, null);
+                            } else if(compileResults.gpuTerrainPreflight == null) {
+                                GpuTerrainDiagnostics.recordQualificationFailure("worker_preflight",
+                                        compileResults.voxels, this.renderSection, this.voxelGeneration);
+                            } else if(compileResults.sparseLighting == null) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "sparse_lighting_unavailable",
+                                        this.renderSection, this.voxelGeneration,
+                                        "faces=" + compileResults.gpuTerrainPreflight.faceCount());
+                            } else if(compileResults.gpuTerrainPreflight.faceCount() <= 0) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "face_count_empty",
+                                        this.renderSection, this.voxelGeneration, null);
+                            } else if(!RenderSection.gpuTerrainCpuBypassEligible(
+                                    compileResults.gpuTerrainPreflight)) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "face_count_unsupported",
+                                        this.renderSection, this.voxelGeneration,
+                                        "faces=" + compileResults.gpuTerrainPreflight.faceCount());
+                            } else {
+                                GpuTerrainDiagnostics.record("worker_preflight", "bypass_gate_rejected",
+                                        this.renderSection, this.voxelGeneration, null);
+                            }
+                        }
+
                         if(compileResults.gpuTerrainCpuBypassed
                                 && GPU_CPU_BYPASS_LOGGED.compareAndSet(false, true)) {
                             Initializer.LOGGER.info(
@@ -201,6 +239,9 @@ public class ChunkTask {
                         compileResults.sparseLighting = null;
                         compileResults.gpuTerrainPreflight = null;
                         compileResults.gpuTerrainCpuBypassed = false;
+                        GpuTerrainDiagnostics.record("worker_preflight", "exception",
+                                this.renderSection, this.voxelGeneration,
+                                error.getClass().getName() + ": " + error.getMessage());
                         if(GPU_PREFLIGHT_FAILURE_LOGGED.compareAndSet(false, true)) {
                             Initializer.LOGGER.warn(
                                     "VULKANMOD_GPU_TERRAIN_PREFLIGHT_FAILED: retaining ordinary CPU terrain path",
