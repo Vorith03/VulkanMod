@@ -9,8 +9,10 @@ import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -71,9 +73,11 @@ public final class GpuTerrainDiagnostics {
     }
 
     /**
-     * Explain the first conservative qualification boundary hit by this snapshot.
-     * This intentionally mirrors the production qualifier closely enough to identify
-     * the concrete unsupported state without changing the production decision.
+     * Explain conservative qualification failure without turning the log into a
+     * per-block firehose. The first blocker still provides the detailed sample, while
+     * the blocker histogram counts every distinct reason/state pair present in this
+     * rejected section once. That makes the periodic top-blocker list useful for
+     * deciding which edge cases would buy the most additional GPU coverage.
      */
     public static void recordQualificationFailure(SectionVoxelSnapshot snapshot,
                                                   RenderSection section,
@@ -92,48 +96,59 @@ public final class GpuTerrainDiagnostics {
             return;
         }
 
+        Set<String> blockersInSection = new HashSet<>();
+        BlockerSample first = null;
+
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
             int stateId = snapshot.stateId(index);
             int flags = snapshot.flags(index);
+            BlockState state = Block.stateById(stateId);
 
-            // These are hard CPU-ownership boundaries even if the baked block model
-            // itself happens to look like a reusable full cube.
             if((flags & SectionVoxelSnapshot.HAS_FLUID) != 0) {
-                recordState(stage, "fluid", snapshot, section,
-                        generation, index, stateId, flags);
-                return;
+                addBlocker(blockersInSection, "fluid", stateId, state);
+                if(first == null)
+                    first = new BlockerSample("fluid", index, stateId, flags);
             }
             if((flags & SectionVoxelSnapshot.HAS_BLOCK_ENTITY) != 0) {
-                recordState(stage, "block_entity", snapshot, section,
-                        generation, index, stateId, flags);
-                return;
+                addBlocker(blockersInSection, "block_entity", stateId, state);
+                if(first == null)
+                    first = new BlockerSample("block_entity", index, stateId, flags);
             }
+            if((flags & (SectionVoxelSnapshot.HAS_FLUID | SectionVoxelSnapshot.HAS_BLOCK_ENTITY)) != 0)
+                continue;
 
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
                 if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null) {
-                    recordState(stage, "qualified_template_stale", snapshot, section,
-                            generation, index, stateId, flags);
-                    return;
+                    addBlocker(blockersInSection, "qualified_template_stale", stateId, state);
+                    if(first == null)
+                        first = new BlockerSample("qualified_template_stale", index, stateId, flags);
                 }
                 continue;
             }
 
-            BlockState state = Block.stateById(stateId);
             if(state == null) {
-                recordState(stage, "state_missing", snapshot, section,
-                        generation, index, stateId, flags);
-                return;
+                addBlocker(blockersInSection, "state_missing", stateId, null);
+                if(first == null)
+                    first = new BlockerSample("state_missing", index, stateId, flags);
+                continue;
             }
             if(!state.getFluidState().isEmpty()) {
-                recordState(stage, "fluid", snapshot, section,
-                        generation, index, stateId, flags);
-                return;
+                addBlocker(blockersInSection, "fluid", stateId, state);
+                if(first == null)
+                    first = new BlockerSample("fluid", index, stateId, flags);
+                continue;
             }
             if(state.getRenderShape() != RenderShape.INVISIBLE) {
-                recordState(stage, "unsupported_visible_model", snapshot, section,
-                        generation, index, stateId, flags);
-                return;
+                addBlocker(blockersInSection, "unsupported_visible_model", stateId, state);
+                if(first == null)
+                    first = new BlockerSample("unsupported_visible_model", index, stateId, flags);
             }
+        }
+
+        if(first != null) {
+            recordState(stage, first.reason(), snapshot, section, generation,
+                    first.index(), first.stateId(), first.flags());
+            return;
         }
 
         record(stage, "qualification_generation_changed", section, generation,
@@ -160,7 +175,6 @@ public final class GpuTerrainDiagnostics {
                                     SectionVoxelSnapshot snapshot, RenderSection section,
                                     long generation, int index, int stateId, int flags) {
         BlockState state = Block.stateById(stateId);
-        recordBlocker(reason, stateId, state);
         int x = index & 15;
         int y = (index >>> 4) & 15;
         int z = (index >>> 8) & 15;
@@ -172,8 +186,18 @@ public final class GpuTerrainDiagnostics {
         record(stage, reason, section, generation, detail);
     }
 
-    private static void recordBlocker(String reason, int stateId, BlockState state) {
-        String key = reason + "/stateId=" + stateId + "/state=" + String.valueOf(state);
+    private static void addBlocker(Set<String> blockersInSection, String reason,
+                                   int stateId, BlockState state) {
+        String key = blockerKey(reason, stateId, state);
+        if(blockersInSection.add(key))
+            recordBlocker(key);
+    }
+
+    private static String blockerKey(String reason, int stateId, BlockState state) {
+        return reason + "/stateId=" + stateId + "/state=" + String.valueOf(state);
+    }
+
+    private static void recordBlocker(String key) {
         AtomicLong existing = BLOCKER_COUNTS.get(key);
         if(existing != null) {
             existing.incrementAndGet();
@@ -221,4 +245,6 @@ public final class GpuTerrainDiagnostics {
             Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_BLOCKER_SUMMARY: {}", top);
         }
     }
+
+    private record BlockerSample(String reason, int index, int stateId, int flags) {}
 }
