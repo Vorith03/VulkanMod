@@ -260,11 +260,10 @@ public class ChunkArea {
             return;
         }
 
-        if (gpuVoxels == null)
-            gpuVoxels = new RegionVoxelGpuStore();
-
         boolean queued;
         try {
+            if (gpuVoxels == null)
+                gpuVoxels = new RegionVoxelGpuStore();
             queued = gpuVoxels.upload(slot, snapshot, generation);
         } catch(RuntimeException error) {
             recoverGpuTerrainInputFailure(slot, generation,
@@ -334,13 +333,29 @@ public class ChunkArea {
     private void recoverGpuTerrainInputFailure(int slot, long generation,
                                                String reason, RuntimeException error) {
         RenderSection section = getOwnedSection(slot);
-        if(section == null || !section.stagedGpuTerrainCpuBypassed(generation))
+        if(section == null)
             return;
         String detail = error == null ? null
                 : error.getClass().getName() + ": " + error.getMessage();
-        GpuTerrainDiagnostics.record("input_publish", reason,
-                section, generation, detail);
-        GpuTerrainSectionMesherBridge.recoverCpuFallback(this, section, generation);
+        AreaUploadManager manager = AreaUploadManager.INSTANCE;
+        if(manager == null) {
+            GpuTerrainDiagnostics.record("input_publish", reason + "_recovery_queue_unavailable",
+                    section, generation, detail);
+            return;
+        }
+
+        // Publication normally holds RenderSection and then ChunkArea. Never acquire
+        // the section monitor while this synchronized ChunkArea method is still active;
+        // defer recovery to the terrain frame queue so the established lock order is
+        // preserved and recovery still executes on the render thread.
+        manager.enqueueFrameOp(() -> {
+            if(section.getChunkArea() != this
+                    || !section.stagedGpuTerrainCpuBypassed(generation))
+                return;
+            GpuTerrainDiagnostics.record("input_publish", reason,
+                    section, generation, detail);
+            GpuTerrainSectionMesherBridge.recoverCpuFallback(this, section, generation);
+        });
     }
 
     public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
