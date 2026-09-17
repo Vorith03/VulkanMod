@@ -38,35 +38,43 @@ public class AreaUploadManager {
 
     volatile int currentFrame;
 
-    public synchronized void createLists(int frames) {
-        // Renderer only replaces existing frame lists after Vulkan.waitIdle() during
-        // swapchain recreation. At that point every queued retirement is safe to run,
-        // and draining here prevents a frame-count change from orphaning callbacks.
-        if(this.frameOps != null) {
-            for(ConcurrentLinkedQueue<Runnable> queue : this.frameOps) {
-                drainFrameOps(queue);
+    public void createLists(int frames) {
+        ConcurrentLinkedQueue<Runnable>[] retiredFrameOps;
+        synchronized(this) {
+            // Renderer only replaces existing frame lists after Vulkan.waitIdle() during
+            // swapchain recreation. Swap the arrays atomically so worker-side enqueue
+            // cannot race onto an abandoned queue while the frame count changes.
+            retiredFrameOps = this.frameOps;
+
+            this.commandBuffers = new CommandPool.CommandBuffer[frames];
+            this.recordedUploads = new ObjectArrayList[frames];
+            this.updatedParameters = new ObjectArrayList[frames];
+            this.submittedUploadOps = new ObjectArrayList[frames];
+            this.frameOps = new ConcurrentLinkedQueue[frames];
+            this.firstUploadNanos = new long[frames];
+            this.recordedUploadBytes = new long[frames];
+
+            this.completedUploadBatches = 0L;
+            this.totalReadyNanos = 0L;
+            this.lastReadyNanos = 0L;
+            this.lastReadyBytes = 0L;
+            this.resetCopyStats();
+
+            for (int i = 0; i < frames; i++) {
+                this.recordedUploads[i] = new ObjectArrayList<>();
+                this.updatedParameters[i] = new ObjectArrayList<>();
+                this.submittedUploadOps[i] = new ObjectArrayList<>();
+                this.frameOps[i] = new ConcurrentLinkedQueue<>();
             }
         }
 
-        this.commandBuffers = new CommandPool.CommandBuffer[frames];
-        this.recordedUploads = new ObjectArrayList[frames];
-        this.updatedParameters = new ObjectArrayList[frames];
-        this.submittedUploadOps = new ObjectArrayList[frames];
-        this.frameOps = new ConcurrentLinkedQueue[frames];
-        this.firstUploadNanos = new long[frames];
-        this.recordedUploadBytes = new long[frames];
-
-        this.completedUploadBatches = 0L;
-        this.totalReadyNanos = 0L;
-        this.lastReadyNanos = 0L;
-        this.lastReadyBytes = 0L;
-        this.resetCopyStats();
-
-        for (int i = 0; i < frames; i++) {
-            this.recordedUploads[i] = new ObjectArrayList<>();
-            this.updatedParameters[i] = new ObjectArrayList<>();
-            this.submittedUploadOps[i] = new ObjectArrayList<>();
-            this.frameOps[i] = new ConcurrentLinkedQueue<>();
+        // Vulkan.waitIdle() makes callbacks from the old frame set safe to retire.
+        // Drain after releasing this monitor because a retirement may return an
+        // AreaBuffer segment whose allocator can in turn interact with this manager.
+        if(retiredFrameOps != null) {
+            for(ConcurrentLinkedQueue<Runnable> queue : retiredFrameOps) {
+                drainFrameOps(queue);
+            }
         }
     }
 
@@ -149,7 +157,7 @@ public class AreaUploadManager {
         this.updatedParameters[this.currentFrame].add(parametersUpdate);
     }
 
-    public void enqueueFrameOp(Runnable runnable) {
+    public synchronized void enqueueFrameOp(Runnable runnable) {
         if(runnable == null)
             throw new IllegalArgumentException("Terrain frame operation must be present");
         this.frameOps[this.currentFrame].add(runnable);
