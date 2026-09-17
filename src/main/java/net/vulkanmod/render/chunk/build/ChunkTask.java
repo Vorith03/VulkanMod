@@ -70,10 +70,12 @@ public class ChunkTask {
         private static final AtomicBoolean SPARSE_LIGHTING_ACTIVE_LOGGED = new AtomicBoolean();
         private static final AtomicBoolean SPARSE_LIGHTING_FAILURE_LOGGED = new AtomicBoolean();
         private static final AtomicBoolean GPU_PREFLIGHT_FAILURE_LOGGED = new AtomicBoolean();
+        private static final AtomicBoolean GPU_CPU_BYPASS_LOGGED = new AtomicBoolean();
 
         @Nullable
         protected RenderChunkRegion region;
         private final long voxelGeneration;
+        private final boolean gpuTerrainCpuBypassCandidate;
 
         //debug
         private float buildTime;
@@ -83,6 +85,9 @@ public class ChunkTask {
             super(renderSection);
             this.region = renderChunkRegion;
             this.voxelGeneration = renderSection.getVoxelGeneration();
+            this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
+                    && !renderSection.gpuTerrainCpuRecoveryRequired()
+                    && renderSection.hasReadyGpuTerrainCpuFallback();
             this.highPriority = highPriority;
         }
 
@@ -120,17 +125,28 @@ public class ChunkTask {
                     compiledChunk.renderableBlockEntities.addAll(compileResults.blockEntities);
                     compiledChunk.transparencyState = compileResults.transparencyState;
 
-                    if(!compileResults.renderedLayers.isEmpty())
+                    if(!compileResults.renderedLayers.isEmpty() || compileResults.gpuTerrainCpuBypassed)
                         compiledChunk.isCompletelyEmpty = false;
 
                     compiledChunk.renderTypes.addAll(compileResults.renderedLayers.keySet());
-                    taskDispatcher.scheduleSectionUpdate(this, renderSection, compileResults.renderedLayers, () -> {
+                    TerrainRenderType preservedLayer = null;
+                    if(compileResults.gpuTerrainCpuBypassed) {
+                        preservedLayer = RenderSection.gpuTerrainOutputLayer();
+                        compiledChunk.renderTypes.add(preservedLayer);
+                    }
+
+                    final TerrainRenderType retainedCpuLayer = preservedLayer;
+                    taskDispatcher.scheduleSectionUpdate(this, renderSection,
+                            compileResults.renderedLayers, retainedCpuLayer, () -> {
                         this.renderSection.updateGlobalBlockEntities(compileResults.globalBlockEntities);
                         this.renderSection.setCompiledSection(compiledChunk);
                         this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
                         this.renderSection.setCompletelyEmpty(compiledChunk.isCompletelyEmpty);
                         this.renderSection.stageGpuTerrainPreflight(
-                                compileResults.gpuTerrainPreflight, this.voxelGeneration);
+                                compileResults.gpuTerrainPreflight, this.voxelGeneration,
+                                compileResults.gpuTerrainCpuBypassed);
+                        if(!compileResults.gpuTerrainCpuBypassed)
+                            this.renderSection.completeGpuTerrainCpuRecovery(this.voxelGeneration);
                         this.renderSection.publishVoxels(compileResults.voxels,
                                 compileResults.sparseLighting, this.voxelGeneration);
                     });
@@ -156,11 +172,11 @@ public class ChunkTask {
                 SectionVoxelSnapshot.Builder voxels = RegionVoxelStore.ENABLED
                         ? new SectionVoxelSnapshot.Builder(blockPos.getX(), blockPos.getY(), blockPos.getZ()) : null;
 
-                // The experimental GPU mesher needs a complete immutable work plan before
-                // ordinary block-model tessellation can eventually be skipped. Capture and
-                // qualify that plan first, but keep the CPU geometry loop authoritative in
-                // this staging slice. Any preflight failure falls back to the original
-                // single-pass CPU + voxel capture path below.
+                // Capture immutable GPU inputs before model tessellation. The stricter
+                // CPU-bypass gate is rebuild-only: it requires an already-ready CPU
+                // fallback, a fully-qualified bounded work plan, and exact sparse
+                // lighting. Fresh sections and recovery rebuilds remain ordinary CPU
+                // builds. The block scan below still owns visibility/block entities.
                 if(voxels != null && RenderSection.gpuTerrainMesherEnabled()) {
                     try {
                         compileResults.voxels = captureGpuTerrainInputs(
@@ -168,11 +184,23 @@ public class ChunkTask {
                         compileResults.gpuTerrainPreflight =
                                 RenderSection.qualifyGpuTerrain(compileResults.voxels);
                         captureSparseLighting(compileResults, renderChunkRegion, blockPos);
+                        compileResults.gpuTerrainCpuBypassed = this.gpuTerrainCpuBypassCandidate
+                                && compileResults.sparseLighting != null
+                                && RenderSection.gpuTerrainCpuBypassEligible(
+                                        compileResults.gpuTerrainPreflight);
+                        if(compileResults.gpuTerrainCpuBypassed
+                                && GPU_CPU_BYPASS_LOGGED.compareAndSet(false, true)) {
+                            Initializer.LOGGER.info(
+                                    "VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE: section=({}, {}, {}) faces={}; worker skipped block-model tessellation and retained the previous CPU mesh pending GPU publication",
+                                    blockPos.getX(), blockPos.getY(), blockPos.getZ(),
+                                    compileResults.gpuTerrainPreflight.faceCount());
+                        }
                         voxels = null;
                     } catch(RuntimeException error) {
                         compileResults.voxels = null;
                         compileResults.sparseLighting = null;
                         compileResults.gpuTerrainPreflight = null;
+                        compileResults.gpuTerrainCpuBypassed = false;
                         if(GPU_PREFLIGHT_FAILURE_LOGGED.compareAndSet(false, true)) {
                             Initializer.LOGGER.warn(
                                     "VULKANMOD_GPU_TERRAIN_PREFLIGHT_FAILED: retaining ordinary CPU terrain path",
@@ -217,7 +245,7 @@ public class ChunkTask {
                         }
                         RenderType renderType;
                         TerrainBufferBuilder bufferBuilder;
-                        if (!fluidState.isEmpty()) {
+                        if (!compileResults.gpuTerrainCpuBypassed && !fluidState.isEmpty()) {
                             renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
 
                             //Force compact RenderType
@@ -231,7 +259,8 @@ public class ChunkTask {
                             blockRenderDispatcher.renderLiquid(blockPos3, renderChunkRegion, bufferBuilder, blockState, fluidState);
                         }
 
-                        if (blockState.getRenderShape() != RenderShape.INVISIBLE) {
+                        if (!compileResults.gpuTerrainCpuBypassed
+                                && blockState.getRenderShape() != RenderShape.INVISIBLE) {
                             renderType = ItemBlockRenderTypes.getChunkRenderType(blockState);
 
                             //Force compact RenderType
@@ -283,7 +312,7 @@ public class ChunkTask {
                         if(renderedBuffer != null)
                             renderedBuffer.release();
                     }
-                    if(compileResults.voxels != null)
+                    if(compileResults.voxels != null && !compileResults.gpuTerrainCpuBypassed)
                         GpuLightingDemandTelemetry.record(compileResults.voxels,
                                 cpuMeshBytes(compileResults.renderedLayers));
                 } finally {
@@ -334,7 +363,7 @@ public class ChunkTask {
                     compileResults.sparseLighting = sparseLighting;
                     if (SPARSE_LIGHTING_ACTIVE_LOGGED.compareAndSet(false, true)) {
                         Initializer.LOGGER.info(
-                                "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_ACTIVE: section=({}, {}, {}) samples={} bytes={}; CPU terrain mesh remains authoritative",
+                                "VULKANMOD_GPU_SPARSE_LIGHTING_CAPTURE_ACTIVE: section=({}, {}, {}) samples={} bytes={}; CPU terrain fallback remains available",
                                 blockPos.getX(), blockPos.getY(), blockPos.getZ(),
                                 sparseLighting.sampleCount(), sparseLighting.byteSize());
                     }
@@ -450,6 +479,7 @@ public class ChunkTask {
             public SectionVoxelSnapshot voxels;
             public GpuSparseLightingSnapshot sparseLighting;
             public RenderSection.GpuTerrainPreflight gpuTerrainPreflight;
+            public boolean gpuTerrainCpuBypassed;
             @org.jetbrains.annotations.Nullable
             public TerrainBufferBuilder.SortState transparencyState;
 
