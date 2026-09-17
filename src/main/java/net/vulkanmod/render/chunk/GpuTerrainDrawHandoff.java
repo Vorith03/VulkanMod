@@ -3,13 +3,12 @@ package net.vulkanmod.render.chunk;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 
 /**
- * Fail-closed command selection for the first production GPU-terrain draw handoff.
+ * Generation-safe command selection for the production GPU-terrain draw handoff.
  *
- * <p>This helper deliberately does not mutate CPU {@link DrawBuffers.DrawParameters}.
- * Callers build the normal CPU command first and may substitute the returned GPU
- * command only when every generation/layer/residency check succeeds. Keeping this
- * policy separate from {@link RegionDrawBatch} makes stale/missing/unsupported
- * output mechanically fall back to the already-proven CPU geometry.</p>
+ * <p>When an exact-generation GPU residency is valid, it may own the command even
+ * when no CPU mesh exists yet. Missing/stale/unsupported GPU output still returns the
+ * supplied CPU command unchanged, so rebuilds with retained CPU geometry continue to
+ * fail closed while fresh GPU-first sections can become visible after publication.</p>
  */
 final class GpuTerrainDrawHandoff {
     // Region terrain uses the renderer's uint16 auto-quad index buffer. A command's
@@ -28,7 +27,7 @@ final class GpuTerrainDrawHandoff {
                               int cpuVertexOffset) {
         DrawCommand cpu = new DrawCommand(cpuIndexCount, cpuFirstIndex,
                 cpuVertexOffset, false);
-        if(!enabled || cpuIndexCount <= 0 || !supported(type) || residency == null
+        if(!enabled || !supported(type) || residency == null
                 || !residency.valid() || residency.generation() != sectionGeneration
                 || residency.faceCount() <= 0
                 || residency.faceCount() > GpuTerrainOutputStore.MAX_FACES
