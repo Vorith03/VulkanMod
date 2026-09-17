@@ -35,12 +35,11 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
-import java.util.function.IntSupplier;
 
 @Mixin(ShaderInstance.class)
 public class ShaderInstanceM implements ShaderMixed {
 
-    @Shadow @Final private Map<String, IntSupplier> samplerMap;
+    @Shadow @Final private Map<String, Object> samplerMap;
     @Shadow @Final private Map<String, Uniform> uniformMap;
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
@@ -124,10 +123,10 @@ public class ShaderInstanceM implements ShaderMixed {
 //                this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
 //            }
 
-            // Mod shaders commonly bind RenderTarget or AbstractTexture ids under
-            // arbitrary JSON sampler names and then use BufferUploader.draw().
-            // Expose those suppliers only for converted legacy shaders; core
-            // VulkanMod shaders retain the fixed RenderSystem SamplerN path.
+            // Mod shaders commonly bind RenderTarget, AbstractTexture, or direct
+            // texture ids under arbitrary JSON sampler names and then use
+            // BufferUploader.draw(). Preserve those vanilla sampler objects for
+            // Vulkan resolution while core shaders keep the fixed SamplerN path.
             ShaderRenderState.activate(this.pipeline, this.samplerMap);
         }
     }
