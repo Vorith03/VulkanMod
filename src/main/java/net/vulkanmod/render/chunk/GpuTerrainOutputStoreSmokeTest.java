@@ -93,24 +93,34 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && store.reserve(7, TerrainRenderType.TRIPWIRE, 13L, 8) == null,
                     "Translucent and tripwire terrain must remain CPU-only");
 
-            // Prove allocation pressure is bounded: one maximum section fits in the
-            // initial area buffer, while a second one fails instead of growing it.
+            // A submitted maximum reservation must remain physically unavailable after
+            // logical generation turnover. Only completion may return that slice to the
+            // AreaBuffer free list, preventing in-flight compute from racing reuse.
             var maximum = requireReservation(store.reserve(8, TerrainRenderType.SOLID, 20L,
                             GpuTerrainOutputStore.MAX_FACES),
                     "One maximum bounded GPU terrain output must fit the initial area buffer");
-            require(store.target(maximum) != null,
-                    "Maximum bounded GPU terrain reservation must resolve a target");
+            require(maximum.submitWithTarget(target -> target != null),
+                    "Maximum GPU terrain reservation must enter submitted ownership");
+            store.invalidateSection(8, 21L);
             require(store.reserve(9, TerrainRenderType.SOLID, 20L,
                             GpuTerrainOutputStore.MAX_FACES) == null,
-                    "GPU terrain allocation pressure must fail closed without growth");
+                    "Invalidated in-flight GPU terrain output must stay physically pinned");
             require(drawBuffers.vertexBuffer.getCapacityBytes() == initialCapacity,
-                    "GPU terrain pressure must never grow the area vertex buffer");
-            store.invalidateSection(8, 21L);
+                    "Pinned GPU terrain pressure must never grow the area vertex buffer");
+            require(!maximum.complete(0, true),
+                    "Stale submitted GPU terrain completion must never publish");
+
+            var afterCompletion = requireReservation(store.reserve(9, TerrainRenderType.SOLID, 20L,
+                            GpuTerrainOutputStore.MAX_FACES),
+                    "Frame-fence completion must release stale submitted output capacity");
+            require(store.publish(afterCompletion, 1, false),
+                    "Released GPU terrain capacity must remain reusable after completion");
+            store.invalidateSection(9, 21L);
 
             verifyChunkAreaLifecycle();
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, section-global generation revocation, ChunkArea teardown/reuse, same-generation retry fallback, translucent/tripwire CPU fallback");
+                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, submitted-output pinning through completion, section-global generation revocation, ChunkArea teardown/reuse, same-generation retry fallback, translucent/tripwire CPU fallback");
         } finally {
             Vulkan.waitIdle();
             if(store != null)

@@ -3,6 +3,8 @@ package net.vulkanmod.render.chunk;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -12,7 +14,8 @@ import java.util.function.Function;
  * the persistent area vertex buffer and never grow it. A newer section generation
  * immediately revokes every terrain-layer result for that section; same-generation
  * replacement keeps the last valid result discoverable until the replacement
- * publishes successfully.</p>
+ * publishes successfully. Successfully submitted reservations remain physically
+ * pinned until their completion callback retires, even after logical invalidation.</p>
  */
 public final class GpuTerrainOutputStore implements AutoCloseable {
     public static final int MAX_FACES = 4096 * 6;
@@ -26,6 +29,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private final Entry[] entries = new Entry[RegionBatchLayout.MAX_SECTIONS
             * TerrainRenderType.VALUES.length];
     private final long[] sectionGenerations = new long[RegionBatchLayout.MAX_SECTIONS];
+    private final Map<Long, Pending> submittedReservations = new HashMap<>();
     private final long ownerId;
     private long nextToken = 1L;
     private boolean closed;
@@ -66,6 +70,8 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         Entry entry = entry(packedSection, type, true);
         // Preserve an already-published same-generation result until a retry
         // actually succeeds. Only the superseded pending reservation is dropped.
+        // Submitted work is detached logically but its segment stays pinned until
+        // the corresponding frame-fence completion callback arrives.
         discardPending(entry);
 
         if(!drawBuffers.isAllocated())
@@ -85,9 +91,10 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     /**
-     * Resolve a snapshot of the current backing-buffer handle. Callers that will
-     * submit GPU work must prefer {@link Reservation#withTarget(Function)} so an
-     * AreaBuffer grow cannot replace/free the VkBuffer between lookup and submit.
+     * Resolve a snapshot of the current backing-buffer handle. Callers that submit
+     * GPU work must use {@link Reservation#submitWithTarget(Function)} so the target
+     * remains stable through submission and the reservation is pinned before either
+     * ownership lock is released.
      */
     public synchronized Target target(Reservation reservation) {
         Pending pending = pendingFor(reservation);
@@ -97,11 +104,9 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     /**
-     * Run a target operation while holding the same AreaBuffer monitor used by CPU
-     * uploads and backing-buffer growth. The operation must submit any command buffer
-     * that references the supplied VkBuffer before it returns. Once submitted, later
-     * growth copies are ordered after that work on the graphics queue and may safely
-     * clone then retire the old allocation.
+     * Run a non-submitting target operation while holding the same AreaBuffer monitor
+     * used by CPU uploads and backing-buffer growth. GPU submissions must use
+     * {@link #submitWithTarget(Reservation, Function)} instead.
      */
     private synchronized <T> T withTarget(Reservation reservation,
                                           Function<Target, T> operation) {
@@ -122,6 +127,30 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         }
     }
 
+    /**
+     * Submit work against a stable target and atomically pin the reservation when the
+     * caller reports a successful submission. A true result means the reservation's
+     * segment cannot return to the AreaBuffer free list until complete() is called.
+     */
+    private synchronized boolean submitWithTarget(Reservation reservation,
+                                                  Function<Target, Boolean> operation) {
+        if(operation == null)
+            throw new IllegalArgumentException("GPU terrain submission operation must be present");
+        Pending pending = pendingFor(reservation);
+        if(pending == null || !drawBuffers.isAllocated() || drawBuffers.vertexBuffer == null)
+            return false;
+
+        synchronized(drawBuffers.vertexBuffer) {
+            pending = pendingFor(reservation);
+            if(pending == null)
+                return false;
+            boolean submitted = Boolean.TRUE.equals(operation.apply(targetFor(pending)));
+            if(submitted)
+                submittedReservations.put(pending.token, pending);
+            return submitted;
+        }
+    }
+
     private Target targetFor(Pending pending) {
         int offset = pending.segment.getOffset();
         if(offset < 0 || offset % VERTEX_BYTES != 0)
@@ -133,14 +162,24 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     /**
      * Publish a completed output. Overflow, zero output, stale tokens, and counts
      * beyond the reservation fail closed without disturbing a valid same-generation
-     * resident result.
+     * resident result. Submitted-but-stale reservations still reach this path so their
+     * physically pinned AreaBuffer segment can be released only after GPU completion.
      */
     public synchronized boolean publish(Reservation reservation, int writtenFaces,
                                         boolean overflow) {
-        Pending pending = pendingFor(reservation);
+        Pending pending = pendingForCompletion(reservation);
         if(pending == null)
             return false;
         Entry entry = entry(reservation.packedSection(), reservation.type(), false);
+        boolean current = !closed
+                && this.sectionGenerations[reservation.packedSection()] == reservation.generation()
+                && entry != null && entry.pending == pending;
+
+        submittedReservations.remove(pending.token, pending);
+        if(!current) {
+            discard(pending.segment);
+            return false;
+        }
 
         if(overflow || writtenFaces <= 0 || writtenFaces > pending.faceCapacity) {
             discardPending(entry);
@@ -206,6 +245,9 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             Entry entry = entries[index];
             if(entry == null)
                 continue;
+            // Submitted segments intentionally remain owned until their frame-fence
+            // callback invokes Reservation.complete(), even though the store is now
+            // logically closed and cannot publish them.
             discardPending(entry);
             if(entry.resident != null) {
                 TerrainRenderType type = TerrainRenderType.VALUES[
@@ -231,11 +273,37 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             return null;
         Entry entry = entry(reservation.packedSection, reservation.type, false);
         Pending pending = entry == null ? null : entry.pending;
-        if(pending == null || pending.generation != reservation.generation
-                || pending.token != reservation.token
-                || pending.faceCapacity != reservation.faceCapacity)
+        if(!matches(pending, reservation)
+                || submittedReservations.containsKey(reservation.token))
             return null;
         return pending;
+    }
+
+    private Pending pendingForCompletion(Reservation reservation) {
+        if(reservation == null || reservation.owner != this
+                || reservation.ownerId != ownerId)
+            return null;
+        if(reservation.type == null || !supported(reservation.type))
+            return null;
+        if(reservation.packedSection < 0
+                || reservation.packedSection >= RegionBatchLayout.MAX_SECTIONS)
+            return null;
+
+        Pending submitted = submittedReservations.get(reservation.token);
+        if(matches(submitted, reservation))
+            return submitted;
+        if(closed || this.sectionGenerations[reservation.packedSection] != reservation.generation)
+            return null;
+
+        Entry entry = entry(reservation.packedSection, reservation.type, false);
+        Pending pending = entry == null ? null : entry.pending;
+        return matches(pending, reservation) ? pending : null;
+    }
+
+    private static boolean matches(Pending pending, Reservation reservation) {
+        return pending != null && pending.generation == reservation.generation
+                && pending.token == reservation.token
+                && pending.faceCapacity == reservation.faceCapacity;
     }
 
     private void advanceSectionGeneration(int packedSection, long generation) {
@@ -269,7 +337,8 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             return;
         Pending pending = entry.pending;
         entry.pending = null;
-        discard(pending.segment);
+        if(!submittedReservations.containsKey(pending.token))
+            discard(pending.segment);
     }
 
     private void discardResident(Entry entry) {
@@ -350,6 +419,14 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
 
         public <T> T withTarget(Function<Target, T> operation) {
             return owner.withTarget(this, operation);
+        }
+
+        public boolean submitWithTarget(Function<Target, Boolean> operation) {
+            return owner.submitWithTarget(this, operation);
+        }
+
+        boolean complete(int writtenFaces, boolean overflow) {
+            return owner.publish(this, writtenFaces, overflow);
         }
     }
 
