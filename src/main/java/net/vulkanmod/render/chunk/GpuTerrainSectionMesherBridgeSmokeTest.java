@@ -28,8 +28,9 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         RenderSection.GpuTerrainPreflight publicPlan = RenderSection.qualifyGpuTerrain(isolatedCube);
         require(publicPlan != null
                         && publicPlan.modelGeneration() == isolatedPlan.modelGeneration()
-                        && publicPlan.faceCount() == isolatedPlan.faceCount(),
-                "Worker-facing preflight must preserve the bridge qualification plan");
+                        && publicPlan.faceCount() == isolatedPlan.faceCount()
+                        && publicPlan.ownership() == GpuTerrainDrawHandoff.Ownership.REPLACE,
+                "Worker-facing preflight must preserve the bridge qualification plan and default to replacement ownership");
 
         RenderSection stagedSection = new RenderSection(0, 0, 64, 0);
         long generation = stagedSection.getVoxelGeneration();
@@ -37,19 +38,55 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
         require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
                         publicPlan.modelGeneration(), publicPlan.faceCount()),
                 "Same-generation worker preflight must become eligible for bridge dispatch");
+        require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        publicPlan.modelGeneration(), publicPlan.faceCount(),
+                        GpuTerrainDrawHandoff.Ownership.REPLACE)
+                        && stagedSection.stagedGpuTerrainOwnership(generation)
+                        == GpuTerrainDrawHandoff.Ownership.REPLACE,
+                "Legacy/full-section preflight must stage explicit replacement ownership");
+
+        RenderSection.GpuTerrainPreflight appendPlan = new RenderSection.GpuTerrainPreflight(
+                publicPlan.modelGeneration(), publicPlan.faceCount(),
+                GpuTerrainDrawHandoff.Ownership.APPEND);
+        stagedSection.stageGpuTerrainPreflight(appendPlan, generation, true);
+        require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        appendPlan.modelGeneration(), appendPlan.faceCount(),
+                        GpuTerrainDrawHandoff.Ownership.APPEND)
+                        && stagedSection.stagedGpuTerrainOwnership(generation)
+                        == GpuTerrainDrawHandoff.Ownership.APPEND
+                        && stagedSection.stagedGpuTerrainCpuBypassed(generation),
+                "Hybrid preflight must stage append ownership with recovery-required CPU omission state");
+        require(!stagedSection.matchesStagedGpuTerrainPreflight(generation,
+                        appendPlan.modelGeneration(), appendPlan.faceCount(),
+                        GpuTerrainDrawHandoff.Ownership.REPLACE),
+                "Append ownership must never be mistaken for full replacement");
 
         stagedSection.stageGpuTerrainPreflight(
                 new RenderSection.GpuTerrainPreflight(
-                        publicPlan.modelGeneration(), publicPlan.faceCount() + 1),
+                        publicPlan.modelGeneration(), publicPlan.faceCount() + 1,
+                        GpuTerrainDrawHandoff.Ownership.REPLACE),
                 generation + 1);
         require(stagedSection.matchesStagedGpuTerrainPreflight(generation,
-                        publicPlan.modelGeneration(), publicPlan.faceCount()),
+                        appendPlan.modelGeneration(), appendPlan.faceCount(),
+                        GpuTerrainDrawHandoff.Ownership.APPEND),
                 "Stale/future generation preflight must not replace current ownership");
 
         stagedSection.stageGpuTerrainPreflight(null, generation);
         require(!stagedSection.matchesStagedGpuTerrainPreflight(generation,
-                        publicPlan.modelGeneration(), publicPlan.faceCount()),
-                "Same-generation fallback must clear staged GPU ownership");
+                        publicPlan.modelGeneration(), publicPlan.faceCount())
+                        && stagedSection.stagedGpuTerrainOwnership(generation)
+                        == GpuTerrainDrawHandoff.Ownership.REPLACE,
+                "Same-generation fallback must clear staged GPU ownership to fail-closed replacement default");
+
+        boolean rejectedNullOwnership = false;
+        try {
+            new RenderSection.GpuTerrainPreflight(publicPlan.modelGeneration(),
+                    publicPlan.faceCount(), null);
+        } catch(IllegalArgumentException expected) {
+            rejectedNullOwnership = true;
+        }
+        require(rejectedNullOwnership,
+                "GPU terrain preflight must reject unspecified draw ownership");
 
         SectionVoxelSnapshot boundaryOccludedCube = fixture(
                 qualifiedState, -1, 0, false, 0, true);
@@ -81,7 +118,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation ownership is fail-closed; unsupported visible, fluid, block-entity, waterlogged/full-cube, missing-bit and stale/forged qualification cases retain CPU fallback");
+                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation and explicit REPLACE/APPEND ownership are fail-closed; unsupported visible, fluid, block-entity, waterlogged/full-cube, missing-bit and stale/forged qualification cases retain CPU fallback");
     }
 
     private static SectionVoxelSnapshot fixture(int qualifiedState,
