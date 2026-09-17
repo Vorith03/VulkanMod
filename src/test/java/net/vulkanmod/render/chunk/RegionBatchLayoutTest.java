@@ -85,6 +85,24 @@ public final class RegionBatchLayoutTest {
         require(gpu.indexCount() == 36 && gpu.firstIndex() == 0 && gpu.vertexOffset() == 8,
                 "GPU handoff must derive an auto-quad command from persistent residency");
 
+        var gpuOnly = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                resident, 0, 0, 0);
+        require(gpuOnly.gpuResident(),
+                "Exact-generation GPU residency must be drawable without a CPU mesh");
+        require(gpuOnly.indexCount() == 36 && gpuOnly.firstIndex() == 0
+                        && gpuOnly.vertexOffset() == 8,
+                "GPU-only fresh sections must derive the same persistent draw command");
+
+        var missingGpuOnly = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 7L,
+                null, 0, 0, 0);
+        require(!missingGpuOnly.gpuResident() && missingGpuOnly.indexCount() == 0,
+                "Fresh sections without published GPU residency must remain non-drawable until recovery/publication");
+
+        var staleGpuOnly = GpuTerrainDrawHandoff.select(true, TerrainRenderType.SOLID, 8L,
+                resident, 0, 0, 0);
+        require(!staleGpuOnly.gpuResident() && staleGpuOnly.indexCount() == 0,
+                "Fresh sections must not draw stale GPU residency");
+
         int maxFaces = GpuTerrainDrawHandoff.MAX_AUTO_INDEX_FACES;
         var maxResident = new GpuTerrainOutputStore.Residency(7L, 160,
                 maxFaces * GpuTerrainOutputStore.BYTES_PER_FACE, maxFaces, 8, true);
