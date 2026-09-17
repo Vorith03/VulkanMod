@@ -255,12 +255,26 @@ public class ChunkArea {
                 gpuVoxels.invalidate(slot, generation);
                 gpuVoxels.invalidateLighting(slot, generation);
             }
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "voxel_snapshot_store_rejected", null);
             return;
         }
 
         if (gpuVoxels == null)
             gpuVoxels = new RegionVoxelGpuStore();
-        gpuVoxels.upload(slot, snapshot, generation);
+
+        boolean queued;
+        try {
+            queued = gpuVoxels.upload(slot, snapshot, generation);
+        } catch(RuntimeException error) {
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "voxel_upload_exception", error);
+            return;
+        }
+        if(!queued) {
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "voxel_upload_rejected", null);
+        }
     }
 
     /**
@@ -279,16 +293,33 @@ public class ChunkArea {
         if (gpuVoxels == null || voxels == null || voxels.get(slot) == null) {
             if (gpuVoxels != null)
                 gpuVoxels.invalidateLighting(slot, generation);
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "lighting_without_voxel_input", null);
             return;
         }
 
         if (snapshot == null) {
             gpuVoxels.invalidateLighting(slot, generation);
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "lighting_snapshot_missing", null);
             return;
         }
 
-        boolean queued = gpuVoxels.uploadLighting(slot, snapshot, generation);
-        if(queued && GpuTerrainSectionMesherBridge.enabled()) {
+        boolean queued;
+        try {
+            queued = gpuVoxels.uploadLighting(slot, snapshot, generation);
+        } catch(RuntimeException error) {
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "lighting_upload_exception", error);
+            return;
+        }
+        if(!queued) {
+            recoverGpuTerrainInputFailure(slot, generation,
+                    "lighting_upload_rejected", null);
+            return;
+        }
+
+        if(GpuTerrainSectionMesherBridge.enabled()) {
             RenderSection section = getOwnedSection(slot);
             if(section != null) {
                 // Run only after this frame slot's upload submission/fence lifecycle.
@@ -298,6 +329,18 @@ public class ChunkArea {
                         GpuTerrainSectionMesherBridge.dispatch(this, section, generation));
             }
         }
+    }
+
+    private void recoverGpuTerrainInputFailure(int slot, long generation,
+                                               String reason, RuntimeException error) {
+        RenderSection section = getOwnedSection(slot);
+        if(section == null || !section.stagedGpuTerrainCpuBypassed(generation))
+            return;
+        String detail = error == null ? null
+                : error.getClass().getName() + ": " + error.getMessage();
+        GpuTerrainDiagnostics.record("input_publish", reason,
+                section, generation, detail);
+        GpuTerrainSectionMesherBridge.recoverCpuFallback(this, section, generation);
     }
 
     public synchronized SectionVoxelSnapshot getVoxels(int x, int y, int z) {
