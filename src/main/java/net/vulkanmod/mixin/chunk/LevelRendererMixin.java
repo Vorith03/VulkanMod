@@ -68,11 +68,6 @@ public abstract class LevelRendererMixin {
         this.worldRenderer.setLevel(clientLevel);
     }
 
-    @Inject(method = "allChanged", at = @At("RETURN"))
-    private void allChanged(CallbackInfo ci) {
-        this.worldRenderer.allChanged();
-    }
-
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;checkPoseStack(Lcom/mojang/blaze3d/vertex/PoseStack;)V", ordinal = 1, shift = At.Shift.BEFORE))
     private void renderBlockEntities(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Vec3 pos = camera.getPosition();
@@ -118,11 +113,12 @@ public abstract class LevelRendererMixin {
     }
 
     /**
-     * @author
-     * @reason
+     * Keep vanilla allChanged bytecode structurally available so third-party
+     * mixins can resolve their vanilla call sites, while retaining VulkanMod's
+     * existing runtime behavior by cancelling before vanilla chunk allocation.
      */
-    @Overwrite
-    public void allChanged() {
+    @Inject(method = "allChanged", at = @At("HEAD"), cancellable = true)
+    private void vulkanmod$allChanged(CallbackInfo ci) {
         if (this.level != null) {
             this.graphicsChanged();
             this.level.clearTintCaches();
@@ -142,6 +138,9 @@ public abstract class LevelRendererMixin {
             }
 
         }
+
+        this.worldRenderer.allChanged();
+        ci.cancel();
     }
 
     /**
