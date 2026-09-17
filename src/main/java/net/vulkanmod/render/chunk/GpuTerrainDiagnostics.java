@@ -89,6 +89,20 @@ public final class GpuTerrainDiagnostics {
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
             int stateId = snapshot.stateId(index);
             int flags = snapshot.flags(index);
+
+            // These are hard CPU-ownership boundaries even if the baked block model
+            // itself happens to look like a reusable full cube.
+            if((flags & SectionVoxelSnapshot.HAS_FLUID) != 0) {
+                recordState(stage, "fluid", snapshot, section,
+                        generation, index, stateId, flags);
+                return;
+            }
+            if((flags & SectionVoxelSnapshot.HAS_BLOCK_ENTITY) != 0) {
+                recordState(stage, "block_entity", snapshot, section,
+                        generation, index, stateId, flags);
+                return;
+            }
+
             if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
                 if(GpuTerrainModelRegistry.getFullCubeTemplate(stateId) == null) {
                     recordState(stage, "qualified_template_stale", snapshot, section,
