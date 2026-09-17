@@ -1,7 +1,6 @@
 package net.vulkanmod.render.chunk;
 
 import net.vulkanmod.render.vertex.TerrainRenderType;
-import net.vulkanmod.vulkan.memory.MemoryManager;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -57,15 +56,15 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
 
     private static Consumer<Runnable> defaultResidentRetirement() {
         return runnable -> {
-            MemoryManager manager = MemoryManager.getInstance();
+            AreaUploadManager manager = AreaUploadManager.INSTANCE;
             if(manager == null) {
                 runnable.run();
                 return;
             }
-            // MemoryManager frame operations run only after the current frame-slot
-            // fence has retired. Graphics-queue order means that fence also covers
-            // every older frame that could still reference this resident slice.
-            manager.addFrameOp(runnable);
+            // Renderer.beginFrame waits the frame-slot fence before updateFrame()
+            // drains this queue. The queue is concurrent because section invalidation
+            // may originate on a terrain worker while the render thread advances it.
+            manager.enqueueFrameOp(runnable);
         };
     }
 
@@ -386,9 +385,9 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             segment.reset();
             return;
         }
-        // Capture the exact allocator that owns this segment. The deferred callback
-        // runs while MemoryManager owns its frame-op monitor, so it must not re-enter
-        // this store and create a MemoryManager <-> output-store lock inversion.
+        // Capture the exact allocator that owns this segment. The deferred terrain
+        // frame-op queue executes without holding an output-store or allocator lock,
+        // so the callback only needs to return this exact segment to its owner.
         residentRetirement.accept(() -> releaseResidentSegment(vertexBuffer, segment));
     }
 

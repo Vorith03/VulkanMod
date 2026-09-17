@@ -10,6 +10,7 @@ import org.apache.commons.lang3.Validate;
 
 import java.nio.ByteBuffer;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class AreaUploadManager {
     public static AreaUploadManager INSTANCE;
@@ -21,7 +22,7 @@ public class AreaUploadManager {
     ObjectArrayList<AreaBuffer.Segment>[] recordedUploads;
     ObjectArrayList<DrawBuffers.ParametersUpdate>[] updatedParameters;
     ObjectArrayList<Runnable>[] submittedUploadOps;
-    ObjectArrayList<Runnable>[] frameOps;
+    ConcurrentLinkedQueue<Runnable>[] frameOps;
     CommandPool.CommandBuffer[] commandBuffers;
     long[] firstUploadNanos;
     long[] recordedUploadBytes;
@@ -34,14 +35,14 @@ public class AreaUploadManager {
     long stagingCopyBytes;
     long stagingCopyNanos;
 
-    int currentFrame;
+    volatile int currentFrame;
 
     public void createLists(int frames) {
         this.commandBuffers = new CommandPool.CommandBuffer[frames];
         this.recordedUploads = new ObjectArrayList[frames];
         this.updatedParameters = new ObjectArrayList[frames];
         this.submittedUploadOps = new ObjectArrayList[frames];
-        this.frameOps = new ObjectArrayList[frames];
+        this.frameOps = new ConcurrentLinkedQueue[frames];
         this.firstUploadNanos = new long[frames];
         this.recordedUploadBytes = new long[frames];
 
@@ -55,7 +56,7 @@ public class AreaUploadManager {
             this.recordedUploads[i] = new ObjectArrayList<>();
             this.updatedParameters[i] = new ObjectArrayList<>();
             this.submittedUploadOps[i] = new ObjectArrayList<>();
-            this.frameOps[i] = new ObjectArrayList<>();
+            this.frameOps[i] = new ConcurrentLinkedQueue<>();
         }
     }
 
@@ -139,6 +140,8 @@ public class AreaUploadManager {
     }
 
     public void enqueueFrameOp(Runnable runnable) {
+        if(runnable == null)
+            throw new IllegalArgumentException("Terrain frame operation must be present");
         this.frameOps[this.currentFrame].add(runnable);
     }
 
@@ -181,12 +184,12 @@ public class AreaUploadManager {
             parametersUpdate.setDrawParameters();
         }
 
-        for(Runnable runnable : this.frameOps[frame]) {
+        Runnable runnable;
+        while((runnable = this.frameOps[frame].poll()) != null) {
             runnable.run();
         }
 
         this.updatedParameters[frame].clear();
-        this.frameOps[frame].clear();
     }
 
     private void markUploadsReady(int frame) {
