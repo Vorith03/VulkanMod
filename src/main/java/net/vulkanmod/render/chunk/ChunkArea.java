@@ -321,10 +321,11 @@ public class ChunkArea {
         if(GpuTerrainSectionMesherBridge.enabled()) {
             RenderSection section = getOwnedSection(slot);
             if(section != null) {
-                // Run only after this frame slot's upload submission/fence lifecycle.
-                // The bridge revalidates section ownership and generation, so a
-                // moved/dirty section becomes a no-op rather than publishing stale output.
-                AreaUploadManager.INSTANCE.enqueueFrameOp(() ->
+                // Voxel and lighting residency become discoverable once their copy
+                // command buffer is submitted. Dispatch immediately afterward: the
+                // compute submission uses the same graphics queue, so queue order
+                // guarantees copy -> compute without waiting a frame fence.
+                AreaUploadManager.INSTANCE.enqueuePostSubmitOp(() ->
                         GpuTerrainSectionMesherBridge.dispatch(this, section, generation));
             }
         }
