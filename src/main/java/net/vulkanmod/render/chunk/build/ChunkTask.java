@@ -91,8 +91,7 @@ public class ChunkTask {
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
-                    && !this.gpuTerrainCpuRecoveryRequired
-                    && this.gpuTerrainHadReadyCpuFallback;
+                    && !this.gpuTerrainCpuRecoveryRequired;
             this.highPriority = highPriority;
         }
 
@@ -177,11 +176,10 @@ public class ChunkTask {
                 SectionVoxelSnapshot.Builder voxels = RegionVoxelStore.ENABLED
                         ? new SectionVoxelSnapshot.Builder(blockPos.getX(), blockPos.getY(), blockPos.getZ()) : null;
 
-                // Capture immutable GPU inputs before model tessellation. The stricter
-                // CPU-bypass gate is rebuild-only: it requires an already-ready CPU
-                // fallback, a fully-qualified bounded work plan, and exact sparse
-                // lighting. Fresh sections and recovery rebuilds remain ordinary CPU
-                // builds. The block scan below still owns visibility/block entities.
+                // Capture immutable GPU inputs before model tessellation. Qualified
+                // sections can now skip CPU block-model tessellation on both fresh
+                // builds and rebuilds. Recovery rebuilds stay CPU-authoritative; the
+                // block scan below still owns visibility and block-entity discovery.
                 if(voxels != null && RenderSection.gpuTerrainMesherEnabled()) {
                     try {
                         compileResults.voxels = captureGpuTerrainInputs(
@@ -196,14 +194,13 @@ public class ChunkTask {
 
                         if(RenderSection.gpuTerrainCpuBypassEnabled()) {
                             if(compileResults.gpuTerrainCpuBypassed) {
-                                GpuTerrainDiagnostics.recordSuccess("worker_bypass", this.renderSection,
-                                        this.voxelGeneration,
+                                GpuTerrainDiagnostics.recordSuccess(
+                                        this.gpuTerrainHadReadyCpuFallback
+                                                ? "worker_bypass_rebuild" : "worker_bypass_fresh",
+                                        this.renderSection, this.voxelGeneration,
                                         compileResults.gpuTerrainPreflight.faceCount(), true);
                             } else if(this.gpuTerrainCpuRecoveryRequired) {
                                 GpuTerrainDiagnostics.record("worker_preflight", "cpu_recovery_required",
-                                        this.renderSection, this.voxelGeneration, null);
-                            } else if(!this.gpuTerrainHadReadyCpuFallback) {
-                                GpuTerrainDiagnostics.record("worker_preflight", "no_prior_cpu_fallback",
                                         this.renderSection, this.voxelGeneration, null);
                             } else if(compileResults.gpuTerrainPreflight == null) {
                                 GpuTerrainDiagnostics.recordQualificationFailure("worker_preflight",
@@ -229,9 +226,10 @@ public class ChunkTask {
                         if(compileResults.gpuTerrainCpuBypassed
                                 && GPU_CPU_BYPASS_LOGGED.compareAndSet(false, true)) {
                             Initializer.LOGGER.info(
-                                    "VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE: section=({}, {}, {}) faces={}; worker skipped block-model tessellation and retained the previous CPU mesh pending GPU publication",
+                                    "VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE: section=({}, {}, {}) faces={} priorCpuFallback={}; worker skipped block-model tessellation pending GPU publication",
                                     blockPos.getX(), blockPos.getY(), blockPos.getZ(),
-                                    compileResults.gpuTerrainPreflight.faceCount());
+                                    compileResults.gpuTerrainPreflight.faceCount(),
+                                    this.gpuTerrainHadReadyCpuFallback);
                         }
                         voxels = null;
                     } catch(RuntimeException error) {
