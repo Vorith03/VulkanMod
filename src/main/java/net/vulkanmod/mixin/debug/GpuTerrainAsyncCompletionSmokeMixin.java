@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin.debug;
 
+import net.vulkanmod.render.chunk.AreaUploadManagerPostSubmitSmokeTest;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainSectionMesherAsyncSmokeTest;
 import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,7 +14,9 @@ public abstract class GpuTerrainAsyncCompletionSmokeMixin {
     @Inject(method = "beginFrame", at = @At("TAIL"), remap = false)
     private void vulkanmod$startGpuTerrainAsyncSmoke(CallbackInfo ci) {
         Renderer renderer = (Renderer)(Object)this;
-        if(renderer.isRecordingFrame())
+        if(renderer.isRecordingFrame()) {
+            AreaUploadManagerPostSubmitSmokeTest.verifyInRecordingFrame();
             GpuTerrainSectionMesherAsyncSmokeTest.onFrameStarted();
+        }
     }
 }
