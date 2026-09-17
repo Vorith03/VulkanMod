@@ -5,17 +5,20 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Vulkan;
 import org.joml.Vector3i;
 
+import java.util.ArrayDeque;
+
 /** CI-only lifecycle oracle for non-consuming GPU terrain output ownership. */
 public final class GpuTerrainOutputStoreSmokeTest {
     private GpuTerrainOutputStoreSmokeTest() {}
 
     public static void verify() {
         DrawBuffers drawBuffers = new DrawBuffers();
+        ArrayDeque<Runnable> residentRetirements = new ArrayDeque<>();
         GpuTerrainOutputStore store = null;
         try {
             drawBuffers.allocateBuffers();
             int initialCapacity = drawBuffers.vertexBuffer.getCapacityBytes();
-            store = new GpuTerrainOutputStore(drawBuffers);
+            store = new GpuTerrainOutputStore(drawBuffers, residentRetirements::addLast);
 
             var first = requireReservation(store.reserve(7, TerrainRenderType.SOLID, 10L, 64),
                     "Initial GPU terrain output reservation must fit");
@@ -93,16 +96,48 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && store.reserve(7, TerrainRenderType.TRIPWIRE, 13L, 8) == null,
                     "Translucent and tripwire terrain must remain CPU-only");
 
+            // Simulate the frame-fence retirement point for the smaller residents
+            // above before using a maximum-size reservation as a precise capacity
+            // oracle for published-resident lifetime.
+            runRetirements(residentRetirements);
+
+            // A published resident may already be referenced by an in-flight or
+            // frame-local indirect command. Logical invalidation must therefore hide
+            // it immediately while keeping its physical slice unavailable until the
+            // owning frame slot retires.
+            var residentMaximum = requireReservation(store.reserve(8, TerrainRenderType.SOLID, 20L,
+                            GpuTerrainOutputStore.MAX_FACES),
+                    "One maximum published GPU terrain output must fit the initial area buffer");
+            require(store.publish(residentMaximum, 1, false),
+                    "Maximum-capacity GPU terrain reservation must publish a bounded resident");
+            store.invalidateSection(8, 21L);
+            require(!store.getResidency(8, TerrainRenderType.SOLID).valid(),
+                    "Invalidated published GPU terrain output must disappear logically immediately");
+            require(store.reserve(9, TerrainRenderType.SOLID, 20L,
+                            GpuTerrainOutputStore.MAX_FACES) == null,
+                    "Invalidated published GPU terrain output must stay physically pinned before frame retirement");
+            require(drawBuffers.vertexBuffer.getCapacityBytes() == initialCapacity,
+                    "Pinned published terrain pressure must never grow the area vertex buffer");
+            runRetirements(residentRetirements);
+
+            var afterResidentRetirement = requireReservation(store.reserve(9, TerrainRenderType.SOLID, 20L,
+                            GpuTerrainOutputStore.MAX_FACES),
+                    "Frame retirement must release stale published output capacity");
+            require(store.publish(afterResidentRetirement, 1, false),
+                    "Released published terrain capacity must remain reusable");
+            store.invalidateSection(9, 21L);
+            runRetirements(residentRetirements);
+
             // A submitted maximum reservation must remain physically unavailable after
             // logical generation turnover. Only completion may return that slice to the
             // AreaBuffer free list, preventing in-flight compute from racing reuse.
-            var maximum = requireReservation(store.reserve(8, TerrainRenderType.SOLID, 20L,
+            var maximum = requireReservation(store.reserve(10, TerrainRenderType.SOLID, 30L,
                             GpuTerrainOutputStore.MAX_FACES),
                     "One maximum bounded GPU terrain output must fit the initial area buffer");
             require(maximum.submitWithTarget(target -> target != null),
                     "Maximum GPU terrain reservation must enter submitted ownership");
-            store.invalidateSection(8, 21L);
-            require(store.reserve(9, TerrainRenderType.SOLID, 20L,
+            store.invalidateSection(10, 31L);
+            require(store.reserve(11, TerrainRenderType.SOLID, 30L,
                             GpuTerrainOutputStore.MAX_FACES) == null,
                     "Invalidated in-flight GPU terrain output must stay physically pinned");
             require(drawBuffers.vertexBuffer.getCapacityBytes() == initialCapacity,
@@ -110,21 +145,23 @@ public final class GpuTerrainOutputStoreSmokeTest {
             require(!maximum.complete(0, true),
                     "Stale submitted GPU terrain completion must never publish");
 
-            var afterCompletion = requireReservation(store.reserve(9, TerrainRenderType.SOLID, 20L,
+            var afterCompletion = requireReservation(store.reserve(11, TerrainRenderType.SOLID, 30L,
                             GpuTerrainOutputStore.MAX_FACES),
                     "Frame-fence completion must release stale submitted output capacity");
             require(store.publish(afterCompletion, 1, false),
                     "Released GPU terrain capacity must remain reusable after completion");
-            store.invalidateSection(9, 21L);
+            store.invalidateSection(11, 31L);
+            runRetirements(residentRetirements);
 
             verifyChunkAreaLifecycle();
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, submitted-output pinning through completion, section-global generation revocation, ChunkArea teardown/reuse, same-generation retry fallback, translucent/tripwire CPU fallback");
+                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, published-resident pinning through frame retirement, submitted-output pinning through completion, section-global generation revocation, ChunkArea teardown/reuse safety, same-generation retry fallback, translucent/tripwire CPU fallback");
         } finally {
             Vulkan.waitIdle();
             if(store != null)
                 store.close();
+            runRetirements(residentRetirements);
             drawBuffers.releaseBuffers();
         }
     }
@@ -167,11 +204,11 @@ public final class GpuTerrainOutputStoreSmokeTest {
                     "Current ChunkArea GPU terrain generation must resolve a target");
             require(area.publishGpuTerrainOutput(current, 4, false),
                     "Current ChunkArea GPU terrain generation must publish");
-            long reusableBuffer = currentTarget.bufferId();
 
-            // Coarse-area reuse must close the output owner before hasLiveGeometry()
-            // decides whether persistent draw buffers can be retained. With no CPU
-            // geometry in this smoke, the same physical vertex buffer should survive.
+            // Coarse-area reuse closes GPU output ownership before deciding whether
+            // the persistent draw buffer can be reused. A resident slice may now stay
+            // physically pinned until frame retirement, so replacement of the whole
+            // area buffer is an acceptable conservative fallback; stale ownership is not.
             area.repositionForReuse(0, y, z);
             require(area.getGpuTerrainOutputResidency(0, y, z, TerrainRenderType.CUTOUT) == null,
                     "ChunkArea reposition must discard old-coordinate GPU output ownership");
@@ -179,8 +216,8 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             0, y, z, TerrainRenderType.SOLID, 40L, 4),
                     "Repositioned ChunkArea must accept fresh GPU terrain ownership");
             var reusedTarget = area.getGpuTerrainOutputTarget(reused);
-            require(reusedTarget != null && reusedTarget.bufferId() == reusableBuffer,
-                    "GPU-only output must not prevent safe persistent area-buffer reuse");
+            require(reusedTarget != null && reusedTarget.bufferId() != 0L,
+                    "Repositioned ChunkArea must expose a valid fresh terrain target");
             require(area.publishGpuTerrainOutput(reused, 4, false),
                     "Repositioned ChunkArea GPU terrain output must publish");
 
@@ -190,6 +227,11 @@ public final class GpuTerrainOutputStoreSmokeTest {
         } finally {
             area.releaseBuffers();
         }
+    }
+
+    private static void runRetirements(ArrayDeque<Runnable> retirements) {
+        while(!retirements.isEmpty())
+            retirements.removeFirst().run();
     }
 
     private static GpuTerrainOutputStore.Reservation requireReservation(
