@@ -1,1 +1,503 @@
-TEMP
+package net.vulkanmod.render.chunk;
+
+import com.google.common.collect.Sets;
+import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.chunk.RenderChunkRegion;
+import net.minecraft.client.renderer.chunk.RenderRegionCache;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.phys.Vec3;
+import net.vulkanmod.render.chunk.build.ChunkTask;
+import net.vulkanmod.render.chunk.build.CompiledSection;
+import net.vulkanmod.render.chunk.build.TaskDispatcher;
+import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingMode;
+import net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshot;
+import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
+
+import javax.annotation.Nullable;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+
+public class RenderSection {
+    static final Map<RenderSection, Set<BlockEntity>> globalBlockEntitiesMap = new Reference2ReferenceOpenHashMap<>();
+
+    private ChunkArea chunkArea;
+    private final RenderSection[] neighbours = new RenderSection[6];
+    public byte frustumIndex;
+    private short lastFrame = -1;
+    private short lastFrame2 = -1;
+
+    private final CompileStatus compileStatus = new CompileStatus();
+
+    private boolean dirty = true;
+    private long voxelGeneration;
+    private long gpuTerrainPreflightGeneration = Long.MIN_VALUE;
+    private long gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
+    private int gpuTerrainPreflightFaceCount = -1;
+    private boolean gpuTerrainPreflightCpuBypassed;
+    private boolean forceCpuTerrainUntilSuccess;
+    private boolean playerChanged;
+
+    private boolean completelyEmpty = true;
+    private long visibility;
+
+    int xOffset, yOffset, zOffset;
+
+//    private final DrawBuffers.DrawParameters[] drawParametersArray =
+//            Arrays.stream(TerrainRenderType.VALUES)
+//                    .map(terrainRenderType -> new DrawBuffers.DrawParameters(terrainRenderType == TerrainRenderType.TRANSLUCENT))
+//                    .toArray(DrawBuffers.DrawParameters[]::new);
+    private final DrawBuffers.DrawParameters[] drawParametersArray;
+
+    //Graph-info
+    public Direction mainDir;
+    public byte directions;
+    public byte step;
+    public byte directionChanges;
+    byte sourceDirs;
+
+
+    public RenderSection(int index, int x, int y, int z) {
+        this.xOffset = x;
+        this.yOffset = y;
+        this.zOffset = z;
+
+        this.drawParametersArray = new DrawBuffers.DrawParameters[TerrainRenderType.VALUES.length];
+        for(int i = 0; i < this.drawParametersArray.length; ++i) {
+            this.drawParametersArray[i] = new DrawBuffers.DrawParameters(TerrainRenderType.VALUES[i]);
+        }
+    }
+
+    public void setOrigin(int x, int y, int z) {
+        this.reset();
+
+        this.xOffset = x;
+        this.yOffset = y;
+        this.zOffset = z;
+
+    }
+
+    public RenderSection setGraphInfo(@Nullable Direction from, byte step) {
+        mainDir = from;
+
+        sourceDirs = (byte) (from != null ? 1 << from.ordinal() : 0);
+
+        this.step = step;
+        this.directions = 0;
+        this.directionChanges = 0;
+        return this;
+    }
+
+    public void addDir(Direction direction) {
+        if(sourceDirs == 0)
+            return;
+        sourceDirs |= 1 << direction.ordinal();
+    }
+
+    public void setDirections(byte p_109855_, Direction p_109856_) {
+        this.directions = (byte)(this.directions | p_109855_ | 1 << p_109856_.ordinal());
+    }
+
+    void setDirectionChanges(byte i) {
+        this.directionChanges = i;
+    }
+
+    public boolean hasDirection(Direction p_109860_) {
+        return (this.directions & 1 << p_109860_.ordinal()) > 0;
+    }
+
+    public boolean hasMainDirection() {
+        return this.sourceDirs != 0;
+    }
+
+    public boolean resortTransparency(TerrainRenderType renderType, TaskDispatcher taskDispatcher) {
+        CompiledSection compiledSection1 = this.getCompiledSection();
+
+        if (this.compileStatus.sortTask != null) {
+            this.compileStatus.sortTask.cancel();
+        }
+
+        if (!compiledSection1.renderTypes.contains(renderType)) {
+            return false;
+        } else {
+            this.compileStatus.sortTask = new ChunkTask.SortTransparencyTask(this);
+            taskDispatcher.schedule(this.compileStatus.sortTask);
+            return true;
+        }
+    }
+
+    public void rebuildChunkAsync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
+        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache);
+        dispatcher.schedule(chunkCompileTask);
+    }
+
+    public void rebuildChunkSync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
+        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache);
+        chunkCompileTask.doTask(dispatcher.fixedBuffers);
+    }
+
+    public ChunkTask.BuildTask createCompileTask(RenderRegionCache renderRegionCache) {
+        boolean flag = this.cancelTasks();
+        BlockPos blockpos = new BlockPos(this.xOffset, this.yOffset, this.zOffset).immutable();
+        RenderChunkRegion renderchunkregion = renderRegionCache.createRegion(WorldRenderer.getLevel(), blockpos.offset(-1, -1, -1), blockpos.offset(16, 16, 16), 1);
+        boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
+
+        this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, !flag1 || flag);
+        return this.compileStatus.rebuildTask;
+    }
+
+    protected boolean cancelTasks() {
+        boolean flag = false;
+        if (this.compileStatus.rebuildTask != null) {
+            this.compileStatus.rebuildTask.cancel();
+            this.compileStatus.rebuildTask = null;
+            flag = true;
+        }
+
+        if (this.compileStatus.sortTask != null) {
+            this.compileStatus.sortTask.cancel();
+            this.compileStatus.sortTask = null;
+        }
+
+        return flag;
+    }
+
+    void release() {
+        this.invalidateVoxels();
+        synchronized(this) {
+            this.forceCpuTerrainUntilSuccess = false;
+        }
+        this.cancelTasks();
+        this.clearGlobalBlockEntities();
+    }
+
+    public void setNotDirty() {
+        this.dirty = false;
+        this.playerChanged = false;
+    }
+
+    public boolean isDirty() { return this.dirty; }
+
+    public boolean isDirtyFromPlayer() {
+        return this.dirty && this.playerChanged;
+    }
+
+    public int xOffset() {
+        return xOffset;
+    }
+
+    public int yOffset() {
+        return yOffset;
+    }
+
+    public int zOffset() {
+        return zOffset;
+    }
+
+    public DrawBuffers.DrawParameters getDrawParameters(TerrainRenderType renderType) {
+        return drawParametersArray[renderType.ordinal()];
+    }
+
+    public void setNeighbour(int index, @Nullable RenderSection chunk) {
+        this.neighbours[index] = chunk;
+    }
+
+    public RenderSection getNeighbour(Direction dir) {
+        return this.neighbours[dir.ordinal()];
+    }
+
+    public RenderSection getNeighbour(int i) {
+        return this.neighbours[i];
+    }
+
+    public void setChunkArea(ChunkArea chunkArea) {
+        this.chunkArea = chunkArea;
+
+        this.frustumIndex = chunkArea.getFrustumIndex(xOffset, yOffset, zOffset);
+    }
+
+    public ChunkArea getChunkArea() {
+        return this.chunkArea;
+    }
+
+    public CompiledSection getCompiledSection() {
+        return compileStatus.compiledSection;
+    }
+
+    public boolean isCompiled() {
+        return this.compileStatus.compiledSection != CompiledSection.UNCOMPILED;
+    }
+
+    public void setVisibility(long visibility) {
+        this.visibility = visibility;
+    }
+
+    public void setCompletelyEmpty(boolean b) {
+        this.completelyEmpty = b;
+    }
+
+    public boolean visibilityBetween(Direction dir1, Direction dir2) {
+        return (this.visibility & (1L << ((dir1.ordinal() << 3) + dir2.ordinal()))) != 0;
+    }
+
+    public boolean isCompletelyEmpty() {
+        return this.completelyEmpty;
+    }
+
+    private boolean doesChunkExistAt(int chunkX, int chunkZ) {
+        var level = WorldRenderer.getLevel();
+        return level != null && level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false) != null;
+    }
+
+    public boolean hasXYNeighbours() {
+        Vec3 cameraPos = WorldRenderer.getCameraPos();
+        if(cameraPos == null)
+            return true;
+
+        double dx = this.xOffset + 8.0D - cameraPos.x;
+        double dy = this.yOffset + 8.0D - cameraPos.y;
+        double dz = this.zOffset + 8.0D - cameraPos.z;
+        if(dx * dx + dy * dy + dz * dz <= 576.0D)
+            return true;
+
+        int chunkX = this.xOffset >> 4;
+        int chunkZ = this.zOffset >> 4;
+        return this.doesChunkExistAt(chunkX - 1, chunkZ)
+                && this.doesChunkExistAt(chunkX, chunkZ - 1)
+                && this.doesChunkExistAt(chunkX + 1, chunkZ)
+                && this.doesChunkExistAt(chunkX, chunkZ + 1);
+    }
+
+    public void updateGlobalBlockEntities(Collection<BlockEntity> fullSet) {
+        Set<BlockEntity> newSet = Sets.newHashSet(fullSet);
+        Set<BlockEntity> oldSet;
+
+        synchronized(globalBlockEntitiesMap) {
+            oldSet = globalBlockEntitiesMap.get(this);
+            if(oldSet == null) {
+                oldSet = Collections.emptySet();
+            }
+
+            if(oldSet.size() == newSet.size() && oldSet.containsAll(newSet)) {
+                return;
+            }
+
+            if(newSet.isEmpty()) {
+                globalBlockEntitiesMap.remove(this);
+            } else {
+                globalBlockEntitiesMap.put(this, newSet);
+            }
+        }
+
+        Set<BlockEntity> removed = Sets.newHashSet(oldSet);
+        removed.removeAll(newSet);
+        Set<BlockEntity> added = Sets.newHashSet(newSet);
+        added.removeAll(oldSet);
+
+        Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(removed, added);
+    }
+
+    private void clearGlobalBlockEntities() {
+        Set<BlockEntity> removed;
+        synchronized(globalBlockEntitiesMap) {
+            removed = globalBlockEntitiesMap.remove(this);
+        }
+
+        if(removed != null && !removed.isEmpty()) {
+            Minecraft minecraft = Minecraft.getInstance();
+            if(minecraft.levelRenderer != null) {
+                minecraft.levelRenderer.updateGlobalBlockEntities(removed, Collections.emptySet());
+            }
+        }
+    }
+
+    private void reset() {
+        this.invalidateVoxels();
+        synchronized(this) {
+            this.forceCpuTerrainUntilSuccess = false;
+        }
+        this.cancelTasks();
+        this.clearGlobalBlockEntities();
+        this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
+        this.dirty = true;
+        this.visibility = 0;
+        this.completelyEmpty = true;
+
+        this.resetDrawParameters();
+    }
+
+    private void resetDrawParameters() {
+        for(DrawBuffers.DrawParameters drawParameters : this.drawParametersArray) {
+            drawParameters.reset(this.chunkArea);
+
+        }
+    }
+
+    public void setDirty(boolean playerChanged) {
+        this.invalidateVoxels();
+        this.playerChanged = playerChanged || this.dirty && this.playerChanged;
+        this.dirty = true;
+        WorldRenderer.getInstance().setNeedsUpdate();
+    }
+
+    public synchronized long getVoxelGeneration() { return this.voxelGeneration; }
+
+    public static boolean gpuTerrainMesherEnabled() {
+        return GpuTerrainSectionMesherBridge.enabled();
+    }
+
+    public static boolean gpuTerrainCpuBypassEnabled() {
+        return GpuTerrainSectionMesherBridge.cpuBypassEnabled();
+    }
+
+    public static TerrainRenderType gpuTerrainOutputLayer() {
+        return GpuTerrainSectionMesherBridge.outputLayer();
+    }
+
+    public static boolean gpuTerrainCpuBypassEligible(@Nullable GpuTerrainPreflight preflight) {
+        return preflight != null && GpuTerrainSectionMesherBridge.supportsCpuBypass(preflight.faceCount());
+    }
+
+    public boolean hasReadyGpuTerrainCpuFallback() {
+        if(!this.isCompiled())
+            return false;
+        DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
+        return parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
+    }
+
+    public synchronized boolean gpuTerrainCpuRecoveryRequired() {
+        return this.forceCpuTerrainUntilSuccess;
+    }
+
+    public synchronized void completeGpuTerrainCpuRecovery(long generation) {
+        if(generation == this.voxelGeneration)
+            this.forceCpuTerrainUntilSuccess = false;
+    }
+
+    @Nullable
+    public static GpuTerrainPreflight qualifyGpuTerrain(SectionVoxelSnapshot snapshot) {
+        GpuTerrainSectionMesherBridge.Qualification qualification =
+                GpuTerrainSectionMesherBridge.qualify(snapshot);
+        return qualification == null ? null
+                : new GpuTerrainPreflight(qualification.modelGeneration(), qualification.faceCount());
+    }
+
+    public void stageGpuTerrainPreflight(@Nullable GpuTerrainPreflight preflight,
+                                         long generation) {
+        this.stageGpuTerrainPreflight(preflight, generation, false);
+    }
+
+    public synchronized void stageGpuTerrainPreflight(@Nullable GpuTerrainPreflight preflight,
+                                                      long generation,
+                                                      boolean cpuBypassed) {
+        if(generation != this.voxelGeneration)
+            return;
+        if(preflight == null) {
+            this.clearGpuTerrainPreflight();
+            return;
+        }
+        this.gpuTerrainPreflightGeneration = generation;
+        this.gpuTerrainPreflightModelGeneration = preflight.modelGeneration();
+        this.gpuTerrainPreflightFaceCount = preflight.faceCount();
+        this.gpuTerrainPreflightCpuBypassed = cpuBypassed;
+    }
+
+    synchronized boolean matchesStagedGpuTerrainPreflight(long generation,
+                                                          long modelGeneration,
+                                                          int faceCount) {
+        return generation == this.voxelGeneration
+                && this.gpuTerrainPreflightGeneration == generation
+                && this.gpuTerrainPreflightModelGeneration == modelGeneration
+                && this.gpuTerrainPreflightFaceCount == faceCount;
+    }
+
+    synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
+        return generation == this.voxelGeneration
+                && this.gpuTerrainPreflightGeneration == generation
+                && this.gpuTerrainPreflightCpuBypassed;
+    }
+
+    boolean requestGpuTerrainCpuRecovery(long generation) {
+        synchronized(this) {
+            if(generation != this.voxelGeneration
+                    || this.gpuTerrainPreflightGeneration != generation
+                    || !this.gpuTerrainPreflightCpuBypassed)
+                return false;
+            this.forceCpuTerrainUntilSuccess = true;
+        }
+        // Keep the previous CPU draw parameters resident. A normal rebuild will
+        // replace them; generation invalidation only revokes the failed GPU inputs.
+        this.setDirty(false);
+        return true;
+    }
+
+    private void clearGpuTerrainPreflight() {
+        this.gpuTerrainPreflightGeneration = Long.MIN_VALUE;
+        this.gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
+        this.gpuTerrainPreflightFaceCount = -1;
+        this.gpuTerrainPreflightCpuBypassed = false;
+    }
+
+    public synchronized void publishVoxels(SectionVoxelSnapshot snapshot, long generation) {
+        this.publishVoxels(snapshot, null, generation);
+    }
+
+    public synchronized void publishVoxels(SectionVoxelSnapshot snapshot,
+                                           GpuSparseLightingSnapshot sparseLighting,
+                                           long generation) {
+        if (!RegionVoxelStore.ENABLED) return;
+        if (generation == this.voxelGeneration && this.chunkArea != null) {
+            this.chunkArea.publishVoxels(xOffset, yOffset, zOffset, snapshot, generation);
+            if (GpuSparseLightingMode.ENABLED)
+                this.chunkArea.publishSparseLighting(xOffset, yOffset, zOffset,
+                        sparseLighting, generation);
+        }
+    }
+
+    synchronized void invalidateVoxels() {
+        // The missing-neighbor BuildTask path also marks a section dirty from a
+        // worker. Serialize generation + store invalidation with publication.
+        this.clearGpuTerrainPreflight();
+        if (!RegionVoxelStore.ENABLED) return;
+        this.voxelGeneration++;
+        if (this.chunkArea != null)
+            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset, this.voxelGeneration);
+    }
+
+    public void setCompiledSection(CompiledSection compiledSection) {
+        this.compileStatus.compiledSection = compiledSection;
+    }
+
+    public boolean setLastFrame(short i) {
+        boolean res = i == this.lastFrame ;
+        if(!res)
+            this.lastFrame = i;
+        return res;
+    }
+
+    public boolean setLastFrame2(short i) {
+        boolean res = i == this.lastFrame2 ;
+        if(!res)
+            this.lastFrame2 = i;
+        return res;
+    }
+
+    public short getLastFrame() {
+        return this.lastFrame;
+    }
+
+    public record GpuTerrainPreflight(long modelGeneration, int faceCount) {}
+
+    static class CompileStatus {
+        CompiledSection compiledSection = CompiledSection.UNCOMPILED;
+        ChunkTask.BuildTask rebuildTask;
+        ChunkTask.SortTransparencyTask sortTask;
+    }
+}
