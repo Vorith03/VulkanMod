@@ -41,6 +41,8 @@ public class RenderSection {
     private long gpuTerrainPreflightGeneration = Long.MIN_VALUE;
     private long gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
     private int gpuTerrainPreflightFaceCount = -1;
+    private GpuTerrainDrawHandoff.Ownership gpuTerrainPreflightOwnership =
+            GpuTerrainDrawHandoff.Ownership.REPLACE;
     private boolean gpuTerrainPreflightCpuBypassed;
     private boolean forceCpuTerrainUntilSuccess;
     private boolean playerChanged;
@@ -406,6 +408,7 @@ public class RenderSection {
         this.gpuTerrainPreflightGeneration = generation;
         this.gpuTerrainPreflightModelGeneration = preflight.modelGeneration();
         this.gpuTerrainPreflightFaceCount = preflight.faceCount();
+        this.gpuTerrainPreflightOwnership = preflight.ownership();
         this.gpuTerrainPreflightCpuBypassed = cpuBypassed;
     }
 
@@ -416,6 +419,22 @@ public class RenderSection {
                 && this.gpuTerrainPreflightGeneration == generation
                 && this.gpuTerrainPreflightModelGeneration == modelGeneration
                 && this.gpuTerrainPreflightFaceCount == faceCount;
+    }
+
+    synchronized boolean matchesStagedGpuTerrainPreflight(long generation,
+                                                          long modelGeneration,
+                                                          int faceCount,
+                                                          GpuTerrainDrawHandoff.Ownership ownership) {
+        return ownership != null
+                && this.matchesStagedGpuTerrainPreflight(generation, modelGeneration, faceCount)
+                && this.gpuTerrainPreflightOwnership == ownership;
+    }
+
+    synchronized GpuTerrainDrawHandoff.Ownership stagedGpuTerrainOwnership(long generation) {
+        if(generation != this.voxelGeneration
+                || this.gpuTerrainPreflightGeneration != generation)
+            return GpuTerrainDrawHandoff.Ownership.REPLACE;
+        return this.gpuTerrainPreflightOwnership;
     }
 
     synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
@@ -442,6 +461,7 @@ public class RenderSection {
         this.gpuTerrainPreflightGeneration = Long.MIN_VALUE;
         this.gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
         this.gpuTerrainPreflightFaceCount = -1;
+        this.gpuTerrainPreflightOwnership = GpuTerrainDrawHandoff.Ownership.REPLACE;
         this.gpuTerrainPreflightCpuBypassed = false;
     }
 
@@ -493,7 +513,17 @@ public class RenderSection {
         return this.lastFrame;
     }
 
-    public record GpuTerrainPreflight(long modelGeneration, int faceCount) {}
+    public record GpuTerrainPreflight(long modelGeneration, int faceCount,
+                                      GpuTerrainDrawHandoff.Ownership ownership) {
+        public GpuTerrainPreflight(long modelGeneration, int faceCount) {
+            this(modelGeneration, faceCount, GpuTerrainDrawHandoff.Ownership.REPLACE);
+        }
+
+        public GpuTerrainPreflight {
+            if(ownership == null)
+                throw new IllegalArgumentException("GPU terrain preflight ownership must be present");
+        }
+    }
 
     static class CompileStatus {
         CompiledSection compiledSection = CompiledSection.UNCOMPILED;
