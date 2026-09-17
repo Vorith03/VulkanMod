@@ -363,7 +363,15 @@ final class GpuTerrainSectionMesherBridge {
         int faceCount = 0;
         for(int index = 0; index < SectionVoxelSnapshot.BLOCK_COUNT; ++index) {
             int stateId = snapshot.stateId(index);
-            if((snapshot.flags(index) & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
+            int flags = snapshot.flags(index);
+
+            // Fluids and block entities remain hard CPU ownership boundaries even
+            // when the associated baked block model happens to qualify as a full cube.
+            if((flags & SectionVoxelSnapshot.HAS_FLUID) != 0
+                    || (flags & SectionVoxelSnapshot.HAS_BLOCK_ENTITY) != 0)
+                return null;
+
+            if((flags & SectionVoxelSnapshot.GPU_FULL_CUBE) != 0) {
                 // GPU_FULL_CUBE is captured by a worker from a particular baked-model
                 // generation. Revalidate the state against the current immutable
                 // registry so a delayed frame operation cannot consume stale resource
