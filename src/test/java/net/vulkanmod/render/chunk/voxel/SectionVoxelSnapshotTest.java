@@ -135,6 +135,7 @@ public final class SectionVoxelSnapshotTest {
         require(!allQualifiedPlan.owns(SectionVoxelSnapshot.blockIndex(0, 8, 8))
                         && allQualifiedPlan.owns(SectionVoxelSnapshot.blockIndex(1, 8, 8)),
                 "A boundary-demoted qualified cube must remain a safe neighbor for an interior qualified cube");
+        verifyFilteredSnapshot(allQualified, allQualifiedPlan);
 
         int center = SectionVoxelSnapshot.blockIndex(8, 8, 8);
         var visibleException = snapshotWithOverride(qualifiedFlags, center,
@@ -150,6 +151,7 @@ public final class SectionVoxelSnapshotTest {
                         && !visibleExceptionPlan.owns(SectionVoxelSnapshot.blockIndex(9, 8, 8))
                         && visibleExceptionPlan.owns(SectionVoxelSnapshot.blockIndex(6, 8, 8)),
                 "Exception adjacency demotion must remain one cell wide");
+        verifyFilteredSnapshot(visibleException, visibleExceptionPlan);
 
         boolean[] invisibleCenter = allVisible.clone();
         invisibleCenter[center] = false;
@@ -164,17 +166,20 @@ public final class SectionVoxelSnapshotTest {
         var fluidPlan = GpuTerrainHybridMask.plan(fluidException, hiddenFlags);
         require(fluidPlan.exceptionDemotions() == 6,
                 "Fluid ownership must demote adjacent GPU cubes even without block-model geometry");
+        verifyFilteredSnapshot(fluidException, fluidPlan);
 
         var blockEntityException = snapshotWithOverride(qualifiedFlags, center,
                 SectionVoxelSnapshot.CPU_REQUIRED | SectionVoxelSnapshot.HAS_BLOCK_ENTITY);
         var blockEntityPlan = GpuTerrainHybridMask.plan(blockEntityException, hiddenFlags);
         require(blockEntityPlan.exceptionDemotions() == 6,
                 "Block-entity ownership must demote adjacent GPU cubes conservatively");
+        verifyFilteredSnapshot(blockEntityException, blockEntityPlan);
 
         boolean[] noVisibleModels = new boolean[SectionVoxelSnapshot.BLOCK_COUNT];
         var noQualified = GpuTerrainHybridMask.plan(uniform(), noVisibleModels);
         require(noQualified.qualifiedCount() == 0 && noQualified.ownedCount() == 0,
                 "Sections without qualified cubes must remain entirely CPU-owned");
+        verifyFilteredSnapshot(uniform(), noQualified);
 
         reject(() -> GpuTerrainHybridMask.plan(null, noVisibleModels));
         reject(() -> GpuTerrainHybridMask.plan(allQualified, null));
@@ -183,13 +188,65 @@ public final class SectionVoxelSnapshotTest {
         reject(() -> allQualifiedPlan.owns(SectionVoxelSnapshot.BLOCK_COUNT));
     }
 
+    private static void verifyFilteredSnapshot(SectionVoxelSnapshot source,
+                                               GpuTerrainHybridMask.Plan plan) {
+        SectionVoxelSnapshot filtered = plan.filteredSnapshot();
+        require(filtered.x() == source.x() && filtered.y() == source.y() && filtered.z() == source.z(),
+                "Filtered hybrid snapshot must preserve section origin");
+        require(filtered.paletteSize() == source.paletteSize()
+                        && filtered.byteSize() == source.byteSize(),
+                "Filtered hybrid snapshot must preserve v4 layout and palette cardinality");
+
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
+            require(filtered.stateId(i) == source.stateId(i),
+                    "Filtered hybrid snapshot must preserve every state ID");
+            int expectedFlags = source.flags(i);
+            if(!plan.owns(i))
+                expectedFlags &= ~SectionVoxelSnapshot.GPU_FULL_CUBE;
+            require(filtered.flags(i) == expectedFlags,
+                    "Filtered hybrid snapshot may only clear GPU_FULL_CUBE ownership");
+
+            int x = i & 15;
+            int y = (i >>> 4) & 15;
+            int z = (i >>> 8) & 15;
+            if(y == 0) require(filtered.boundaryNeighborSolidRender(i, 0)
+                            == source.boundaryNeighborSolidRender(i, 0),
+                    "Filtered hybrid snapshot must preserve DOWN halo");
+            if(y == 15) require(filtered.boundaryNeighborSolidRender(i, 1)
+                            == source.boundaryNeighborSolidRender(i, 1),
+                    "Filtered hybrid snapshot must preserve UP halo");
+            if(z == 0) require(filtered.boundaryNeighborSolidRender(i, 2)
+                            == source.boundaryNeighborSolidRender(i, 2),
+                    "Filtered hybrid snapshot must preserve NORTH halo");
+            if(z == 15) require(filtered.boundaryNeighborSolidRender(i, 3)
+                            == source.boundaryNeighborSolidRender(i, 3),
+                    "Filtered hybrid snapshot must preserve SOUTH halo");
+            if(x == 0) require(filtered.boundaryNeighborSolidRender(i, 4)
+                            == source.boundaryNeighborSolidRender(i, 4),
+                    "Filtered hybrid snapshot must preserve WEST halo");
+            if(x == 15) require(filtered.boundaryNeighborSolidRender(i, 5)
+                            == source.boundaryNeighborSolidRender(i, 5),
+                    "Filtered hybrid snapshot must preserve EAST halo");
+        }
+    }
+
     private static SectionVoxelSnapshot snapshotWithOverride(int defaultFlags,
                                                              int overrideIndex,
                                                              int overrideFlags) {
         var builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
-        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i)
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; ++i) {
             builder.add(i == overrideIndex ? 2 : 1,
                     i == overrideIndex ? overrideFlags : defaultFlags);
+            int x = i & 15;
+            int y = (i >>> 4) & 15;
+            int z = (i >>> 8) & 15;
+            if(y == 0) builder.setBoundaryNeighborSolidRender(i, 0, expectedHalo(i, 0));
+            if(y == 15) builder.setBoundaryNeighborSolidRender(i, 1, expectedHalo(i, 1));
+            if(z == 0) builder.setBoundaryNeighborSolidRender(i, 2, expectedHalo(i, 2));
+            if(z == 15) builder.setBoundaryNeighborSolidRender(i, 3, expectedHalo(i, 3));
+            if(x == 0) builder.setBoundaryNeighborSolidRender(i, 4, expectedHalo(i, 4));
+            if(x == 15) builder.setBoundaryNeighborSolidRender(i, 5, expectedHalo(i, 5));
+        }
         return builder.finish();
     }
 
