@@ -13,6 +13,7 @@ import net.minecraft.client.renderer.chunk.RenderChunkRegion;
 import net.minecraft.client.renderer.chunk.VisGraph;
 import net.minecraft.client.renderer.chunk.VisibilitySet;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
@@ -418,13 +419,36 @@ public class ChunkTask {
                 if(!fluidState.isEmpty()) flags |= SectionVoxelSnapshot.HAS_FLUID;
 
                 boolean gpuFullCube = GpuTerrainModelRegistry.isFullCubeGeometry(blockState)
-                        && hasZeroPositionOffset(blockState, region, pos);
+                        && hasZeroPositionOffset(blockState, region, pos)
+                        && hasGpuFacePredicateEquivalence(blockState, region, pos);
                 if(gpuFullCube) flags |= SectionVoxelSnapshot.GPU_FULL_CUBE;
                 voxels.add(Block.getId(blockState), flags);
                 if(gpuFullCube)
                     captureSolidRenderBoundaryHalo(voxels, region, pos);
             }
             return new GpuTerrainCapture(voxels.finish(), visibleCpuBlockModels);
+        }
+
+        /**
+         * Prove that the shader's current face predicate matches the authoritative
+         * Minecraft/Forge culling result while the worker still owns its region halo.
+         * SOLID_RENDER is a visibility/occlusion fact, not by itself permission to
+         * replace Block.shouldRenderFace(...). Any disagreement keeps this cube CPU-owned.
+         */
+        private static boolean hasGpuFacePredicateEquivalence(BlockState state,
+                                                               RenderChunkRegion region,
+                                                               BlockPos pos) {
+            for(Direction direction : Direction.values()) {
+                BlockPos neighborPos = pos.relative(direction);
+                boolean neighborSolidRender = region.getBlockState(neighborPos)
+                        .isSolidRender(region, neighborPos);
+                boolean gpuWouldRender = !neighborSolidRender;
+                boolean authoritative = Block.shouldRenderFace(
+                        state, region, pos, direction, neighborPos);
+                if(authoritative != gpuWouldRender)
+                    return false;
+            }
+            return true;
         }
 
         private static void captureSparseLighting(CompileResults compileResults,
