@@ -3,6 +3,7 @@ package net.vulkanmod.gl;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
+import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import org.apache.commons.lang3.Validate;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -25,6 +26,14 @@ public class GlFramebuffer {
         return id;
     }
 
+    public static int getBoundFramebufferId() {
+        return boundId;
+    }
+
+    public static boolean isBoundFramebuffer(Framebuffer framebuffer) {
+        return boundFramebuffer != null && boundFramebuffer.framebuffer == framebuffer;
+    }
+
     public static void bindFramebuffer(int target, int id) {
         // target
         // 36160 GL_FRAMEBUFFER
@@ -36,10 +45,13 @@ public class GlFramebuffer {
 
         boundId = id;
         if(id == 0) {
-            // 0 means the default framebuffer. VulkanMod's swapchain pass is
-            // managed by Renderer/MainPass rather than by this GL object table,
-            // so never alias object 0 to a generated off-screen framebuffer.
+            // OpenGL framebuffer 0 means resume the window/default target. The
+            // previous shim only changed bookkeeping here, leaving Vulkan draws
+            // inside whichever off-screen render pass happened to be active.
+            // Restore the LOAD-preserving swapchain pass so mods that save and
+            // restore framebuffer 0 retain the actual GL contract.
             boundFramebuffer = null;
+            RenderTargetManager.bindMain(false, 0, 0);
             return;
         }
 

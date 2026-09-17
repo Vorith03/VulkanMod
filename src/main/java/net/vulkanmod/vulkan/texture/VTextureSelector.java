@@ -13,6 +13,7 @@ import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
+import net.vulkanmod.vulkan.shader.ShaderRenderState;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
@@ -85,11 +86,6 @@ public abstract class VTextureSelector {
         if(width <= 0 || height <= 0)
             return;
 
-        // Same-queue texture helper submissions are ordered before the next main
-        // graphics submission, and their command buffers are then retired behind
-        // that frame fence. Count only helpers still outstanding since the last
-        // successful main submit; otherwise a healthy gameplay session eventually
-        // hits the 256-submission emergency device-idle path just from elapsed time.
         long mainFrameSubmissions = Synchronization.INSTANCE.getMainFrameSubmissionCount();
         if(mainFrameSubmissions != observedMainFrameSubmissions) {
             resetStagingSubmissionWindow();
@@ -108,13 +104,8 @@ public abstract class VTextureSelector {
                     MAX_SINGLE_TEXTURE_STAGING / (1024 * 1024)));
         }
 
-        // Catch aggregate native/heap pressure even when no single VulkanMod
-        // allocator has crossed its own local budget. This is throttled internally
-        // to avoid turning /proc reads into per-sprite overhead.
         MemoryDiagnostics.enforceSystemMemorySafety("texture staging");
 
-        // Account and reserve only the rectangle's texels. VulkanImage copies
-        // rows directly into mapped staging, excluding unrelated source-row gaps.
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
         int uploadSize = (int)stagedBytes;
@@ -125,12 +116,6 @@ public abstract class VTextureSelector {
                 && unbatchedTextureSubmissions >= MAX_UNBATCHED_TEXTURE_SUBMISSIONS;
 
         if(stagingBudgetReached || submissionBudgetReached) {
-            // The old resource-reload guard disabled recycling while the animated
-            // texture queue owned a shared command buffer. That made the 128 MiB
-            // limit ineffective exactly when a long upload batch could grow the
-            // mapped host buffer without bound. Close the batch, make every queue
-            // idle, drain deferred old staging allocations, then transparently
-            // resume batching with a fresh command buffer.
             boolean restartUploadBatch = activeUploadBatch;
             if(restartUploadBatch) {
                 graphicsQueue.endRecordingAndSubmit();
@@ -142,12 +127,6 @@ public abstract class VTextureSelector {
             Vulkan.waitIdle();
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
 
-            // Startup/resource reload may not advance frame retirement, so drain
-            // deferred resources aggressively there. During gameplay, however,
-            // texture animation runs while the main graphics command buffer may
-            // already reference resources scheduled in the current frame slot.
-            // Device-idle does not make that not-yet-submitted command buffer safe;
-            // let normal frame-fence retirement reclaim those resources instead.
             if(Minecraft.getInstance().level == null) {
                 MemoryManager.getInstance().freeAllBuffers();
             }
@@ -172,9 +151,6 @@ public abstract class VTextureSelector {
             }
         }
 
-        // Always bound geometric growth, including while a shared graphics upload
-        // batch is active. One upload may exceed the normal batch budget, but it
-        // grows only to its exact requirement and is separately safety-limited.
         stagingBuffer.setGrowthLimit(TEXTURE_STAGING_BATCH_LIMIT);
 
         stagingBatchSourceBytes += availableBytes;
@@ -200,10 +176,6 @@ public abstract class VTextureSelector {
     }
 
     public static VulkanImage getTexture(String name) {
-        // EffectInstance post shaders use their declared sampler names (for
-        // example DiffuseSampler and arbitrary aux names) rather than the fixed
-        // core-shader Sampler0/Sampler1 slots. Resolve those suppliers directly
-        // while an EffectInstance owns the manual draw path.
         if(EffectRenderState.isActive()) {
             VulkanImage effectTexture = EffectRenderState.resolveTexture(name);
             if(effectTexture != null)
@@ -215,17 +187,32 @@ public abstract class VTextureSelector {
             return whiteTexture;
         }
 
-        VulkanImage texture = switch (name) {
-            case "Sampler0" -> getBoundTexture();
-            case "Sampler1" -> getOverlayTexture();
-            case "Sampler2" -> getLightTexture();
-            case "Sampler3" -> boundTexture2;
-            case "Sampler4" -> boundTexture3;
-            case "Framebuffer0" -> framebufferTexture;
-            case "Framebuffer1" -> framebufferTexture2;
-            default -> throw new RuntimeException("unknown sampler name: " + name);
-        };
+        // Converted mod/legacy ShaderInstances may own arbitrary named sampler
+        // objects, but they can also keep using Minecraft's standard SamplerN
+        // slots. Prefer an explicit shader-owned sampler, then retain the normal
+        // fixed selector contract before falling back to white.
+        if(ShaderRenderState.isActive()) {
+            VulkanImage shaderTexture = ShaderRenderState.resolveTexture(name);
+            if(shaderTexture != null)
+                return shaderTexture;
 
+            if(isFixedSamplerName(name)) {
+                VulkanImage fixedTexture = resolveFixedTexture(name);
+                if(fixedTexture != null)
+                    return fixedTexture;
+            }
+
+            if(missingSamplerWarnings.add("shader:" + name)) {
+                Initializer.LOGGER.warn("Legacy shader sampler {} has no bound Vulkan texture; using white fallback", name);
+            }
+            return whiteTexture;
+        }
+
+        if(!isFixedSamplerName(name)) {
+            throw new RuntimeException("unknown sampler name: " + name);
+        }
+
+        VulkanImage texture = resolveFixedTexture(name);
         if(texture == null) {
             if(missingSamplerWarnings.add(name)) {
                 Initializer.LOGGER.warn("Sampler {} has no bound Vulkan texture; using white fallback", name);
@@ -234,6 +221,27 @@ public abstract class VTextureSelector {
         }
 
         return texture;
+    }
+
+    private static boolean isFixedSamplerName(String name) {
+        return switch (name) {
+            case "Sampler0", "Sampler1", "Sampler2", "Sampler3", "Sampler4",
+                    "Framebuffer0", "Framebuffer1" -> true;
+            default -> false;
+        };
+    }
+
+    private static VulkanImage resolveFixedTexture(String name) {
+        return switch (name) {
+            case "Sampler0" -> getBoundTexture();
+            case "Sampler1" -> getOverlayTexture();
+            case "Sampler2" -> getLightTexture();
+            case "Sampler3" -> boundTexture2;
+            case "Sampler4" -> boundTexture3;
+            case "Framebuffer0" -> framebufferTexture;
+            case "Framebuffer1" -> framebufferTexture2;
+            default -> null;
+        };
     }
 
     public static void setLightTexture(VulkanImage texture) {

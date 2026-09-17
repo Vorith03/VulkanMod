@@ -14,6 +14,7 @@ import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.shader.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
+import net.vulkanmod.vulkan.shader.ShaderRenderState;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.parser.GlslConverter;
@@ -38,6 +39,7 @@ import java.util.Map;
 @Mixin(ShaderInstance.class)
 public class ShaderInstanceM implements ShaderMixed {
 
+    @Shadow @Final private Map<String, Object> samplerMap;
     @Shadow @Final private Map<String, Uniform> uniformMap;
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
@@ -84,6 +86,7 @@ public class ShaderInstanceM implements ShaderMixed {
      */
     @Overwrite
     public void close() {
+        ShaderRenderState.clear(this.pipeline);
         if(this.pipeline != null) {
             this.pipeline.cleanUp();
             this.pipeline = null;
@@ -119,6 +122,12 @@ public class ShaderInstanceM implements ShaderMixed {
 //            if (this.LINE_WIDTH != null) {
 //                this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
 //            }
+
+            // Mod shaders commonly bind RenderTarget, AbstractTexture, or direct
+            // texture ids under arbitrary JSON sampler names and then use
+            // BufferUploader.draw(). Preserve those vanilla sampler objects for
+            // Vulkan resolution while core shaders keep the fixed SamplerN path.
+            ShaderRenderState.activate(this.pipeline, this.samplerMap);
         }
     }
 
@@ -126,7 +135,9 @@ public class ShaderInstanceM implements ShaderMixed {
      * @author
      */
     @Overwrite
-    public void clear() {}
+    public void clear() {
+        ShaderRenderState.clear(this.pipeline);
+    }
 
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
         try (Reader reader = resourceProvider.openAsReader(location)) {

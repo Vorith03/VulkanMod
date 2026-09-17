@@ -11,6 +11,7 @@ import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
+import net.vulkanmod.vulkan.shader.ShaderRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
@@ -74,14 +75,18 @@ public class BufferUploaderM {
     }
 
     /**
-     * PostPass uses BufferUploader.draw after EffectInstance.apply(), not the
-     * RenderSystem ShaderInstance path used by drawWithShader. Intercept only
-     * while a Vulkan effect pipeline is active so unrelated manual-buffer draws
-     * retain their existing behavior.
+     * EffectInstance and converted legacy ShaderInstance both use
+     * BufferUploader.draw after explicitly applying a shader. OpenGL would have
+     * consumed their named sampler maps during apply(); Vulkan carries that
+     * state explicitly and records the manual draw here instead.
      */
     @Inject(method = "draw", at = @At("HEAD"), cancellable = true)
-    private static void vulkanmod$drawEffect(BufferBuilder.RenderedBuffer buffer, CallbackInfo ci) {
+    private static void vulkanmod$drawManualPipeline(BufferBuilder.RenderedBuffer buffer, CallbackInfo ci) {
         GraphicsPipeline pipeline = EffectRenderState.getActivePipeline();
+        boolean effectPipeline = pipeline != null;
+        if(!effectPipeline) {
+            pipeline = ShaderRenderState.getActivePipeline();
+        }
         if(pipeline == null)
             return;
 
@@ -90,7 +95,12 @@ public class BufferUploaderM {
 
         BufferBuilder.DrawState parameters = buffer.drawState();
         if(parameters.vertexCount() > 0) {
-            EffectRenderState.prepareTextures();
+            if(effectPipeline) {
+                EffectRenderState.prepareTextures();
+            } else {
+                ShaderRenderState.prepareTextures();
+            }
+
             Renderer renderer = Renderer.getInstance();
             GraphicsPipeline.requestPrimitiveMode(parameters.mode());
             renderer.bindGraphicsPipeline(pipeline);
