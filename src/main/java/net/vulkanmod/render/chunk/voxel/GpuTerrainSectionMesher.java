@@ -39,10 +39,11 @@ import static org.lwjgl.vulkan.VK10.*;
  * Reusable Vulkan dispatcher for the bounded section terrain compute kernel.
  *
  * <p>The caller owns generation validation and output reservation/publication. The
- * production path can submit bounded compute without waiting on its helper fence:
- * completion is consumed from a frame callback only after the main graphics fence
- * has covered the same-queue helper submission. The validation oracle remains
- * synchronous so CI can inspect complete generated payloads deterministically.</p>
+ * production path can submit bounded compute without waiting on its helper fence.
+ * Signaled helper fences may be consumed opportunistically from a render-frame poll,
+ * while the original frame-fence callback remains the guaranteed completion fallback.
+ * The validation oracle remains synchronous so CI can inspect complete generated
+ * payloads deterministically.</p>
  */
 public final class GpuTerrainSectionMesher implements AutoCloseable {
     static final int RESULT_HEADER_WORDS = 6;
@@ -56,6 +57,7 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
     private long descriptorPool;
     private final long[] descriptorSets = new long[MAX_IN_FLIGHT];
     private final ArrayDeque<Integer> availableDescriptorSlots = new ArrayDeque<>(MAX_IN_FLIGHT);
+    private final ArrayDeque<PendingCompletion> pendingCompletions = new ArrayDeque<>(MAX_IN_FLIGHT);
     private long pipelineLayout;
     private long pipeline;
     private boolean closed;
@@ -92,9 +94,10 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
 
     /**
      * Production submission path. Returns false only when the bounded descriptor-slot
-     * pool is saturated. A true return means the helper work was submitted and the
-     * completion callback will run on the render thread after the main frame fence
-     * proves the compute/readback copy has completed. The callback receives either a
+     * pool is saturated. A true return means the helper work was submitted. Completion
+     * may be consumed by pollCompletions() once the helper fence is signaled, otherwise
+     * the original frame callback completes it after the main frame fence proves the
+     * same-queue compute/readback copy has finished. The callback receives either a
      * result or a readback failure, never both.
      */
     public boolean dispatchAsync(
@@ -131,30 +134,18 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             readbackBuffer = pReadbackBuffer.get(0);
             readbackAllocation = pReadbackAllocation.get(0);
 
-            submitDispatch(voxelPage, voxel, lightingPage, lighting, model,
+            CommandPool.CommandBuffer commandBuffer = submitDispatch(
+                    voxelPage, voxel, lightingPage, lighting, model,
                     templateCount, target, faceCapacity, descriptorSets[slot], result,
                     resultBytes, readbackBuffer, false, 0);
 
-            StorageBuffer completedResult = result;
-            long completedReadbackBuffer = readbackBuffer;
-            long completedReadbackAllocation = readbackAllocation;
-            int completedSlot = slot;
-            memoryManager.addFrameOp(() -> {
-                DispatchResult dispatchResult = null;
-                RuntimeException readbackFailure = null;
-                try {
-                    dispatchResult = readDispatchResult(memoryManager,
-                            completedReadbackAllocation, readbackBytes);
-                } catch(RuntimeException error) {
-                    readbackFailure = error;
-                } finally {
-                    completedResult.freeBuffer();
-                    MemoryManager.freeBuffer(completedReadbackBuffer,
-                            completedReadbackAllocation);
-                    releaseDescriptorSlot(completedSlot);
-                }
-                completion.accept(dispatchResult, readbackFailure);
-            });
+            PendingCompletion token = new PendingCompletion(
+                    memoryManager, commandBuffer.getFence(), result,
+                    readbackBuffer, readbackAllocation, readbackBytes, slot, completion);
+            memoryManager.addFrameOp(() -> completePending(token));
+            synchronized(this) {
+                this.pendingCompletions.addLast(token);
+            }
             completionScheduled = true;
             return true;
         } finally {
@@ -166,6 +157,50 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
                 releaseDescriptorSlot(slot);
             }
         }
+    }
+
+    /**
+     * Non-blockingly consume helper submissions whose own fences are already signaled.
+     * Unsignaled work is left untouched for a later poll or the existing frame-fence
+     * fallback. This method never waits for device progress.
+     */
+    public void pollCompletions() {
+        PendingCompletion[] snapshot;
+        synchronized(this) {
+            if(this.pendingCompletions.isEmpty())
+                return;
+            snapshot = this.pendingCompletions.toArray(new PendingCompletion[0]);
+        }
+
+        for(PendingCompletion token : snapshot) {
+            if(token.completed)
+                continue;
+            if(Synchronization.checkFenceStatus(token.fence))
+                completePending(token);
+        }
+    }
+
+    private void completePending(PendingCompletion token) {
+        synchronized(this) {
+            if(token.completed)
+                return;
+            token.completed = true;
+            this.pendingCompletions.remove(token);
+        }
+
+        DispatchResult dispatchResult = null;
+        RuntimeException readbackFailure = null;
+        try {
+            dispatchResult = readDispatchResult(token.memoryManager,
+                    token.readbackAllocation, token.readbackBytes);
+        } catch(RuntimeException error) {
+            readbackFailure = error;
+        } finally {
+            token.result.freeBuffer();
+            MemoryManager.freeBuffer(token.readbackBuffer, token.readbackAllocation);
+            releaseDescriptorSlot(token.slot);
+        }
+        token.completion.accept(dispatchResult, readbackFailure);
     }
 
     /**
@@ -616,6 +651,32 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             vkDestroyDescriptorPool(Device.device, descriptorPool, null);
         if(descriptorSetLayout != VK_NULL_HANDLE)
             vkDestroyDescriptorSetLayout(Device.device, descriptorSetLayout, null);
+    }
+
+    private static final class PendingCompletion {
+        final MemoryManager memoryManager;
+        final long fence;
+        final StorageBuffer result;
+        final long readbackBuffer;
+        final long readbackAllocation;
+        final int readbackBytes;
+        final int slot;
+        final BiConsumer<DispatchResult, RuntimeException> completion;
+        volatile boolean completed;
+
+        PendingCompletion(MemoryManager memoryManager, long fence,
+                          StorageBuffer result, long readbackBuffer,
+                          long readbackAllocation, int readbackBytes, int slot,
+                          BiConsumer<DispatchResult, RuntimeException> completion) {
+            this.memoryManager = memoryManager;
+            this.fence = fence;
+            this.result = result;
+            this.readbackBuffer = readbackBuffer;
+            this.readbackAllocation = readbackAllocation;
+            this.readbackBytes = readbackBytes;
+            this.slot = slot;
+            this.completion = completion;
+        }
     }
 
     public record DispatchResult(int requestedFaces, int writtenFaces,

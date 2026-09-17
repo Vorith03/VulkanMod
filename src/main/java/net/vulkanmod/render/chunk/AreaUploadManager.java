@@ -241,6 +241,10 @@ public class AreaUploadManager {
         waitUploads(this.currentFrame);
         drainReadyPostSubmitOps();
         executeFrameOps(frame);
+        // Existing frame operations may invalidate section generations or request
+        // recovery. Let those decisions land before opportunistically publishing any
+        // newly signaled GPU terrain result for this render frame.
+        GpuTerrainSectionMesherBridge.pollCompletions();
     }
 
     private void executeFrameOps(int frame) {

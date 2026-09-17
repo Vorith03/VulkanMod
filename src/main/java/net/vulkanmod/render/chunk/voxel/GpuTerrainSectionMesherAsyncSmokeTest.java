@@ -15,8 +15,9 @@ import org.joml.Vector3i;
  * <p>The synchronous mesher oracle proves shader output. This smoke instead launches
  * real {@link GpuTerrainSectionMesher#dispatchAsync} submissions from a recording
  * frame, deliberately fills the bounded descriptor pool until it rejects another
- * submission, and waits for normal frame-slot retirement to deliver every accepted
- * callback. CI does not report the Vulkan smoke as passed until that happens.</p>
+ * submission, and waits for every accepted callback through either the non-blocking
+ * helper-fence poll or the original frame-slot retirement fallback. CI does not report
+ * the Vulkan smoke as passed until that happens.</p>
  */
 public final class GpuTerrainSectionMesherAsyncSmokeTest {
     private static final int EXPECTED_FACES = 6;
@@ -71,8 +72,8 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
         active = null;
         run.cleanup();
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_ASYNC_COMPLETION_OK: {} accepted submissions completed only after frame-slot retirement; bounded descriptor saturation rejected the next submission; output published exactly once",
-                run.submittedCount);
+                "VULKANMOD_GPU_TERRAIN_ASYNC_COMPLETION_OK: {} accepted submissions completed non-blockingly; {} completed before the submitted frame slot recycled; bounded descriptor saturation rejected the next submission; output published exactly once",
+                run.submittedCount, run.earlyCompletionCount);
         Initializer.LOGGER.info("Vulkan smoke test passed");
         System.exit(0);
     }
@@ -114,6 +115,7 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
         private int submittedFrame = -1;
         private int submittedCount;
         private int completionCount;
+        private int earlyCompletionCount;
         private boolean submissionReturned;
         private boolean aborted;
         private boolean cleaned;
@@ -201,14 +203,14 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
             require(!result.overflow() && result.errorFlags() == 0,
                     "Async section-mesher production dispatch must complete exactly");
 
+            if(Renderer.getCurrentFrame() != submittedFrame)
+                earlyCompletionCount++;
             completionCount++;
             require(completionCount <= submittedCount,
                     "Async section-mesher delivered too many callbacks");
             if(completionCount != submittedCount)
                 return;
 
-            require(Renderer.getCurrentFrame() == submittedFrame,
-                    "Async section-mesher callbacks must retire on the submitted frame slot");
             require(area.publishGpuTerrainOutput(
                             reservation, EXPECTED_FACES, false),
                     "Async section-mesher completed output must publish once");
