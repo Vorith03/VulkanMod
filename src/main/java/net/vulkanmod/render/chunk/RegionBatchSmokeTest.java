@@ -160,14 +160,50 @@ public final class RegionBatchSmokeTest {
 
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Enabling the GPU terrain handoff must rebuild the frame-local cache");
-            require(first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
-                    "Exact-generation residency must be counted as one bounded GPU draw");
+            require(first.drawCount == 1 && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
+                    "Exact-generation replacement residency must be counted as one bounded GPU draw");
             require(first.commands.getByteBuffer().getInt(0) == 18
                             && first.commands.getByteBuffer().getInt(8) == 0
                             && first.commands.getByteBuffer().getInt(12) == residency.vertexOffset()
                             && first.commands.getByteBuffer().getInt(16)
                             == (7 | (2 << 3) | (3 << 6)),
                     "FrameBatch must substitute GPU quad geometry while retaining section identity");
+
+            // Stage explicit APPEND ownership for the same generation. Production
+            // workers cannot do this yet; this smoke exercises the live command
+            // consumer independently before mixed CPU tessellation is enabled.
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            123L, 3, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    section.getVoxelGeneration(), true);
+            buffers.markMeshChanged(TerrainRenderType.CUTOUT_MIPPED);
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
+                    "Explicit append ownership must rebuild the live frame batch");
+            require(first.drawCount == 2 && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
+                    "Hybrid handoff must record one CPU exception command plus one GPU command");
+            var hybridCommands = first.commands.getByteBuffer();
+            int packedSection = 7 | (2 << 3) | (3 << 6);
+            require(hybridCommands.getInt(0) == 12
+                            && hybridCommands.getInt(8) == parameters.firstIndex
+                            && hybridCommands.getInt(12) == parameters.vertexOffset
+                            && hybridCommands.getInt(16) == packedSection,
+                    "Hybrid first command must preserve the CPU exception draw byte-for-byte");
+            require(hybridCommands.getInt(20) == 18
+                            && hybridCommands.getInt(28) == 0
+                            && hybridCommands.getInt(32) == residency.vertexOffset()
+                            && hybridCommands.getInt(36) == packedSection,
+                    "Hybrid second command must append the exact GPU quad draw with the same section identity");
+
+            parameters.vertexBufferSegment.setPending();
+            buffers.markMeshChanged(TerrainRenderType.CUTOUT_MIPPED);
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
+                    "Pending hybrid CPU exception upload must rebuild the cache");
+            require(first.drawCount == 0 && first.gpuDrawCount == 0 && first.pendingUploads,
+                    "Hybrid handoff must suppress both CPU and GPU halves until the CPU exception upload is ready");
+            parameters.vertexBufferSegment.setReady();
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
+                    "Ready hybrid CPU exception upload must retry automatically");
+            require(first.drawCount == 2 && first.gpuDrawCount == 1 && !first.pendingUploads,
+                    "Hybrid handoff must restore both commands together after CPU upload completion");
 
             long invalidateRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED);
             area.removeVoxels(section.xOffset, section.yOffset, section.zOffset,
@@ -177,11 +213,11 @@ public final class RegionBatchSmokeTest {
                     "GPU generation turnover must invalidate cached resident commands");
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Stale GPU residency must force a FrameBatch rebuild");
-            require(first.gpuDrawCount == 0
+            require(first.gpuDrawCount == 0 && first.drawCount == 1
                             && first.commands.getByteBuffer().getInt(0) == 12
                             && first.commands.getByteBuffer().getInt(8) == parameters.firstIndex
                             && first.commands.getByteBuffer().getInt(12) == parameters.vertexOffset,
-                    "Generation turnover must fall back to the untouched CPU command");
+                    "Generation turnover must fall back to the untouched CPU command even from append ownership");
 
             area.resetQueue();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
