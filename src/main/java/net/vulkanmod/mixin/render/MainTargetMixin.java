@@ -7,7 +7,9 @@ import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.framebuffer.SwapChain;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MainTarget.class)
 public class MainTargetMixin extends RenderTarget {
@@ -17,20 +19,26 @@ public class MainTargetMixin extends RenderTarget {
     }
 
     /**
-     * @author
+     * MainTarget renders into the rotating swapchain rather than owning a fixed
+     * OpenGL framebuffer. Cancel vanilla allocation while deliberately leaving
+     * the original method body in the transformed class so compatibility mixins
+     * can still resolve their vanilla GL call sites. This is important for mods
+     * such as Immersive Portals which wrap the framebuffer attachment calls even
+     * though VulkanMod never executes those calls at runtime.
      */
-    @Overwrite
-    private void createFrameBuffer(int width, int height) {
+    @Inject(method = "createFrameBuffer", at = @At("HEAD"), cancellable = true)
+    private void vulkanmod$createFrameBuffer(int width, int height, CallbackInfo ci) {
         this.viewWidth = width;
         this.viewHeight = height;
         this.width = width;
         this.height = height;
 
-        // MainTarget renders into the rotating swapchain rather than owning a
-        // fixed off-screen image. Keep one stable synthetic GL name and remap it
-        // to the acquired swapchain image whenever a sampler asks for it.
+        // Keep one stable synthetic GL name and remap it to the acquired
+        // swapchain image whenever a sampler asks for it.
         if(this.colorTextureId <= 0)
             this.colorTextureId = GlTexture.genTextureId();
+
+        ci.cancel();
     }
 
     /**
