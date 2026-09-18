@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.debug;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
@@ -114,6 +115,18 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                         "Immersive Portals did not install its framebuffer compatibility renderer");
             }
             selectedRenderer.getClass().getMethod("prepareRendering").invoke(selectedRenderer);
+
+            // Immersive Portals creates one LevelRenderer per remote client
+            // dimension. Construct and dispose a second renderer here so CI proves
+            // VulkanMod terrain ownership is per renderer rather than a singleton.
+            Minecraft minecraft = Minecraft.getInstance();
+            LevelRenderer secondaryLevelRenderer = new LevelRenderer(
+                    minecraft,
+                    minecraft.getEntityRenderDispatcher(),
+                    minecraft.getBlockEntityRenderDispatcher(),
+                    minecraft.renderBuffers()
+            );
+            secondaryLevelRenderer.close();
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
             throw new IllegalStateException("Immersive Portals compatibility smoke invocation failed", cause);

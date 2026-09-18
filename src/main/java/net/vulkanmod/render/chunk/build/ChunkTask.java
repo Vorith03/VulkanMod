@@ -44,14 +44,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ChunkTask {
-    private static TaskDispatcher taskDispatcher;
-
+    protected final TaskDispatcher taskDispatcher;
     protected AtomicBoolean cancelled = new AtomicBoolean(false);
     protected final RenderSection renderSection;
     public boolean highPriority = false;
 
-    ChunkTask(RenderSection renderSection) {
+    ChunkTask(RenderSection renderSection, TaskDispatcher taskDispatcher) {
         this.renderSection = renderSection;
+        this.taskDispatcher = taskDispatcher;
     }
 
     public String name() { return "generic_chk_task"; }
@@ -59,8 +59,6 @@ public class ChunkTask {
     public CompletableFuture<Result> doTask(ThreadBuilderPack builderPack) { return null; }
 
     public void cancel() { this.cancelled.set(true); }
-
-    public static void setTaskDispatcher(TaskDispatcher dispatcher) { taskDispatcher = dispatcher; }
 
     public static class BuildTask extends ChunkTask {
         private static final AtomicBoolean SPARSE_LIGHTING_ACTIVE_LOGGED = new AtomicBoolean();
@@ -82,8 +80,9 @@ public class ChunkTask {
         private float buildTime;
         private boolean submitted = false;
 
-        public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, boolean highPriority) {
-            super(renderSection);
+        public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, boolean highPriority,
+                         TaskDispatcher taskDispatcher) {
+            super(renderSection, taskDispatcher);
             this.region = renderChunkRegion;
             this.voxelGeneration = renderSection.getVoxelGeneration();
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
@@ -121,7 +120,7 @@ public class ChunkTask {
             } else if (this.cancelled.get()) {
                 return CompletableFuture.completedFuture(Result.CANCELLED);
             } else {
-                Vec3 vec3 = WorldRenderer.getCameraPos();
+                Vec3 vec3 = this.renderSection.getCameraPos();
                 float f = (float)vec3.x;
                 float g = (float)vec3.y;
                 float h = (float)vec3.z;
@@ -601,8 +600,8 @@ public class ChunkTask {
     public static class SortTransparencyTask extends ChunkTask {
         CompiledSection compiledSection;
 
-        public SortTransparencyTask(RenderSection renderSection) {
-            super(renderSection);
+        public SortTransparencyTask(RenderSection renderSection, TaskDispatcher taskDispatcher) {
+            super(renderSection, taskDispatcher);
             this.compiledSection = renderSection.getCompiledSection();
         }
 
@@ -615,7 +614,7 @@ public class ChunkTask {
                 this.cancelled.set(true);
                 return CompletableFuture.completedFuture(Result.CANCELLED);
             } else {
-                Vec3 vec3 = WorldRenderer.getCameraPos();
+                Vec3 vec3 = this.renderSection.getCameraPos();
                 float f = (float)vec3.x;
                 float f1 = (float)vec3.y;
                 float f2 = (float)vec3.z;

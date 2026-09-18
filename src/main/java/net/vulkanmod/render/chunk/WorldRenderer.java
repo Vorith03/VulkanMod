@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.RenderType;
@@ -44,12 +45,12 @@ import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
+import java.lang.ref.WeakReference;
 import java.util.*;
 
 public class WorldRenderer {
-    private static WorldRenderer INSTANCE;
-
     private final Minecraft minecraft;
+    private final LevelRenderer levelRenderer;
 
     private ClientLevel level;
     private int lastViewDistance;
@@ -71,6 +72,7 @@ public class WorldRenderer {
     private final Set<BlockEntity> globalBlockEntities = Sets.newHashSet();
 
     private final TaskDispatcher taskDispatcher;
+    private boolean closed;
     private final ResettableQueue<RenderSection> chunkQueue = new ResettableQueue<>();
     private AreaSetQueue chunkAreaQueue;
     private short lastFrame = 0;
@@ -88,16 +90,20 @@ public class WorldRenderer {
 
     private final List<Runnable> onAllChangedCallbacks = new ObjectArrayList<>();
 
-    private WorldRenderer(RenderBuffers renderBuffers) {
+    private WorldRenderer(LevelRenderer levelRenderer, RenderBuffers renderBuffers) {
         this.minecraft = Minecraft.getInstance();
+        this.levelRenderer = levelRenderer;
         this.renderBuffers = renderBuffers;
         this.taskDispatcher = new TaskDispatcher();
-        ChunkTask.setTaskDispatcher(this.taskDispatcher);
         allocateIndirectBuffers();
 
+        WeakReference<WorldRenderer> owner = new WeakReference<>(this);
         Renderer.getInstance().addOnResizeCallback(() -> {
-            if(this.indirectBuffers.length != Vulkan.getSwapChain().getFramesNum())
-                allocateIndirectBuffers();
+            WorldRenderer renderer = owner.get();
+            if(renderer != null && !renderer.closed && renderer.indirectBuffers != null
+                    && renderer.indirectBuffers.length != Vulkan.getSwapChain().getFramesNum()) {
+                renderer.allocateIndirectBuffers();
+            }
         });
     }
 
@@ -115,22 +121,20 @@ public class WorldRenderer {
 //        uniformBuffers = new UniformBuffers(100000, MemoryTypes.GPU_MEM);
     }
 
-    public static WorldRenderer init(RenderBuffers renderBuffers) {
-        if(INSTANCE != null)
-            throw new RuntimeException("WorldRenderer re-initialization");
-        return INSTANCE = new WorldRenderer(renderBuffers);
+    public static WorldRenderer init(LevelRenderer levelRenderer, RenderBuffers renderBuffers) {
+        return new WorldRenderer(levelRenderer, renderBuffers);
     }
 
-    public static WorldRenderer getInstance() {
-        return INSTANCE;
+    public ClientLevel getLevel() {
+        return this.level;
     }
 
-    public static ClientLevel getLevel() {
-        return INSTANCE.level;
+    public Vec3 getCameraPos() {
+        return this.cameraPos;
     }
 
-    public static Vec3 getCameraPos() {
-        return INSTANCE.cameraPos;
+    public void updateGlobalBlockEntities(Collection<BlockEntity> removed, Collection<BlockEntity> added) {
+        this.levelRenderer.updateGlobalBlockEntities(removed, added);
     }
 
     public void setupRenderer(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
@@ -485,7 +489,7 @@ public class WorldRenderer {
                 this.globalBlockEntities.clear();
             }
 
-            this.sectionGrid = new SectionGrid(this.level, this.minecraft.options.getEffectiveRenderDistance());
+            this.sectionGrid = new SectionGrid(this, this.level, this.minecraft.options.getEffectiveRenderDistance());
             this.chunkAreaQueue = new AreaSetQueue(this.sectionGrid.chunkAreaManager.size);
 
             this.onAllChangedCallbacks.forEach(Runnable::run);
@@ -741,8 +745,19 @@ public class WorldRenderer {
     }
 
     public void cleanUp() {
-        if(indirectBuffers != null)
-            Arrays.stream(indirectBuffers).forEach(Buffer::freeBuffer);
+        if(this.closed)
+            return;
+        this.closed = true;
+
+        this.taskDispatcher.stopThreads();
+        if(this.sectionGrid != null) {
+            this.sectionGrid.releaseAllBuffers();
+            this.sectionGrid = null;
+        }
+        if(this.indirectBuffers != null) {
+            Arrays.stream(this.indirectBuffers).forEach(Buffer::freeBuffer);
+            this.indirectBuffers = null;
+        }
     }
 
 }

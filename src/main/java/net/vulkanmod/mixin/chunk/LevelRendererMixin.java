@@ -60,7 +60,14 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(Minecraft minecraft, EntityRenderDispatcher entityRenderDispatcher, BlockEntityRenderDispatcher blockEntityRenderDispatcher, RenderBuffers renderBuffers, CallbackInfo ci) {
-        this.worldRenderer = WorldRenderer.init(this.renderBuffers);
+        this.worldRenderer = WorldRenderer.init((LevelRenderer)(Object)this, this.renderBuffers);
+    }
+
+    @Inject(method = "close", at = @At("HEAD"))
+    private void vulkanmod$closeWorldRenderer(CallbackInfo ci) {
+        if(this.worldRenderer != null) {
+            this.worldRenderer.cleanUp();
+        }
     }
 
     @Inject(method = "setLevel", at = @At("RETURN"))
@@ -228,7 +235,7 @@ public abstract class LevelRendererMixin {
         if(!Initializer.CONFIG.entityCulling)
             return;
 
-        Vec3 cameraPos = WorldRenderer.getCameraPos();
+        Vec3 cameraPos = this.worldRenderer.getCameraPos();
 
         for(var list : this.entitiesMap.values()) {
             for(var pair : list) {

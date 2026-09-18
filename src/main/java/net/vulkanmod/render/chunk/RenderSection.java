@@ -2,7 +2,6 @@ package net.vulkanmod.render.chunk;
 
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.chunk.RenderChunkRegion;
 import net.minecraft.client.renderer.chunk.RenderRegionCache;
 import net.minecraft.core.BlockPos;
@@ -26,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class RenderSection {
+    private WorldRenderer worldRenderer;
     static final Map<RenderSection, Set<BlockEntity>> globalBlockEntitiesMap = new Reference2ReferenceOpenHashMap<>();
 
     private ChunkArea chunkArea;
@@ -82,6 +82,14 @@ public class RenderSection {
         }
     }
 
+    void setWorldRenderer(WorldRenderer worldRenderer) {
+        this.worldRenderer = worldRenderer;
+    }
+
+    public Vec3 getCameraPos() {
+        return this.worldRenderer == null ? null : this.worldRenderer.getCameraPos();
+    }
+
     public void setOrigin(int x, int y, int z) {
         this.reset();
         this.xOffset = x;
@@ -119,27 +127,29 @@ public class RenderSection {
         CompiledSection compiledSection1 = this.getCompiledSection();
         if (this.compileStatus.sortTask != null) this.compileStatus.sortTask.cancel();
         if (!compiledSection1.renderTypes.contains(renderType)) return false;
-        this.compileStatus.sortTask = new ChunkTask.SortTransparencyTask(this);
+        this.compileStatus.sortTask = new ChunkTask.SortTransparencyTask(this, taskDispatcher);
         taskDispatcher.schedule(this.compileStatus.sortTask);
         return true;
     }
 
     public void rebuildChunkAsync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
-        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache);
+        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache, dispatcher);
         dispatcher.schedule(chunkCompileTask);
     }
 
     public void rebuildChunkSync(TaskDispatcher dispatcher, RenderRegionCache renderRegionCache) {
-        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache);
+        ChunkTask.BuildTask chunkCompileTask = this.createCompileTask(renderRegionCache, dispatcher);
         chunkCompileTask.doTask(dispatcher.fixedBuffers);
     }
 
-    public ChunkTask.BuildTask createCompileTask(RenderRegionCache renderRegionCache) {
+    public ChunkTask.BuildTask createCompileTask(RenderRegionCache renderRegionCache, TaskDispatcher dispatcher) {
         boolean flag = this.cancelTasks();
         BlockPos blockpos = new BlockPos(this.xOffset, this.yOffset, this.zOffset).immutable();
-        RenderChunkRegion renderchunkregion = renderRegionCache.createRegion(WorldRenderer.getLevel(), blockpos.offset(-1, -1, -1), blockpos.offset(16, 16, 16), 1);
+        if(this.worldRenderer == null || this.worldRenderer.getLevel() == null)
+            throw new IllegalStateException("RenderSection has no owning world renderer");
+        RenderChunkRegion renderchunkregion = renderRegionCache.createRegion(this.worldRenderer.getLevel(), blockpos.offset(-1, -1, -1), blockpos.offset(16, 16, 16), 1);
         boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
-        this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, !flag1 || flag);
+        this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, !flag1 || flag, dispatcher);
         return this.compileStatus.rebuildTask;
     }
 
@@ -203,12 +213,12 @@ public class RenderSection {
     public boolean isCompletelyEmpty() { return this.completelyEmpty; }
 
     private boolean doesChunkExistAt(int chunkX, int chunkZ) {
-        var level = WorldRenderer.getLevel();
+        var level = this.worldRenderer == null ? null : this.worldRenderer.getLevel();
         return level != null && level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false) != null;
     }
 
     public boolean hasXYNeighbours() {
-        Vec3 cameraPos = WorldRenderer.getCameraPos();
+        Vec3 cameraPos = this.getCameraPos();
         if(cameraPos == null) return true;
         double dx = this.xOffset + 8.0D - cameraPos.x;
         double dy = this.yOffset + 8.0D - cameraPos.y;
@@ -236,16 +246,16 @@ public class RenderSection {
         removed.removeAll(newSet);
         Set<BlockEntity> added = Sets.newHashSet(newSet);
         added.removeAll(oldSet);
-        Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(removed, added);
+        if(this.worldRenderer != null)
+            this.worldRenderer.updateGlobalBlockEntities(removed, added);
     }
 
     private void clearGlobalBlockEntities() {
         Set<BlockEntity> removed;
         synchronized(globalBlockEntitiesMap) { removed = globalBlockEntitiesMap.remove(this); }
         if(removed != null && !removed.isEmpty()) {
-            Minecraft minecraft = Minecraft.getInstance();
-            if(minecraft.levelRenderer != null)
-                minecraft.levelRenderer.updateGlobalBlockEntities(removed, Collections.emptySet());
+            if(this.worldRenderer != null)
+                this.worldRenderer.updateGlobalBlockEntities(removed, Collections.emptySet());
         }
     }
 
@@ -270,7 +280,8 @@ public class RenderSection {
         this.invalidateVoxels(true);
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
-        WorldRenderer.getInstance().setNeedsUpdate();
+        if(this.worldRenderer != null)
+            this.worldRenderer.setNeedsUpdate();
     }
 
     public synchronized long getVoxelGeneration() { return this.voxelGeneration; }

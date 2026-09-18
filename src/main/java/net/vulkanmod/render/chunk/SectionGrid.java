@@ -15,6 +15,7 @@ import java.util.List;
 
 public class SectionGrid {
 
+    private final WorldRenderer worldRenderer;
     protected final Level level;
     protected int gridHeight;
     protected int gridWidth;
@@ -24,7 +25,8 @@ public class SectionGrid {
     private int prevSecX;
     private int prevSecZ;
 
-    public SectionGrid(Level level, int viewDistance) {
+    public SectionGrid(WorldRenderer worldRenderer, Level level, int viewDistance) {
+        this.worldRenderer = worldRenderer;
         this.level = level;
         this.setViewDistance(viewDistance);
         this.createChunks();
@@ -46,6 +48,7 @@ public class SectionGrid {
                     for(int l = 0; l < this.gridWidth; ++l) {
                         int i1 = this.getChunkIndex(j, k, l);
                         RenderSection renderSection = new RenderSection(i1, j * 16, k * 16, l * 16);
+                        renderSection.setWorldRenderer(this.worldRenderer);
                         this.chunks[i1] = renderSection;
                     }
                 }
