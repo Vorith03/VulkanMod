@@ -416,7 +416,7 @@ public class RenderSection {
      * The CPU and GPU staged allocations must already have committed successfully
      * on the render thread before this no-fail state transition is invoked.
      */
-    synchronized boolean stageGpuTerrainAppendCpu(
+    public synchronized boolean stageGpuTerrainAppendCpu(
             long generation, DrawBuffers.StagedDrawParameters staged) {
         if(staged == null || generation != this.voxelGeneration
                 || staged.section != this || staged.generation() != generation)
@@ -477,7 +477,7 @@ public class RenderSection {
                 && this.gpuTerrainPreflightCpuBypassed;
     }
 
-    boolean requestGpuTerrainCpuRecovery(long generation) {
+    public boolean requestGpuTerrainCpuRecovery(long generation) {
         synchronized(this) {
             if(generation != this.voxelGeneration
                     || this.gpuTerrainPreflightGeneration != generation
