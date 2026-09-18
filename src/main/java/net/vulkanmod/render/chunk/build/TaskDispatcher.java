@@ -340,10 +340,17 @@ public class TaskDispatcher {
                     stagedUpload = uploadBuffers.remove(preservedLayer);
                     if(stagedUpload != null)
                         this.pendingUploadBuffers.remove(stagedUpload);
-                    DrawBuffers.StagedDrawParameters staged = stagedUpload != null
-                            ? drawBuffers.stageUpload(stagedUpload, section, preservedLayer, generation)
-                            : drawBuffers.stageEmpty(section, preservedLayer, generation);
-                    stagedUpload = null; // stageUpload consumed/released it.
+                    DrawBuffers.StagedDrawParameters staged;
+                    if(stagedUpload != null) {
+                        // stageUpload owns release on both success and failure.
+                        UploadBuffer ownedUpload = stagedUpload;
+                        stagedUpload = null;
+                        staged = drawBuffers.stageUpload(
+                                ownedUpload, section, preservedLayer, generation);
+                    } else {
+                        staged = drawBuffers.stageEmpty(
+                                section, preservedLayer, generation);
+                    }
 
                     if(!section.stageGpuTerrainAppendCpu(generation, staged)) {
                         drawBuffers.discardStaged(staged);
@@ -366,6 +373,9 @@ public class TaskDispatcher {
                     if(stagedAppendCpu)
                         section.discardGpuTerrainAppendCpuStage(generation);
                     section.requestGpuTerrainCpuRecovery(generation);
+                    this.droppedResults.incrementAndGet();
+                    LOGGER.warn("GPU terrain APPEND staging failed; preserving previous terrain and requesting CPU recovery", error);
+                    return;
                 }
                 throw error;
             } finally {
