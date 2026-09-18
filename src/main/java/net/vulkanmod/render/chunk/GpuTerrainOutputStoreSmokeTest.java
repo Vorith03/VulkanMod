@@ -108,6 +108,33 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && !store.getResidency(5, TerrainRenderType.SOLID).valid(),
                     "Generation turnover must cancel submitted staged output without publishing it");
 
+            // A complete-CPU dirty rebuild invalidates GPU output first, advancing
+            // the store to the new section generation before replacement GPU work is
+            // reserved. Staging that current generation must therefore be legal.
+            store.invalidateSection(7, 70L);
+            var currentStage = requireStagedReservation(store.reserveStaged(
+                            7, TerrainRenderType.SOLID, 70L, 4),
+                    "Current-generation staging must work after dirty invalidation");
+            require(currentStage.submitWithTarget(target -> target != null)
+                            && currentStage.complete(4, false)
+                            && currentStage.canCommit()
+                            && currentStage.commit(),
+                    "Current-generation staged output must commit after exact completion");
+            var currentResidency = store.getResidency(7, TerrainRenderType.SOLID);
+            require(currentResidency.valid() && currentResidency.generation() == 70L
+                            && currentResidency.faceCount() == 4,
+                    "Current-generation staged commit must publish residency");
+
+            var sameGenerationRevoked = requireStagedReservation(store.reserveStaged(
+                            7, TerrainRenderType.SOLID, 70L, 5),
+                    "Same-generation staged retry must reserve without replacing the resident");
+            require(sameGenerationRevoked.submitWithTarget(target -> target != null),
+                    "Same-generation staged retry must submit");
+            store.invalidateSection(7, 70L);
+            require(!sameGenerationRevoked.complete(5, false)
+                            && !store.getResidency(7, TerrainRenderType.SOLID).valid(),
+                    "Explicit same-generation invalidation must revoke staged retry and resident");
+
             // A same-generation retry must leave the previous result available if
             // the new compute result overflows its reservation.
             var retry = requireReservation(store.reserve(7, TerrainRenderType.SOLID, 10L, 16),
