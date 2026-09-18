@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.vulkanmod.mixin.compatibility.ImmersivePortalsGameRendererInvoker;
+import net.vulkanmod.vulkan.util.MappedBuffer;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -23,6 +24,8 @@ public final class ImmersivePortalsShaderCompat {
             "qouteall.imm_ptl.core.render.ShaderCodeTransformation";
     private static final String RENDER_HELPER_CLASS =
             "qouteall.imm_ptl.core.render.MyRenderHelper";
+    private static final String FRONT_CLIPPING_CLASS =
+            "qouteall.imm_ptl.core.render.FrontClipping";
 
     private static boolean initialized;
     private static boolean available;
@@ -32,6 +35,12 @@ public final class ImmersivePortalsShaderCompat {
     private static volatile boolean renderHelperReady;
     private static Object loadShaderSignal;
     private static Method emitShaderSignal;
+
+    private static final MappedBuffer TERRAIN_CLIP_PLANE = new MappedBuffer(4 * Float.BYTES);
+    private static boolean terrainClippingInitialized;
+    private static boolean terrainClippingAvailable;
+    private static java.lang.reflect.Field clippingEnabled;
+    private static Method getActiveClipPlane;
 
     private ImmersivePortalsShaderCompat() {
     }
@@ -73,6 +82,50 @@ public final class ImmersivePortalsShaderCompat {
 
     public static void markRenderHelperReady() {
         renderHelperReady = true;
+    }
+
+    /**
+     * VulkanMod's custom terrain pipelines bypass Minecraft ShaderInstance, so
+     * Immersive Portals cannot update them through IEShader. Mirror IP's active
+     * camera-relative clip equation into a Vulkan UBO field. A positive constant
+     * distance disables clipping when IP is absent or clipping is inactive.
+     */
+    public static MappedBuffer getTerrainClipPlane() {
+        setTerrainClipPlane(0.0f, 0.0f, 0.0f, 1.0f);
+        initializeTerrainClipping();
+        if(!terrainClippingAvailable) {
+            return TERRAIN_CLIP_PLANE;
+        }
+
+        try {
+            if(!clippingEnabled.getBoolean(null)) {
+                return TERRAIN_CLIP_PLANE;
+            }
+
+            Object value = getActiveClipPlane.invoke(null);
+            if(!(value instanceof double[] equation) || equation.length < 4) {
+                throw new IllegalStateException(
+                        "Immersive Portals clipping is enabled without a valid terrain clip equation");
+            }
+            setTerrainClipPlane(
+                    (float) equation[0],
+                    (float) equation[1],
+                    (float) equation[2],
+                    (float) equation[3]
+            );
+            return TERRAIN_CLIP_PLANE;
+        } catch(IllegalAccessException e) {
+            throw new IllegalStateException("Cannot access Immersive Portals terrain clipping state", e);
+        } catch(InvocationTargetException e) {
+            throw propagate("Immersive Portals terrain clipping lookup failed", e);
+        }
+    }
+
+    private static void setTerrainClipPlane(float x, float y, float z, float w) {
+        TERRAIN_CLIP_PLANE.putFloat(0, x);
+        TERRAIN_CLIP_PLANE.putFloat(Float.BYTES, y);
+        TERRAIN_CLIP_PLANE.putFloat(2 * Float.BYTES, z);
+        TERRAIN_CLIP_PLANE.putFloat(3 * Float.BYTES, w);
     }
 
     /**
@@ -132,6 +185,28 @@ public final class ImmersivePortalsShaderCompat {
             available = false;
         } catch(ReflectiveOperationException e) {
             throw new IllegalStateException("Unsupported Immersive Portals shader compatibility API", e);
+        }
+    }
+
+    private static synchronized void initializeTerrainClipping() {
+        if(terrainClippingInitialized) {
+            return;
+        }
+
+        terrainClippingInitialized = true;
+        try {
+            Class<?> clazz = Class.forName(
+                    FRONT_CLIPPING_CLASS,
+                    false,
+                    ImmersivePortalsShaderCompat.class.getClassLoader()
+            );
+            clippingEnabled = clazz.getField("isClippingEnabled");
+            getActiveClipPlane = clazz.getMethod("getActiveClipPlaneEquationBeforeModelView");
+            terrainClippingAvailable = true;
+        } catch(ClassNotFoundException ignored) {
+            terrainClippingAvailable = false;
+        } catch(ReflectiveOperationException e) {
+            throw new IllegalStateException("Unsupported Immersive Portals terrain clipping API", e);
         }
     }
 

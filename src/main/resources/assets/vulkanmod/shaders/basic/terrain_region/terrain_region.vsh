@@ -11,6 +11,7 @@ vec4 minecraft_sample_lightmap(sampler2D lightMap, ivec2 uv) {
 layout(binding = 0) uniform UniformBufferObject {
    mat4 MVP;
    mat4 ModelViewMat;
+   vec4 VulkanModClipPlane;
 };
 
 layout(push_constant) uniform pushConstant {
@@ -35,6 +36,7 @@ void main() {
     vec3 sectionOffset = vec3(section & 7u, (section >> 3u) & 7u, (section >> 6u) & 7u) * 16.0;
     vec3 pos = vec3(Position) * (1.0 / 1900.0) + sectionOffset + ChunkOffset;
     gl_Position = MVP * vec4(pos, 1.0);
+    gl_ClipDistance[0] = dot(pos, VulkanModClipPlane.xyz) + VulkanModClipPlane.w;
     vertexDistance = length((ModelViewMat * vec4(pos, 1.0)).xyz);
     vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
     texCoord0 = vec2(UV0) * (1.0 / 65536.0);

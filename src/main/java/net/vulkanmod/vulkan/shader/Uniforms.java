@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
+import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.util.MappedBuffer;
 
@@ -47,6 +48,7 @@ public class Uniforms {
         //Vec4
         vec4f_uniformMap.put("ColorModulator", VRenderSystem::getShaderColor);
         vec4f_uniformMap.put("FogColor", VRenderSystem::getShaderFogColor);
+        vec4f_uniformMap.put("VulkanModClipPlane", ImmersivePortalsShaderCompat::getTerrainClipPlane);
 
     }
 }

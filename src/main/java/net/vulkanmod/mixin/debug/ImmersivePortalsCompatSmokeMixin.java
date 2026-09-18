@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
+import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -70,10 +71,33 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             cHelper.getMethod("disableDepthClamp").invoke(null);
 
             Field clippingEnabled = frontClipping.getField("isClippingEnabled");
+            Field activeClipPlane = frontClipping.getDeclaredField(
+                    "activeClipPlaneEquationBeforeModelView");
+            activeClipPlane.setAccessible(true);
+            activeClipPlane.set(null, new double[]{1.0, 2.0, 3.0, 4.0});
             clippingEnabled.setBoolean(null, true);
+
+            MappedBuffer terrainClipPlane = ImmersivePortalsShaderCompat.getTerrainClipPlane();
+            if(terrainClipPlane.getFloat(0) != 1.0f
+                    || terrainClipPlane.getFloat(Float.BYTES) != 2.0f
+                    || terrainClipPlane.getFloat(2 * Float.BYTES) != 3.0f
+                    || terrainClipPlane.getFloat(3 * Float.BYTES) != 4.0f) {
+                throw new IllegalStateException(
+                        "Immersive Portals clip equation did not reach Vulkan terrain uniforms");
+            }
+
             frontClipping.getMethod("disableClipping").invoke(null);
             if(clippingEnabled.getBoolean(null)) {
                 throw new IllegalStateException("Immersive Portals clipping bookkeeping was not preserved");
+            }
+            activeClipPlane.set(null, null);
+            terrainClipPlane = ImmersivePortalsShaderCompat.getTerrainClipPlane();
+            if(terrainClipPlane.getFloat(0) != 0.0f
+                    || terrainClipPlane.getFloat(Float.BYTES) != 0.0f
+                    || terrainClipPlane.getFloat(2 * Float.BYTES) != 0.0f
+                    || terrainClipPlane.getFloat(3 * Float.BYTES) != 1.0f) {
+                throw new IllegalStateException(
+                        "Disabled Immersive Portals clipping did not restore no-clip terrain state");
             }
 
             // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own

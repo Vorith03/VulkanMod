@@ -11,6 +11,7 @@ vec4 minecraft_sample_lightmap(sampler2D lightMap, ivec2 uv) {
 layout(binding = 0) uniform UniformBufferObject {
    mat4 MVP;
    mat4 ModelViewMat;
+   vec4 VulkanModClipPlane;
 };
 
 layout(push_constant) uniform pushConstant {
@@ -38,9 +39,11 @@ const float POSITION_INV = 1.0 / 1900.0;
 
 void main() {
     vec3 pos = (Position * POSITION_INV);
-    gl_Position = MVP * vec4(pos + ChunkOffset, 1.0);
+    vec3 worldPos = pos + ChunkOffset;
+    gl_Position = MVP * vec4(worldPos, 1.0);
+    gl_ClipDistance[0] = dot(worldPos, VulkanModClipPlane.xyz) + VulkanModClipPlane.w;
 
-    vertexDistance = length((ModelViewMat * vec4(pos + ChunkOffset, 1.0)).xyz);
+    vertexDistance = length((ModelViewMat * vec4(worldPos, 1.0)).xyz);
     vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
     texCoord0 = UV0 * UV_INV;
 //    normal = MVP * vec4(Normal, 0.0);
@@ -55,9 +58,11 @@ layout(location = 3) in ivec2 UV2;
 layout(location = 4) in vec3 Normal;
 
 void main() {
-    gl_Position = MVP * vec4(Position + ChunkOffset, 1.0);
+    vec3 worldPos = Position + ChunkOffset;
+    gl_Position = MVP * vec4(worldPos, 1.0);
+    gl_ClipDistance[0] = dot(worldPos, VulkanModClipPlane.xyz) + VulkanModClipPlane.w;
 
-    vertexDistance = length((ModelViewMat * vec4(Position + ChunkOffset, 1.0)).xyz);
+    vertexDistance = length((ModelViewMat * vec4(worldPos, 1.0)).xyz);
     vertexColor = Color * minecraft_sample_lightmap(Sampler2, UV2);
     texCoord0 = UV0;
     //    normal = MVP * vec4(Normal, 0.0);
