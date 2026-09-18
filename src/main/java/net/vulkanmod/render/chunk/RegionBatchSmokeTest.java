@@ -302,7 +302,8 @@ public final class RegionBatchSmokeTest {
             long oldRevision = buffers.getMeshRevision(type);
             DrawBuffers.StagedDrawParameters staged;
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                staged = buffers.stageVertexData(type, stack.calloc(vertexBytes), 12);
+                staged = buffers.stageVertexData(
+                        section, type, stack.calloc(vertexBytes), 12, section.getVoxelGeneration());
             }
 
             require(parameters.vertexOffset == oldVertexOffset
@@ -327,7 +328,8 @@ public final class RegionBatchSmokeTest {
 
             DrawBuffers.StagedDrawParameters abandoned;
             try(MemoryStack stack = MemoryStack.stackPush()) {
-                abandoned = buffers.stageVertexData(type, stack.calloc(vertexBytes), 18);
+                abandoned = buffers.stageVertexData(
+                        section, type, stack.calloc(vertexBytes), 18, section.getVoxelGeneration());
             }
             AreaUploadManager.INSTANCE.submitUploads();
             require(abandoned.ready(),
