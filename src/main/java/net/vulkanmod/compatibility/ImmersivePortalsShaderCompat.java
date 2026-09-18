@@ -1,9 +1,14 @@
 package net.vulkanmod.compatibility;
 
 import com.mojang.blaze3d.shaders.Program;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.server.packs.resources.ResourceProvider;
+import net.vulkanmod.mixin.compatibility.ImmersivePortalsGameRendererInvoker;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.function.Consumer;
 
 /**
  * Optional bridge to Immersive Portals' shader source transformation without a
@@ -16,11 +21,17 @@ import java.lang.reflect.Method;
 public final class ImmersivePortalsShaderCompat {
     private static final String TRANSFORM_CLASS =
             "qouteall.imm_ptl.core.render.ShaderCodeTransformation";
+    private static final String RENDER_HELPER_CLASS =
+            "qouteall.imm_ptl.core.render.MyRenderHelper";
 
     private static boolean initialized;
     private static boolean available;
     private static Method shouldAddUniform;
     private static Method transform;
+
+    private static volatile boolean renderHelperReady;
+    private static Object loadShaderSignal;
+    private static Method emitShaderSignal;
 
     private ImmersivePortalsShaderCompat() {
     }
@@ -60,6 +71,48 @@ public final class ImmersivePortalsShaderCompat {
         }
     }
 
+    public static void markRenderHelperReady() {
+        renderHelperReady = true;
+    }
+
+    /**
+     * Rebuild VulkanMod's core shaders, then invoke Immersive Portals' shader
+     * listener signal explicitly. VulkanMod cancels GameRenderer.reloadShaders
+     * at HEAD, so IP's normal RETURN injection cannot reliably run by itself.
+     */
+    public static void rebuildShaders(Minecraft minecraft) {
+        if(minecraft == null || minecraft.gameRenderer == null) {
+            return;
+        }
+
+        ResourceProvider resourceProvider = minecraft.getResourceManager();
+        ImmersivePortalsGameRendererInvoker bridge =
+                (ImmersivePortalsGameRendererInvoker)(Object)minecraft.gameRenderer;
+
+        bridge.vulkanmod$reloadShaders(resourceProvider);
+
+        if(!renderHelperReady) {
+            return;
+        }
+
+        emitPortalShaders(resourceProvider,
+                shader -> bridge.vulkanmod$getShaders().put(shader.getName(), shader));
+    }
+
+    private static void emitPortalShaders(
+            ResourceProvider resourceProvider,
+            Consumer<ShaderInstance> resultConsumer) {
+        initializeRenderHelperSignal();
+
+        try {
+            emitShaderSignal.invoke(loadShaderSignal, resourceProvider, resultConsumer);
+        } catch(IllegalAccessException e) {
+            throw new IllegalStateException("Cannot access Immersive Portals shader loader signal", e);
+        } catch(InvocationTargetException e) {
+            throw propagate("Immersive Portals shader loader signal failed", e);
+        }
+    }
+
     private static synchronized void initialize() {
         if(initialized) {
             return;
@@ -79,6 +132,24 @@ public final class ImmersivePortalsShaderCompat {
             available = false;
         } catch(ReflectiveOperationException e) {
             throw new IllegalStateException("Unsupported Immersive Portals shader compatibility API", e);
+        }
+    }
+
+    private static synchronized void initializeRenderHelperSignal() {
+        if(emitShaderSignal != null) {
+            return;
+        }
+
+        try {
+            Class<?> clazz = Class.forName(
+                    RENDER_HELPER_CLASS,
+                    false,
+                    ImmersivePortalsShaderCompat.class.getClassLoader()
+            );
+            loadShaderSignal = clazz.getField("loadShaderSignal").get(null);
+            emitShaderSignal = loadShaderSignal.getClass().getMethod("emit", Object.class, Object.class);
+        } catch(ReflectiveOperationException e) {
+            throw new IllegalStateException("Unsupported Immersive Portals shader loader API", e);
         }
     }
 

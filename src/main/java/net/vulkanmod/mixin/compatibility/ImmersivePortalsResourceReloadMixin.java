@@ -10,11 +10,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Immersive Portals loads its shader transformation table as a resource reload
- * listener. VulkanMod's early core-shader construction can therefore run before
- * IP knows which shaders need clipping support. Rebuild only the shader set once
- * the enclosing resource reload has completed so the transformed Vulkan variants
- * are created from the now-live IP transformation table.
+ * Once Immersive Portals is active, rebuild both VulkanMod's core shaders and
+ * IP's helper shaders after manual resource-pack reloads. Startup initialization
+ * is handled separately from MyRenderHelper.init(), because Minecraft's initial
+ * resource load does not pass through reloadResourcePacks().
  */
 @Mixin(Minecraft.class)
 public abstract class ImmersivePortalsResourceReloadMixin {
@@ -43,9 +42,7 @@ public abstract class ImmersivePortalsResourceReloadMixin {
                 return;
             }
 
-            minecraft.execute(() ->
-                    ((ImmersivePortalsGameRendererInvoker)(Object)minecraft.gameRenderer)
-                            .vulkanmod$reloadShaders(minecraft.getResourceManager()));
+            minecraft.execute(() -> ImmersivePortalsShaderCompat.rebuildShaders(minecraft));
         });
     }
 }

@@ -19,10 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Immersive Portals initializes its shader transformation table immediately
  * before MyRenderHelper.init() and registers its extra shader listeners inside
  * this method. VulkanMod's initial shader reload can finish before that client
- * setup task runs, so rebuild the shader set once at RETURN when clipping is
- * actually active. This gives both IP's dynamic clipping uniforms and its extra
- * shaders a live Vulkan pipeline on first launch; later resource-pack reloads
- * remain covered by ImmersivePortalsResourceReloadMixin.
+ * setup task runs, so rebuild the full IP-aware shader set once at RETURN.
  */
 @Pseudo
 @Mixin(targets = "qouteall.imm_ptl.core.render.MyRenderHelper", remap = false)
@@ -32,8 +29,7 @@ public abstract class ImmersivePortalsMyRenderHelperMixin {
 
     @Inject(method = "init()V", at = @At("RETURN"))
     private static void vulkanmod$rebuildShadersAfterPortalShaderInit(CallbackInfo ci) {
-        if(vulkanmod$startupShaderReloaded
-                || !ImmersivePortalsShaderCompat.shouldTransform("rendertype_solid")) {
+        if(vulkanmod$startupShaderReloaded) {
             return;
         }
 
@@ -43,8 +39,8 @@ public abstract class ImmersivePortalsMyRenderHelperMixin {
         }
 
         vulkanmod$startupShaderReloaded = true;
-        ((ImmersivePortalsGameRendererInvoker)(Object)minecraft.gameRenderer)
-                .vulkanmod$reloadShaders(minecraft.getResourceManager());
+        ImmersivePortalsShaderCompat.markRenderHelperReady();
+        ImmersivePortalsShaderCompat.rebuildShaders(minecraft);
     }
 
     @Redirect(method = "applyMirrorFaceCulling()V",
