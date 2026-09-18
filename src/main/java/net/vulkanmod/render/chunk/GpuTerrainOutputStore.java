@@ -133,7 +133,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             throw new IllegalArgumentException("GPU terrain output generation must be non-negative");
         if(faceCapacity <= 0 || faceCapacity > MAX_FACES)
             throw new IllegalArgumentException("GPU terrain face capacity is outside the bounded section limit");
-        if(closed || generation <= this.sectionGenerations[packedSection])
+        if(closed || generation < this.sectionGenerations[packedSection])
             return null;
 
         for(StagedPending staged : stagedReservations.values()) {
@@ -280,7 +280,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private synchronized boolean canCommitStaged(StagedReservation reservation) {
         StagedPending pending = stagedPending(reservation);
         return pending != null && pending.ready && !pending.cancelled && !closed
-                && pending.generation > this.sectionGenerations[pending.packedSection];
+                && pending.generation >= this.sectionGenerations[pending.packedSection];
     }
 
     private synchronized boolean commitStaged(StagedReservation reservation) {
@@ -289,8 +289,13 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         StagedPending pending = stagedPending(reservation);
 
         stagedReservations.remove(pending.token);
-        advanceSectionGeneration(pending.packedSection, pending.generation);
+        long currentGeneration = this.sectionGenerations[pending.packedSection];
+        if(pending.generation > currentGeneration)
+            advanceSectionGeneration(pending.packedSection, pending.generation);
         Entry entry = entry(pending.packedSection, pending.type, true);
+        if(entry.resident != null)
+            discardResident(entry);
+        discardPending(entry);
         entry.resident = new Resident(pending.generation, pending.writtenFaces,
                 Math.multiplyExact(pending.writtenFaces, BYTES_PER_FACE), pending.segment);
         drawBuffers.markMeshChanged(pending.type);
@@ -487,13 +492,15 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private void advanceSectionGeneration(int packedSection, long generation) {
         this.sectionGenerations[packedSection] = generation;
 
-        // Any staged replacement at or behind the new authoritative generation can
-        // no longer commit. Retire it here rather than depending on a delayed
+        // Any staged replacement strictly behind the new authoritative generation can
+        // no longer commit. A staged replacement for the current generation is valid
+        // after dirty invalidation has already advanced the section generation.
+        // Retire stale work here rather than depending on a delayed
         // completion/transaction owner to notice the turnover. Submitted work stays
         // physically pinned until completion, exactly like ordinary reservations.
         stagedReservations.entrySet().removeIf(entry -> {
             StagedPending staged = entry.getValue();
-            if(staged.packedSection != packedSection || staged.generation > generation)
+            if(staged.packedSection != packedSection || staged.generation >= generation)
                 return false;
             if(staged.submitted && !staged.ready) {
                 staged.cancelled = true;
