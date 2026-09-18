@@ -238,15 +238,8 @@ final class GpuTerrainSectionMesherBridge {
                 ownership == GpuTerrainDrawHandoff.Ownership.APPEND && cpuBypassed
                         ? section.gpuTerrainAppendCpuStage(generation) : null;
         boolean atomicAppendRebuild = ownership == GpuTerrainDrawHandoff.Ownership.APPEND
-                && cpuBypassed && section.gpuTerrainCpuMeshComplete();
+                && cpuBypassed && stagedCpu != null;
         if(atomicAppendRebuild) {
-            if(stagedCpu == null) {
-                GpuTerrainDiagnostics.record("dispatch", "append_cpu_stage_missing",
-                        section, generation, "faces=" + faceCapacity);
-                recoverCpuFallback(area, section, generation);
-                return;
-            }
-
             GpuTerrainOutputStore.StagedReservation stagedGpu =
                     area.reserveStagedGpuTerrainOutput(
                             x, y, z, layer, generation, faceCapacity);
