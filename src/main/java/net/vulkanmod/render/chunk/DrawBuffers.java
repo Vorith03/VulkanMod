@@ -85,10 +85,12 @@ public class DrawBuffers {
                 || renderType == TerrainRenderType.TRIPWIRE)
             throw new IllegalArgumentException("Staged APPEND CPU upload must be auto-indexed opaque terrain");
 
-        StagedDrawParameters staged = stageVertexData(
-                section, renderType, buffer.getVertexBuffer(), buffer.indexCount, generation);
-        buffer.release();
-        return staged;
+        try {
+            return stageVertexData(
+                    section, renderType, buffer.getVertexBuffer(), buffer.indexCount, generation);
+        } finally {
+            buffer.release();
+        }
     }
 
     StagedDrawParameters stageVertexData(RenderSection section, TerrainRenderType renderType,
@@ -105,23 +107,37 @@ public class DrawBuffers {
         if(vertexData.remaining() <= 0 || vertexData.remaining() % VERTEX_SIZE != 0)
             throw new IllegalArgumentException("Staged terrain vertices must be non-empty and aligned");
 
-        AreaBuffer.Segment segment = new AreaBuffer.Segment();
-        this.vertexBuffer.upload(vertexData, segment);
-        int vertexOffset = segment.getOffset() / VERTEX_SIZE;
+        // Capacity growth is logically independent of the staged vertex allocation.
+        // Perform it first so a failure cannot strand a newly allocated CPU segment.
         Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3);
+
+        AreaBuffer.Segment segment = new AreaBuffer.Segment();
+        try {
+            this.vertexBuffer.upload(vertexData, segment);
+        } catch(RuntimeException error) {
+            if(segment.getOffset() != -1) {
+                this.vertexBuffer.setSegmentFree(segment);
+                segment.reset();
+            }
+            throw error;
+        }
+        int vertexOffset = segment.getOffset() / VERTEX_SIZE;
         return new StagedDrawParameters(this, section, generation, renderType,
                 indexCount, 0, vertexOffset, segment, this.vertexBuffer);
     }
 
+    boolean canCommitStaged(DrawParameters target, StagedDrawParameters staged) {
+        return target != null && staged != null && staged.owner == this
+                && !staged.consumed && staged.renderType == target.renderType
+                && staged.section.getDrawParameters(staged.renderType) == target
+                && staged.section.getVoxelGeneration() == staged.generation
+                && staged.vertexBufferOwner == this.vertexBuffer
+                && staged.vertexBufferSegment.getOffset() >= 0
+                && staged.vertexBufferSegment.isReady();
+    }
+
     boolean commitStaged(DrawParameters target, StagedDrawParameters staged) {
-        if(target == null || staged == null || staged.owner != this
-                || staged.consumed || staged.renderType != target.renderType
-                || staged.section.getDrawParameters(staged.renderType) != target
-                || staged.section.getVoxelGeneration() != staged.generation)
-            return false;
-        if(staged.vertexBufferOwner != this.vertexBuffer
-                || staged.vertexBufferSegment.getOffset() < 0
-                || !staged.vertexBufferSegment.isReady())
+        if(!this.canCommitStaged(target, staged))
             return false;
 
         AreaBuffer.Segment previous = target.vertexBufferSegment;
