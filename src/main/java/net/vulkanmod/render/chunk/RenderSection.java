@@ -442,7 +442,7 @@ public class RenderSection {
                 && this.gpuTerrainAppendCpuStage == staged;
     }
 
-    void discardGpuTerrainAppendCpuStage(long generation) {
+    public void discardGpuTerrainAppendCpuStage(long generation) {
         DrawBuffers.StagedDrawParameters staged;
         ChunkArea area;
         synchronized(this) {
