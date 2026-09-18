@@ -20,6 +20,8 @@
     "compatibility.FTBLibraryGuiHelperMixin",
     "compatibility.FTBLibraryScissorMixin",
     "compatibility.ImmersivePortalsCHelperMixin",
+    "compatibility.ImmersivePortalsGameRendererInvoker",
+    "compatibility.ImmersivePortalsResourceReloadMixin",
     "compatibility.ImmersivePortalsFrontClippingMixin",
     "compatibility.ImmersivePortalsLevelRendererMixin",
     "compatibility.ImmersivePortalsMyRenderHelperMixin",

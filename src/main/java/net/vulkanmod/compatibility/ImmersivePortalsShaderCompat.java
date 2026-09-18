@@ -25,6 +25,11 @@ public final class ImmersivePortalsShaderCompat {
     private ImmersivePortalsShaderCompat() {
     }
 
+    public static boolean isAvailable() {
+        initialize();
+        return available;
+    }
+
     public static boolean shouldTransform(String shaderName) {
         initialize();
         if(!available) {
