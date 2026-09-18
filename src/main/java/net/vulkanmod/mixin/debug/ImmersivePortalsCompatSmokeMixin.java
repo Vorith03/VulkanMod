@@ -95,6 +95,19 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             if(!"compatibility".equals(((Enum<?>) renderMode.get(null)).name())) {
                 throw new IllegalStateException("Immersive Portals did not select framebuffer compatibility mode");
             }
+
+            // Exercise the selected framebuffer renderer itself, not just its class
+            // load. prepareRendering() is the first real compatibility-mode path and
+            // reaches IP's direct GL_STENCIL_TEST disable on an unpatched build.
+            Class<?> ipcGlobal = Class.forName("qouteall.imm_ptl.core.IPCGlobal", true, loader);
+            Object selectedRenderer = ipcGlobal.getField("renderer").get(null);
+            if(selectedRenderer == null ||
+                    !"qouteall.imm_ptl.core.render.RendererUsingFrameBuffer".equals(
+                            selectedRenderer.getClass().getName())) {
+                throw new IllegalStateException(
+                        "Immersive Portals did not install its framebuffer compatibility renderer");
+            }
+            selectedRenderer.getClass().getMethod("prepareRendering").invoke(selectedRenderer);
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
             throw new IllegalStateException("Immersive Portals compatibility smoke invocation failed", cause);
