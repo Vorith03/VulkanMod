@@ -91,7 +91,7 @@ Hybrid-focused commits add tests for conservative cell ownership/demotion, filte
 
 ## Compatibility intersection
 
-Live Forge remains `328018e7`. Compatibility work remains independently owned by draft PR #6 (`compat-audit-20260917`); CI #615 is fully green through Immersive Portals, Crash Assistant, Chat Heads, and Flywheel.
+Live Forge remains `328018e7`. Compatibility work remains independently owned by draft PR #6 (`compat-audit-20260917`). Its earlier CI #615 was green through Immersive Portals, Crash Assistant, Chat Heads, and Flywheel, but the branch has since advanced to `efdced56` with a stronger clipping-pipeline proof. Latest CI #622 fails only because the new `VULKANMOD_IP_CLIPPING_SHADER_OK` marker is absent even though the existing Immersive Portals compatibility smoke itself passes; treat that stronger compatibility proof as unresolved until the compatibility thread closes it.
 
 To move PR #4's combined smoke far enough to validate the terrain fixes, this branch selectively consumed the first two compatibility fixes: `1c7e0e1a` preserves vanilla `MainTarget.createFrameBuffer` call sites and `7ff35811` preserves `LevelRenderer.allChanged` call sites while cancelling the unsupported vanilla paths at runtime. CI #620 then reached the next known IP-owned boundary: VulkanMod's `ProgramM` overwrite removes the shader-source call site IP wraps. PR #6 already fixes that and later shader/uniform/clip-distance compatibility; do not duplicate the remainder into terrain production merely to make PR #4 green. Reconcile when the compatibility branch lands or when an explicit combined validation branch is appropriate.
 
@@ -116,12 +116,12 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 ## Next action
 
 1. Keep PR #4 isolated while compatibility PR #6 is active; re-fetch live Forge before any reconciliation.
-2. Once a combined artifact contains the green PR #6 compatibility stack, perform the first narrow RX 6900 XT/RADV **functional** terrain test with REPLACE + fresh APPEND enabled. Check visual completeness, recovery behavior, and logs; do not treat it as an FPS benchmark.
+2. Once a combined artifact contains a current compatibility head whose stronger Immersive Portals clipping proof is green, perform the first narrow RX 6900 XT/RADV **functional** terrain test with REPLACE + fresh APPEND enabled. Check visual completeness, recovery behavior, and logs; do not treat it as an FPS benchmark.
 3. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
 4. Mixed-section APPEND rebuilds remain deliberately disabled. The audit now pins the required design: stage the rebuilt CPU output-layer allocation and GPU output reservation independently, keep the previous generation visible, then commit both new halves together only after both are ready; stale/failure paths must retire staged allocations without disturbing the old draw. Cover that transaction before enabling rebuild omission.
 5. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
 
-Do not ask the user to remove Immersive Portals merely to test the target pack; prefer waiting for/reconciling the already-green compatibility stack into the test artifact.
+Do not ask the user to remove Immersive Portals merely to test the target pack; prefer waiting for/reconciling the compatibility stack after its new clipping-pipeline proof is green.
 
 ## Outstanding RX evidence / performance boundary
 
