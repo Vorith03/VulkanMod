@@ -93,10 +93,10 @@ public final class RegionBatchSmokeTest {
             parameters.vertexBufferSegment.setPending();
             area.addSection(section);
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Initial cache build");
-            require(first.drawCount == 0 && first.pendingUploads, "Pending vertices must not draw");
+            require(first.drawCount == 0 && first.sectionCount == 0 && first.pendingUploads, "Pending vertices must not draw or count as a rendered section");
             parameters.vertexBufferSegment.setReady();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Upload completion must retry");
-            require(first.drawCount == 1 && !first.pendingUploads, "Ready geometry must draw");
+            require(first.drawCount == 1 && first.sectionCount == 1 && !first.pendingUploads, "Ready geometry must draw and count exactly one rendered section");
             require(first.commands.getByteBuffer().getInt(16) == (7 | (2 << 3) | (3 << 6)), "GPU section coordinates");
             require(!first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED), "Unchanged cache must not upload");
 
@@ -104,8 +104,9 @@ public final class RegionBatchSmokeTest {
             solidParameters.indexCount = 3;
             solidParameters.vertexOffset = 8;
             solidParameters.vertexBufferSegment.setReady();
-            require(solid.update(buffers, area, TerrainRenderType.SOLID) && solid.drawCount == 1,
-                    "Independent terrain layer must build its own cache");
+            require(solid.update(buffers, area, TerrainRenderType.SOLID)
+                            && solid.drawCount == 1 && solid.sectionCount == 1,
+                    "Independent terrain layer must build one command for one rendered section");
 
             var emptyParameters = section.getDrawParameters(TerrainRenderType.CUTOUT);
             long emptyRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT);
@@ -160,8 +161,9 @@ public final class RegionBatchSmokeTest {
 
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Enabling the GPU terrain handoff must rebuild the frame-local cache");
-            require(first.drawCount == 1 && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
-                    "Exact-generation replacement residency must be counted as one bounded GPU draw");
+            require(first.drawCount == 1 && first.sectionCount == 1
+                            && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
+                    "Exact-generation replacement residency must remain one command for one rendered section");
             require(first.commands.getByteBuffer().getInt(0) == 18
                             && first.commands.getByteBuffer().getInt(8) == 0
                             && first.commands.getByteBuffer().getInt(12) == residency.vertexOffset()
@@ -178,8 +180,9 @@ public final class RegionBatchSmokeTest {
             buffers.markMeshChanged(TerrainRenderType.CUTOUT_MIPPED);
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Explicit append ownership must rebuild the live frame batch");
-            require(first.drawCount == 2 && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
-                    "Hybrid handoff must record one CPU exception command plus one GPU command");
+            require(first.drawCount == 2 && first.sectionCount == 1
+                            && first.gpuDrawCount == 1 && first.maxGpuVertexCount == 12,
+                    "Hybrid handoff must record two commands while counting exactly one rendered section");
             var hybridCommands = first.commands.getByteBuffer();
             int packedSection = 7 | (2 << 3) | (3 << 6);
             require(hybridCommands.getInt(0) == 12
@@ -197,13 +200,15 @@ public final class RegionBatchSmokeTest {
             buffers.markMeshChanged(TerrainRenderType.CUTOUT_MIPPED);
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Pending hybrid CPU exception upload must rebuild the cache");
-            require(first.drawCount == 0 && first.gpuDrawCount == 0 && first.pendingUploads,
-                    "Hybrid handoff must suppress both CPU and GPU halves until the CPU exception upload is ready");
+            require(first.drawCount == 0 && first.sectionCount == 0
+                            && first.gpuDrawCount == 0 && first.pendingUploads,
+                    "Pending hybrid handoff must suppress commands and must not count an undrawn section");
             parameters.vertexBufferSegment.setReady();
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Ready hybrid CPU exception upload must retry automatically");
-            require(first.drawCount == 2 && first.gpuDrawCount == 1 && !first.pendingUploads,
-                    "Hybrid handoff must restore both commands together after CPU upload completion");
+            require(first.drawCount == 2 && first.sectionCount == 1
+                            && first.gpuDrawCount == 1 && !first.pendingUploads,
+                    "Ready hybrid handoff must restore two commands while counting one rendered section");
 
             long invalidateRevision = buffers.getMeshRevision(TerrainRenderType.CUTOUT_MIPPED);
             area.removeVoxels(section.xOffset, section.yOffset, section.zOffset,
@@ -213,24 +218,27 @@ public final class RegionBatchSmokeTest {
                     "GPU generation turnover must invalidate cached resident commands");
             require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED, true),
                     "Stale GPU residency must force a FrameBatch rebuild");
-            require(first.gpuDrawCount == 0 && first.drawCount == 1
+            require(first.gpuDrawCount == 0 && first.drawCount == 1 && first.sectionCount == 1
                             && first.commands.getByteBuffer().getInt(0) == 12
                             && first.commands.getByteBuffer().getInt(8) == parameters.firstIndex
                             && first.commands.getByteBuffer().getInt(12) == parameters.vertexOffset,
                     "Generation turnover must fall back to the untouched CPU command even from append ownership");
 
             area.resetQueue();
-            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
-                    "Visibility removal must clear draws");
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED)
+                            && first.drawCount == 0 && first.sectionCount == 0,
+                    "Visibility removal must clear commands and rendered-section count");
             area.resetQueue();
             area.addSection(section);
-            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 1,
-                    "Visibility restoration must rebuild draws");
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED)
+                            && first.drawCount == 1 && first.sectionCount == 1,
+                    "Visibility restoration must rebuild one command for one rendered section");
 
             parameters.reset(area);
             require(!parameters.ready, "Reset parameters must not retain upload readiness");
-            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED) && first.drawCount == 0,
-                    "Section reset must invalidate cached geometry");
+            require(first.update(buffers, area, TerrainRenderType.CUTOUT_MIPPED)
+                            && first.drawCount == 0 && first.sectionCount == 0,
+                    "Section reset must invalidate commands and rendered-section count");
 
             // If a coarse slot unexpectedly still owns geometry, detach the old
             // DrawBuffers immediately so the recycled region can proceed, but keep
