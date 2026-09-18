@@ -70,6 +70,90 @@ public class DrawBuffers {
         return drawParameters;
     }
 
+    /**
+     * Upload a non-visible replacement CPU mesh into a fresh vertex allocation.
+     * The active DrawParameters remain untouched until commitStaged() is called.
+     * This first staging primitive is deliberately limited to auto-indexed opaque
+     * terrain, which is the only CPU half needed by mixed APPEND rebuilds.
+     */
+    StagedDrawParameters stageUpload(UploadBuffer buffer, TerrainRenderType renderType) {
+        if(buffer == null || renderType == null)
+            throw new IllegalArgumentException("Staged terrain upload requires a buffer and render type");
+        if(buffer.indexOnly || !buffer.autoIndices
+                || renderType == TerrainRenderType.TRANSLUCENT
+                || renderType == TerrainRenderType.TRIPWIRE)
+            throw new IllegalArgumentException("Staged APPEND CPU upload must be auto-indexed opaque terrain");
+
+        StagedDrawParameters staged = stageVertexData(
+                renderType, buffer.getVertexBuffer(), buffer.indexCount);
+        buffer.release();
+        return staged;
+    }
+
+    StagedDrawParameters stageVertexData(TerrainRenderType renderType,
+                                         ByteBuffer vertexData, int indexCount) {
+        if(renderType == null || vertexData == null || indexCount <= 0)
+            throw new IllegalArgumentException("Invalid staged terrain vertex upload");
+        if(renderType == TerrainRenderType.TRANSLUCENT
+                || renderType == TerrainRenderType.TRIPWIRE)
+            throw new IllegalArgumentException("Staged APPEND CPU upload must remain opaque");
+        if(vertexData.remaining() <= 0 || vertexData.remaining() % VERTEX_SIZE != 0)
+            throw new IllegalArgumentException("Staged terrain vertices must be non-empty and aligned");
+
+        AreaBuffer.Segment segment = new AreaBuffer.Segment();
+        this.vertexBuffer.upload(vertexData, segment);
+        int vertexOffset = segment.getOffset() / VERTEX_SIZE;
+        Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3);
+        return new StagedDrawParameters(this, renderType, indexCount, 0,
+                vertexOffset, segment, this.vertexBuffer);
+    }
+
+    boolean commitStaged(DrawParameters target, StagedDrawParameters staged) {
+        if(target == null || staged == null || staged.owner != this
+                || staged.consumed || staged.renderType != target.renderType)
+            return false;
+        if(staged.vertexBufferOwner != this.vertexBuffer
+                || staged.vertexBufferSegment.getOffset() < 0
+                || !staged.vertexBufferSegment.isReady())
+            return false;
+
+        AreaBuffer.Segment previous = target.vertexBufferSegment;
+        AreaBuffer previousOwner = this.vertexBuffer;
+        target.indexCount = staged.indexCount;
+        target.firstIndex = staged.firstIndex;
+        target.vertexOffset = staged.vertexOffset;
+        target.vertexBufferSegment = staged.vertexBufferSegment;
+        target.ready = true;
+        staged.consumed = true;
+        this.markMeshChanged(target.renderType);
+
+        if(previous != null && previous.getOffset() != -1)
+            retireSegment(previousOwner, previous);
+        return true;
+    }
+
+    void discardStaged(StagedDrawParameters staged) {
+        if(staged == null || staged.owner != this || staged.consumed)
+            return;
+        staged.consumed = true;
+        if(staged.vertexBufferSegment.getOffset() != -1)
+            retireSegment(staged.vertexBufferOwner, staged.vertexBufferSegment);
+    }
+
+    private static void retireSegment(AreaBuffer owner, AreaBuffer.Segment segment) {
+        if(owner == null || segment == null)
+            return;
+        AreaUploadManager manager = AreaUploadManager.INSTANCE;
+        Runnable retirement = () -> {
+            owner.setSegmentFree(segment);
+            segment.reset();
+        };
+        if(manager == null)
+            retirement.run();
+        else
+            manager.enqueueFrameRetirement(retirement);
+    }
+
     long getMeshRevision(TerrainRenderType renderType) {
         return this.meshRevisions[renderType.ordinal()];
     }
@@ -328,6 +412,38 @@ public class DrawBuffers {
 
     public boolean isAllocated() {
         return allocated;
+    }
+
+    static final class StagedDrawParameters {
+        private final DrawBuffers owner;
+        final TerrainRenderType renderType;
+        final int indexCount;
+        final int firstIndex;
+        final int vertexOffset;
+        final AreaBuffer.Segment vertexBufferSegment;
+        final AreaBuffer vertexBufferOwner;
+        private boolean consumed;
+
+        StagedDrawParameters(DrawBuffers owner, TerrainRenderType renderType,
+                             int indexCount, int firstIndex, int vertexOffset,
+                             AreaBuffer.Segment vertexBufferSegment,
+                             AreaBuffer vertexBufferOwner) {
+            this.owner = owner;
+            this.renderType = renderType;
+            this.indexCount = indexCount;
+            this.firstIndex = firstIndex;
+            this.vertexOffset = vertexOffset;
+            this.vertexBufferSegment = vertexBufferSegment;
+            this.vertexBufferOwner = vertexBufferOwner;
+        }
+
+        boolean ready() {
+            return !consumed && vertexBufferSegment.isReady();
+        }
+
+        int vertexOffset() {
+            return vertexOffset;
+        }
     }
 
     public static class DrawParameters {
