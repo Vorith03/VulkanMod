@@ -50,6 +50,7 @@ final class GpuTerrainAppendRebuildTransaction {
                 && gpu.ready()
                 && gpu.canCommit()
                 && section.canCommitGpuTerrainAppendRebuild(generation, gpu.faceCapacity())
+                && section.matchesGpuTerrainAppendCpuStage(generation, cpu)
                 && drawBuffers.canCommitStaged(section.getDrawParameters(type), cpu);
     }
 
@@ -69,7 +70,8 @@ final class GpuTerrainAppendRebuildTransaction {
             throw new IllegalStateException("Prevalidated staged GPU terrain commit failed");
         if(!drawBuffers.commitStaged(target, cpu))
             throw new IllegalStateException("Prevalidated staged CPU terrain commit failed");
-        section.commitGpuTerrainAppendRebuildHandoff(generation, gpu.faceCapacity());
+        section.commitGpuTerrainAppendRebuildHandoff(
+                generation, gpu.faceCapacity(), cpu);
 
         finished = true;
         return true;
@@ -79,7 +81,7 @@ final class GpuTerrainAppendRebuildTransaction {
         RenderSystem.assertOnRenderThread();
         if(finished)
             return;
-        drawBuffers.discardStaged(cpu);
+        section.discardGpuTerrainAppendCpuStage(generation);
         gpu.discard();
         finished = true;
     }
