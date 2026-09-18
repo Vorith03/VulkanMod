@@ -400,6 +400,29 @@ public class RenderSection {
         return true;
     }
 
+    synchronized boolean canCommitGpuTerrainAppendRebuild(long generation, int faceCount) {
+        return generation == this.voxelGeneration
+                && faceCount > 0
+                && this.gpuTerrainPreflightGeneration == generation
+                && this.gpuTerrainPreflightFaceCount == faceCount
+                && this.gpuTerrainPreflightOwnership == GpuTerrainDrawHandoff.Ownership.APPEND
+                && this.gpuTerrainPreflightCpuBypassed;
+    }
+
+    /**
+     * Final logical visibility switch for a prevalidated atomic APPEND rebuild.
+     * The CPU and GPU staged allocations must already have committed successfully
+     * on the render thread before this no-fail state transition is invoked.
+     */
+    synchronized void commitGpuTerrainAppendRebuildHandoff(long generation, int faceCount) {
+        if(!this.canCommitGpuTerrainAppendRebuild(generation, faceCount))
+            throw new IllegalStateException("GPU APPEND rebuild handoff became stale during commit");
+        this.gpuTerrainVisibleGeneration = generation;
+        this.gpuTerrainVisibleOwnership = GpuTerrainDrawHandoff.Ownership.APPEND;
+        this.forceCpuTerrainUntilSuccess = false;
+        this.gpuTerrainCpuMeshComplete = false;
+    }
+
     synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
         return generation == this.voxelGeneration
                 && this.gpuTerrainPreflightGeneration == generation
