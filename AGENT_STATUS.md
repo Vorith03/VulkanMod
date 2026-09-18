@@ -11,10 +11,11 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Latest executable checkpoint is `76a667ed3d33622ba746613957dd98da1513ed53` (`test: execute IP framebuffer renderer smoke`), fully validated by CI #678 / run `35375262387`. The pre-bridge baseline `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` is also fully green in CI #677 / run `35337817185`.
-- The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward to the exact green head; no merge-only content was introduced.
-- CI #678 / run `35375262387` at `76a667ed` is fully green: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, the strengthened Immersive Portals 3.0.7 framebuffer-runtime smoke, Crash Assistant, Chat Heads, and Flywheel all pass.
-- A real Create Chronicles/RX 6900 XT run exposed an additional Immersive Portals blocker after `ac2a9a28`: IP correctly switched to its framebuffer compatibility renderer, then `RendererUsingFrameBuffer.prepareRendering()` called raw `GL11.glDisable(GL_STENCIL_TEST)` on VulkanMod's `GLFW_NO_API` window. `a39e6466` adds redirects for both raw framebuffer-renderer stencil disables, `c5b825a8` registers the mixin, and `76a667ed` makes CI select the real framebuffer renderer and execute `prepareRendering()` with no OpenGL context. CI #678 passes that regression path; a repeat RX/full-pack run is still required because the run that found the defect stopped before the terrain gate.
+- Latest executable checkpoint is `8e553bb6991c16f86098227aa35639189d4e4aaf` (`compat: preserve portal reload guards`), fully validated by CI #690 / run `35385931592`.
+- The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward; subsequent compatibility/preflight work is directly on `forge-1.20.1`.
+- CI #690 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel all pass. The GLSL declaration-parser regression test also passes.
+- Preflight after the first RX/Create Chronicles IP crash closed additional downstream issues before another user test: per-`LevelRenderer` terrain/world/camera/dispatcher ownership for IP secondary dimensions, IP recursive `RenderBuffers` use for block entities, Vulkan terrain clip-plane support in direct/indirect/region pipelines, preservation of IP's reload guards/fan-out despite VulkanMod cancelling vanilla `allChanged()`, and the debug lifecycle mixin constructor descriptor after the renderer refactor.
+- The first RX 6900 XT/Create Chronicles attempt remains useful evidence: it reached IP's framebuffer compatibility renderer and stopped at a raw `GL11.glDisable(GL_STENCIL_TEST)` before terrain evidence. That raw-GL path and the downstream preflight issues above are now regression-covered in CI #690; a repeat full-pack hardware run is still required.
 - Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
 - Mixed APPEND rebuild omission remains experimental/default-off and transactionally stages CPU exception geometry plus GPU output while retaining the previous complete draw until replacement is ready. Stale/failure paths remain fail-closed.
 - `RegionBatchStats.sections` now counts rendered sections rather than indirect commands, so one hybrid APPEND section emitting CPU+GPU commands is counted once; `RegionBatchSmokeTest` locks pending/ready/fallback/visibility cases.
@@ -104,11 +105,13 @@ Hybrid-focused commits add tests for conservative cell ownership/demotion, filte
 
 ## Compatibility intersection
 
-Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into `forge-1.20.1` through `76a667ed` and validated by CI #678.
+Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into the current `forge-1.20.1` executable head `8e553bb6` and validated by CI #690.
 
-Immersive Portals 3.0.7 passes shader transformation, helper-shader installation, the clipping proof `VULKANMOD_IP_CLIPPING_SHADER_OK`, renderer-mode selection, and now the actual framebuffer renderer's `prepareRendering()` path under a no-OpenGL-context Vulkan window. The earlier `RuntimeException: not admitted type: mat3` remains fixed by std140 `mat3` packing, and the later full-pack `GL11.glDisable(GL_STENCIL_TEST)` crash is bridged by the framebuffer-renderer mixin. The CI regression is closed; repeat Create Chronicles/RX 6900 XT evidence is still needed to prove the full-pack runtime reaches terrain.
+Immersive Portals 3.0.7 passes shader transformation, all three helper-shader Vulkan-pipeline checks, `VULKANMOD_IP_CLIPPING_SHADER_OK`, renderer-mode selection, the real framebuffer renderer's `prepareRendering()` path under a no-OpenGL-context Vulkan window, construction/cleanup of a second real `LevelRenderer`, and the portal reload-hook API check. VulkanMod terrain state is per `LevelRenderer`; async tasks retain their owning world/camera/dispatcher, recursive block-entity rendering uses the active IP-swapped `RenderBuffers`, and the direct/legacy-indirect/region terrain shaders consume IP's camera-relative clip equation. IP reload cancellation during recursive rendering and secondary-renderer reload fan-out are explicitly preserved despite VulkanMod's HEAD cancellation of vanilla `allChanged()`.
 
-FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are also green on the same current executable head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
+Distant Horizons 3.2.0-b currently operates fail-closed: its OpenGL LOD draw/fade passes are suppressed under Vulkan while DH data and render-thread maintenance remain active. CI #690 logs that suppression and passes the DH compatibility smoke; do not describe this as working DH LOD rendering.
+
+FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are green on the same executable head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
 
 ## Fail-closed boundary
 
@@ -130,12 +133,12 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 
 ## Next action
 
-1. Repeat the narrow RX 6900 XT/RADV **functional** Create Chronicles run using the CI #678 artifact with REPLACE + APPEND enabled:
+1. Repeat the narrow RX 6900 XT/RADV **functional** Create Chronicles run using CI #690 artifact `VulkanMod-Forge-build-690` (artifact id `10563794462`; JAR `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.690-g8e553bb6-all.jar`) with REPLACE + APPEND enabled:
    `-Dvulkanmod.experimentalGpuTerrainMesher=true`
    `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`
    `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`
    `-Dvulkanmod.experimentalGpuTerrainHybrid=true`
-2. First verify the prior Immersive Portals `No GLCapabilities` / raw-stencil crash is gone and that the run reaches VulkanMod GPU-terrain markers. Then exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior.
+2. First verify the prior Immersive Portals `No GLCapabilities` / raw-stencil crash is gone and that the run reaches VulkanMod GPU-terrain markers. Look through an actual portal and check for terrain leaking across the portal plane or wrong-dimension/stale terrain, then exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior.
 3. Treat this as a correctness test, not an FPS benchmark. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
 4. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
 

@@ -317,18 +317,23 @@ workers omit only the GPU-owned ordinary-cube subset while preserving unsupporte
 geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
 stage CPU exception geometry and GPU output independently, retain the previous complete
 pair, and switch both halves atomically only when the replacement generation is ready.
-CI #678 validates the current combined terrain/compatibility tree, including transition,
+CI #690 validates the current combined terrain/compatibility tree, including transition,
 face-policy, readback, overflow/fallback, hybrid command-count/section-count oracles,
-and the Immersive Portals framebuffer renderer's real `prepareRendering()` path under
-VulkanMod's no-OpenGL-context window.
+the GLSL declaration-parser regression, Immersive Portals framebuffer rendering under
+VulkanMod's no-OpenGL-context window, per-portal-world `LevelRenderer` ownership,
+recursive render-buffer use, terrain clip-plane propagation across all three Vulkan
+terrain pipelines, and IP reload-hook compatibility. Distant Horizons 3.2.0-b is
+explicitly fail-closed under Vulkan by suppressing its OpenGL LOD draw/fade passes.
 
 The hybrid implementation gate is therefore closed. The first attempted narrow
 Create Chronicles/RX 6900 XT run stopped before terrain evidence because Immersive
-Portals still issued a raw stencil GL call; that regression is now fixed and covered by
-CI #678. The next evidence boundary is a repeat functional run with REPLACE + APPEND
-enabled, including a dirty mixed-section rebuild. This remains a correctness test, not
-a performance claim. Live GPU visibility/section-selection correctness and broader
-lifecycle/Forge preservation gates remain open until representative runtime evidence supports them.
+Portals still issued a raw stencil GL call. That regression and the downstream portal
+multi-world/clipping hazards found during preflight are now fixed and covered by CI #690.
+The next evidence boundary is a repeat functional run with REPLACE + APPEND enabled,
+including looking through a real portal and performing a dirty mixed-section rebuild.
+This remains a correctness test, not a performance claim. Live GPU visibility/section-
+selection correctness and broader lifecycle/Forge preservation gates remain open until
+representative runtime evidence supports them.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -395,22 +400,23 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `76a667ed3d33622ba746613957dd98da1513ed53`, CI #678
-  (run `35375262387`) is fully green on the current production tree. The pre-bridge
-  baseline `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` is also fully green in CI #677
-  (run `35337817185`).
+- Latest executable checkpoint: `8e553bb6991c16f86098227aa35639189d4e4aaf`, CI #690
+  (run `35385931592`) is fully green on the current production tree, including
+  Immersive Portals 3.0.7 and Distant Horizons 3.2.0-b compatibility smokes.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
   conservative hybrid APPEND, atomic dirty APPEND replacement, authoritative face-policy
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
-  stack including the Immersive Portals framebuffer raw-stencil bridge.
-- The first attempted RX 6900 XT/Create Chronicles functional run exposed that IP bridge
-  gap and stopped before terrain evidence. CI #678 now directly exercises the repaired
-  framebuffer `prepareRendering()` path. The next useful gate evidence is a repeat
-  full-pack correctness run with REPLACE + APPEND enabled, including at least one dirty
-  mixed-section rebuild. Live GPU visibility correctness, broader lifecycle/Forge-
-  preservation proof, and comparable A/B performance evidence remain open.
+  stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
+  recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
+- The first attempted RX 6900 XT/Create Chronicles functional run exposed the IP raw-GL
+  gap and stopped before terrain evidence. CI #690 now directly covers that repaired
+  framebuffer path plus the downstream portal-world/clipping preflight. The next useful
+  gate evidence is a repeat full-pack correctness run with REPLACE + APPEND enabled,
+  including looking through a real portal and at least one dirty mixed-section rebuild.
+  Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
+  comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
 
 See `AGENT_STATUS.md` for the current continuation checkpoint. Read task-specific GPU
