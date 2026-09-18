@@ -106,6 +106,7 @@ public class MinecraftMixin {
             net.vulkanmod.render.chunk.VFrustumSnapshotSmokeTest.verify();
             net.vulkanmod.render.chunk.RegionBatchSmokeTest.verify();
             net.vulkanmod.render.chunk.SectionVoxelSmokeTest.verify();
+            net.vulkanmod.render.chunk.build.GpuTerrainFacePredicateSmokeTest.verify();
             net.vulkanmod.render.chunk.build.PublicationDrainSmokeTest.verify();
             net.vulkanmod.render.chunk.voxel.GpuSectionSelectionShadowSmokeTest.verify();
             net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic.verifyProbeReadbackForCi();
