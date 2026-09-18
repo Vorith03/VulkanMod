@@ -340,6 +340,13 @@ public final class RegionBatchSmokeTest {
                             && parameters.indexCount == 12,
                     "Discarding staged CPU geometry must leave the committed draw untouched");
 
+            DrawBuffers.StagedDrawParameters empty =
+                    buffers.stageEmpty(section, type, section.getVoxelGeneration());
+            require(empty.ready() && buffers.commitStaged(parameters, empty)
+                            && parameters.indexCount == 0
+                            && parameters.vertexBufferSegment.getOffset() == -1,
+                    "Staged empty CPU replacement must atomically retire prior opaque geometry");
+
             Device.getGraphicsQueue().waitIdle();
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
             for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame)
@@ -414,8 +421,9 @@ public final class RegionBatchSmokeTest {
                         stack.calloc(vertexSize * 8), 12, generation);
             }
             AreaUploadManager.INSTANCE.submitUploads();
-            require(stagedCpu.ready(),
-                    "Atomic APPEND replacement CPU half must become staged-ready");
+            require(stagedCpu.ready()
+                            && section.stageGpuTerrainAppendCpu(generation, stagedCpu),
+                    "Atomic APPEND replacement CPU half must become staged-ready and section-owned");
 
             GpuTerrainOutputStore.StagedReservation stagedGpu =
                     area.reserveStagedGpuTerrainOutput(
@@ -484,6 +492,9 @@ public final class RegionBatchSmokeTest {
                         stack.calloc(vertexSize * 8), 18, staleGeneration);
             }
             AreaUploadManager.INSTANCE.submitUploads();
+            require(staleCpu.ready()
+                            && section.stageGpuTerrainAppendCpu(staleGeneration, staleCpu),
+                    "Stale-path APPEND CPU half must become section-owned");
             GpuTerrainOutputStore.StagedReservation staleGpu =
                     area.reserveStagedGpuTerrainOutput(
                             section.xOffset, section.yOffset, section.zOffset,
