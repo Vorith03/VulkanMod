@@ -15,6 +15,7 @@ import net.minecraft.client.renderer.chunk.VisibilitySet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainHybridMask;
@@ -435,9 +436,9 @@ public class ChunkTask {
          * SOLID_RENDER is a visibility/occlusion fact, not by itself permission to
          * replace Block.shouldRenderFace(...). Any disagreement keeps this cube CPU-owned.
          */
-        private static boolean hasGpuFacePredicateEquivalence(BlockState state,
-                                                               RenderChunkRegion region,
-                                                               BlockPos pos) {
+        static boolean hasGpuFacePredicateEquivalence(BlockState state,
+                                                       BlockGetter region,
+                                                       BlockPos pos) {
             for(Direction direction : Direction.values()) {
                 BlockPos neighborPos = pos.relative(direction);
                 boolean neighborSolidRender = region.getBlockState(neighborPos)
