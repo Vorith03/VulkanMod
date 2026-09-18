@@ -83,6 +83,7 @@ public abstract class Field {
     public static Field createField(FieldInfo info) {
         return switch (info.type) {
             case "mat4" -> new Mat4f(info);
+            case "mat3" -> new Mat3f(info);
             case "vec4" -> new Vec4f(info);
             case "vec3" -> new Vec3f(info);
             case "vec2" -> new Vec2f(info);
@@ -90,6 +91,45 @@ public abstract class Field {
             case "int" -> new Vec1i(info);
             default -> throw new RuntimeException("not admitted type: " + info.type);
         };
+    }
+
+    /**
+     * std140 mat3 values occupy three 16-byte columns even though Minecraft's
+     * Uniform storage contains only the nine matrix floats. Pack each source
+     * column into its padded UBO column instead of over-reading the source or
+     * shifting every field that follows the matrix.
+     */
+    private static final class Mat3f extends Field {
+        private static final long SOURCE_COLUMN_BYTES = 3L * Float.BYTES;
+        private static final long STD140_COLUMN_BYTES = 4L * Float.BYTES;
+
+        private Mat3f(FieldInfo info) {
+            super(info);
+        }
+
+        @Override
+        void setSupplier() {
+            throw new IllegalStateException(
+                    "mat3 uniform requires explicit supplier binding: " + this.fieldInfo.name);
+        }
+
+        @Override
+        void update(long ptr) {
+            if(this.values == null) {
+                throw new IllegalStateException("No supplier bound for uniform field: " + this.fieldInfo.name);
+            }
+
+            MappedBuffer src = this.values.get();
+            long dst = ptr + this.offset;
+            MemoryUtil.memSet(dst, 0, 3L * STD140_COLUMN_BYTES);
+            for(int column = 0; column < 3; ++column) {
+                MemoryUtil.memCopy(
+                        src.ptr + column * SOURCE_COLUMN_BYTES,
+                        dst + column * STD140_COLUMN_BYTES,
+                        SOURCE_COLUMN_BYTES
+                );
+            }
+        }
     }
 
     public int getOffset() {
@@ -119,7 +159,8 @@ public abstract class Field {
     public static FieldInfo createFieldInfo(String type, String name) {
         return switch (type) {
             case "mat4" -> new FieldInfo(type, name, 4, 16);
-            case "mat3" -> new FieldInfo(type, name, 4, 9);
+            // std140 stores mat3 as three vec4-aligned columns (3 * 16 bytes).
+            case "mat3" -> new FieldInfo(type, name, 4, 12);
 
             case "vec4" -> new FieldInfo(type, name, 4, 4);
             case "vec3" -> new FieldInfo(type, name, 4, 3);
