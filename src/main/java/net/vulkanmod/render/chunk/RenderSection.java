@@ -290,6 +290,25 @@ public class RenderSection {
         return parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
     }
 
+    public synchronized boolean hasReadyGpuTerrainAppendFallback() {
+        if(!this.isCompiled()
+                || this.gpuTerrainVisibleGeneration == Long.MIN_VALUE
+                || this.gpuTerrainVisibleOwnership != GpuTerrainDrawHandoff.Ownership.APPEND
+                || this.chunkArea == null)
+            return false;
+
+        DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
+        if(parameters.indexCount > 0 && !parameters.vertexBufferSegment.isReady())
+            return false;
+
+        GpuTerrainOutputStore.Residency residency =
+                this.chunkArea.getGpuTerrainOutputResidency(
+                        this.xOffset, this.yOffset, this.zOffset, gpuTerrainOutputLayer());
+        return residency != null && residency.valid()
+                && residency.generation() == this.gpuTerrainVisibleGeneration
+                && residency.faceCount() > 0;
+    }
+
     synchronized boolean gpuTerrainCpuMeshComplete() {
         return this.gpuTerrainCpuMeshComplete;
     }
