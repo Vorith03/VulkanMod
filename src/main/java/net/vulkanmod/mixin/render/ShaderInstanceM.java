@@ -10,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.util.GsonHelper;
+import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.shader.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
@@ -60,7 +61,12 @@ public class ShaderInstanceM implements ShaderMixed {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void create(ResourceProvider resourceProvider, String name, VertexFormat format, CallbackInfo ci) {
-        if(Pipeline.class.getResourceAsStream("/assets/vulkanmod/shaders/minecraft/core/" + name + ".json") == null) {
+        // Immersive Portals transforms a defined set of vanilla/core shader
+        // sources to emit gl_ClipDistance. VulkanMod's packaged native shaders
+        // bypass vanilla Program compilation, so use the converted legacy path
+        // for exactly those shaders while IP clipping is active.
+        if(ImmersivePortalsShaderCompat.shouldTransform(name)
+                || Pipeline.class.getResourceAsStream("/assets/vulkanmod/shaders/minecraft/core/" + name + ".json") == null) {
             createLegacyShader(resourceProvider, new ResourceLocation("shaders/core/" + name + ".json"), format);
             return;
         }
@@ -154,12 +160,14 @@ public class ShaderInstanceM implements ShaderMixed {
             try (InputStream inputStream = vertexResource.open()) {
                 vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
+            vshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.VERTEX, vertexName, vshSrc);
 
             String fshSrc;
             Resource fragmentResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + fragmentName + ".fsh"));
             try (InputStream inputStream = fragmentResource.open()) {
                 fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
+            fshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.FRAGMENT, fragmentName, fshSrc);
 
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(format);
