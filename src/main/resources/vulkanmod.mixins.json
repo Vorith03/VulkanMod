@@ -35,6 +35,7 @@
 
     "debug.ChunkBorderRendererM",
     "debug.GlDebugInfoM",
+    "debug.GpuTerrainAsyncCompletionSmokeMixin",
     "debug.KeyboardHandlerM",
     "debug.ResourceReloadLifecycleMemoryMixin",
     "debug.TerrainDebugOverlayMixin",
