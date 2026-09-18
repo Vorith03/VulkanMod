@@ -16,16 +16,43 @@ import java.lang.reflect.Method;
 public final class ImmersivePortalsLevelRendererCompat {
     private static final String CLIENT_WORLD_LOADER =
             "qouteall.imm_ptl.core.ClientWorldLoader";
+    private static final String WORLD_RENDER_INFO =
+            "qouteall.imm_ptl.core.render.context_management.WorldRenderInfo";
 
     private static boolean initialized;
     private static Method worldRendererReloaded;
+    private static Method isRenderingPortalWorld;
 
     private ImmersivePortalsLevelRendererCompat() {
     }
 
     public static boolean isAvailable() {
         initialize();
-        return worldRendererReloaded != null;
+        return worldRendererReloaded != null && isRenderingPortalWorld != null;
+    }
+
+    public static boolean shouldCancelWorldRendererReload() {
+        initialize();
+        if(isRenderingPortalWorld == null) {
+            return false;
+        }
+
+        try {
+            return (boolean) isRenderingPortalWorld.invoke(null);
+        } catch(IllegalAccessException e) {
+            throw new IllegalStateException(
+                    "Cannot access Immersive Portals world-render state", e);
+        } catch(InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if(cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if(cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(
+                    "Immersive Portals world-render state lookup failed", cause);
+        }
     }
 
     public static void afterWorldRendererReloaded(Minecraft minecraft) {
@@ -63,14 +90,14 @@ public final class ImmersivePortalsLevelRendererCompat {
 
         initialized = true;
         try {
-            Class<?> clazz = Class.forName(
-                    CLIENT_WORLD_LOADER,
-                    false,
-                    ImmersivePortalsLevelRendererCompat.class.getClassLoader()
-            );
+            ClassLoader loader = ImmersivePortalsLevelRendererCompat.class.getClassLoader();
+            Class<?> clazz = Class.forName(CLIENT_WORLD_LOADER, false, loader);
+            Class<?> worldRenderInfo = Class.forName(WORLD_RENDER_INFO, false, loader);
             worldRendererReloaded = clazz.getMethod("_onWorldRendererReloaded");
+            isRenderingPortalWorld = worldRenderInfo.getMethod("isRendering");
         } catch(ClassNotFoundException ignored) {
             worldRendererReloaded = null;
+            isRenderingPortalWorld = null;
         } catch(ReflectiveOperationException e) {
             throw new IllegalStateException(
                     "Unsupported Immersive Portals world-renderer reload API", e);

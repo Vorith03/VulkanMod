@@ -127,6 +127,11 @@ public abstract class LevelRendererMixin {
      */
     @Inject(method = "allChanged", at = @At("HEAD"), cancellable = true)
     private void vulkanmod$allChanged(CallbackInfo ci) {
+        if(ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload()) {
+            ci.cancel();
+            return;
+        }
+
         if (this.level != null) {
             this.graphicsChanged();
             this.level.clearTintCaches();
@@ -148,7 +153,9 @@ public abstract class LevelRendererMixin {
         }
 
         this.worldRenderer.allChanged();
-        ImmersivePortalsLevelRendererCompat.afterWorldRendererReloaded(this.minecraft);
+        if(this.minecraft.levelRenderer == (LevelRenderer)(Object)this) {
+            ImmersivePortalsLevelRendererCompat.afterWorldRendererReloaded(this.minecraft);
+        }
         ci.cancel();
     }
 
