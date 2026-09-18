@@ -2,6 +2,7 @@ package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
@@ -278,6 +279,8 @@ public final class RegionBatchSmokeTest {
     }
 
     private static void verifyGpuFirstTransitionContract() {
+        boolean voxelStoreWasEnabled = RegionVoxelStore.ENABLED;
+        RegionVoxelStore.setConfigEnabled(true);
         ChunkArea area = new ChunkArea(39, new Vector3i(0, 0, 0));
         DrawBuffers buffers = area.drawBuffers;
         RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
@@ -373,6 +376,7 @@ public final class RegionBatchSmokeTest {
             if(batch.commands != null)
                 batch.commands.freeBuffer();
             area.releaseBuffers();
+            RegionVoxelStore.setConfigEnabled(voxelStoreWasEnabled);
         }
     }
 
