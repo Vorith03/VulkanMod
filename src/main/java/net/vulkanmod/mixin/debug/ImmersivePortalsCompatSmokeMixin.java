@@ -75,7 +75,13 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                     "activeClipPlaneEquationBeforeModelView");
             activeClipPlane.setAccessible(true);
             activeClipPlane.set(null, new double[]{1.0, 2.0, 3.0, 4.0});
-            clippingEnabled.setBoolean(null, true);
+            clippingEnabled.setBoolean(null, false);
+            Method enableClipping = frontClipping.getDeclaredMethod("enableClipping");
+            enableClipping.setAccessible(true);
+            enableClipping.invoke(null);
+            if(!clippingEnabled.getBoolean(null)) {
+                throw new IllegalStateException("Immersive Portals clipping enable bookkeeping was not preserved");
+            }
 
             MappedBuffer terrainClipPlane = ImmersivePortalsShaderCompat.getTerrainClipPlane();
             if(terrainClipPlane.getFloat(0) != 1.0f

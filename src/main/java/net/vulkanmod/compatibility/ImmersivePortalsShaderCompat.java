@@ -42,6 +42,10 @@ public final class ImmersivePortalsShaderCompat {
     private static java.lang.reflect.Field clippingEnabled;
     private static Method getActiveClipPlane;
 
+    static {
+        clearTerrainClipPlane();
+    }
+
     private ImmersivePortalsShaderCompat() {
     }
 
@@ -91,15 +95,20 @@ public final class ImmersivePortalsShaderCompat {
      * distance disables clipping when IP is absent or clipping is inactive.
      */
     public static MappedBuffer getTerrainClipPlane() {
-        setTerrainClipPlane(0.0f, 0.0f, 0.0f, 1.0f);
+        return TERRAIN_CLIP_PLANE;
+    }
+
+    public static void refreshTerrainClipPlane() {
         initializeTerrainClipping();
         if(!terrainClippingAvailable) {
-            return TERRAIN_CLIP_PLANE;
+            clearTerrainClipPlane();
+            return;
         }
 
         try {
             if(!clippingEnabled.getBoolean(null)) {
-                return TERRAIN_CLIP_PLANE;
+                clearTerrainClipPlane();
+                return;
             }
 
             Object value = getActiveClipPlane.invoke(null);
@@ -113,12 +122,15 @@ public final class ImmersivePortalsShaderCompat {
                     (float) equation[2],
                     (float) equation[3]
             );
-            return TERRAIN_CLIP_PLANE;
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals terrain clipping state", e);
         } catch(InvocationTargetException e) {
             throw propagate("Immersive Portals terrain clipping lookup failed", e);
         }
+    }
+
+    public static void clearTerrainClipPlane() {
+        setTerrainClipPlane(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
     private static void setTerrainClipPlane(float x, float y, float z, float w) {
