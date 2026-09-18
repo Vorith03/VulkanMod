@@ -73,6 +73,7 @@ public class ChunkTask {
         private final long voxelGeneration;
         private final boolean gpuTerrainCpuRecoveryRequired;
         private final boolean gpuTerrainHadReadyCpuFallback;
+        private final boolean gpuTerrainHadReadyAppendFallback;
         private final boolean gpuTerrainCpuBypassCandidate;
         private final boolean gpuTerrainHybridFreshCandidate;
         private final boolean gpuTerrainHybridRebuildCandidate;
@@ -87,6 +88,7 @@ public class ChunkTask {
             this.voxelGeneration = renderSection.getVoxelGeneration();
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
+            this.gpuTerrainHadReadyAppendFallback = renderSection.hasReadyGpuTerrainAppendFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
                     && !this.gpuTerrainCpuRecoveryRequired;
             this.gpuTerrainHybridFreshCandidate = RenderSection.gpuTerrainHybridEnabled()
@@ -96,8 +98,10 @@ public class ChunkTask {
             // relying on an incomplete GPU-first CPU half must finish CPU recovery first.
             this.gpuTerrainHybridRebuildCandidate = RenderSection.gpuTerrainHybridEnabled()
                     && renderSection.isCompiled()
-                    && this.gpuTerrainHadReadyCpuFallback
-                    && !this.gpuTerrainCpuRecoveryRequired;
+                    && (this.gpuTerrainHadReadyCpuFallback
+                    || this.gpuTerrainHadReadyAppendFallback)
+                    && (!this.gpuTerrainCpuRecoveryRequired
+                    || this.gpuTerrainHadReadyAppendFallback);
             this.highPriority = highPriority;
         }
 
@@ -276,11 +280,12 @@ public class ChunkTask {
                         if(compileResults.gpuTerrainCpuBypassed
                                 && GPU_CPU_BYPASS_LOGGED.compareAndSet(false, true)) {
                             Initializer.LOGGER.info(
-                                    "VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE: section=({}, {}, {}) faces={} ownership={} priorCpuFallback={}; worker omitted GPU-owned block-model tessellation pending GPU publication",
+                                    "VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE: section=({}, {}, {}) faces={} ownership={} priorCpuFallback={} priorAppendPair={}; worker omitted GPU-owned block-model tessellation pending GPU publication",
                                     blockPos.getX(), blockPos.getY(), blockPos.getZ(),
                                     compileResults.gpuTerrainPreflight.faceCount(),
                                     compileResults.gpuTerrainPreflight.ownership(),
-                                    this.gpuTerrainHadReadyCpuFallback);
+                                    this.gpuTerrainHadReadyCpuFallback,
+                                    this.gpuTerrainHadReadyAppendFallback);
                         }
                         voxels = null;
                     } catch(RuntimeException error) {
