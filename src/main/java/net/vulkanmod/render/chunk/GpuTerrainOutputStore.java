@@ -482,6 +482,23 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
 
     private void advanceSectionGeneration(int packedSection, long generation) {
         this.sectionGenerations[packedSection] = generation;
+
+        // Any staged replacement at or behind the new authoritative generation can
+        // no longer commit. Retire it here rather than depending on a delayed
+        // completion/transaction owner to notice the turnover. Submitted work stays
+        // physically pinned until completion, exactly like ordinary reservations.
+        stagedReservations.entrySet().removeIf(entry -> {
+            StagedPending staged = entry.getValue();
+            if(staged.packedSection != packedSection || staged.generation > generation)
+                return false;
+            if(staged.submitted && !staged.ready) {
+                staged.cancelled = true;
+                return false;
+            }
+            discard(staged.segment);
+            return true;
+        });
+
         for(TerrainRenderType type : TerrainRenderType.VALUES) {
             Entry entry = entry(packedSection, type, false);
             if(entry == null)
