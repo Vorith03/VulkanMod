@@ -492,15 +492,16 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private void advanceSectionGeneration(int packedSection, long generation) {
         this.sectionGenerations[packedSection] = generation;
 
-        // Any staged replacement strictly behind the new authoritative generation can
-        // no longer commit. A staged replacement for the current generation is valid
-        // after dirty invalidation has already advanced the section generation.
+        // Any staged replacement at or behind an explicit authoritative invalidation
+        // can no longer commit. Same-generation staging is still allowed after a
+        // prior dirty invalidation has already advanced sectionGenerations; a later
+        // invalidateSection(currentGeneration) deliberately revokes that staged work.
         // Retire stale work here rather than depending on a delayed
         // completion/transaction owner to notice the turnover. Submitted work stays
         // physically pinned until completion, exactly like ordinary reservations.
         stagedReservations.entrySet().removeIf(entry -> {
             StagedPending staged = entry.getValue();
-            if(staged.packedSection != packedSection || staged.generation >= generation)
+            if(staged.packedSection != packedSection || staged.generation > generation)
                 return false;
             if(staged.submitted && !staged.ready) {
                 staged.cancelled = true;
