@@ -396,6 +396,16 @@ public class ChunkArea {
         return gpuTerrainOutputs.reserve(slot, type, generation, faceCapacity);
     }
 
+    synchronized GpuTerrainOutputStore.StagedReservation reserveStagedGpuTerrainOutput(
+            int x, int y, int z, TerrainRenderType type, long generation, int faceCapacity) {
+        int slot = voxelSlot(x, y, z);
+        if(slot < 0)
+            return null;
+        if(gpuTerrainOutputs == null)
+            gpuTerrainOutputs = new GpuTerrainOutputStore(this.drawBuffers);
+        return gpuTerrainOutputs.reserveStaged(slot, type, generation, faceCapacity);
+    }
+
     public synchronized GpuTerrainOutputStore.Target getGpuTerrainOutputTarget(
             GpuTerrainOutputStore.Reservation reservation) {
         return gpuTerrainOutputs == null ? null : gpuTerrainOutputs.target(reservation);
