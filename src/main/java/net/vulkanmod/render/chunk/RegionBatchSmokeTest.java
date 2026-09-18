@@ -17,6 +17,7 @@ public final class RegionBatchSmokeTest {
 
     public static void verify() {
         verifyGpuIndirectFallbackContract();
+        verifyStagedCpuReplacementContract();
         verifyGpuFirstTransitionContract();
 
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
@@ -275,6 +276,77 @@ public final class RegionBatchSmokeTest {
             if (second.commands != null) second.commands.freeBuffer();
             if (solid.commands != null) solid.commands.freeBuffer();
             RegionBatchStats.reset();
+        }
+    }
+
+    private static void verifyStagedCpuReplacementContract() {
+        ChunkArea area = new ChunkArea(38, new Vector3i(0, 0, 0));
+        DrawBuffers buffers = area.getDrawBuffers();
+        TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+        RenderSection section = new RenderSection(0, 16, 16, 16);
+        section.setChunkArea(area);
+        DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+        int vertexBytes = TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize() * 4;
+
+        try {
+            require(buffers.vertexBuffer.tryReserve(vertexBytes, parameters.vertexBufferSegment),
+                    "Staged CPU replacement baseline allocation must fit");
+            parameters.vertexBufferSegment.setReady();
+            parameters.indexCount = 6;
+            parameters.firstIndex = 0;
+            parameters.vertexOffset = parameters.vertexBufferSegment.getOffset()
+                    / TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize();
+            parameters.ready = true;
+
+            int oldVertexOffset = parameters.vertexOffset;
+            long oldRevision = buffers.getMeshRevision(type);
+            DrawBuffers.StagedDrawParameters staged;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                staged = buffers.stageVertexData(type, stack.calloc(vertexBytes), 12);
+            }
+
+            require(parameters.vertexOffset == oldVertexOffset
+                            && parameters.indexCount == 6
+                            && buffers.getMeshRevision(type) == oldRevision,
+                    "Staging replacement CPU geometry must not mutate the visible draw");
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(staged.ready(),
+                    "Submitted staged CPU replacement must become ready without publication");
+            require(parameters.vertexOffset == oldVertexOffset
+                            && parameters.indexCount == 6,
+                    "Ready staged CPU replacement must remain invisible before commit");
+
+            require(buffers.commitStaged(parameters, staged),
+                    "Ready staged CPU replacement must commit");
+            int committedVertexOffset = parameters.vertexOffset;
+            require(committedVertexOffset == staged.vertexOffset()
+                            && committedVertexOffset != oldVertexOffset
+                            && parameters.indexCount == 12
+                            && buffers.getMeshRevision(type) == oldRevision + 1,
+                    "CPU staged commit must swap draw metadata once and invalidate the cache");
+
+            DrawBuffers.StagedDrawParameters abandoned;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                abandoned = buffers.stageVertexData(type, stack.calloc(vertexBytes), 18);
+            }
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(abandoned.ready(),
+                    "Discard-path staged CPU replacement must become ready");
+            buffers.discardStaged(abandoned);
+            require(parameters.vertexOffset == committedVertexOffset
+                            && parameters.indexCount == 12,
+                    "Discarding staged CPU geometry must leave the committed draw untouched");
+
+            Device.getGraphicsQueue().waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame)
+                AreaUploadManager.INSTANCE.updateFrame(frame);
+            AreaUploadManager.INSTANCE.updateFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
+
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_TERRAIN_CPU_STAGE_OK: replacement CPU vertices upload out-of-band, remain hidden before commit, swap atomically when ready, and discard without disturbing the visible draw");
+        } finally {
+            area.releaseBuffers();
         }
     }
 
