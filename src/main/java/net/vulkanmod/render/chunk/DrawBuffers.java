@@ -169,7 +169,7 @@ public class DrawBuffers {
         return true;
     }
 
-    void discardStaged(StagedDrawParameters staged) {
+    public void discardStaged(StagedDrawParameters staged) {
         if(staged == null || staged.owner != this || staged.consumed)
             return;
         staged.consumed = true;
