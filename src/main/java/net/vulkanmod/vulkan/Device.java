@@ -127,6 +127,12 @@ public class Device {
                 deviceFeatures.features().samplerAnisotropy(true);
             if(deviceInfo.availableFeatures.features().logicOp())
                 deviceFeatures.features().logicOp(true);
+            // Core shaders from compatibility mods such as Immersive Portals may
+            // use gl_ClipDistance. Enable the Vulkan core feature whenever the
+            // selected device exposes it; shaders that do not use clip distance
+            // are unaffected.
+            if(deviceInfo.availableFeatures.features().shaderClipDistance())
+                deviceFeatures.features().shaderClipDistance(true);
 
             VkPhysicalDeviceVulkan11Features deviceVulkan11Features = VkPhysicalDeviceVulkan11Features.calloc(stack);
             deviceVulkan11Features.sType$Default();
@@ -217,7 +223,6 @@ public class Device {
 
             extensions.put(glfwExtensions);
             extensions.put(stack.UTF8(VK_EXT_DEBUG_UTILS_EXTENSION_NAME));
-
             // Rewind the buffer before returning it to reset its position back to 0
             return extensions.rewind();
         }
@@ -350,7 +355,7 @@ public class Device {
 
         if(count.get(0) != 0) {
             details.presentModes = stack.mallocInt(count.get(0));
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, count, details.presentModes);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device,surface, count, details.presentModes);
         }
 
         return details;
