@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.render;
 
 import com.google.gson.JsonObject;
+import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -10,6 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.util.GsonHelper;
+import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.shader.EffectUniformBindings;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
@@ -30,17 +33,23 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Mixin(ShaderInstance.class)
 public class ShaderInstanceM implements ShaderMixed {
 
     @Shadow @Final private Map<String, Object> samplerMap;
     @Shadow @Final private Map<String, Uniform> uniformMap;
+    @Shadow @Final private List<Uniform> uniforms;
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
     @Shadow @Final @Nullable public Uniform PROJECTION_MATRIX;
@@ -57,7 +66,12 @@ public class ShaderInstanceM implements ShaderMixed {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void create(ResourceProvider resourceProvider, String name, VertexFormat format, CallbackInfo ci) {
-        if(Pipeline.class.getResourceAsStream("/assets/vulkanmod/shaders/minecraft/core/" + name + ".json") == null) {
+        // Immersive Portals transforms a defined set of vanilla/core shader
+        // sources to emit gl_ClipDistance. VulkanMod's packaged native shaders
+        // bypass vanilla Program compilation, so use the converted legacy path
+        // for exactly those shaders while IP clipping is active.
+        if(ImmersivePortalsShaderCompat.shouldTransform(name)
+                || Pipeline.class.getResourceAsStream("/assets/vulkanmod/shaders/minecraft/core/" + name + ".json") == null) {
             createLegacyShader(resourceProvider, new ResourceLocation("shaders/core/" + name + ".json"), format);
             return;
         }
@@ -139,7 +153,42 @@ public class ShaderInstanceM implements ShaderMixed {
         ShaderRenderState.clear(this.pipeline);
     }
 
+    /**
+     * Vanilla Program compilation expands #moj_import directives after mods such
+     * as Immersive Portals have transformed the raw shader source. The Vulkan
+     * legacy path bypasses Program.compileShaderInternal, so mirror that
+     * preprocessing step before GlslConverter/shaderc sees the source.
+     */
+    private static String vulkanmod$preprocessCoreShader(
+            ResourceProvider resourceProvider, String source) {
+        Set<ResourceLocation> imported = new HashSet<>();
+
+        GlslPreprocessor preprocessor = new GlslPreprocessor() {
+            @Override
+            public String applyImport(boolean inline, String name) {
+                ResourceLocation importLocation = new ResourceLocation("shaders/include/" + name);
+                if(!imported.add(importLocation)) {
+                    return "";
+                }
+
+                try {
+                    Resource resource = resourceProvider.getResourceOrThrow(importLocation);
+                    try (InputStream inputStream = resource.open()) {
+                        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+                    }
+                } catch(IOException e) {
+                    throw new IllegalStateException(
+                            "Failed to load shader include " + importLocation, e);
+                }
+            }
+        };
+
+        return String.join("", preprocessor.process(source));
+    }
+
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
+        boolean immersivePortalsClippingShader = false;
+
         try (Reader reader = resourceProvider.openAsReader(location)) {
             JsonObject jsonObject = GsonHelper.parse(reader);
 
@@ -151,12 +200,22 @@ public class ShaderInstanceM implements ShaderMixed {
             try (InputStream inputStream = vertexResource.open()) {
                 vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
+            immersivePortalsClippingShader = ImmersivePortalsShaderCompat.shouldTransform(vertexName);
+            vshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.VERTEX, vertexName, vshSrc);
+            vshSrc = vulkanmod$preprocessCoreShader(resourceProvider, vshSrc);
+            if(immersivePortalsClippingShader
+                    && (!vshSrc.contains("imm_ptl_ClippingEquation") || !vshSrc.contains("gl_ClipDistance[0]"))) {
+                throw new IllegalStateException(
+                        "Immersive Portals did not inject Vulkan clipping into shader " + vertexName);
+            }
 
             String fshSrc;
             Resource fragmentResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + fragmentName + ".fsh"));
             try (InputStream inputStream = fragmentResource.open()) {
                 fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
+            fshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.FRAGMENT, fragmentName, fshSrc);
+            fshSrc = vulkanmod$preprocessCoreShader(resourceProvider, fshSrc);
 
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(format);
@@ -169,7 +228,20 @@ public class ShaderInstanceM implements ShaderMixed {
                 converter.process(format, vshSrc, fshSrc);
             }
             UBO ubo = converter.getUBO();
-            this.vulkanmod$uniformBindings.bind(ubo, this.uniformMap);
+
+            // Other renderer mods may add Uniform objects dynamically during
+            // ShaderInstance.updateLocations() instead of declaring them in the
+            // shader JSON. Include those objects when resolving converted GLSL
+            // fields so their live values are not replaced by zero fallbacks.
+            Map<String, Uniform> bindingUniforms = new HashMap<>(this.uniformMap);
+            for(Uniform uniform : this.uniforms) {
+                bindingUniforms.putIfAbsent(uniform.getName(), uniform);
+            }
+            if(immersivePortalsClippingShader && !bindingUniforms.containsKey("imm_ptl_ClippingEquation")) {
+                throw new IllegalStateException(
+                        "Immersive Portals clipping uniform was not attached to shader " + vertexName);
+            }
+            this.vulkanmod$uniformBindings.bind(ubo, bindingUniforms);
 
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
@@ -177,8 +249,33 @@ public class ShaderInstanceM implements ShaderMixed {
             this.pipeline = builder.createGraphicsPipeline();
             this.isLegacy = true;
 
+            if(immersivePortalsClippingShader && this.pipeline == null) {
+                throw new IllegalStateException(
+                        "Immersive Portals clipping shader did not create a Vulkan pipeline: " + vertexName);
+            }
+            if(immersivePortalsClippingShader
+                    && "rendertype_solid".equals(vertexName)
+                    && Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
+                Initializer.LOGGER.info(
+                        "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline");
+            }
+
         } catch (Throwable throwable) {
             this.vulkanmod$uniformBindings.close();
+
+            // A transformed IP shader without a usable Vulkan pipeline renders
+            // portal geometry with incorrect clipping. Do not silently fall back
+            // to a null pipeline for this compatibility path.
+            if(immersivePortalsClippingShader) {
+                if(throwable instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                if(throwable instanceof Error error) {
+                    throw error;
+                }
+                throw new IllegalStateException("Failed to build Immersive Portals clipping shader", throwable);
+            }
+
             throwable.printStackTrace();
         }
     }
