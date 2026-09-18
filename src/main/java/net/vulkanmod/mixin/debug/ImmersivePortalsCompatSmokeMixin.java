@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
+import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -45,6 +46,11 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
 
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         try {
+            if(!ImmersivePortalsLevelRendererCompat.isAvailable()) {
+                throw new IllegalStateException(
+                        "Immersive Portals world-renderer reload hook is unavailable");
+            }
+
             Class<?> queryManager = Class.forName("qouteall.imm_ptl.core.render.QueryManager", true, loader);
             Class<?> cHelper = Class.forName("qouteall.imm_ptl.core.CHelper", true, loader);
             Class<?> portalRenderer = Class.forName("qouteall.imm_ptl.core.render.PortalRenderer", true, loader);

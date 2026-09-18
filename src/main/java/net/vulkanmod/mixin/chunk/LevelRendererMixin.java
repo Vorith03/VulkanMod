@@ -18,6 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.vulkan.util.Pair;
@@ -147,6 +148,7 @@ public abstract class LevelRendererMixin {
         }
 
         this.worldRenderer.allChanged();
+        ImmersivePortalsLevelRendererCompat.afterWorldRendererReloaded(this.minecraft);
         ci.cancel();
     }
 
