@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.render;
 
 import com.google.gson.JsonObject;
+import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -32,13 +33,16 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Mixin(ShaderInstance.class)
 public class ShaderInstanceM implements ShaderMixed {
@@ -149,6 +153,39 @@ public class ShaderInstanceM implements ShaderMixed {
         ShaderRenderState.clear(this.pipeline);
     }
 
+    /**
+     * Vanilla Program compilation expands #moj_import directives after mods such
+     * as Immersive Portals have transformed the raw shader source. The Vulkan
+     * legacy path bypasses Program.compileShaderInternal, so mirror that
+     * preprocessing step before GlslConverter/shaderc sees the source.
+     */
+    private static String vulkanmod$preprocessCoreShader(
+            ResourceProvider resourceProvider, String source) {
+        Set<ResourceLocation> imported = new HashSet<>();
+
+        GlslPreprocessor preprocessor = new GlslPreprocessor() {
+            @Override
+            public String applyImport(boolean inline, String name) {
+                ResourceLocation importLocation = new ResourceLocation("shaders/include/" + name);
+                if(!imported.add(importLocation)) {
+                    return "";
+                }
+
+                try {
+                    Resource resource = resourceProvider.getResourceOrThrow(importLocation);
+                    try (InputStream inputStream = resource.open()) {
+                        return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+                    }
+                } catch(IOException e) {
+                    throw new IllegalStateException(
+                            "Failed to load shader include " + importLocation, e);
+                }
+            }
+        };
+
+        return String.join("", preprocessor.process(source));
+    }
+
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
         boolean immersivePortalsClippingShader = false;
 
@@ -165,6 +202,7 @@ public class ShaderInstanceM implements ShaderMixed {
             }
             immersivePortalsClippingShader = ImmersivePortalsShaderCompat.shouldTransform(vertexName);
             vshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.VERTEX, vertexName, vshSrc);
+            vshSrc = vulkanmod$preprocessCoreShader(resourceProvider, vshSrc);
             if(immersivePortalsClippingShader
                     && (!vshSrc.contains("imm_ptl_ClippingEquation") || !vshSrc.contains("gl_ClipDistance[0]"))) {
                 throw new IllegalStateException(
@@ -177,6 +215,7 @@ public class ShaderInstanceM implements ShaderMixed {
                 fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
             fshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.FRAGMENT, fragmentName, fshSrc);
+            fshSrc = vulkanmod$preprocessCoreShader(resourceProvider, fshSrc);
 
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(format);
