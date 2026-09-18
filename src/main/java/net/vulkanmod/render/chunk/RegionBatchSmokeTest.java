@@ -16,6 +16,7 @@ public final class RegionBatchSmokeTest {
 
     public static void verify() {
         verifyGpuIndirectFallbackContract();
+        verifyGpuFirstTransitionContract();
 
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
         ChunkArea recycleArea = new ChunkArea(1, new Vector3i(-128, -128, 128));
@@ -273,6 +274,105 @@ public final class RegionBatchSmokeTest {
             if (second.commands != null) second.commands.freeBuffer();
             if (solid.commands != null) solid.commands.freeBuffer();
             RegionBatchStats.reset();
+        }
+    }
+
+    private static void verifyGpuFirstTransitionContract() {
+        ChunkArea area = new ChunkArea(39, new Vector3i(0, 0, 0));
+        DrawBuffers buffers = area.drawBuffers;
+        RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
+        try {
+            RenderSection section = new RenderSection(0, 16, 16, 16);
+            section.setChunkArea(area);
+            area.registerSection(section, section.xOffset, section.yOffset, section.zOffset);
+            area.addSection(section);
+
+            TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+            DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+            parameters.indexCount = 12; // CPU exceptions only: intentionally incomplete.
+            parameters.firstIndex = 0;
+            parameters.vertexOffset = 24;
+            parameters.vertexBufferSegment.setReady();
+
+            long generation = section.getVoxelGeneration();
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            321L, 3, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    generation, true);
+            section.setGpuTerrainCpuMeshComplete(generation, false);
+            buffers.markMeshChanged(type);
+
+            require(batch.update(buffers, area, type, true),
+                    "Fresh hybrid publication must rebuild the frame batch");
+            require(batch.drawCount == 0 && batch.gpuDrawCount == 0 && batch.pendingUploads,
+                    "Incomplete CPU exceptions must stay hidden until matching GPU output publishes");
+
+            GpuTerrainOutputStore.Reservation reservation = area.reserveGpuTerrainOutput(
+                    section.xOffset, section.yOffset, section.zOffset, type, generation, 3);
+            require(reservation != null, "Fresh hybrid transition reservation must fit");
+            require(area.publishGpuTerrainOutput(reservation, 3, false),
+                    "Fresh hybrid transition GPU result must publish");
+            require(section.publishGpuTerrainDrawHandoff(
+                            generation, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    "Fresh hybrid transition must publish explicit draw ownership");
+
+            require(batch.update(buffers, area, type, true),
+                    "Matching APPEND GPU output must make the complete pair drawable");
+            require(batch.drawCount == 2 && batch.gpuDrawCount == 1 && !batch.pendingUploads,
+                    "Fresh APPEND must become visible only as one complete CPU+GPU pair");
+            int oldGpuVertexOffset = area.getGpuTerrainOutputResidency(
+                    section.xOffset, section.yOffset, section.zOffset, type).vertexOffset();
+
+            // Dirtying a GPU-first section advances build/input generation, but its
+            // old complete draw pair must remain visible until a complete CPU mesh is
+            // published. This is the same old-mesh-until-rebuild behavior users get
+            // from ordinary CPU terrain.
+            section.invalidateVoxels(true);
+            long recoveryGeneration = section.getVoxelGeneration();
+            require(recoveryGeneration == generation + 1L
+                            && section.gpuTerrainCpuRecoveryRequired()
+                            && !section.gpuTerrainCpuMeshComplete(),
+                    "Dirty GPU-first terrain must force a complete CPU recovery generation");
+            GpuTerrainOutputStore.Residency retained = area.getGpuTerrainOutputResidency(
+                    section.xOffset, section.yOffset, section.zOffset, type);
+            require(retained != null && retained.valid()
+                            && retained.generation() == generation
+                            && retained.vertexOffset() == oldGpuVertexOffset,
+                    "Dirty transition must retain the previous complete GPU handoff");
+            RenderSection.GpuTerrainDrawState retainedState = section.gpuTerrainDrawState();
+            require(retainedState.generation() == generation
+                            && retainedState.ownership() == GpuTerrainDrawHandoff.Ownership.APPEND,
+                    "Dirty transition must keep drawing the previous visible generation");
+            require(!batch.update(buffers, area, type, true)
+                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
+                    "Dirty transition must keep the cached complete APPEND pair intact");
+
+            // Model the render-thread publication point of the forced CPU rebuild.
+            parameters.indexCount = 30;
+            parameters.vertexOffset = 40;
+            parameters.vertexBufferSegment.setReady();
+            buffers.markMeshChanged(type);
+            section.completeGpuTerrainCpuRecovery(recoveryGeneration);
+            require(section.gpuTerrainCpuMeshComplete()
+                            && !section.gpuTerrainCpuRecoveryRequired(),
+                    "Complete CPU publication must close the forced recovery state");
+            GpuTerrainOutputStore.Residency retired = area.getGpuTerrainOutputResidency(
+                    section.xOffset, section.yOffset, section.zOffset, type);
+            require(retired != null && !retired.valid()
+                            && retired.generation() == recoveryGeneration,
+                    "Complete CPU publication must retire the retained old GPU generation");
+            require(batch.update(buffers, area, type, true),
+                    "Complete CPU recovery must rebuild away from the old APPEND pair");
+            require(batch.drawCount == 1 && batch.gpuDrawCount == 0
+                            && batch.commands.getByteBuffer().getInt(0) == 30
+                            && batch.commands.getByteBuffer().getInt(12) == 40,
+                    "CPU recovery must expose one complete CPU command, never the old partial exceptions");
+
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_TERRAIN_TRANSITION_OK: partial fresh handoff hidden until GPU publication, dirty GPU-first generation retained atomically, complete CPU recovery retires old GPU output");
+        } finally {
+            if(batch.commands != null)
+                batch.commands.freeBuffer();
+            area.releaseBuffers();
         }
     }
 

@@ -44,6 +44,14 @@ public class RenderSection {
     private GpuTerrainDrawHandoff.Ownership gpuTerrainPreflightOwnership =
             GpuTerrainDrawHandoff.Ownership.REPLACE;
     private boolean gpuTerrainPreflightCpuBypassed;
+    // CPU terrain is incomplete after a fresh GPU-first REPLACE/APPEND build until
+    // either its matching GPU output publishes or a complete CPU recovery publishes.
+    private boolean gpuTerrainCpuMeshComplete = true;
+    // A visible GPU handoff may intentionally remain on the previous build generation
+    // while a dirty GPU-first section reconstructs a complete CPU fallback.
+    private long gpuTerrainVisibleGeneration = Long.MIN_VALUE;
+    private GpuTerrainDrawHandoff.Ownership gpuTerrainVisibleOwnership =
+            GpuTerrainDrawHandoff.Ownership.REPLACE;
     private boolean forceCpuTerrainUntilSuccess;
     private boolean playerChanged;
 
@@ -148,7 +156,7 @@ public class RenderSection {
     }
 
     void release() {
-        this.invalidateVoxels();
+        this.invalidateVoxels(false);
         synchronized(this) { this.forceCpuTerrainUntilSuccess = false; }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
@@ -240,7 +248,7 @@ public class RenderSection {
     }
 
     private void reset() {
-        this.invalidateVoxels();
+        this.invalidateVoxels(false);
         synchronized(this) { this.forceCpuTerrainUntilSuccess = false; }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
@@ -257,7 +265,7 @@ public class RenderSection {
     }
 
     public void setDirty(boolean playerChanged) {
-        this.invalidateVoxels();
+        this.invalidateVoxels(true);
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
         WorldRenderer.getInstance().setNeedsUpdate();
@@ -274,16 +282,45 @@ public class RenderSection {
         return preflight != null && GpuTerrainSectionMesherBridge.supportsCpuBypass(preflight.faceCount());
     }
 
-    public boolean hasReadyGpuTerrainCpuFallback() {
-        if(!this.isCompiled()) return false;
+    public synchronized boolean hasReadyGpuTerrainCpuFallback() {
+        if(!this.gpuTerrainCpuMeshComplete || !this.isCompiled()) return false;
         DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
         return parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
     }
 
+    synchronized boolean gpuTerrainCpuMeshComplete() {
+        return this.gpuTerrainCpuMeshComplete;
+    }
+
     public synchronized boolean gpuTerrainCpuRecoveryRequired() { return this.forceCpuTerrainUntilSuccess; }
 
-    public synchronized void completeGpuTerrainCpuRecovery(long generation) {
-        if(generation == this.voxelGeneration) this.forceCpuTerrainUntilSuccess = false;
+    /**
+     * Record whether the CPU draw retained by this generation is independently
+     * complete. GPU-first fresh builds deliberately publish false here; a REPLACE
+     * rebuild may still report true when it retained a previously complete CPU mesh.
+     */
+    public synchronized void setGpuTerrainCpuMeshComplete(long generation, boolean complete) {
+        if(generation == this.voxelGeneration)
+            this.gpuTerrainCpuMeshComplete = complete;
+    }
+
+    /**
+     * A complete CPU publication becomes the safe transition point away from any
+     * retained older GPU-first handoff. Input/build generation can advance earlier,
+     * but the old complete pair stays drawable until this point.
+     */
+    public void completeGpuTerrainCpuRecovery(long generation) {
+        ChunkArea area;
+        synchronized(this) {
+            if(generation != this.voxelGeneration)
+                return;
+            this.forceCpuTerrainUntilSuccess = false;
+            this.gpuTerrainCpuMeshComplete = true;
+            this.clearGpuTerrainVisibleHandoff();
+            area = this.chunkArea;
+        }
+        if(area != null)
+            area.invalidateGpuTerrainOutput(this.xOffset, this.yOffset, this.zOffset, generation);
     }
 
     @Nullable
@@ -342,6 +379,27 @@ public class RenderSection {
         return this.gpuTerrainPreflightOwnership;
     }
 
+    synchronized GpuTerrainDrawState gpuTerrainDrawState() {
+        if(this.gpuTerrainVisibleGeneration != Long.MIN_VALUE) {
+            return new GpuTerrainDrawState(
+                    this.gpuTerrainVisibleGeneration, this.gpuTerrainVisibleOwnership);
+        }
+        return new GpuTerrainDrawState(
+                this.voxelGeneration, this.stagedGpuTerrainOwnership(this.voxelGeneration));
+    }
+
+    synchronized boolean publishGpuTerrainDrawHandoff(
+            long generation, GpuTerrainDrawHandoff.Ownership ownership) {
+        if(ownership == null
+                || generation != this.voxelGeneration
+                || this.gpuTerrainPreflightGeneration != generation
+                || this.gpuTerrainPreflightOwnership != ownership)
+            return false;
+        this.gpuTerrainVisibleGeneration = generation;
+        this.gpuTerrainVisibleOwnership = ownership;
+        return true;
+    }
+
     synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
         return generation == this.voxelGeneration
                 && this.gpuTerrainPreflightGeneration == generation
@@ -384,11 +442,42 @@ public class RenderSection {
     }
 
     synchronized void invalidateVoxels() {
+        this.invalidateVoxels(false);
+    }
+
+    /**
+     * Dirty rebuilds preserve an already-published GPU handoff only when the current
+     * CPU mesh is not independently complete. This mirrors vanilla's old-mesh-until-
+     * rebuild behavior: stale complete geometry may remain visible briefly, while
+     * partial CPU geometry is never exposed by itself.
+     */
+    synchronized void invalidateVoxels(boolean preserveIncompleteGpuHandoff) {
+        boolean cpuIncomplete = !this.gpuTerrainCpuMeshComplete;
+        boolean retainVisibleGpu = preserveIncompleteGpuHandoff
+                && cpuIncomplete
+                && this.gpuTerrainVisibleGeneration != Long.MIN_VALUE;
+
+        if(preserveIncompleteGpuHandoff && cpuIncomplete)
+            this.forceCpuTerrainUntilSuccess = true;
+
         this.clearGpuTerrainPreflight();
-        if (!RegionVoxelStore.ENABLED) return;
+        if (!RegionVoxelStore.ENABLED) {
+            if(!retainVisibleGpu)
+                this.clearGpuTerrainVisibleHandoff();
+            return;
+        }
+
         this.voxelGeneration++;
+        if(!retainVisibleGpu)
+            this.clearGpuTerrainVisibleHandoff();
         if (this.chunkArea != null)
-            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset, this.voxelGeneration);
+            this.chunkArea.removeVoxels(xOffset, yOffset, zOffset,
+                    this.voxelGeneration, retainVisibleGpu);
+    }
+
+    private void clearGpuTerrainVisibleHandoff() {
+        this.gpuTerrainVisibleGeneration = Long.MIN_VALUE;
+        this.gpuTerrainVisibleOwnership = GpuTerrainDrawHandoff.Ownership.REPLACE;
     }
 
     public void setCompiledSection(CompiledSection compiledSection) { this.compileStatus.compiledSection = compiledSection; }
@@ -406,6 +495,9 @@ public class RenderSection {
     }
 
     public short getLastFrame() { return this.lastFrame; }
+
+    record GpuTerrainDrawState(long generation,
+                               GpuTerrainDrawHandoff.Ownership ownership) {}
 
     public record GpuTerrainPreflight(long modelGeneration, int faceCount,
                                       GpuTerrainDrawHandoff.Ownership ownership) {

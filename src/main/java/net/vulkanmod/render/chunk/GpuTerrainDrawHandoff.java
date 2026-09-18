@@ -8,9 +8,10 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
  * <p>The established {@link Ownership#REPLACE} mode preserves today's fully-qualified
  * section behavior: exact GPU residency replaces the supplied CPU command, while any
  * missing/stale/unsupported result returns the CPU command unchanged. The bounded
- * {@link Ownership#APPEND} mode is groundwork for hybrid sections: when an exact GPU
- * result exists, the CPU exception command remains authoritative and the GPU quad
- * command is added as a second draw. No production caller enables APPEND yet.</p>
+ * {@link Ownership#APPEND} mode serves the experimental fresh hybrid path: when an
+ * exact GPU result exists, the CPU exception command remains authoritative and the
+ * GPU quad command is added as a second draw. A missing GPU half must never make a
+ * partial CPU exception mesh look like a complete fallback.</p>
  */
 final class GpuTerrainDrawHandoff {
     // Region terrain uses the renderer's uint16 auto-quad index buffer. A command's

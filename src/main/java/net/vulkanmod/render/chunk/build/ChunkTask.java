@@ -148,8 +148,12 @@ public class ChunkTask {
                         this.renderSection.stageGpuTerrainPreflight(
                                 compileResults.gpuTerrainPreflight, this.voxelGeneration,
                                 compileResults.gpuTerrainCpuBypassed);
-                        if(!compileResults.gpuTerrainCpuBypassed)
+                        if(compileResults.gpuTerrainCpuBypassed) {
+                            this.renderSection.setGpuTerrainCpuMeshComplete(
+                                    this.voxelGeneration, this.gpuTerrainHadReadyCpuFallback);
+                        } else {
                             this.renderSection.completeGpuTerrainCpuRecovery(this.voxelGeneration);
+                        }
                         this.renderSection.publishVoxels(compileResults.voxels,
                                 compileResults.sparseLighting, this.voxelGeneration);
                     });

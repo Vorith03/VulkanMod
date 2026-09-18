@@ -396,14 +396,14 @@ final class RegionDrawBatch {
                 var iterator = area.sectionQueue.iterator(false);
                 while (iterator.hasNext()) {
                     RenderSection section = iterator.next();
-                    long generation = section.getVoxelGeneration();
+                    RenderSection.GpuTerrainDrawState drawState = section.gpuTerrainDrawState();
+                    long generation = drawState.generation();
                     DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
                     GpuTerrainOutputStore.Residency residency = gpuTerrainHandoff
                             ? area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
                                     section.zOffset, type)
                             : null;
-                    GpuTerrainDrawHandoff.Ownership ownership =
-                            section.stagedGpuTerrainOwnership(generation);
+                    GpuTerrainDrawHandoff.Ownership ownership = drawState.ownership();
                     GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(
                             gpuTerrainHandoff, type, generation, residency,
                             parameters.indexCount, parameters.firstIndex, parameters.vertexOffset,
@@ -417,6 +417,16 @@ final class RegionDrawBatch {
                             break;
                         }
                     }
+                    // A GPU-first CPU mesh may be partial (APPEND) or absent
+                    // (fresh REPLACE). Never expose that CPU side by itself while its
+                    // matching GPU handoff is missing. pendingUploads deliberately
+                    // keeps this frame batch retryable until GPU publication or a
+                    // complete CPU recovery changes the mesh revision/state.
+                    if(!section.gpuTerrainCpuMeshComplete() && plan.gpuDrawCount() == 0) {
+                        pendingUploads = true;
+                        continue;
+                    }
+
                     // APPEND is atomic at frame recording: never record the GPU half
                     // without its CPU exception half merely because the CPU upload is
                     // still pending. REPLACE/GPU-only output does not depend on CPU

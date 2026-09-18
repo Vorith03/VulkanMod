@@ -331,6 +331,14 @@ final class GpuTerrainSectionMesherBridge {
             recoverCpuFallback(area, section, generation);
             return;
         }
+        if(!section.publishGpuTerrainDrawHandoff(generation, ownership)) {
+            area.invalidateGpuTerrainOutput(section.xOffset(), section.yOffset(),
+                    section.zOffset(), generation);
+            GpuTerrainDiagnostics.record("completion", "draw_handoff_rejected",
+                    section, generation, "ownership=" + ownership);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
 
         GpuTerrainDiagnostics.recordSuccess("published", section, generation,
                 result.writtenFaces(), cpuBypassed);

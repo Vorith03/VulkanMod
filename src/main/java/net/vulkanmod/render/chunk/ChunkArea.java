@@ -474,6 +474,11 @@ public class ChunkArea {
     }
 
     public synchronized void removeVoxels(int x, int y, int z, long generation) {
+        this.removeVoxels(x, y, z, generation, false);
+    }
+
+    synchronized void removeVoxels(int x, int y, int z, long generation,
+                                   boolean retainGpuTerrainOutput) {
         int slot = voxelSlot(x, y, z);
         if (slot < 0) return;
         if (voxels != null) voxels.remove(slot);
@@ -481,7 +486,13 @@ public class ChunkArea {
             gpuVoxels.invalidate(slot, generation);
             gpuVoxels.invalidateLighting(slot, generation);
         }
-        if(gpuTerrainOutputs != null)
+        if(!retainGpuTerrainOutput && gpuTerrainOutputs != null)
+            gpuTerrainOutputs.invalidateSection(slot, generation);
+    }
+
+    synchronized void invalidateGpuTerrainOutput(int x, int y, int z, long generation) {
+        int slot = voxelSlot(x, y, z);
+        if(slot >= 0 && gpuTerrainOutputs != null)
             gpuTerrainOutputs.invalidateSection(slot, generation);
     }
 
