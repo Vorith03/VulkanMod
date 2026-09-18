@@ -284,6 +284,13 @@ public final class GpuTerrainOutputStoreSmokeTest {
             retirements.removeFirst().run();
     }
 
+    private static GpuTerrainOutputStore.StagedReservation requireStagedReservation(
+            GpuTerrainOutputStore.StagedReservation reservation, String message) {
+        if(reservation == null)
+            throw new AssertionError(message);
+        return reservation;
+    }
+
     private static GpuTerrainOutputStore.Reservation requireReservation(
             GpuTerrainOutputStore.Reservation reservation, String message) {
         if(reservation == null)
