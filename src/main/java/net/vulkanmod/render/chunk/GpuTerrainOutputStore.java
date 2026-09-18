@@ -277,12 +277,16 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         return true;
     }
 
-    private synchronized boolean commitStaged(StagedReservation reservation) {
+    private synchronized boolean canCommitStaged(StagedReservation reservation) {
         StagedPending pending = stagedPending(reservation);
-        if(pending == null || !pending.ready || pending.cancelled || closed)
+        return pending != null && pending.ready && !pending.cancelled && !closed
+                && pending.generation > this.sectionGenerations[pending.packedSection];
+    }
+
+    private synchronized boolean commitStaged(StagedReservation reservation) {
+        if(!this.canCommitStaged(reservation))
             return false;
-        if(pending.generation <= this.sectionGenerations[pending.packedSection])
-            return false;
+        StagedPending pending = stagedPending(reservation);
 
         stagedReservations.remove(pending.token);
         advanceSectionGeneration(pending.packedSection, pending.generation);
@@ -703,6 +707,10 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
 
         boolean ready() {
             return owner.stagedReady(this);
+        }
+
+        boolean canCommit() {
+            return owner.canCommitStaged(this);
         }
     }
 
