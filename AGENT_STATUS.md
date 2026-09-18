@@ -11,7 +11,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Integration target and live branch: `forge-1.20.1` at `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` (`test: lock hybrid section statistics`).
+- Latest executable checkpoint is `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` (`test: lock hybrid section statistics`), validated by CI #676; subsequent `forge-1.20.1` commits are documentation-only `[skip ci]` reconciliation.
 - The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward to the exact green head; no merge-only content was introduced.
 - CI #676 / run `35337095457` at `ac2a9a28` is fully green: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Crash Assistant, Chat Heads, and Flywheel all pass.
 - The Immersive Portals blocker is closed. VulkanMod now preserves the required vanilla mixin call sites, transforms and compiles IP-aware core shaders through the Vulkan path, rebuilds IP helper shaders after IP initialization/resource reload, and supports std140 `mat3` uniforms without under-sizing or over-reading source storage.
@@ -92,7 +92,7 @@ The validation workstream found two real correctness gaps; both are now fixed an
 1. **Device-to-host readback visibility:** `e629121e` adds a buffer dependency over the full actual readback range after the transfer copies and before submission: source `TRANSFER / TRANSFER_WRITE`, destination `HOST / HOST_READ`. Production header-only and validation full-payload readbacks use the same helper. `b0e0f241` adds smoke-only execution counting plus a locked stage/access contract; CI #620 ran those assertions successfully without introducing a CPU wait.
 2. **Authoritative face semantics:** `56f317e9` makes worker capture compare every candidate direction with `Block.shouldRenderFace(...)` while `RenderChunkRegion` and its halo are available. Any disagreement clears GPU ownership, which makes REPLACE fail closed and APPEND retain that cell plus conservatively protected neighbors on CPU. `b0e0f241` factors the shader/authoritative equivalence predicate into shared production code and exhaustively truth-table tests all four boolean cases.
 
-These findings no longer block a terrain-only RX functional test. A Create Chronicles test still needs a combined artifact containing the remaining independently validated Immersive Portals compatibility stack.
+These findings no longer block the combined Create Chronicles RX functional test. The required Immersive Portals compatibility stack is integrated on the same executable checkpoint and green in CI #676.
 
 ## Validation evidence
 
