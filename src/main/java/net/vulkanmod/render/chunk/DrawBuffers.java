@@ -76,7 +76,7 @@ public class DrawBuffers {
      * This first staging primitive is deliberately limited to auto-indexed opaque
      * terrain, which is the only CPU half needed by mixed APPEND rebuilds.
      */
-    StagedDrawParameters stageUpload(UploadBuffer buffer, RenderSection section,
+    public StagedDrawParameters stageUpload(UploadBuffer buffer, RenderSection section,
                                      TerrainRenderType renderType, long generation) {
         if(buffer == null || section == null || renderType == null)
             throw new IllegalArgumentException("Staged terrain upload requires a buffer, section, and render type");
@@ -91,6 +91,20 @@ public class DrawBuffers {
         } finally {
             buffer.release();
         }
+    }
+
+    public StagedDrawParameters stageEmpty(RenderSection section,
+                                           TerrainRenderType renderType, long generation) {
+        if(section == null || renderType == null || generation < 0L)
+            throw new IllegalArgumentException("Invalid staged empty terrain draw");
+        if(section.getChunkArea() == null || section.getChunkArea().drawBuffers != this
+                || section.getVoxelGeneration() != generation)
+            throw new IllegalArgumentException("Staged empty terrain draw section/generation is stale");
+        if(renderType == TerrainRenderType.TRANSLUCENT
+                || renderType == TerrainRenderType.TRIPWIRE)
+            throw new IllegalArgumentException("Staged APPEND CPU draw must remain opaque");
+        return new StagedDrawParameters(this, section, generation, renderType,
+                0, 0, 0, new AreaBuffer.Segment(), this.vertexBuffer, true);
     }
 
     StagedDrawParameters stageVertexData(RenderSection section, TerrainRenderType renderType,
@@ -123,7 +137,7 @@ public class DrawBuffers {
         }
         int vertexOffset = segment.getOffset() / VERTEX_SIZE;
         return new StagedDrawParameters(this, section, generation, renderType,
-                indexCount, 0, vertexOffset, segment, this.vertexBuffer);
+                indexCount, 0, vertexOffset, segment, this.vertexBuffer, false);
     }
 
     boolean canCommitStaged(DrawParameters target, StagedDrawParameters staged) {
@@ -132,8 +146,8 @@ public class DrawBuffers {
                 && staged.section.getDrawParameters(staged.renderType) == target
                 && staged.section.getVoxelGeneration() == staged.generation
                 && staged.vertexBufferOwner == this.vertexBuffer
-                && staged.vertexBufferSegment.getOffset() >= 0
-                && staged.vertexBufferSegment.isReady();
+                && (staged.empty || (staged.vertexBufferSegment.getOffset() >= 0
+                && staged.vertexBufferSegment.isReady()));
     }
 
     boolean commitStaged(DrawParameters target, StagedDrawParameters staged) {
@@ -146,7 +160,7 @@ public class DrawBuffers {
         target.firstIndex = staged.firstIndex;
         target.vertexOffset = staged.vertexOffset;
         target.vertexBufferSegment = staged.vertexBufferSegment;
-        target.ready = true;
+        target.ready = staged.empty || staged.vertexBufferSegment.isReady();
         staged.consumed = true;
         this.markMeshChanged(target.renderType);
 
@@ -437,7 +451,7 @@ public class DrawBuffers {
         return allocated;
     }
 
-    static final class StagedDrawParameters {
+    public static final class StagedDrawParameters {
         private final DrawBuffers owner;
         final RenderSection section;
         final long generation;
@@ -447,13 +461,14 @@ public class DrawBuffers {
         final int vertexOffset;
         final AreaBuffer.Segment vertexBufferSegment;
         final AreaBuffer vertexBufferOwner;
+        final boolean empty;
         private boolean consumed;
 
         StagedDrawParameters(DrawBuffers owner, RenderSection section, long generation,
                              TerrainRenderType renderType, int indexCount,
                              int firstIndex, int vertexOffset,
                              AreaBuffer.Segment vertexBufferSegment,
-                             AreaBuffer vertexBufferOwner) {
+                             AreaBuffer vertexBufferOwner, boolean empty) {
             this.owner = owner;
             this.section = section;
             this.generation = generation;
@@ -463,10 +478,11 @@ public class DrawBuffers {
             this.vertexOffset = vertexOffset;
             this.vertexBufferSegment = vertexBufferSegment;
             this.vertexBufferOwner = vertexBufferOwner;
+            this.empty = empty;
         }
 
         boolean ready() {
-            return !consumed && vertexBufferSegment.isReady();
+            return !consumed && (empty || vertexBufferSegment.isReady());
         }
 
         int vertexOffset() {
