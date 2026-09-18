@@ -60,7 +60,7 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(Minecraft minecraft, EntityRenderDispatcher entityRenderDispatcher, BlockEntityRenderDispatcher blockEntityRenderDispatcher, RenderBuffers renderBuffers, CallbackInfo ci) {
-        this.worldRenderer = WorldRenderer.init((LevelRenderer)(Object)this, this.renderBuffers);
+        this.worldRenderer = WorldRenderer.init((LevelRenderer)(Object)this);
     }
 
     @Inject(method = "close", at = @At("HEAD"))
@@ -78,7 +78,7 @@ public abstract class LevelRendererMixin {
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;checkPoseStack(Lcom/mojang/blaze3d/vertex/PoseStack;)V", ordinal = 1, shift = At.Shift.BEFORE))
     private void renderBlockEntities(PoseStack poseStack, float f, long l, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, CallbackInfo ci) {
         Vec3 pos = camera.getPosition();
-        this.worldRenderer.renderBlockEntities(poseStack, pos.x(), pos.y(), pos.z(), this.destructionProgress, f);
+        this.worldRenderer.renderBlockEntities(this.renderBuffers, poseStack, pos.x(), pos.y(), pos.z(), this.destructionProgress, f);
     }
 
     /**

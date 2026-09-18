@@ -60,8 +60,6 @@ public class WorldRenderer {
 
     private ClientLevel level;
     private int lastViewDistance;
-    private final RenderBuffers renderBuffers;
-
     private Vec3 cameraPos;
     private int lastCameraSectionX;
     private int lastCameraSectionY;
@@ -96,10 +94,9 @@ public class WorldRenderer {
 
     private final List<Runnable> onAllChangedCallbacks = new ObjectArrayList<>();
 
-    private WorldRenderer(LevelRenderer levelRenderer, RenderBuffers renderBuffers) {
+    private WorldRenderer(LevelRenderer levelRenderer) {
         this.minecraft = Minecraft.getInstance();
         this.levelRenderer = levelRenderer;
-        this.renderBuffers = renderBuffers;
         this.taskDispatcher = new TaskDispatcher();
         allocateIndirectBuffers();
 
@@ -127,8 +124,8 @@ public class WorldRenderer {
 //        uniformBuffers = new UniformBuffers(100000, MemoryTypes.GPU_MEM);
     }
 
-    public static WorldRenderer init(LevelRenderer levelRenderer, RenderBuffers renderBuffers) {
-        WorldRenderer renderer = new WorldRenderer(levelRenderer, renderBuffers);
+    public static WorldRenderer init(LevelRenderer levelRenderer) {
+        WorldRenderer renderer = new WorldRenderer(levelRenderer);
         INSTANCES.put(levelRenderer, new WeakReference<>(renderer));
         return renderer;
     }
@@ -690,9 +687,10 @@ public class WorldRenderer {
         this.minecraft.getProfiler().pop();
     }
 
-    public void renderBlockEntities(PoseStack poseStack, double camX, double camY, double camZ,
+    public void renderBlockEntities(RenderBuffers renderBuffers, PoseStack poseStack,
+                                    double camX, double camY, double camZ,
                                     Long2ObjectMap<SortedSet<BlockDestructionProgress>> destructionProgress, float gameTime) {
-        MultiBufferSource bufferSource = this.renderBuffers.bufferSource();
+        MultiBufferSource bufferSource = renderBuffers.bufferSource();
 
         for(RenderSection renderSection : this.chunkQueue) {
             List<BlockEntity> list = renderSection.getCompiledSection().getRenderableBlockEntities();
@@ -707,7 +705,7 @@ public class WorldRenderer {
                         int j1 = sortedset.last().getProgress();
                         if (j1 >= 0) {
                             PoseStack.Pose posestack$pose1 = poseStack.last();
-                            VertexConsumer vertexconsumer = new SheetedDecalTextureGenerator(this.renderBuffers.crumblingBufferSource().getBuffer(ModelBakery.DESTROY_TYPES.get(j1)), posestack$pose1.pose(), posestack$pose1.normal(), 1.0f);
+                            VertexConsumer vertexconsumer = new SheetedDecalTextureGenerator(renderBuffers.crumblingBufferSource().getBuffer(ModelBakery.DESTROY_TYPES.get(j1)), posestack$pose1.pose(), posestack$pose1.normal(), 1.0f);
                             multibuffersource1 = (p_194349_) -> {
                                 VertexConsumer vertexconsumer3 = bufferSource.getBuffer(p_194349_);
                                 return p_194349_.affectsCrumbling() ? VertexMultiConsumer.create(vertexconsumer, vertexconsumer3) : vertexconsumer3;
