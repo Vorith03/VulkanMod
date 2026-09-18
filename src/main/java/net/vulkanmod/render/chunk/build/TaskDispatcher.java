@@ -298,16 +298,61 @@ public class TaskDispatcher {
                                       EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
                                       @Nullable TerrainRenderType preservedLayer,
                                       Runnable publishResult) {
+        this.scheduleSectionUpdate(task, section, uploadBuffers, preservedLayer,
+                -1L, false, publishResult);
+    }
+
+    public void scheduleSectionUpdate(ChunkTask task, RenderSection section,
+                                      EnumMap<TerrainRenderType, UploadBuffer> uploadBuffers,
+                                      @Nullable TerrainRenderType preservedLayer,
+                                      long generation, boolean stagePreservedLayer,
+                                      Runnable publishResult) {
         long queuedAt = System.nanoTime();
         this.pendingUploadBuffers.addAll(uploadBuffers.values());
         this.toUpload.add(() -> {
+            UploadBuffer stagedUpload = null;
+            boolean stagedAppendCpu = false;
             try {
                 if(task.cancelled.get()) {
                     this.droppedResults.incrementAndGet();
                     return;
                 }
+                if(stagePreservedLayer && section.getVoxelGeneration() != generation) {
+                    this.droppedResults.incrementAndGet();
+                    return;
+                }
 
                 long publicationStart = System.nanoTime();
+                if(stagePreservedLayer) {
+                    if(preservedLayer == null)
+                        throw new IllegalArgumentException("Staged APPEND publication requires an output layer");
+
+                    ChunkArea renderArea = section.getChunkArea();
+                    if(renderArea == null) {
+                        this.droppedResults.incrementAndGet();
+                        return;
+                    }
+                    DrawBuffers drawBuffers = renderArea.getDrawBuffers();
+
+                    // Stage the new opaque CPU half before mutating any active layer.
+                    // A zero-geometry layer is meaningful: committing it retires stale
+                    // opaque CPU geometry from the previous generation.
+                    stagedUpload = uploadBuffers.remove(preservedLayer);
+                    if(stagedUpload != null)
+                        this.pendingUploadBuffers.remove(stagedUpload);
+                    DrawBuffers.StagedDrawParameters staged = stagedUpload != null
+                            ? drawBuffers.stageUpload(stagedUpload, section, preservedLayer, generation)
+                            : drawBuffers.stageEmpty(section, preservedLayer, generation);
+                    stagedUpload = null; // stageUpload consumed/released it.
+
+                    if(!section.stageGpuTerrainAppendCpu(generation, staged)) {
+                        drawBuffers.discardStaged(staged);
+                        this.droppedResults.incrementAndGet();
+                        return;
+                    }
+                    stagedAppendCpu = true;
+                }
+
                 this.doSectionUpdate(section, uploadBuffers, preservedLayer);
                 publishResult.run();
                 this.acceptedResults.incrementAndGet();
@@ -316,7 +361,18 @@ public class TaskDispatcher {
                 this.handoffNanos.addAndGet(Math.max(0L, publicationEnd - queuedAt));
                 this.publicationQueueNanos.addAndGet(Math.max(0L, publicationStart - queuedAt));
                 this.publicationWorkNanos.addAndGet(Math.max(0L, publicationEnd - publicationStart));
+            } catch(RuntimeException error) {
+                if(stagePreservedLayer) {
+                    if(stagedAppendCpu)
+                        section.discardGpuTerrainAppendCpuStage(generation);
+                    section.requestGpuTerrainCpuRecovery(generation);
+                }
+                throw error;
             } finally {
+                if(stagedUpload != null) {
+                    stagedUpload.release();
+                    this.pendingUploadBuffers.remove(stagedUpload);
+                }
                 releaseUploads(uploadBuffers);
                 this.pendingUploadBuffers.removeAll(uploadBuffers.values());
             }
