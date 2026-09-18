@@ -3,6 +3,7 @@ package net.vulkanmod.render.chunk;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.voxel.GpuTerrainFacePredicate;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelTable;
 import net.vulkanmod.render.chunk.voxel.SectionVoxelSnapshot;
 
@@ -11,6 +12,15 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
     private GpuTerrainSectionMesherBridgeSmokeTest() {}
 
     public static void verify() {
+        require(GpuTerrainFacePredicate.matches(false, true),
+                "Visible shader face must agree with authoritative visible face");
+        require(!GpuTerrainFacePredicate.matches(false, false),
+                "Authoritative hidden face must demote a shader-visible candidate");
+        require(GpuTerrainFacePredicate.matches(true, false),
+                "Occluded shader face must agree with authoritative hidden face");
+        require(!GpuTerrainFacePredicate.matches(true, true),
+                "Authoritative visible face must demote a shader-occluded candidate");
+
         GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
         require(table.templateCount() > 0,
                 "GPU terrain bridge smoke requires a qualified baked model");
@@ -118,7 +128,7 @@ public final class GpuTerrainSectionMesherBridgeSmokeTest {
                 "A stale or forged GPU_FULL_CUBE bit must be rejected by current model qualification");
 
         Initializer.LOGGER.info(
-                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: input-only face planning mirrors compute culling; staged generation and explicit REPLACE/APPEND ownership are fail-closed; unsupported visible, fluid, block-entity, waterlogged/full-cube, missing-bit and stale/forged qualification cases retain CPU fallback");
+                "VULKANMOD_GPU_TERRAIN_BRIDGE_POLICY_OK: authoritative face-predicate agreement is truth-table covered; input-only face planning mirrors compute culling; staged generation and explicit REPLACE/APPEND ownership are fail-closed; unsupported visible, fluid, block-entity, waterlogged/full-cube, missing-bit and stale/forged qualification cases retain CPU fallback");
     }
 
     private static SectionVoxelSnapshot fixture(int qualifiedState,

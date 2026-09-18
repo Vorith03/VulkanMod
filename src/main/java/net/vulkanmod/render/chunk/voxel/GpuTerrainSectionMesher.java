@@ -52,6 +52,12 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
     private static final int PUSH_CONSTANT_BYTES = 7 * Integer.BYTES;
     private static final int WORKGROUP_COUNT = SectionVoxelSnapshot.BLOCK_COUNT / 64;
     private static final int MAX_IN_FLIGHT = 32;
+    static final int READBACK_SRC_ACCESS = VK_ACCESS_TRANSFER_WRITE_BIT;
+    static final int READBACK_DST_ACCESS = VK_ACCESS_HOST_READ_BIT;
+    static final int READBACK_SRC_STAGE = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    static final int READBACK_DST_STAGE = VK_PIPELINE_STAGE_HOST_BIT;
+    private static final boolean SMOKE_TEST = Boolean.getBoolean("vulkanmod.smokeTest");
+    private static int readbackBarrierSmokeCount;
 
     private long descriptorSetLayout;
     private long descriptorPool;
@@ -596,16 +602,33 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.calloc(1, stack);
             barrier.get(0).sType$Default()
-                    .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                    .dstAccessMask(VK_ACCESS_HOST_READ_BIT)
+                    .srcAccessMask(READBACK_SRC_ACCESS)
+                    .dstAccessMask(READBACK_DST_ACCESS)
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(readbackBuffer).offset(0L).size(readbackBytes);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_HOST_BIT,
+                    READBACK_SRC_STAGE,
+                    READBACK_DST_STAGE,
                     0, null, barrier, null);
+            if(SMOKE_TEST)
+                readbackBarrierSmokeCount++;
         }
+    }
+
+    static boolean readbackBarrierContractMatchesVulkan() {
+        return READBACK_SRC_ACCESS == VK_ACCESS_TRANSFER_WRITE_BIT
+                && READBACK_DST_ACCESS == VK_ACCESS_HOST_READ_BIT
+                && READBACK_SRC_STAGE == VK_PIPELINE_STAGE_TRANSFER_BIT
+                && READBACK_DST_STAGE == VK_PIPELINE_STAGE_HOST_BIT;
+    }
+
+    static boolean readbackBarrierSmokeTrackingEnabled() {
+        return SMOKE_TEST;
+    }
+
+    static int readbackBarrierSmokeCount() {
+        return readbackBarrierSmokeCount;
     }
 
     private static void validateSlice(StorageBuffer page,

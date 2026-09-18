@@ -169,6 +169,11 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
 
         void submitAndPollSignaledHelpers() {
             submittedFrame = Renderer.getCurrentFrame();
+            require(GpuTerrainSectionMesher.readbackBarrierContractMatchesVulkan(),
+                    "Async section-mesher readback must retain transfer-write -> host-read synchronization");
+            require(GpuTerrainSectionMesher.readbackBarrierSmokeTrackingEnabled(),
+                    "Async section-mesher smoke must track submitted readback barriers");
+            int readbackBarriersBefore = GpuTerrainSectionMesher.readbackBarrierSmokeCount();
             boolean pinned = reservation.submitWithTarget(target -> {
                 for(int attempt = 0; attempt < MAX_PROBE_SUBMISSIONS; ++attempt) {
                     boolean accepted = mesher.dispatchAsync(
@@ -189,6 +194,9 @@ public final class GpuTerrainSectionMesherAsyncSmokeTest {
             require(pinned,
                     "Async section-mesher reservation must pin after submission");
             submissionReturned = true;
+            require(GpuTerrainSectionMesher.readbackBarrierSmokeCount()
+                            == readbackBarriersBefore + submittedCount,
+                    "Every accepted async dispatch must record one transfer-to-host barrier");
 
             // Test-only synchronization makes every helper fence deterministically
             // signaled. Production does not wait here: it merely polls status once per

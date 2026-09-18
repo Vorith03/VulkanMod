@@ -18,6 +18,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Block;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainHybridMask;
+import net.vulkanmod.render.chunk.voxel.GpuTerrainFacePredicate;
 import net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry;
 import net.vulkanmod.render.chunk.voxel.GpuLightingDemandTelemetry;
 import net.vulkanmod.render.chunk.voxel.GpuSparseLightingMode;
@@ -442,10 +443,9 @@ public class ChunkTask {
                 BlockPos neighborPos = pos.relative(direction);
                 boolean neighborSolidRender = region.getBlockState(neighborPos)
                         .isSolidRender(region, neighborPos);
-                boolean gpuWouldRender = !neighborSolidRender;
                 boolean authoritative = Block.shouldRenderFace(
                         state, region, pos, direction, neighborPos);
-                if(authoritative != gpuWouldRender)
+                if(!GpuTerrainFacePredicate.matches(neighborSolidRender, authoritative))
                     return false;
             }
             return true;

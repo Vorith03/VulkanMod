@@ -40,6 +40,11 @@ public final class GpuTerrainSectionMesherSmokeTest {
     public static void verify() {
         if(AreaUploadManager.INSTANCE == null)
             throw new AssertionError("Section mesher smoke requires the terrain upload manager");
+        require(GpuTerrainSectionMesher.readbackBarrierContractMatchesVulkan(),
+                "Section mesher readback must retain transfer-write -> host-read synchronization");
+        require(GpuTerrainSectionMesher.readbackBarrierSmokeTrackingEnabled(),
+                "Section mesher smoke must track submitted readback barriers");
+        int readbackBarriersBefore = GpuTerrainSectionMesher.readbackBarrierSmokeCount();
 
         GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
         require(table.templateCount() > 0,
@@ -89,6 +94,9 @@ public final class GpuTerrainSectionMesherSmokeTest {
                         model, table.templateCount(), target, EXPECTED_FACES));
             }
             require(exact != null, "Section mesher exact target must remain live through submission");
+            require(GpuTerrainSectionMesher.readbackBarrierSmokeCount()
+                            == readbackBarriersBefore + 1,
+                    "Full validation payload readback must record one transfer-to-host barrier");
             verifyExact(exact, oracle);
 
             require(area.publishGpuTerrainOutput(reservation,
@@ -120,6 +128,9 @@ public final class GpuTerrainSectionMesherSmokeTest {
                         model, table.templateCount(), target, OVERFLOW_CAPACITY));
             }
             require(overflow != null, "Overflow target must remain live through submission");
+            require(GpuTerrainSectionMesher.readbackBarrierSmokeCount()
+                            == readbackBarriersBefore + 2,
+                    "Each validation readback submission must record its transfer-to-host barrier");
             GpuTerrainSectionMesher.DispatchResult overflowDispatch = overflow.dispatch();
             require(overflowDispatch.requestedFaces() == EXPECTED_FACES,
                     "Overflow dispatch must retain the exact requested face count");
