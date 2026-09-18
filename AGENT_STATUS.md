@@ -11,15 +11,14 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Integration target: `forge-1.20.1`; latest consumed live tip is `328018e731baea07ae0245519d4f16953fe0c5ba`.
-- GPU-terrain production work remains isolated on `gpu-terrain-continuation-20260917` while compatibility work proceeds concurrently.
-- Fresh-hybrid implementation checkpoint before compatibility reconciliation: `8240768ae25c8800edd76be46795c3f36c9a1d05` (`terrain: omit qualified cubes on fresh hybrid builds`).
-- First compatibility reconciliation merge: `5327fe80fdbd1058a27ae84261642fc95dd3e490`, with parents `8240768a` and Forge `39f9d9f2`. Its only content conflict was `src/main/resources/vulkanmod.mixins.json`; the resolution preserves Forge compatibility registrations plus `debug.GpuTerrainAsyncCompletionSmokeMixin`.
-- Forge then advanced by two documentation commits to `328018e7`; the terrain branch reconciled that checkpoint and fixed both validation findings it carried.
-- Latest terrain checkpoint is `ead33f4c2b18332c5dc60d16079133779f5f190f` (`test: isolate current-generation GPU staging oracle`). Draft PR #4 remains isolated from `forge-1.20.1`.
-- CI #664 / run `35314625964` at `ead33f4c` passes build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, and Pick Up Notifier. Startup-dependent logs repeatedly emit `VULKANMOD_GPU_TERRAIN_CPU_STAGE_OK`, `VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK`, and `VULKANMOD_GPU_TERRAIN_TRANSITION_OK`. Its only failure is the independently owned old Immersive Portals `Program.compileShaderInternal` call-site conflict still present on PR #4.
-- Mixed APPEND rebuild omission is now implemented behind the existing experimental hybrid gate: replacement CPU exception geometry and GPU output stage independently while the previous complete draw remains visible, then commit together only after both halves are ready. Stale/failure paths discard staged allocations and retain/recover CPU-safe output. Terrain-side CI validates the transaction machinery; PR #4 is still not merge-ready as a combined modpack branch because current Immersive Portals helper-shader/reload closure remains on compatibility PR #6.
-- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. Active roadmap remains **Phase 7 — GPU-driven terrain and hybrid meshing**; no accelerated-default or performance gate is closed.
+- Integration target and live branch: `forge-1.20.1` at `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` (`test: lock hybrid section statistics`).
+- The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward to the exact green head; no merge-only content was introduced.
+- CI #676 / run `35337095457` at `ac2a9a28` is fully green: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Crash Assistant, Chat Heads, and Flywheel all pass.
+- The Immersive Portals blocker is closed. VulkanMod now preserves the required vanilla mixin call sites, transforms and compiles IP-aware core shaders through the Vulkan path, rebuilds IP helper shaders after IP initialization/resource reload, and supports std140 `mat3` uniforms without under-sizing or over-reading source storage.
+- Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
+- Mixed APPEND rebuild omission remains experimental/default-off and transactionally stages CPU exception geometry plus GPU output while retaining the previous complete draw until replacement is ready. Stale/failure paths remain fail-closed.
+- `RegionBatchStats.sections` now counts rendered sections rather than indirect commands, so one hybrid APPEND section emitting CPU+GPU commands is counted once; `RegionBatchSmokeTest` locks pending/ready/fallback/visibility cases.
+- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. Active roadmap remains **Phase 7 — GPU-driven terrain and hybrid meshing**; accelerated-default and performance gates remain open.
 
 ## Task-relevant references
 
@@ -105,9 +104,11 @@ Hybrid-focused commits add tests for conservative cell ownership/demotion, filte
 
 ## Compatibility intersection
 
-Live Forge remains `328018e7`. Compatibility work remains independently owned by draft PR #6 (`compat-audit-20260917`), currently observed at `590b8546d72cb49a84e2d9f2298cb765e969c12e` (`compat: preprocess transformed core shader imports`). CI #663 / run `35314367365` passes build, both startup smokes, GPU-indirect, post/depth, screenshot, FTB Library, and Pick Up Notifier. The stronger clipping proof is now **green in the log**: `VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline`. The IP step still fails later during the compatibility-owned shader rebuild because VulkanMod's uniform layout rejects `mat3` (`RuntimeException: not admitted type: mat3`), after which the smoke reports helper shader `drawFbInAreaShader` was not installed. Treat helper-shader/reload closure, not clipping proof, as the remaining compatibility blocker.
+Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into `forge-1.20.1` at `ac2a9a28` and validated by CI #676.
 
-To move PR #4's combined smoke far enough to validate the terrain fixes, this branch selectively consumed the first two compatibility fixes: `1c7e0e1a` preserves vanilla `MainTarget.createFrameBuffer` call sites and `7ff35811` preserves `LevelRenderer.allChanged` call sites while cancelling the unsupported vanilla paths at runtime. CI #620 then reached the next known IP-owned boundary: VulkanMod's `ProgramM` overwrite removes the shader-source call site IP wraps. PR #6 already fixes that and later shader/uniform/clip-distance compatibility; do not duplicate the remainder into terrain production merely to make PR #4 green. Reconcile when the compatibility branch lands or when an explicit combined validation branch is appropriate.
+Immersive Portals 3.0.7 now passes its full runtime smoke, including the stronger clipping proof `VULKANMOD_IP_CLIPPING_SHADER_OK` and helper-shader installation. The prior `RuntimeException: not admitted type: mat3` was the underlying remaining failure; `Field` now represents std140 `mat3` as three vec4-aligned columns and packs Minecraft's nine source floats without source over-read or following-field misalignment.
+
+FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are also green on the same combined head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
 
 ## Fail-closed boundary
 
@@ -129,13 +130,16 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 
 ## Next action
 
-1. Keep PR #4 isolated while compatibility PR #6 is active. Terrain mixed-rebuild validation is green through CI #664; do not duplicate PR #6's remaining helper-shader/reload work into terrain merely to turn PR #4 green. Re-fetch live Forge and PR #6 before reconciliation.
-2. Wait for PR #6 to close the current `mat3`/helper-shader reload failure and obtain a green Immersive Portals compatibility step. The clipping-pipeline proof itself is already present in CI #663.
-3. Once a combined artifact contains that green compatibility head plus terrain `ead33f4c` or its reconciled descendant, perform the first narrow RX 6900 XT/RADV **functional** terrain test with REPLACE + APPEND enabled. Include at least one dirty mixed-section rebuild so pair-to-pair atomic replacement is exercised; check visual completeness, recovery behavior, and logs. Do not treat it as an FPS benchmark.
-4. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
-5. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
+1. Perform the first narrow RX 6900 XT/RADV **functional** terrain test from the landed combined artifact with REPLACE + APPEND enabled:
+   `-Dvulkanmod.experimentalGpuTerrainMesher=true`
+   `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`
+   `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`
+   `-Dvulkanmod.experimentalGpuTerrainHybrid=true`
+2. In Create Chronicles, exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior. Preserve the relevant log if anything is wrong.
+3. Treat this as a correctness test, not an FPS benchmark. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
+4. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
 
-Do not ask the user to remove Immersive Portals merely to test the target pack; prefer waiting for/reconciling the compatibility stack after its new clipping-pipeline proof is green.
+Prior user evidence remains valid; do not repeat settled sparse-lighting density collection or unrelated compatibility tests unless new hardware evidence contradicts them.
 
 ## Outstanding RX evidence / performance boundary
 
