@@ -75,6 +75,7 @@ public class ChunkTask {
         private final boolean gpuTerrainHadReadyCpuFallback;
         private final boolean gpuTerrainCpuBypassCandidate;
         private final boolean gpuTerrainHybridFreshCandidate;
+        private final boolean gpuTerrainHybridRebuildCandidate;
 
         //debug
         private float buildTime;
@@ -88,12 +89,15 @@ public class ChunkTask {
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
                     && !this.gpuTerrainCpuRecoveryRequired;
-            // Mixed omission is fresh-section-only for now. A rebuild already has a
-            // complete CPU mesh; publishing a new partial CPU mesh before its matching
-            // GPU half would create a transient hole unless both halves are swapped
-            // atomically. Keep rebuilds fully CPU-authored until that protocol exists.
             this.gpuTerrainHybridFreshCandidate = RenderSection.gpuTerrainHybridEnabled()
                     && !renderSection.isCompiled() && !this.gpuTerrainCpuRecoveryRequired;
+            // Rebuild omission is allowed only when a complete old CPU mesh can remain
+            // visible while the new APPEND CPU/GPU pair is staged. Sections already
+            // relying on an incomplete GPU-first CPU half must finish CPU recovery first.
+            this.gpuTerrainHybridRebuildCandidate = RenderSection.gpuTerrainHybridEnabled()
+                    && renderSection.isCompiled()
+                    && this.gpuTerrainHadReadyCpuFallback
+                    && !this.gpuTerrainCpuRecoveryRequired;
             this.highPriority = highPriority;
         }
 
@@ -140,7 +144,8 @@ public class ChunkTask {
 
                     final TerrainRenderType retainedCpuLayer = preservedLayer;
                     taskDispatcher.scheduleSectionUpdate(this, renderSection,
-                            compileResults.renderedLayers, retainedCpuLayer, () -> {
+                            compileResults.renderedLayers, retainedCpuLayer,
+                            this.voxelGeneration, compileResults.gpuTerrainAtomicAppendRebuild, () -> {
                         this.renderSection.updateGlobalBlockEntities(compileResults.globalBlockEntities);
                         this.renderSection.setCompiledSection(compiledChunk);
                         this.renderSection.setVisibility(((VisibilitySetExtended)compiledChunk.visibilitySet).getVisibility());
@@ -199,7 +204,8 @@ public class ChunkTask {
                         }
 
                         if(!compileResults.gpuTerrainCpuBypassed
-                                && this.gpuTerrainHybridFreshCandidate) {
+                                && (this.gpuTerrainHybridFreshCandidate
+                                || this.gpuTerrainHybridRebuildCandidate)) {
                             GpuTerrainHybridMask.Plan hybridPlan = GpuTerrainHybridMask.plan(
                                     original, capture.visibleCpuBlockModels());
                             if(hybridPlan.ownedCount() > 0) {
@@ -214,6 +220,8 @@ public class ChunkTask {
                                     if(compileResults.sparseLighting != null) {
                                         compileResults.gpuTerrainCpuBypassed = true;
                                         compileResults.gpuTerrainHybridPlan = hybridPlan;
+                                        compileResults.gpuTerrainAtomicAppendRebuild =
+                                                this.gpuTerrainHybridRebuildCandidate;
                                     }
                                 }
                             }
@@ -233,7 +241,9 @@ public class ChunkTask {
                         if(RenderSection.gpuTerrainCpuBypassEnabled()) {
                             if(compileResults.gpuTerrainCpuBypassed) {
                                 String reason = compileResults.gpuTerrainHybridPlan != null
-                                        ? "worker_bypass_hybrid_fresh"
+                                        ? (compileResults.gpuTerrainAtomicAppendRebuild
+                                        ? "worker_bypass_hybrid_rebuild"
+                                        : "worker_bypass_hybrid_fresh")
                                         : (this.gpuTerrainHadReadyCpuFallback
                                         ? "worker_bypass_rebuild" : "worker_bypass_fresh");
                                 GpuTerrainDiagnostics.recordSuccess(reason,
@@ -577,6 +587,7 @@ public class ChunkTask {
             public RenderSection.GpuTerrainPreflight gpuTerrainPreflight;
             public GpuTerrainHybridMask.Plan gpuTerrainHybridPlan;
             public boolean gpuTerrainCpuBypassed;
+            public boolean gpuTerrainAtomicAppendRebuild;
             @org.jetbrains.annotations.Nullable
             public TerrainBufferBuilder.SortState transparencyState;
         }
