@@ -35,7 +35,7 @@ public final class SectionVoxelSmokeTest {
             var snapshot = builder.finish();
             require(snapshot.paletteSize() == 2, "Distinct state IDs in publication fixture");
             long generation = section.getVoxelGeneration();
-            var task = new ChunkTask.BuildTask(section, null, false);
+            var task = new ChunkTask.BuildTask(section, null, false, dispatcher);
             dispatcher.scheduleSectionUpdate(task, section, new EnumMap<>(TerrainRenderType.class),
                     () -> section.publishVoxels(snapshot, generation));
             dispatcher.uploadAllPendingUploads();
@@ -48,7 +48,7 @@ public final class SectionVoxelSmokeTest {
                     "Voxel updates must be independent of mesh revisions");
 
             area.removeVoxels(-16, -96, 176);
-            task = new ChunkTask.BuildTask(section, null, false);
+            task = new ChunkTask.BuildTask(section, null, false, dispatcher);
             dispatcher.scheduleSectionUpdate(task, section, new EnumMap<>(TerrainRenderType.class),
                     () -> section.publishVoxels(snapshot, generation));
             task.cancel();
@@ -86,7 +86,7 @@ public final class SectionVoxelSmokeTest {
             area.releaseBuffers();
             require(area.getVoxels(-16, -96, 176) == null, "World/region release clears voxel residency");
             var abandoned = new java.util.concurrent.atomic.AtomicBoolean();
-            dispatcher.scheduleSectionUpdate(new ChunkTask.BuildTask(section, null, false), section,
+            dispatcher.scheduleSectionUpdate(new ChunkTask.BuildTask(section, null, false, dispatcher), section,
                     new EnumMap<>(TerrainRenderType.class), () -> abandoned.set(true));
             dispatcher.stopThreads();
             dispatcher.uploadAllPendingUploads();

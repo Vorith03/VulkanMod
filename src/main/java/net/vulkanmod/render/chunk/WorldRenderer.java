@@ -49,6 +49,12 @@ import java.lang.ref.WeakReference;
 import java.util.*;
 
 public class WorldRenderer {
+    // Compatibility/debug callers sometimes need the terrain renderer associated
+    // with Minecraft's currently active LevelRenderer. This is a lookup only:
+    // async terrain ownership remains explicit and never consults this map.
+    private static final Map<LevelRenderer, WeakReference<WorldRenderer>> INSTANCES =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
     private final Minecraft minecraft;
     private final LevelRenderer levelRenderer;
 
@@ -122,7 +128,18 @@ public class WorldRenderer {
     }
 
     public static WorldRenderer init(LevelRenderer levelRenderer, RenderBuffers renderBuffers) {
-        return new WorldRenderer(levelRenderer, renderBuffers);
+        WorldRenderer renderer = new WorldRenderer(levelRenderer, renderBuffers);
+        INSTANCES.put(levelRenderer, new WeakReference<>(renderer));
+        return renderer;
+    }
+
+    @Nullable
+    public static WorldRenderer getInstance() {
+        LevelRenderer current = Minecraft.getInstance().levelRenderer;
+        if(current == null)
+            return null;
+        WeakReference<WorldRenderer> renderer = INSTANCES.get(current);
+        return renderer == null ? null : renderer.get();
     }
 
     public ClientLevel getLevel() {
@@ -748,6 +765,12 @@ public class WorldRenderer {
         if(this.closed)
             return;
         this.closed = true;
+
+        synchronized(INSTANCES) {
+            WeakReference<WorldRenderer> current = INSTANCES.get(this.levelRenderer);
+            if(current != null && current.get() == this)
+                INSTANCES.remove(this.levelRenderer);
+        }
 
         this.taskDispatcher.stopThreads();
         if(this.sectionGrid != null) {

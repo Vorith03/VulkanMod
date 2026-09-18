@@ -26,12 +26,12 @@ public final class PublicationDrainSmokeTest {
             // Fill the real result queue before starting workers. Cancelled results
             // must free backlog capacity too, without invoking their callbacks.
             for(int i = 0; i < workerCount * 2; i++) {
-                ChunkTask cancelled = new ChunkTask(section);
+                ChunkTask cancelled = new ChunkTask(section, dispatcher);
                 cancelled.cancel();
                 dispatcher.scheduleSectionUpdate(cancelled, section, new EnumMap<>(TerrainRenderType.class),
                         () -> { throw new AssertionError("Cancelled result published"); });
             }
-            dispatcher.scheduleSectionUpdate(new ChunkTask(section), section, new EnumMap<>(TerrainRenderType.class),
+            dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section, new EnumMap<>(TerrainRenderType.class),
                     () -> {
                         try {
                             if(!workerResumed.await(2, TimeUnit.SECONDS))
@@ -41,7 +41,7 @@ public final class PublicationDrainSmokeTest {
                             throw new AssertionError(interrupted);
                         }
                     });
-            dispatcher.schedule(new ChunkTask(section) {
+            dispatcher.schedule(new ChunkTask(section, dispatcher) {
                 @Override
                 public CompletableFuture<Result> doTask(ThreadBuilderPack pack) {
                     workerResumed.countDown();
