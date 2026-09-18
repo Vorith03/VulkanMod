@@ -76,24 +76,29 @@ public class DrawBuffers {
      * This first staging primitive is deliberately limited to auto-indexed opaque
      * terrain, which is the only CPU half needed by mixed APPEND rebuilds.
      */
-    StagedDrawParameters stageUpload(UploadBuffer buffer, TerrainRenderType renderType) {
-        if(buffer == null || renderType == null)
-            throw new IllegalArgumentException("Staged terrain upload requires a buffer and render type");
+    StagedDrawParameters stageUpload(UploadBuffer buffer, RenderSection section,
+                                     TerrainRenderType renderType, long generation) {
+        if(buffer == null || section == null || renderType == null)
+            throw new IllegalArgumentException("Staged terrain upload requires a buffer, section, and render type");
         if(buffer.indexOnly || !buffer.autoIndices
                 || renderType == TerrainRenderType.TRANSLUCENT
                 || renderType == TerrainRenderType.TRIPWIRE)
             throw new IllegalArgumentException("Staged APPEND CPU upload must be auto-indexed opaque terrain");
 
         StagedDrawParameters staged = stageVertexData(
-                renderType, buffer.getVertexBuffer(), buffer.indexCount);
+                section, renderType, buffer.getVertexBuffer(), buffer.indexCount, generation);
         buffer.release();
         return staged;
     }
 
-    StagedDrawParameters stageVertexData(TerrainRenderType renderType,
-                                         ByteBuffer vertexData, int indexCount) {
-        if(renderType == null || vertexData == null || indexCount <= 0)
+    StagedDrawParameters stageVertexData(RenderSection section, TerrainRenderType renderType,
+                                         ByteBuffer vertexData, int indexCount, long generation) {
+        if(section == null || renderType == null || vertexData == null
+                || indexCount <= 0 || generation < 0L)
             throw new IllegalArgumentException("Invalid staged terrain vertex upload");
+        if(section.getChunkArea() == null || section.getChunkArea().drawBuffers != this
+                || section.getVoxelGeneration() != generation)
+            throw new IllegalArgumentException("Staged terrain upload section/generation is stale");
         if(renderType == TerrainRenderType.TRANSLUCENT
                 || renderType == TerrainRenderType.TRIPWIRE)
             throw new IllegalArgumentException("Staged APPEND CPU upload must remain opaque");
@@ -104,13 +109,15 @@ public class DrawBuffers {
         this.vertexBuffer.upload(vertexData, segment);
         int vertexOffset = segment.getOffset() / VERTEX_SIZE;
         Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(indexCount * 2 / 3);
-        return new StagedDrawParameters(this, renderType, indexCount, 0,
-                vertexOffset, segment, this.vertexBuffer);
+        return new StagedDrawParameters(this, section, generation, renderType,
+                indexCount, 0, vertexOffset, segment, this.vertexBuffer);
     }
 
     boolean commitStaged(DrawParameters target, StagedDrawParameters staged) {
         if(target == null || staged == null || staged.owner != this
-                || staged.consumed || staged.renderType != target.renderType)
+                || staged.consumed || staged.renderType != target.renderType
+                || staged.section.getDrawParameters(staged.renderType) != target
+                || staged.section.getVoxelGeneration() != staged.generation)
             return false;
         if(staged.vertexBufferOwner != this.vertexBuffer
                 || staged.vertexBufferSegment.getOffset() < 0
@@ -416,6 +423,8 @@ public class DrawBuffers {
 
     static final class StagedDrawParameters {
         private final DrawBuffers owner;
+        final RenderSection section;
+        final long generation;
         final TerrainRenderType renderType;
         final int indexCount;
         final int firstIndex;
@@ -424,11 +433,14 @@ public class DrawBuffers {
         final AreaBuffer vertexBufferOwner;
         private boolean consumed;
 
-        StagedDrawParameters(DrawBuffers owner, TerrainRenderType renderType,
-                             int indexCount, int firstIndex, int vertexOffset,
+        StagedDrawParameters(DrawBuffers owner, RenderSection section, long generation,
+                             TerrainRenderType renderType, int indexCount,
+                             int firstIndex, int vertexOffset,
                              AreaBuffer.Segment vertexBufferSegment,
                              AreaBuffer vertexBufferOwner) {
             this.owner = owner;
+            this.section = section;
+            this.generation = generation;
             this.renderType = renderType;
             this.indexCount = indexCount;
             this.firstIndex = firstIndex;
@@ -443,6 +455,10 @@ public class DrawBuffers {
 
         int vertexOffset() {
             return vertexOffset;
+        }
+
+        long generation() {
+            return generation;
         }
     }
 
