@@ -35,6 +35,7 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             * TerrainRenderType.VALUES.length];
     private final long[] sectionGenerations = new long[RegionBatchLayout.MAX_SECTIONS];
     private final Map<Long, Pending> submittedReservations = new HashMap<>();
+    private final Map<Long, StagedPending> stagedReservations = new HashMap<>();
     private final long ownerId;
     private long nextToken = 1L;
     private boolean closed;
@@ -117,6 +118,48 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     }
 
     /**
+     * Reserve a future-generation output without advancing section visibility.
+     * Mixed APPEND rebuilds use this to keep the previous complete generation
+     * drawable while GPU work for the replacement generation is still in flight.
+     */
+    public synchronized StagedReservation reserveStaged(int packedSection, TerrainRenderType type,
+                                                        long generation, int faceCapacity) {
+        checkSection(packedSection);
+        if(type == null)
+            throw new IllegalArgumentException("GPU terrain output layer must be present");
+        if(!supported(type))
+            return null;
+        if(generation < 0L)
+            throw new IllegalArgumentException("GPU terrain output generation must be non-negative");
+        if(faceCapacity <= 0 || faceCapacity > MAX_FACES)
+            throw new IllegalArgumentException("GPU terrain face capacity is outside the bounded section limit");
+        if(closed || generation <= this.sectionGenerations[packedSection])
+            return null;
+
+        for(StagedPending staged : stagedReservations.values()) {
+            if(staged.packedSection == packedSection && staged.type == type
+                    && !staged.cancelled)
+                return null;
+        }
+
+        if(!drawBuffers.isAllocated())
+            drawBuffers.allocateBuffers();
+
+        int byteCapacity = Math.multiplyExact(faceCapacity, BYTES_PER_FACE);
+        AreaBuffer.Segment segment = new AreaBuffer.Segment();
+        if(!drawBuffers.vertexBuffer.tryReserve(byteCapacity, segment))
+            return null;
+
+        long token = nextToken++;
+        if(token == 0L)
+            token = nextToken++;
+        stagedReservations.put(token, new StagedPending(token, packedSection, type,
+                generation, faceCapacity, segment));
+        return new StagedReservation(this, ownerId, token, packedSection, type,
+                generation, faceCapacity);
+    }
+
+    /**
      * Resolve a snapshot of the current backing-buffer handle. Callers that submit
      * GPU work must use {@link Reservation#submitWithTarget(Function)} so the target
      * remains stable through submission and the reservation is pinned before either
@@ -183,6 +226,88 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             throw new IllegalStateException("GPU terrain output reservation lost vertex alignment");
         return new Target(drawBuffers.vertexBuffer.getId(), offset,
                 pending.segment.getSize(), offset / VERTEX_BYTES);
+    }
+
+    private synchronized boolean submitStagedWithTarget(
+            StagedReservation reservation, Function<Target, Boolean> operation) {
+        if(operation == null)
+            throw new IllegalArgumentException("GPU terrain staged submission operation must be present");
+        StagedPending pending = stagedPending(reservation);
+        if(pending == null || pending.submitted || pending.ready
+                || !drawBuffers.isAllocated() || drawBuffers.vertexBuffer == null)
+            return false;
+
+        synchronized(drawBuffers.vertexBuffer) {
+            pending = stagedPending(reservation);
+            if(pending == null || pending.submitted || pending.ready)
+                return false;
+            Target target = targetFor(pending.segment);
+            boolean submitted = Boolean.TRUE.equals(operation.apply(target));
+            if(submitted)
+                pending.submitted = true;
+            return submitted;
+        }
+    }
+
+    private Target targetFor(AreaBuffer.Segment segment) {
+        int offset = segment.getOffset();
+        if(offset < 0 || offset % VERTEX_BYTES != 0)
+            throw new IllegalStateException("GPU terrain output reservation lost vertex alignment");
+        return new Target(drawBuffers.vertexBuffer.getId(), offset,
+                segment.getSize(), offset / VERTEX_BYTES);
+    }
+
+    private synchronized boolean completeStaged(StagedReservation reservation,
+                                                int writtenFaces, boolean overflow) {
+        StagedPending pending = stagedPending(reservation);
+        if(pending == null)
+            return false;
+
+        pending.submitted = false;
+        if(pending.cancelled || closed || overflow || writtenFaces <= 0
+                || writtenFaces > pending.faceCapacity) {
+            stagedReservations.remove(pending.token);
+            discard(pending.segment);
+            return false;
+        }
+
+        pending.writtenFaces = writtenFaces;
+        pending.ready = true;
+        pending.segment.setReady();
+        return true;
+    }
+
+    private synchronized boolean commitStaged(StagedReservation reservation) {
+        StagedPending pending = stagedPending(reservation);
+        if(pending == null || !pending.ready || pending.cancelled || closed)
+            return false;
+        if(pending.generation <= this.sectionGenerations[pending.packedSection])
+            return false;
+
+        stagedReservations.remove(pending.token);
+        advanceSectionGeneration(pending.packedSection, pending.generation);
+        Entry entry = entry(pending.packedSection, pending.type, true);
+        entry.resident = new Resident(pending.generation, pending.writtenFaces,
+                Math.multiplyExact(pending.writtenFaces, BYTES_PER_FACE), pending.segment);
+        drawBuffers.markMeshChanged(pending.type);
+        return true;
+    }
+
+    private synchronized void discardStaged(StagedReservation reservation) {
+        StagedPending pending = stagedPending(reservation);
+        if(pending == null)
+            return;
+        if(pending.submitted && !pending.ready) {
+            pending.cancelled = true;
+            return;
+        }
+        stagedReservations.remove(pending.token);
+        discard(pending.segment);
+    }
+
+    private synchronized boolean stagedReady(StagedReservation reservation) {
+        StagedPending pending = stagedPending(reservation);
+        return pending != null && pending.ready && !pending.cancelled;
     }
 
     /**
@@ -282,6 +407,15 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
             }
             discardResident(entry);
         }
+        for(StagedPending staged : stagedReservations.values()) {
+            if(staged.submitted && !staged.ready) {
+                staged.cancelled = true;
+            } else {
+                discard(staged.segment);
+            }
+        }
+        stagedReservations.entrySet().removeIf(entry ->
+                !entry.getValue().submitted || entry.getValue().ready);
         Arrays.fill(entries, null);
         Arrays.fill(sectionGenerations, -1L);
     }
@@ -330,6 +464,20 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
         return pending != null && pending.generation == reservation.generation
                 && pending.token == reservation.token
                 && pending.faceCapacity == reservation.faceCapacity;
+    }
+
+    private StagedPending stagedPending(StagedReservation reservation) {
+        if(reservation == null || reservation.owner != this
+                || reservation.ownerId != ownerId)
+            return null;
+        StagedPending pending = stagedReservations.get(reservation.token);
+        if(pending == null
+                || pending.packedSection != reservation.packedSection
+                || pending.type != reservation.type
+                || pending.generation != reservation.generation
+                || pending.faceCapacity != reservation.faceCapacity)
+            return null;
+        return pending;
     }
 
     private void advanceSectionGeneration(int packedSection, long generation) {
@@ -431,6 +579,29 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
     private record Resident(long generation, int faceCount, int byteLength,
                             AreaBuffer.Segment segment) {}
 
+    private static final class StagedPending {
+        final long token;
+        final int packedSection;
+        final TerrainRenderType type;
+        final long generation;
+        final int faceCapacity;
+        final AreaBuffer.Segment segment;
+        boolean submitted;
+        boolean ready;
+        boolean cancelled;
+        int writtenFaces;
+
+        StagedPending(long token, int packedSection, TerrainRenderType type,
+                      long generation, int faceCapacity, AreaBuffer.Segment segment) {
+            this.token = token;
+            this.packedSection = packedSection;
+            this.type = type;
+            this.generation = generation;
+            this.faceCapacity = faceCapacity;
+            this.segment = segment;
+        }
+    }
+
     public static final class Reservation {
         private final GpuTerrainOutputStore owner;
         private final long ownerId;
@@ -469,6 +640,52 @@ public final class GpuTerrainOutputStore implements AutoCloseable {
 
         boolean complete(int writtenFaces, boolean overflow) {
             return owner.publish(this, writtenFaces, overflow);
+        }
+    }
+
+    public static final class StagedReservation {
+        private final GpuTerrainOutputStore owner;
+        private final long ownerId;
+        private final long token;
+        private final int packedSection;
+        private final TerrainRenderType type;
+        private final long generation;
+        private final int faceCapacity;
+
+        private StagedReservation(GpuTerrainOutputStore owner, long ownerId, long token,
+                                  int packedSection, TerrainRenderType type,
+                                  long generation, int faceCapacity) {
+            this.owner = owner;
+            this.ownerId = ownerId;
+            this.token = token;
+            this.packedSection = packedSection;
+            this.type = type;
+            this.generation = generation;
+            this.faceCapacity = faceCapacity;
+        }
+
+        public long generation() { return generation; }
+        public TerrainRenderType type() { return type; }
+        public int faceCapacity() { return faceCapacity; }
+
+        public boolean submitWithTarget(Function<Target, Boolean> operation) {
+            return owner.submitStagedWithTarget(this, operation);
+        }
+
+        boolean complete(int writtenFaces, boolean overflow) {
+            return owner.completeStaged(this, writtenFaces, overflow);
+        }
+
+        boolean commit() {
+            return owner.commitStaged(this);
+        }
+
+        void discard() {
+            owner.discardStaged(this);
+        }
+
+        boolean ready() {
+            return owner.stagedReady(this);
         }
     }
 
