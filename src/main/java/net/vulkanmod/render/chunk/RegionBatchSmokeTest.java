@@ -2,6 +2,7 @@ package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.build.CompiledSection;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
@@ -401,6 +402,9 @@ public final class RegionBatchSmokeTest {
             require(batch.update(buffers, area, type, true)
                             && batch.drawCount == 2 && batch.gpuDrawCount == 1,
                     "Atomic APPEND baseline pair must be drawable");
+            section.setCompiledSection(new CompiledSection());
+            require(section.hasReadyGpuTerrainAppendFallback(),
+                    "Published APPEND pair must qualify as a complete rebuild fallback");
 
             int oldCpuOffset = parameters.vertexOffset;
             int oldGpuOffset = area.getGpuTerrainOutputResidency(
@@ -409,8 +413,9 @@ public final class RegionBatchSmokeTest {
             section.invalidateVoxels(true);
             long generation = section.getVoxelGeneration();
             require(generation == oldGeneration + 1L
-                            && section.gpuTerrainCpuRecoveryRequired(),
-                    "Dirty APPEND baseline must advance input generation while retaining recovery safety");
+                            && section.gpuTerrainCpuRecoveryRequired()
+                            && section.hasReadyGpuTerrainAppendFallback(),
+                    "Dirty APPEND baseline must advance inputs while retaining a complete pair fallback");
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
                             701L, 4, GpuTerrainDrawHandoff.Ownership.APPEND),
                     generation, true);
