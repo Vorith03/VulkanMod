@@ -234,6 +234,54 @@ final class GpuTerrainSectionMesherBridge {
             return;
         }
 
+        DrawBuffers.StagedDrawParameters stagedCpu =
+                ownership == GpuTerrainDrawHandoff.Ownership.APPEND && cpuBypassed
+                        ? section.gpuTerrainAppendCpuStage(generation) : null;
+        boolean atomicAppendRebuild = ownership == GpuTerrainDrawHandoff.Ownership.APPEND
+                && cpuBypassed && section.gpuTerrainCpuMeshComplete();
+        if(atomicAppendRebuild) {
+            if(stagedCpu == null) {
+                GpuTerrainDiagnostics.record("dispatch", "append_cpu_stage_missing",
+                        section, generation, "faces=" + faceCapacity);
+                recoverCpuFallback(area, section, generation);
+                return;
+            }
+
+            GpuTerrainOutputStore.StagedReservation stagedGpu =
+                    area.reserveStagedGpuTerrainOutput(
+                            x, y, z, layer, generation, faceCapacity);
+            if(stagedGpu == null) {
+                GpuTerrainDiagnostics.record("dispatch", "staged_output_reservation_failed",
+                        section, generation, "faces=" + faceCapacity);
+                recoverCpuFallback(area, section, generation);
+                return;
+            }
+
+            try {
+                boolean submitted = stagedGpu.submitWithTarget(target -> mesher.dispatchAsync(
+                        voxelPage, voxel, lightingPage, lighting, model,
+                        modelTable.templateCount(), target, faceCapacity,
+                        (result, failure) -> completeStagedAppendDispatch(
+                                area, section, generation, modelGeneration, faceCapacity,
+                                layer, stagedCpu, stagedGpu, result, failure)));
+                if(!submitted) {
+                    stagedGpu.discard();
+                    GpuTerrainDiagnostics.record("dispatch", "staged_submission_rejected",
+                            section, generation, "faces=" + faceCapacity);
+                    recoverCpuFallback(area, section, generation);
+                }
+            } catch(RuntimeException error) {
+                stagedGpu.discard();
+                GpuTerrainDiagnostics.record("dispatch", "staged_submission_exception",
+                        section, generation, error.getClass().getName() + ": " + error.getMessage());
+                recoverCpuFallback(area, section, generation);
+                reportDispatchFailure(
+                        "GPU terrain staged APPEND submission failed; preserving previous terrain",
+                        error);
+            }
+            return;
+        }
+
         GpuTerrainOutputStore.Reservation reservation = area.reserveGpuTerrainOutput(
                 x, y, z, layer, generation, faceCapacity);
         if(reservation == null) {
@@ -350,6 +398,96 @@ final class GpuTerrainSectionMesherBridge {
         }
     }
 
+    private static synchronized void completeStagedAppendDispatch(
+            ChunkArea area, RenderSection section, long generation,
+            long modelGeneration, int faceCapacity, TerrainRenderType layer,
+            DrawBuffers.StagedDrawParameters stagedCpu,
+            GpuTerrainOutputStore.StagedReservation stagedGpu,
+            GpuTerrainSectionMesher.DispatchResult result, RuntimeException failure) {
+        RenderSystem.assertOnRenderThread();
+
+        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
+            stagedGpu.discard();
+            section.discardGpuTerrainAppendCpuStage(generation);
+            GpuTerrainDiagnostics.record("completion", "staged_section_stale",
+                    section, generation, null);
+            return;
+        }
+
+        if(failure != null) {
+            stagedGpu.discard();
+            GpuTerrainDiagnostics.record("completion", "staged_readback_failed",
+                    section, generation, failure.getClass().getName() + ": " + failure.getMessage());
+            recoverCpuFallback(area, section, generation);
+            reportDispatchFailure(
+                    "GPU terrain staged APPEND completion failed; preserving previous terrain",
+                    failure);
+            return;
+        }
+
+        if(GpuTerrainModelRegistry.generation() != modelGeneration
+                || !section.matchesStagedGpuTerrainPreflight(
+                        generation, modelGeneration, faceCapacity,
+                        GpuTerrainDrawHandoff.Ownership.APPEND)
+                || !section.matchesGpuTerrainAppendCpuStage(generation, stagedCpu)) {
+            stagedGpu.discard();
+            GpuTerrainDiagnostics.record("completion", "staged_generation_or_preflight_changed",
+                    section, generation,
+                    "modelGeneration=" + modelGeneration
+                            + " registryGeneration=" + GpuTerrainModelRegistry.generation()
+                            + " faces=" + faceCapacity);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        boolean exact = result != null
+                && !result.overflow()
+                && result.errorFlags() == 0
+                && result.requestedFaces() == faceCapacity
+                && result.writtenFaces() == faceCapacity;
+        if(!exact) {
+            stagedGpu.discard();
+            String detail = result == null ? "result=null"
+                    : "overflow=" + result.overflow()
+                            + " errorFlags=0x" + Integer.toHexString(result.errorFlags())
+                            + " requested=" + result.requestedFaces()
+                            + " written=" + result.writtenFaces()
+                            + " expected=" + faceCapacity;
+            GpuTerrainDiagnostics.record("completion", "staged_output_mismatch",
+                    section, generation, detail);
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        if(!stagedGpu.complete(result.writtenFaces(), false)) {
+            GpuTerrainDiagnostics.record("completion", "staged_completion_rejected",
+                    section, generation, "faces=" + result.writtenFaces());
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        GpuTerrainAppendRebuildTransaction transaction =
+                new GpuTerrainAppendRebuildTransaction(
+                        section, generation, area.drawBuffers, stagedCpu, stagedGpu);
+        if(!transaction.ready() || !transaction.commit()) {
+            transaction.discard();
+            GpuTerrainDiagnostics.record("completion", "staged_transaction_rejected",
+                    section, generation, "faces=" + result.writtenFaces());
+            recoverCpuFallback(area, section, generation);
+            return;
+        }
+
+        GpuTerrainDiagnostics.recordSuccess(
+                "published_atomic_append_rebuild", section, generation,
+                result.writtenFaces(), true);
+        if(ACTIVE_LOGGED.compareAndSet(false, true)) {
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_TERRAIN_MESHER_ACTIVE: section=({}, {}, {}) layer={} faces={} ownership=APPEND cpuBypassed=true; staged CPU/GPU rebuild published atomically",
+                    section.xOffset(), section.yOffset(), section.zOffset(), layer.ordinal(),
+                    result.writtenFaces());
+        }
+    }
+
     private static void reportDispatchFailure(String message, RuntimeException error) {
         if(FAILURE_LOGGED.compareAndSet(false, true))
             Initializer.LOGGER.warn(message, error);
@@ -367,6 +505,7 @@ final class GpuTerrainSectionMesherBridge {
         RenderSystem.assertOnRenderThread();
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation)
             return;
+        section.discardGpuTerrainAppendCpuStage(generation);
         if(section.requestGpuTerrainCpuRecovery(generation)) {
             GpuTerrainDiagnostics.record("recovery", "cpu_rebuild_requested",
                     section, generation, null);
