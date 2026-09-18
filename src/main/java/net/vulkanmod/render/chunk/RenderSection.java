@@ -53,6 +53,8 @@ public class RenderSection {
     private GpuTerrainDrawHandoff.Ownership gpuTerrainVisibleOwnership =
             GpuTerrainDrawHandoff.Ownership.REPLACE;
     private boolean forceCpuTerrainUntilSuccess;
+    private long gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
+    private DrawBuffers.StagedDrawParameters gpuTerrainAppendCpuStage;
     private boolean playerChanged;
 
     private boolean completelyEmpty = true;
@@ -414,13 +416,59 @@ public class RenderSection {
      * The CPU and GPU staged allocations must already have committed successfully
      * on the render thread before this no-fail state transition is invoked.
      */
-    synchronized void commitGpuTerrainAppendRebuildHandoff(long generation, int faceCount) {
-        if(!this.canCommitGpuTerrainAppendRebuild(generation, faceCount))
+    synchronized boolean stageGpuTerrainAppendCpu(
+            long generation, DrawBuffers.StagedDrawParameters staged) {
+        if(staged == null || generation != this.voxelGeneration
+                || staged.section != this || staged.generation() != generation)
+            return false;
+        if(this.gpuTerrainAppendCpuStage != null)
+            return false;
+        this.gpuTerrainAppendCpuStageGeneration = generation;
+        this.gpuTerrainAppendCpuStage = staged;
+        return true;
+    }
+
+    synchronized DrawBuffers.StagedDrawParameters gpuTerrainAppendCpuStage(long generation) {
+        return generation == this.voxelGeneration
+                && this.gpuTerrainAppendCpuStageGeneration == generation
+                ? this.gpuTerrainAppendCpuStage : null;
+    }
+
+    synchronized boolean matchesGpuTerrainAppendCpuStage(
+            long generation, DrawBuffers.StagedDrawParameters staged) {
+        return staged != null
+                && generation == this.voxelGeneration
+                && this.gpuTerrainAppendCpuStageGeneration == generation
+                && this.gpuTerrainAppendCpuStage == staged;
+    }
+
+    void discardGpuTerrainAppendCpuStage(long generation) {
+        DrawBuffers.StagedDrawParameters staged;
+        ChunkArea area;
+        synchronized(this) {
+            if(this.gpuTerrainAppendCpuStageGeneration != generation
+                    || this.gpuTerrainAppendCpuStage == null)
+                return;
+            staged = this.gpuTerrainAppendCpuStage;
+            this.gpuTerrainAppendCpuStage = null;
+            this.gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
+            area = this.chunkArea;
+        }
+        if(area != null)
+            area.drawBuffers.discardStaged(staged);
+    }
+
+    synchronized void commitGpuTerrainAppendRebuildHandoff(
+            long generation, int faceCount, DrawBuffers.StagedDrawParameters stagedCpu) {
+        if(!this.canCommitGpuTerrainAppendRebuild(generation, faceCount)
+                || !this.matchesGpuTerrainAppendCpuStage(generation, stagedCpu))
             throw new IllegalStateException("GPU APPEND rebuild handoff became stale during commit");
         this.gpuTerrainVisibleGeneration = generation;
         this.gpuTerrainVisibleOwnership = GpuTerrainDrawHandoff.Ownership.APPEND;
         this.forceCpuTerrainUntilSuccess = false;
         this.gpuTerrainCpuMeshComplete = false;
+        this.gpuTerrainAppendCpuStage = null;
+        this.gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
     }
 
     synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
@@ -475,6 +523,14 @@ public class RenderSection {
      * partial CPU geometry is never exposed by itself.
      */
     synchronized void invalidateVoxels(boolean preserveIncompleteGpuHandoff) {
+        if(this.gpuTerrainAppendCpuStage != null) {
+            DrawBuffers.StagedDrawParameters staged = this.gpuTerrainAppendCpuStage;
+            this.gpuTerrainAppendCpuStage = null;
+            this.gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
+            if(this.chunkArea != null)
+                this.chunkArea.drawBuffers.discardStaged(staged);
+        }
+
         boolean cpuIncomplete = !this.gpuTerrainCpuMeshComplete;
         boolean retainVisibleGpu = preserveIncompleteGpuHandoff
                 && cpuIncomplete
