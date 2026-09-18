@@ -2,34 +2,35 @@ package net.vulkanmod.mixin.compatibility;
 
 import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.Program;
-import net.vulkanmod.gl.Util;
-import net.vulkanmod.vulkan.shader.SPIRVUtils;
-import org.apache.commons.io.IOUtils;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 
 @Mixin(Program.class)
 public class ProgramM {
 
     /**
-     * @author
-     * @reason Compile the same preprocessed GLSL source vanilla would submit to
-     * OpenGL. In particular, #moj_import expansion must not be discarded before
-     * handing the program to shaderc.
+     * Keep vanilla's compileShaderInternal bytecode structurally available to
+     * third-party shader mixins while preventing an unsupported OpenGL compile
+     * from running under VulkanMod.
+     *
+     * VulkanMod's ShaderInstance and EffectInstance mixins own the real Vulkan
+     * shader compilation paths. Returning the same synthetic program id used by
+     * the former overwrite therefore preserves VulkanMod's runtime contract,
+     * but unlike an overwrite leaves source-read call sites available for mods
+     * such as Immersive Portals to transform safely during mixin application.
      */
-    @Overwrite
-    public static int compileShaderInternal(Program.Type type, String string, InputStream inputStream, String string2, GlslPreprocessor glslPreprocessor) throws IOException {
-        String source = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
-        if (source == null) {
-            throw new IOException("Could not load program " + type.getName());
-        }
-
-        String processedSource = String.join("", glslPreprocessor.process(source));
-        SPIRVUtils.compileShader(string2 + ":" + string, processedSource, Util.extToShaderKind(type.getExtension()));
-        return 0;
+    @Inject(method = "compileShaderInternal", at = @At("HEAD"), cancellable = true)
+    private static void vulkanmod$skipOpenGlShaderCompile(
+            Program.Type type,
+            String name,
+            InputStream shaderData,
+            String sourceName,
+            GlslPreprocessor preprocessor,
+            CallbackInfoReturnable<Integer> cir) {
+        cir.setReturnValue(0);
     }
 }
