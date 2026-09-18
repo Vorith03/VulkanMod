@@ -52,6 +52,7 @@ export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvu
 timeout 240s xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-immersive-portals.log
 
 grep -F "Immersive Portals 3.0.7 compatibility mixin smoke passed" vulkan-smoke-immersive-portals.log
+grep -F "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline" vulkan-smoke-immersive-portals.log
 grep -F "Vulkan smoke test passed" vulkan-smoke-immersive-portals.log
 if grep -E 'Validation Error|SYNC-HAZARD' vulkan-smoke-immersive-portals.log; then
   echo "Immersive Portals compatibility smoke produced invalid Vulkan" >&2
