@@ -42,6 +42,56 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && resident.byteLength() == 32 * GpuTerrainOutputStore.BYTES_PER_FACE,
                     "Published GPU terrain output residency mismatch");
 
+            // Future-generation APPEND work must be able to reserve and complete
+            // without changing what the renderer can discover until an explicit
+            // atomic commit point.
+            var stagedOld = requireReservation(store.reserve(
+                            6, TerrainRenderType.SOLID, 50L, 4),
+                    "Staged-output baseline reservation must fit");
+            require(store.publish(stagedOld, 4, false),
+                    "Staged-output baseline must publish");
+            var stagedVisible = store.getResidency(6, TerrainRenderType.SOLID);
+            int stagedOldOffset = stagedVisible.vertexOffset();
+            long stagedRevision = drawBuffers.getMeshRevision(TerrainRenderType.SOLID);
+
+            var staged = requireStagedReservation(store.reserveStaged(
+                            6, TerrainRenderType.SOLID, 51L, 6),
+                    "Future-generation staged GPU output must reserve");
+            require(store.getSectionGeneration(6) == 50L
+                            && store.getResidency(6, TerrainRenderType.SOLID).valid()
+                            && store.getResidency(6, TerrainRenderType.SOLID).generation() == 50L
+                            && store.getResidency(6, TerrainRenderType.SOLID).vertexOffset()
+                            == stagedOldOffset,
+                    "Future-generation staged output must preserve the current resident");
+            require(drawBuffers.getMeshRevision(TerrainRenderType.SOLID) == stagedRevision,
+                    "Staging future GPU output must not invalidate the visible draw cache");
+            require(staged.submitWithTarget(target -> target != null),
+                    "Future-generation staged GPU output must enter submitted ownership");
+            require(staged.complete(6, false) && staged.ready(),
+                    "Completed staged GPU output must become commit-ready");
+            require(store.getSectionGeneration(6) == 50L
+                            && store.getResidency(6, TerrainRenderType.SOLID).generation() == 50L,
+                    "Completed staged output must remain invisible before commit");
+            require(staged.commit(),
+                    "Ready future-generation GPU output must commit");
+            stagedVisible = store.getResidency(6, TerrainRenderType.SOLID);
+            require(stagedVisible.valid() && stagedVisible.generation() == 51L
+                            && stagedVisible.faceCount() == 6,
+                    "Committed staged GPU output must atomically advance residency");
+
+            var abandoned = requireStagedReservation(store.reserveStaged(
+                            6, TerrainRenderType.SOLID, 52L, 5),
+                    "Discard-path staged GPU output must reserve");
+            require(abandoned.submitWithTarget(target -> target != null),
+                    "Discard-path staged GPU output must submit");
+            abandoned.discard();
+            require(!abandoned.complete(5, false),
+                    "Cancelled in-flight staged output must retire on completion without publishing");
+            stagedVisible = store.getResidency(6, TerrainRenderType.SOLID);
+            require(stagedVisible.valid() && stagedVisible.generation() == 51L
+                            && stagedVisible.faceCount() == 6,
+                    "Discarded staged output must not disturb the committed generation");
+
             // A same-generation retry must leave the previous result available if
             // the new compute result overflows its reservation.
             var retry = requireReservation(store.reserve(7, TerrainRenderType.SOLID, 10L, 16),
@@ -156,7 +206,7 @@ public final class GpuTerrainOutputStoreSmokeTest {
             verifyChunkAreaLifecycle();
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, published-resident pinning through frame retirement, submitted-output pinning through completion, section-global generation revocation, ChunkArea teardown/reuse safety, same-generation retry fallback, translucent/tripwire CPU fallback");
+                    "VULKANMOD_GPU_TERRAIN_OUTPUT_RESIDENCY_OK: storage-capable area vertices, no-growth reservation, published-resident pinning through frame retirement, submitted-output pinning through completion, section-global generation revocation, non-visible future-generation staging/commit/discard, ChunkArea teardown/reuse safety, same-generation retry fallback, translucent/tripwire CPU fallback");
         } finally {
             Vulkan.waitIdle();
             if(store != null)
