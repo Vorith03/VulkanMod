@@ -82,7 +82,7 @@ final class RegionDrawBatch {
         publishLiveCandidates(buffers, area, type);
         GpuSectionSelectionShadowStore shadowStore = dispatchShadowCandidates(area, type, frames);
         if (batch.drawCount == 0) return;
-        RegionBatchStats.sections += batch.drawCount;
+        RegionBatchStats.sections += batch.sectionCount;
 
         GpuRegionCandidateTable candidateTable = candidateTables[type.ordinal()];
         boolean useGpuIndirect = canUseGpuIndirectDraw(area, shadowStore, candidateTable, batch);
@@ -355,6 +355,7 @@ final class RegionDrawBatch {
         boolean pendingUploads;
         boolean gpuTerrainHandoff;
         int drawCount;
+        int sectionCount;
         int gpuDrawCount;
         int maxGpuVertexCount;
 
@@ -389,6 +390,7 @@ final class RegionDrawBatch {
             }
             pendingUploads = false;
             drawCount = 0;
+            sectionCount = 0;
             gpuDrawCount = 0;
             maxGpuVertexCount = 0;
             try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -436,6 +438,7 @@ final class RegionDrawBatch {
                         continue;
                     }
 
+                    int drawCountBeforeSection = drawCount;
                     int packedSection = packSection(section.xOffset - area.position.x,
                             section.yOffset - area.position.y,
                             section.zOffset - area.position.z);
@@ -454,6 +457,8 @@ final class RegionDrawBatch {
                                 command.vertexOffset(), packedSection);
                         drawCount++;
                     }
+                    if(drawCount > drawCountBeforeSection)
+                        sectionCount++;
                 }
                 if (drawCount != 0) {
                     if (commands == null) commands = new RegionCommands();
