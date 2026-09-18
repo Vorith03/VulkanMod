@@ -18,6 +18,7 @@ public final class RegionBatchSmokeTest {
     public static void verify() {
         verifyGpuIndirectFallbackContract();
         verifyStagedCpuReplacementContract();
+        verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
 
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
@@ -349,6 +350,184 @@ public final class RegionBatchSmokeTest {
                     "VULKANMOD_GPU_TERRAIN_CPU_STAGE_OK: replacement CPU vertices upload out-of-band, remain hidden before commit, swap atomically when ready, and discard without disturbing the visible draw");
         } finally {
             area.releaseBuffers();
+        }
+    }
+
+    private static void verifyGpuAppendRebuildTransactionContract() {
+        ChunkArea area = new ChunkArea(40, new Vector3i(0, 0, 0));
+        DrawBuffers buffers = area.getDrawBuffers();
+        RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
+        boolean voxelStoreEnabled = RegionVoxelStore.ENABLED;
+        RegionVoxelStore.ENABLED = true;
+        try {
+            RenderSection section = new RenderSection(0, 16, 16, 16);
+            section.setChunkArea(area);
+            area.registerSection(section, section.xOffset, section.yOffset, section.zOffset);
+            area.addSection(section);
+
+            TerrainRenderType type = RenderSection.gpuTerrainOutputLayer();
+            DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+            int vertexSize = TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize();
+            AreaBuffer.Segment oldCpuSegment = parameters.vertexBufferSegment;
+            require(buffers.vertexBuffer.tryReserve(vertexSize * 4, oldCpuSegment),
+                    "Atomic APPEND baseline CPU segment must fit");
+            oldCpuSegment.setReady();
+            parameters.indexCount = 6;
+            parameters.firstIndex = 0;
+            parameters.vertexOffset = oldCpuSegment.getOffset() / vertexSize;
+            parameters.ready = true;
+
+            long oldGeneration = section.getVoxelGeneration();
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            700L, 3, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    oldGeneration, true);
+            section.setGpuTerrainCpuMeshComplete(oldGeneration, false);
+            GpuTerrainOutputStore.Reservation oldGpu = area.reserveGpuTerrainOutput(
+                    section.xOffset, section.yOffset, section.zOffset,
+                    type, oldGeneration, 3);
+            require(oldGpu != null && area.publishGpuTerrainOutput(oldGpu, 3, false),
+                    "Atomic APPEND baseline GPU half must publish");
+            require(section.publishGpuTerrainDrawHandoff(
+                            oldGeneration, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    "Atomic APPEND baseline handoff must publish");
+            buffers.markMeshChanged(type);
+            require(batch.update(buffers, area, type, true)
+                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
+                    "Atomic APPEND baseline pair must be drawable");
+
+            int oldCpuOffset = parameters.vertexOffset;
+            int oldGpuOffset = area.getGpuTerrainOutputResidency(
+                    section.xOffset, section.yOffset, section.zOffset, type).vertexOffset();
+
+            section.invalidateVoxels(true);
+            long generation = section.getVoxelGeneration();
+            require(generation == oldGeneration + 1L
+                            && section.gpuTerrainCpuRecoveryRequired(),
+                    "Dirty APPEND baseline must advance input generation while retaining recovery safety");
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            701L, 4, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    generation, true);
+
+            DrawBuffers.StagedDrawParameters stagedCpu;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                stagedCpu = buffers.stageVertexData(section, type,
+                        stack.calloc(vertexSize * 8), 12, generation);
+            }
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(stagedCpu.ready(),
+                    "Atomic APPEND replacement CPU half must become staged-ready");
+
+            GpuTerrainOutputStore.StagedReservation stagedGpu =
+                    area.reserveStagedGpuTerrainOutput(
+                            section.xOffset, section.yOffset, section.zOffset,
+                            type, generation, 4);
+            require(stagedGpu != null
+                            && stagedGpu.submitWithTarget(target -> target != null)
+                            && stagedGpu.complete(4, false)
+                            && stagedGpu.ready(),
+                    "Atomic APPEND replacement GPU half must become staged-ready");
+
+            require(!batch.update(buffers, area, type, true)
+                            && parameters.vertexOffset == oldCpuOffset
+                            && parameters.indexCount == 6,
+                    "Ready staged halves must leave the previous complete pair visible");
+            GpuTerrainOutputStore.Residency beforeCommit =
+                    area.getGpuTerrainOutputResidency(
+                            section.xOffset, section.yOffset, section.zOffset, type);
+            require(beforeCommit.valid()
+                            && beforeCommit.generation() == oldGeneration
+                            && beforeCommit.vertexOffset() == oldGpuOffset,
+                    "Staged future GPU output must not revoke the previous resident");
+
+            GpuTerrainAppendRebuildTransaction transaction =
+                    new GpuTerrainAppendRebuildTransaction(
+                            section, generation, buffers, stagedCpu, stagedGpu);
+            require(transaction.ready() && transaction.commit(),
+                    "Ready APPEND CPU/GPU halves must commit as one render-thread transaction");
+            RenderSection.GpuTerrainDrawState committedState = section.gpuTerrainDrawState();
+            GpuTerrainOutputStore.Residency committedGpu =
+                    area.getGpuTerrainOutputResidency(
+                            section.xOffset, section.yOffset, section.zOffset, type);
+            require(committedState.generation() == generation
+                            && committedState.ownership() == GpuTerrainDrawHandoff.Ownership.APPEND
+                            && committedGpu.valid()
+                            && committedGpu.generation() == generation
+                            && committedGpu.faceCount() == 4
+                            && parameters.vertexOffset == stagedCpu.vertexOffset()
+                            && parameters.indexCount == 12
+                            && !section.gpuTerrainCpuRecoveryRequired()
+                            && !section.gpuTerrainCpuMeshComplete(),
+                    "Atomic APPEND commit must expose one matching new generation and clear forced recovery");
+
+            require(batch.update(buffers, area, type, true)
+                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
+                    "Atomic APPEND commit must invalidate and rebuild the frame batch once");
+            var commands = batch.commands.getByteBuffer();
+            require(commands.getInt(0) == 12
+                            && commands.getInt(12) == stagedCpu.vertexOffset()
+                            && commands.getInt(20) == 24
+                            && commands.getInt(32) == committedGpu.vertexOffset(),
+                    "Atomic APPEND commit must draw the new CPU exceptions and new GPU half together");
+
+            // Stale transaction path: prepare both future halves, then advance the
+            // section again before commit. Aborting must not disturb the generation
+            // that was already complete and visible.
+            section.invalidateVoxels(true);
+            long staleGeneration = section.getVoxelGeneration();
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            702L, 5, GpuTerrainDrawHandoff.Ownership.APPEND),
+                    staleGeneration, true);
+
+            DrawBuffers.StagedDrawParameters staleCpu;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                staleCpu = buffers.stageVertexData(section, type,
+                        stack.calloc(vertexSize * 8), 18, staleGeneration);
+            }
+            AreaUploadManager.INSTANCE.submitUploads();
+            GpuTerrainOutputStore.StagedReservation staleGpu =
+                    area.reserveStagedGpuTerrainOutput(
+                            section.xOffset, section.yOffset, section.zOffset,
+                            type, staleGeneration, 5);
+            require(staleGpu != null
+                            && staleGpu.submitWithTarget(target -> target != null)
+                            && staleGpu.complete(5, false),
+                    "Stale-path APPEND replacement halves must stage");
+
+            GpuTerrainAppendRebuildTransaction staleTransaction =
+                    new GpuTerrainAppendRebuildTransaction(
+                            section, staleGeneration, buffers, staleCpu, staleGpu);
+            section.invalidateVoxels(true);
+            require(!staleTransaction.ready() && !staleTransaction.commit(),
+                    "Generation turnover must reject an otherwise-ready APPEND transaction");
+            staleTransaction.discard();
+
+            RenderSection.GpuTerrainDrawState retainedState = section.gpuTerrainDrawState();
+            GpuTerrainOutputStore.Residency retainedGpu =
+                    area.getGpuTerrainOutputResidency(
+                            section.xOffset, section.yOffset, section.zOffset, type);
+            require(retainedState.generation() == generation
+                            && retainedState.ownership() == GpuTerrainDrawHandoff.Ownership.APPEND
+                            && retainedGpu.valid()
+                            && retainedGpu.generation() == generation
+                            && parameters.indexCount == 12
+                            && parameters.vertexOffset == stagedCpu.vertexOffset()
+                            && !batch.update(buffers, area, type, true)
+                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
+                    "Discarding a stale APPEND transaction must leave the previous complete pair intact");
+
+            Device.getGraphicsQueue().waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame)
+                AreaUploadManager.INSTANCE.updateFrame(frame);
+            AreaUploadManager.INSTANCE.updateFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
+
+            Initializer.LOGGER.info(
+                    "VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK: staged CPU/GPU halves remain hidden, commit together as one generation, and stale transaction discard preserves the previous complete pair");
+        } finally {
+            if(batch.commands != null)
+                batch.commands.freeBuffer();
+            area.releaseBuffers();
+            RegionVoxelStore.ENABLED = voxelStoreEnabled;
         }
     }
 
