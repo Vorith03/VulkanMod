@@ -2,6 +2,7 @@ package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Synchronization;
@@ -281,6 +282,11 @@ public final class RegionBatchSmokeTest {
         ChunkArea area = new ChunkArea(39, new Vector3i(0, 0, 0));
         DrawBuffers buffers = area.drawBuffers;
         RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
+        boolean voxelStoreEnabled = RegionVoxelStore.ENABLED;
+        // This startup smoke runs with experimental terrain disabled by default, but
+        // the transition contract being modeled is reachable only while voxel/input
+        // generations are active. Scope the gate to this oracle and restore it below.
+        RegionVoxelStore.ENABLED = true;
         try {
             RenderSection section = new RenderSection(0, 16, 16, 16);
             section.setChunkArea(area);
@@ -373,6 +379,7 @@ public final class RegionBatchSmokeTest {
             if(batch.commands != null)
                 batch.commands.freeBuffer();
             area.releaseBuffers();
+            RegionVoxelStore.ENABLED = voxelStoreEnabled;
         }
     }
 
