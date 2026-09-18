@@ -317,14 +317,18 @@ workers omit only the GPU-owned ordinary-cube subset while preserving unsupporte
 geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
 stage CPU exception geometry and GPU output independently, retain the previous complete
 pair, and switch both halves atomically only when the replacement generation is ready.
-CI #676 validates the combined terrain/compatibility tree, including transition,
-face-policy, readback, overflow/fallback, and hybrid command-count/section-count oracles.
+CI #678 validates the current combined terrain/compatibility tree, including transition,
+face-policy, readback, overflow/fallback, hybrid command-count/section-count oracles,
+and the Immersive Portals framebuffer renderer's real `prepareRendering()` path under
+VulkanMod's no-OpenGL-context window.
 
-The hybrid implementation gate is therefore closed. The next evidence boundary is a
-narrow Create Chronicles/RX 6900 XT functional run with REPLACE + APPEND enabled,
-including a dirty mixed-section rebuild. This is a correctness test, not a performance
-claim. Live GPU visibility/section-selection correctness and broader lifecycle/Forge
-preservation gates remain open until representative runtime evidence supports them.
+The hybrid implementation gate is therefore closed. The first attempted narrow
+Create Chronicles/RX 6900 XT run stopped before terrain evidence because Immersive
+Portals still issued a raw stencil GL call; that regression is now fixed and covered by
+CI #678. The next evidence boundary is a repeat functional run with REPLACE + APPEND
+enabled, including a dirty mixed-section rebuild. This remains a correctness test, not
+a performance claim. Live GPU visibility/section-selection correctness and broader
+lifecycle/Forge preservation gates remain open until representative runtime evidence supports them.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -391,18 +395,22 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65`, CI #676
-  (run `35337095457`) is fully green on the consolidated production tree.
+- Latest executable checkpoint: `76a667ed3d33622ba746613957dd98da1513ed53`, CI #678
+  (run `35375262387`) is fully green on the current production tree. The pre-bridge
+  baseline `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` is also fully green in CI #677
+  (run `35337817185`).
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
   conservative hybrid APPEND, atomic dirty APPEND replacement, authoritative face-policy
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
-  closure needed by the target pack.
-- The next useful gate evidence is representative RX 6900 XT/Create Chronicles functional
-  correctness with REPLACE + APPEND enabled, including at least one dirty mixed-section
-  rebuild. Live GPU visibility correctness, broader lifecycle/Forge-preservation proof,
-  and comparable A/B performance evidence remain open.
+  stack including the Immersive Portals framebuffer raw-stencil bridge.
+- The first attempted RX 6900 XT/Create Chronicles functional run exposed that IP bridge
+  gap and stopped before terrain evidence. CI #678 now directly exercises the repaired
+  framebuffer `prepareRendering()` path. The next useful gate evidence is a repeat
+  full-pack correctness run with REPLACE + APPEND enabled, including at least one dirty
+  mixed-section rebuild. Live GPU visibility correctness, broader lifecycle/Forge-
+  preservation proof, and comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
 
 See `AGENT_STATUS.md` for the current continuation checkpoint. Read task-specific GPU

@@ -11,10 +11,10 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Latest executable checkpoint is `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` (`test: lock hybrid section statistics`), validated by CI #676; subsequent `forge-1.20.1` commits are documentation-only `[skip ci]` reconciliation.
+- Latest executable checkpoint is `76a667ed3d33622ba746613957dd98da1513ed53` (`test: execute IP framebuffer renderer smoke`), fully validated by CI #678 / run `35375262387`. The pre-bridge baseline `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65` is also fully green in CI #677 / run `35337817185`.
 - The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward to the exact green head; no merge-only content was introduced.
-- CI #676 / run `35337095457` at `ac2a9a28` is fully green: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Crash Assistant, Chat Heads, and Flywheel all pass.
-- The Immersive Portals blocker is closed. VulkanMod now preserves the required vanilla mixin call sites, transforms and compiles IP-aware core shaders through the Vulkan path, rebuilds IP helper shaders after IP initialization/resource reload, and supports std140 `mat3` uniforms without under-sizing or over-reading source storage.
+- CI #678 / run `35375262387` at `76a667ed` is fully green: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, the strengthened Immersive Portals 3.0.7 framebuffer-runtime smoke, Crash Assistant, Chat Heads, and Flywheel all pass.
+- A real Create Chronicles/RX 6900 XT run exposed an additional Immersive Portals blocker after `ac2a9a28`: IP correctly switched to its framebuffer compatibility renderer, then `RendererUsingFrameBuffer.prepareRendering()` called raw `GL11.glDisable(GL_STENCIL_TEST)` on VulkanMod's `GLFW_NO_API` window. `a39e6466` adds redirects for both raw framebuffer-renderer stencil disables, `c5b825a8` registers the mixin, and `76a667ed` makes CI select the real framebuffer renderer and execute `prepareRendering()` with no OpenGL context. CI #678 passes that regression path; a repeat RX/full-pack run is still required because the run that found the defect stopped before the terrain gate.
 - Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
 - Mixed APPEND rebuild omission remains experimental/default-off and transactionally stages CPU exception geometry plus GPU output while retaining the previous complete draw until replacement is ready. Stale/failure paths remain fail-closed.
 - `RegionBatchStats.sections` now counts rendered sections rather than indirect commands, so one hybrid APPEND section emitting CPU+GPU commands is counted once; `RegionBatchSmokeTest` locks pending/ready/fallback/visibility cases.
@@ -92,7 +92,7 @@ The validation workstream found two real correctness gaps; both are now fixed an
 1. **Device-to-host readback visibility:** `e629121e` adds a buffer dependency over the full actual readback range after the transfer copies and before submission: source `TRANSFER / TRANSFER_WRITE`, destination `HOST / HOST_READ`. Production header-only and validation full-payload readbacks use the same helper. `b0e0f241` adds smoke-only execution counting plus a locked stage/access contract; CI #620 ran those assertions successfully without introducing a CPU wait.
 2. **Authoritative face semantics:** `56f317e9` makes worker capture compare every candidate direction with `Block.shouldRenderFace(...)` while `RenderChunkRegion` and its halo are available. Any disagreement clears GPU ownership, which makes REPLACE fail closed and APPEND retain that cell plus conservatively protected neighbors on CPU. `b0e0f241` factors the shader/authoritative equivalence predicate into shared production code and exhaustively truth-table tests all four boolean cases.
 
-These findings no longer block the combined Create Chronicles RX functional test. The required Immersive Portals compatibility stack is integrated on the same executable checkpoint and green in CI #676.
+These terrain findings no longer block the combined Create Chronicles RX functional test. The Immersive Portals framebuffer raw-GL regression discovered by the first attempted full-pack run is now fixed and directly exercised in CI #678; the hardware terrain test itself remains pending because that attempted run stopped before GPU-terrain evidence was reached.
 
 ## Validation evidence
 
@@ -104,11 +104,11 @@ Hybrid-focused commits add tests for conservative cell ownership/demotion, filte
 
 ## Compatibility intersection
 
-Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into `forge-1.20.1` at `ac2a9a28` and validated by CI #676.
+Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into `forge-1.20.1` through `76a667ed` and validated by CI #678.
 
-Immersive Portals 3.0.7 now passes its full runtime smoke, including the stronger clipping proof `VULKANMOD_IP_CLIPPING_SHADER_OK` and helper-shader installation. The prior `RuntimeException: not admitted type: mat3` was the underlying remaining failure; `Field` now represents std140 `mat3` as three vec4-aligned columns and packs Minecraft's nine source floats without source over-read or following-field misalignment.
+Immersive Portals 3.0.7 passes shader transformation, helper-shader installation, the clipping proof `VULKANMOD_IP_CLIPPING_SHADER_OK`, renderer-mode selection, and now the actual framebuffer renderer's `prepareRendering()` path under a no-OpenGL-context Vulkan window. The earlier `RuntimeException: not admitted type: mat3` remains fixed by std140 `mat3` packing, and the later full-pack `GL11.glDisable(GL_STENCIL_TEST)` crash is bridged by the framebuffer-renderer mixin. The CI regression is closed; repeat Create Chronicles/RX 6900 XT evidence is still needed to prove the full-pack runtime reaches terrain.
 
-FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are also green on the same combined head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
+FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are also green on the same current executable head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
 
 ## Fail-closed boundary
 
@@ -130,12 +130,12 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 
 ## Next action
 
-1. Perform the first narrow RX 6900 XT/RADV **functional** terrain test from the landed combined artifact with REPLACE + APPEND enabled:
+1. Repeat the narrow RX 6900 XT/RADV **functional** Create Chronicles run using the CI #678 artifact with REPLACE + APPEND enabled:
    `-Dvulkanmod.experimentalGpuTerrainMesher=true`
    `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`
    `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`
    `-Dvulkanmod.experimentalGpuTerrainHybrid=true`
-2. In Create Chronicles, exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior. Preserve the relevant log if anything is wrong.
+2. First verify the prior Immersive Portals `No GLCapabilities` / raw-stencil crash is gone and that the run reaches VulkanMod GPU-terrain markers. Then exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior.
 3. Treat this as a correctness test, not an FPS benchmark. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
 4. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
 
