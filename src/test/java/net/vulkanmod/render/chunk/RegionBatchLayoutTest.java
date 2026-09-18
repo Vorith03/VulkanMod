@@ -4,6 +4,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.vulkanmod.mixin.compatibility.EffectUniformBindingsTest;
 import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.vulkan.shader.parser.GlslConverterParsingTest;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -46,6 +47,7 @@ public final class RegionBatchLayoutTest {
         verifyFrameRetirementBarrier();
         verifyGpuTerrainDrawHandoff();
         EffectUniformBindingsTest.run();
+        GlslConverterParsingTest.run();
         System.out.println("Terrain region layout tests passed");
     }
 

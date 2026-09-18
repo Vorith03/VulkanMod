@@ -3,6 +3,7 @@ package net.vulkanmod.mixin.debug;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
+import net.vulkanmod.interfaces.ShaderMixed;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -77,9 +78,14 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own
             // RETURN injector cannot be trusted to populate these helper shaders.
             for(String fieldName : new String[]{"drawFbInAreaShader", "portalAreaShader", "blitScreenNoBlendShader"}) {
-                if(myRenderHelper.getField(fieldName).get(null) == null) {
+                Object shader = myRenderHelper.getField(fieldName).get(null);
+                if(shader == null) {
                     throw new IllegalStateException(
                             "Immersive Portals helper shader was not installed: " + fieldName);
+                }
+                if(!(shader instanceof ShaderMixed shaderMixed) || shaderMixed.getPipeline() == null) {
+                    throw new IllegalStateException(
+                            "Immersive Portals helper shader has no Vulkan pipeline: " + fieldName);
                 }
             }
 
