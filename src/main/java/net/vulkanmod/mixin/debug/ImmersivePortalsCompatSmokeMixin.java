@@ -2,6 +2,7 @@ package net.vulkanmod.mixin.debug;
 
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,6 +30,14 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
         if(this.vulkanmod$immersivePortalsSmokeRan || !Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
             return;
         }
+
+        // The Forge client setup task that loads IP's transformation table runs
+        // after Minecraft's initial resource reload. Wait until that table is live
+        // so this smoke validates the actual first-launch Vulkan compatibility path.
+        if(!ImmersivePortalsShaderCompat.shouldTransform("rendertype_solid")) {
+            return;
+        }
+
         this.vulkanmod$immersivePortalsSmokeRan = true;
 
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
@@ -43,7 +52,7 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             Class.forName("qouteall.imm_ptl.core.render.RendererUsingFrameBuffer", true, loader);
             Class<?> frontClipping = Class.forName("qouteall.imm_ptl.core.render.FrontClipping", true, loader);
             Class.forName("qouteall.imm_ptl.core.render.ViewAreaRenderer", true, loader);
-            Class.forName("qouteall.imm_ptl.core.render.MyRenderHelper", true, loader);
+            Class<?> myRenderHelper = Class.forName("qouteall.imm_ptl.core.render.MyRenderHelper", true, loader);
 
             AtomicBoolean rendered = new AtomicBoolean(false);
             Method query = queryManager.getMethod("renderAndGetDoesAnySamplePass", Runnable.class);
@@ -63,6 +72,15 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             frontClipping.getMethod("disableClipping").invoke(null);
             if(clippingEnabled.getBoolean(null)) {
                 throw new IllegalStateException("Immersive Portals clipping bookkeeping was not preserved");
+            }
+
+            // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own
+            // RETURN injector cannot be trusted to populate these helper shaders.
+            for(String fieldName : new String[]{"drawFbInAreaShader", "portalAreaShader", "blitScreenNoBlendShader"}) {
+                if(myRenderHelper.getField(fieldName).get(null) == null) {
+                    throw new IllegalStateException(
+                            "Immersive Portals helper shader was not installed: " + fieldName);
+                }
             }
 
             // Verify the default stencil mode is converted to IP's own framebuffer
