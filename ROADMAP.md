@@ -252,26 +252,28 @@ Mandatory gates:
 - [ ] implement correct GPU visibility/section selection;
 - [x] generate bounded GPU indirect commands while retaining direct/legacy fallbacks;
 - [x] qualify reusable baked-model templates and resolve Java-dependent instance metadata;
-- [ ] implement hybrid ordinary-cube meshing with halo/light/tint inputs and output-overflow fallback;
+- [x] implement hybrid ordinary-cube meshing with halo/light/tint inputs and output-overflow fallback;
 - [ ] integrate rebuild/unload/world/resource-generation transitions without stale GPU data;
 - [ ] preserve arbitrary Forge callbacks, block entities and unsupported models on CPU;
 - [ ] preserve translucent/tripwire rendering until separately supported and validated;
 - [ ] obtain RX 6900 XT A/B correctness/performance evidence before enabling an accelerated default.
 
-**Progress: 5/11 verified gates.** Input infrastructure, bounded region residency,
-diagnostic compute plumbing, fail-closed reusable model instances, and bounded GPU
-indirect-command generation/fallback are verified. Live GPU selection correctness and
-hybrid terrain meshing remain open; GPU indirect production consumption is default-off
-pending representative RX 6900 XT evidence.
+**Progress: 6/11 verified gates.** Input infrastructure, bounded region residency,
+diagnostic compute plumbing, fail-closed reusable model instances, bounded GPU
+indirect-command generation/fallback, and hybrid ordinary-cube meshing are verified.
+Live GPU selection correctness, broader lifecycle/Forge-preservation validation, and
+RX 6900 XT correctness/performance evidence remain open; accelerated consumption stays
+default-off pending representative hardware evidence.
 
 Current lighting/output work has advanced beyond the earlier dense-lattice prototype.
 Reusable canonical model templates, bounded sparse lighting capture/decode, exact
 Minecraft-matched AO/color/light reconstruction, and complete packed 20-byte terrain
 vertex generation are proven for the qualified subset. The recovered Create Chronicles
 density sample still supports bounded sparse input; do not repeat that collection.
-CPU terrain output remains authoritative in normal gameplay even though a production-owned
-section-mesher dispatcher and bridge now exist, because the bridge is default-off and
-runs only after the authoritative CPU mesh has already been produced.
+CPU terrain output remains authoritative in normal gameplay because all accelerated
+terrain gates are default-off. With the explicit experimental gates enabled, fully
+qualified REPLACE sections can become GPU-first and conservative APPEND sections can
+split one generation between CPU exception geometry and GPU ordinary-cube geometry.
 
 The bounded-output contract includes generation-owned persistent area-buffer publication.
 `GpuTerrainSectionMesher` is now a reusable production-owned compute dispatcher rather
@@ -304,25 +306,25 @@ region, candidate-superset, capacity, or feature-gate checks fail. See
 `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`.
 
 The default-off generated-geometry consumer remains fail-closed. `RegionDrawBatch.FrameBatch`
-can substitute exact-generation `GpuTerrainOutputStore.Residency`; publication and
-invalidation advance mesh revision so cached frame batches cannot retain stale offsets,
-and the handoff falls back above the shared uint16 auto-quad index limit. With the new
-bridge, ordinary production code can now create such residency for a fully-qualified
-section when explicitly enabled, but it does so only after CPU geometry exists and the
-first dispatcher deliberately waits for completion on the render thread. This proves
-production ownership/plumbing, not CPU-time savings.
+can consume exact-generation GPU output for REPLACE or emit CPU-then-GPU APPEND commands
+for one section. Publication/invalidation advance mesh revision so cached frame batches
+cannot retain stale offsets, APPEND suppresses both halves until its CPU exception upload
+is ready, and stale/missing GPU residency falls back to complete CPU output when available.
 
-The next hybrid-meshing work must separate qualification/input capture from CPU geometry
-emission and establish a completion/ownership design that does not replace worker CPU
-meshing with a blocking Vulkan wait. Only after a same-generation GPU result can safely
-own a completely-qualified subset should `CPU_REQUIRED`/`renderBatched(...)` bypass be
-attempted. Preserve arbitrary Forge callbacks, unsupported/mixed models, fluids,
-translucent/tripwire paths, overflow, and all failure cases on CPU.
+Production section-mesher completion is non-blocking on the render thread. Qualified
+fresh REPLACE sections can skip ordinary CPU `renderBatched(...)`; conservative APPEND
+workers omit only the GPU-owned ordinary-cube subset while preserving unsupported
+geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
+stage CPU exception geometry and GPU output independently, retain the previous complete
+pair, and switch both halves atomically only when the replacement generation is ready.
+CI #676 validates the combined terrain/compatibility tree, including transition,
+face-policy, readback, overflow/fallback, and hybrid command-count/section-count oracles.
 
-This additional bridge plumbing does **not** close the live visibility-selection or
-hybrid-meshing gates. Representative Create Chronicles/RX 6900 XT correctness evidence
-is still needed before accelerated behavior can become a default, and no performance
-improvement is claimed.
+The hybrid implementation gate is therefore closed. The next evidence boundary is a
+narrow Create Chronicles/RX 6900 XT functional run with REPLACE + APPEND enabled,
+including a dirty mixed-section rebuild. This is a correctness test, not a performance
+claim. Live GPU visibility/section-selection correctness and broader lifecycle/Forge
+preservation gates remain open until representative runtime evidence supports them.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -389,23 +391,19 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `91f825d1a83cf297ca48ba422e7f40c66126bb3b`, CI #503
-  (run `35153213009`) is fully green.
+- Latest executable checkpoint: `ac2a9a28b0f5244bcb077e4cff6aed806fc88c65`, CI #676
+  (run `35337095457`) is fully green on the consolidated production tree.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 5/11.
-- P7 input ABI, capped persistent region SSBO residency, compute plumbing, reusable
-  Forge model instances, bounded indirect-command generation/fallback, complete
-  packed-vertex reconstruction, generation-owned persistent output, a default-off
-  frame-batch GPU-geometry consumer, and the first default-off production section-mesher
-  dispatch bridge are now present and covered by current CI/smokes.
-- The hybrid-meshing gate remains open because `ChunkTask.BuildTask.compile` still emits
-  ordinary CPU geometry before the bridge runs, and the initial bridge deliberately waits
-  for compute completion on the render thread. Do not clear `CPU_REQUIRED` or bypass
-  `renderBatched(...)` until a fail-closed staged/completion path can actually replace CPU
-  work without turning it into synchronization stalls.
-- Live GPU visibility correctness still needs representative RX 6900 XT/Create
-  Chronicles evidence. No new RX 6900 XT A/B performance measurement or performance
-  claim exists.
+- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
+- P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
+  conservative hybrid APPEND, atomic dirty APPEND replacement, authoritative face-policy
+  qualification, bounded indirect/output fallback, and the integrated mod-compatibility
+  closure needed by the target pack.
+- The next useful gate evidence is representative RX 6900 XT/Create Chronicles functional
+  correctness with REPLACE + APPEND enabled, including at least one dirty mixed-section
+  rebuild. Live GPU visibility correctness, broader lifecycle/Forge-preservation proof,
+  and comparable A/B performance evidence remain open.
+- No new RX 6900 XT A/B performance measurement or performance claim exists.
 
 See `AGENT_STATUS.md` for the current continuation checkpoint. Read task-specific GPU
 terrain contract documents only when the active change touches those contracts;
