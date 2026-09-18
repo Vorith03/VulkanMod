@@ -92,6 +92,22 @@ public final class GpuTerrainOutputStoreSmokeTest {
                             && stagedVisible.faceCount() == 6,
                     "Discarded staged output must not disturb the committed generation");
 
+            var turnoverBase = requireReservation(store.reserve(
+                            5, TerrainRenderType.SOLID, 60L, 4),
+                    "Staged-turnover baseline reservation must fit");
+            require(store.publish(turnoverBase, 4, false),
+                    "Staged-turnover baseline must publish");
+            var turnoverStaged = requireStagedReservation(store.reserveStaged(
+                            5, TerrainRenderType.SOLID, 61L, 4),
+                    "Future staged output for turnover must reserve");
+            require(turnoverStaged.submitWithTarget(target -> target != null),
+                    "Future staged output for turnover must submit");
+            store.invalidateSection(5, 61L);
+            require(!turnoverStaged.complete(4, false)
+                            && !turnoverStaged.ready()
+                            && !store.getResidency(5, TerrainRenderType.SOLID).valid(),
+                    "Generation turnover must cancel submitted staged output without publishing it");
+
             // A same-generation retry must leave the previous result available if
             // the new compute result overflows its reservation.
             var retry = requireReservation(store.reserve(7, TerrainRenderType.SOLID, 10L, 16),
