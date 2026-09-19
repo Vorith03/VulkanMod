@@ -11,9 +11,9 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Latest executable checkpoint is `8e553bb6991c16f86098227aa35639189d4e4aaf` (`compat: preserve portal reload guards`), fully validated by CI #690 / run `35385931592`.
+- Latest executable checkpoint is `94c459f17f452320193e532535ed31137e794801` (`compat: restore Forge vertex consumer contracts`), fully validated by CI #691 / run `35424374238`.
 - The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward; subsequent compatibility/preflight work is directly on `forge-1.20.1`.
-- CI #690 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel all pass. The GLSL declaration-parser regression test also passes.
+- CI #691 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel all pass. The cluster-1 vertex/Forge smoke proves ordinary non-Vulkan `VertexConsumer` fallback, exact non-`NEW_ENTITY` layout/stride behavior, Forge baked lighting/normals, and per-vertex alpha.
 - Preflight after the first RX/Create Chronicles IP crash closed additional downstream issues before another user test: per-`LevelRenderer` terrain/world/camera/dispatcher ownership for IP secondary dimensions, IP recursive `RenderBuffers` use for block entities, Vulkan terrain clip-plane support in direct/indirect/region pipelines, preservation of IP's reload guards/fan-out despite VulkanMod cancelling vanilla `allChanged()`, and the debug lifecycle mixin constructor descriptor after the renderer refactor.
 - The first RX 6900 XT/Create Chronicles attempt remains useful evidence: it reached IP's framebuffer compatibility renderer and stopped at a raw `GL11.glDisable(GL_STENCIL_TEST)` before terrain evidence. That raw-GL path and the downstream preflight issues above are now regression-covered in CI #690; a repeat full-pack hardware run is still required.
 - Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
@@ -135,7 +135,7 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 
 The full adversarial audit inserted before the pending RX 6900 XT/Create Chronicles functional run is complete. The durable report is `docs/CODEBASE_AUDIT_2026-09-18.md`.
 
-The report is pinned to executable SHA `8e553bb6991c16f86098227aa35639189d4e4aaf`; later branch commits through the audit-completion documentation checkpoint are docs-only. CI #690 remains the last fully green executable checkpoint, but green CI is no longer sufficient reason to proceed directly to hardware testing because the audit established significant untested defects.
+The report is pinned to executable SHA `8e553bb6991c16f86098227aa35639189d4e4aaf`. Repair cluster 1 (A10/A11/A12: vertex layout corruption, Forge `putBulkData` semantics, and unsafe private-interface casts) is closed at `94c459f17f452320193e532535ed31137e794801`, fully green in CI #691. Four repair clusters remain; hardware testing is still deferred while statically provable audit defects remain.
 
 Highest-priority repair clusters are:
 
@@ -148,10 +148,10 @@ Several suspicious areas were explicitly cleared: frame-slot vs image-index sema
 
 ## Next action
 
-1. Start repairs from `docs/CODEBASE_AUDIT_2026-09-18.md`; do not restart the full audit.
-2. Prefer the normal-path Forge/vertex compatibility cluster first, then terrain/native lifetime, in small logical commits with focused regression oracles.
+1. Continue repair cluster 2 from `docs/CODEBASE_AUDIT_2026-09-18.md`: A13 shader registration/reload/namespaced construction, A15 block-layer `RenderLevelStageEvent`, then A14 truthful stencil capability.
+2. Do not reopen completed cluster 1 unless new evidence contradicts CI #691 or the repaired contracts.
 3. Preserve current fail-closed GPU-terrain boundaries while fixing ownership/lifetime issues.
-4. Keep CI green between repair clusters and make compatibility/failure-path tests assert public contracts rather than implementation markers.
+4. Keep CI green between repair slices and make compatibility/failure-path tests assert public contracts rather than implementation markers.
 5. Only after significant proven findings are repaired should the pending narrow RX 6900 XT/RADV Create Chronicles correctness run resume, unless one repair specifically requires hardware evidence.
 
 ## Outstanding RX evidence / performance boundary
