@@ -17,6 +17,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.ForgeHooksClient;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.render.chunk.WorldRenderer;
@@ -118,6 +119,17 @@ public abstract class LevelRendererMixin {
     @Overwrite
     private void renderChunkLayer(RenderType renderType, PoseStack poseStack, double camX, double camY, double camZ, Matrix4f projectionMatrix) {
         this.worldRenderer.renderSectionLayer(renderType, poseStack, camX, camY, camZ, projectionMatrix);
+
+        LevelRenderer levelRenderer = (LevelRenderer)(Object)this;
+        ForgeHooksClient.dispatchRenderStage(
+                renderType,
+                levelRenderer,
+                poseStack,
+                projectionMatrix,
+                levelRenderer.getTicks(),
+                this.minecraft.gameRenderer.getMainCamera(),
+                levelRenderer.getFrustum()
+        );
     }
 
     /**
