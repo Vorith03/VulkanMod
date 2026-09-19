@@ -295,6 +295,7 @@ tasks.named('check').configure {
     dependsOn 'testSpirvNativeLifetime'
     dependsOn 'testVmaMappingContract'
     dependsOn 'testAutoIndexBufferWidth'
+    dependsOn 'testTextureSamplerState'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -367,6 +368,12 @@ tasks.register('testAutoIndexBufferWidth', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.vulkan.memory.AutoIndexBufferWidthTest'
+}
+
+tasks.register('testTextureSamplerState', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.texture.TextureSamplerStateTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

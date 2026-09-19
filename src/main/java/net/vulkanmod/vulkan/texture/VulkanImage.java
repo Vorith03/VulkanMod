@@ -40,6 +40,7 @@ public class VulkanImage {
     public final int formatSize;
 
     private int usage;
+    private boolean clamp;
 
     private int currentLayout;
     private boolean freeScheduled;
@@ -349,8 +350,9 @@ public class VulkanImage {
             long sampler = pTextureSampler.get(0);
             try {
                 textureSampler = new Sampler(this, sampler);
-                byte mask = (byte) ((blur ? 1 : 0) | (mipmap ? 2 : 0));
+                byte mask = samplerKey(blur, clamp, mipmap);
                 this.samplers.put(mask, sampler);
+                this.clamp = clamp;
             } catch(RuntimeException | Error failure) {
                 vkDestroySampler(getDevice(), sampler, null);
                 throw failure;
@@ -359,13 +361,23 @@ public class VulkanImage {
     }
 
     public void updateTextureSampler(boolean blur, boolean clamp, boolean mipmap) {
-        byte mask = (byte) ((blur ? 1 : 0) | (mipmap ? 2 : 0));
+        byte mask = samplerKey(blur, clamp, mipmap);
         long sampler = this.samplers.get(mask);
 
-        if(sampler == 0L)
+        if(sampler == 0L) {
             createTextureSampler(blur, clamp, mipmap);
-        else
+        } else {
             this.textureSampler = new Sampler(this, sampler);
+            this.clamp = clamp;
+        }
+    }
+
+    static byte samplerKey(boolean blur, boolean clamp, boolean mipmap) {
+        return (byte)((blur ? 1 : 0) | (mipmap ? 2 : 0) | (clamp ? 4 : 0));
+    }
+
+    public boolean isClamp() {
+        return this.clamp;
     }
 
     private void copyBufferToImageCmd(CommandPool.CommandBuffer commandBuffer, long buffer, long image, int mipLevel, int width, int height, int xOffset, int yOffset, int bufferOffset, int bufferRowLenght, int bufferImageHeight) {

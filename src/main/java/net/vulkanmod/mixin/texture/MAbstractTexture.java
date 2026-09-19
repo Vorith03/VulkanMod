@@ -87,7 +87,10 @@ public abstract class MAbstractTexture implements VAbstractTextureI {
             this.blur = blur;
             this.mipmap = mipmap;
 
-            vulkanImage.updateTextureSampler(this.blur, false, this.mipmap);
+            if(this.vulkanImage != null) {
+                this.vulkanImage.updateTextureSampler(
+                        this.blur, this.vulkanImage.isClamp(), this.mipmap);
+            }
         }
     }
 
