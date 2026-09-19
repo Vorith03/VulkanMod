@@ -1,16 +1,16 @@
 package net.vulkanmod.mixin.render;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
-import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.ResourceProvider;
+import net.minecraftforge.client.event.RegisterShadersEvent;
+import net.minecraftforge.fml.ModLoader;
+import net.vulkanmod.render.ForgeShaderContractSmokeTest;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -98,10 +99,7 @@ public abstract class GameRendererMixin {
     @Inject(method = "reloadShaders", at = @At("HEAD"), cancellable = true)
     public void reloadShaders(ResourceProvider provider, CallbackInfo ci) {
         RenderSystem.assertOnRenderThread();
-        List<Program> list = Lists.newArrayList();
-//        list.addAll(Program.Type.FRAGMENT.getPrograms().values());
-//        list.addAll(Program.Type.VERTEX.getPrograms().values());
-//        list.forEach(Program::close);
+        ForgeShaderContractSmokeTest.prepareReload(this.shaders);
         List<Pair<ShaderInstance, Consumer<ShaderInstance>>> list1 = Lists.newArrayListWithCapacity(this.shaders.size());
 
         try {
@@ -297,6 +295,8 @@ public abstract class GameRendererMixin {
             list1.add(Pair.of(positionColor, (shaderInstance) -> {
                 rendertypeGuiGhostRecipeOverlayShader = shaderInstance;
             }));
+
+            ModLoader.get().postEvent(new RegisterShadersEvent(provider, list1));
         } catch (IOException ioexception) {
             list1.forEach((pair) -> {
                 pair.getFirst().close();
@@ -304,15 +304,19 @@ public abstract class GameRendererMixin {
             throw new RuntimeException("could not reload shaders", ioexception);
         }
 
-        final var clearList = ImmutableList.copyOf(this.shaders.values());
-        MemoryManager.getInstance().addFrameOp(() -> clearList.forEach((ShaderInstance::close)));
-        //this.shutdownShaders();
-        //TODO: clear shaders
+        // Match vanilla/Forge's replacement semantics without immediately
+        // destroying Vulkan pipelines that the current frame may still reference.
+        // A set prevents aliases from scheduling the same ShaderInstance twice.
+        final var clearSet = new HashSet<>(this.shaders.values());
+        this.shaders.clear();
+        MemoryManager.getInstance().addFrameOp(() -> clearSet.forEach(ShaderInstance::close));
+
         list1.forEach((pair) -> {
             ShaderInstance shaderinstance = pair.getFirst();
             this.shaders.put(shaderinstance.getName(), shaderinstance);
             pair.getSecond().accept(shaderinstance);
         });
+        ForgeShaderContractSmokeTest.verifyReload(this.shaders);
 
         ci.cancel();
     }

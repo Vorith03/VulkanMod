@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.util.GsonHelper;
+import net.minecraftforge.client.ForgeHooksClient;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
@@ -64,15 +65,23 @@ public class ShaderInstanceM implements ShaderMixed {
         return pipeline;
     }
 
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void create(ResourceProvider resourceProvider, String name, VertexFormat format, CallbackInfo ci) {
-        // Immersive Portals transforms a defined set of vanilla/core shader
-        // sources to emit gl_ClipDistance. VulkanMod's packaged native shaders
-        // bypass vanilla Program compilation, so use the converted legacy path
-        // for exactly those shaders while IP clipping is active.
-        if(ImmersivePortalsShaderCompat.shouldTransform(name)
+    @Inject(
+            method = "<init>(Lnet/minecraft/server/packs/resources/ResourceProvider;Lnet/minecraft/resources/ResourceLocation;Lcom/mojang/blaze3d/vertex/VertexFormat;)V",
+            at = @At("RETURN")
+    )
+    private void create(ResourceProvider resourceProvider, ResourceLocation shaderLocation,
+                        VertexFormat format, CallbackInfo ci) {
+        String namespace = shaderLocation.getNamespace();
+        String name = shaderLocation.getPath();
+
+        // Only exact vanilla-namespaced built-ins may use VulkanMod's packaged
+        // preconverted pipelines. Forge/mod namespaces must resolve their own
+        // JSON/program resources through the normal namespaced resource provider.
+        if(!"minecraft".equals(namespace)
+                || ImmersivePortalsShaderCompat.shouldTransform(name)
                 || Pipeline.class.getResourceAsStream("/assets/vulkanmod/shaders/minecraft/core/" + name + ".json") == null) {
-            createLegacyShader(resourceProvider, new ResourceLocation("shaders/core/" + name + ".json"), format);
+            createLegacyShader(resourceProvider,
+                    new ResourceLocation(namespace, "shaders/core/" + name + ".json"), format);
             return;
         }
 
@@ -160,13 +169,17 @@ public class ShaderInstanceM implements ShaderMixed {
      * preprocessing step before GlslConverter/shaderc sees the source.
      */
     private static String vulkanmod$preprocessCoreShader(
-            ResourceProvider resourceProvider, String source) {
+            ResourceProvider resourceProvider, ResourceLocation shaderResource, String source) {
         Set<ResourceLocation> imported = new HashSet<>();
+        String resourcePath = shaderResource.getPath();
+        int separator = resourcePath.lastIndexOf('/');
+        String basePath = separator >= 0 ? resourcePath.substring(0, separator + 1) : "";
 
         GlslPreprocessor preprocessor = new GlslPreprocessor() {
             @Override
             public String applyImport(boolean inline, String name) {
-                ResourceLocation importLocation = new ResourceLocation("shaders/include/" + name);
+                ResourceLocation importLocation =
+                        ForgeHooksClient.getShaderImportLocation(basePath, inline, name);
                 if(!imported.add(importLocation)) {
                     return "";
                 }
@@ -186,6 +199,12 @@ public class ShaderInstanceM implements ShaderMixed {
         return String.join("", preprocessor.process(source));
     }
 
+    private static ResourceLocation vulkanmod$coreProgramResource(String programName, String extension) {
+        ResourceLocation programLocation = new ResourceLocation(programName);
+        return new ResourceLocation(programLocation.getNamespace(),
+                "shaders/core/" + programLocation.getPath() + extension);
+    }
+
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
         boolean immersivePortalsClippingShader = false;
 
@@ -196,13 +215,14 @@ public class ShaderInstanceM implements ShaderMixed {
             String fragmentName = GsonHelper.getAsString(jsonObject, "fragment");
 
             String vshSrc;
-            Resource vertexResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + vertexName + ".vsh"));
+            ResourceLocation vertexLocation = vulkanmod$coreProgramResource(vertexName, ".vsh");
+            Resource vertexResource = resourceProvider.getResourceOrThrow(vertexLocation);
             try (InputStream inputStream = vertexResource.open()) {
                 vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
             immersivePortalsClippingShader = ImmersivePortalsShaderCompat.shouldTransform(vertexName);
             vshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.VERTEX, vertexName, vshSrc);
-            vshSrc = vulkanmod$preprocessCoreShader(resourceProvider, vshSrc);
+            vshSrc = vulkanmod$preprocessCoreShader(resourceProvider, vertexLocation, vshSrc);
             if(immersivePortalsClippingShader
                     && (!vshSrc.contains("imm_ptl_ClippingEquation") || !vshSrc.contains("gl_ClipDistance[0]"))) {
                 throw new IllegalStateException(
@@ -210,12 +230,13 @@ public class ShaderInstanceM implements ShaderMixed {
             }
 
             String fshSrc;
-            Resource fragmentResource = resourceProvider.getResourceOrThrow(new ResourceLocation("shaders/core/" + fragmentName + ".fsh"));
+            ResourceLocation fragmentLocation = vulkanmod$coreProgramResource(fragmentName, ".fsh");
+            Resource fragmentResource = resourceProvider.getResourceOrThrow(fragmentLocation);
             try (InputStream inputStream = fragmentResource.open()) {
                 fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
             fshSrc = ImmersivePortalsShaderCompat.transform(Program.Type.FRAGMENT, fragmentName, fshSrc);
-            fshSrc = vulkanmod$preprocessCoreShader(resourceProvider, fshSrc);
+            fshSrc = vulkanmod$preprocessCoreShader(resourceProvider, fragmentLocation, fshSrc);
 
             GlslConverter converter = new GlslConverter();
             Pipeline.Builder builder = new Pipeline.Builder(format);
