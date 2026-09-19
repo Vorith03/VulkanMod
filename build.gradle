@@ -298,6 +298,7 @@ tasks.named('check').configure {
     dependsOn 'testTextureSamplerState'
     dependsOn 'testEmergencySaveMixinContract'
     dependsOn 'testLegacyTextureUnitContract'
+    dependsOn 'testConfigPersistenceContract'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -388,6 +389,12 @@ tasks.register('testLegacyTextureUnitContract', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.vulkan.texture.LegacyTextureUnitContractTest'
+}
+
+tasks.register('testConfigPersistenceContract', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.config.ConfigPersistenceContractTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

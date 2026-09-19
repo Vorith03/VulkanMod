@@ -246,6 +246,7 @@ public class Options {
             }
         }
 
+        minecraftOptions.save();
         config.write();
     }
 }
