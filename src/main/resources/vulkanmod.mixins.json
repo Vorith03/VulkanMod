@@ -61,7 +61,6 @@
     "render.vertex.FaceBakeryM",
     "render.vertex.BufferBuilderM",
     "render.vertex.VertexBufferM",
-    "render.vertex.VertexConsumerM",
     "render.vertex.LiquidBlockRendererM",
     "render.vertex.VertexFormatMixin",
     "render.BlockModelShaperMixin",

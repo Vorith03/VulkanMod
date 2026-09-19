@@ -23,11 +23,8 @@ public class VertexMultiConsumersM {
 
         @Override
         public void vertex(float x, float y, float z, int packedColor, float u, float v, int overlay, int light, int packedNormal) {
-            ExtendedVertexBuilder firstExt = (ExtendedVertexBuilder) this.first;
-            ExtendedVertexBuilder secondExt = (ExtendedVertexBuilder) this.second;
-
-            firstExt.vertex(x, y, z, packedColor, u, v, overlay, light, packedNormal);
-            secondExt.vertex(x, y, z, packedColor, u, v, overlay, light, packedNormal);
+            ExtendedVertexBuilder.emit(this.first, x, y, z, packedColor, u, v, overlay, light, packedNormal);
+            ExtendedVertexBuilder.emit(this.second, x, y, z, packedColor, u, v, overlay, light, packedNormal);
         }
     }
 
@@ -38,9 +35,7 @@ public class VertexMultiConsumersM {
         @Override
         public void vertex(float x, float y, float z, int packedColor, float u, float v, int overlay, int light, int packedNormal) {
             for (VertexConsumer vertexConsumer : this.delegates) {
-                ExtendedVertexBuilder extendedVertexBuilder = (ExtendedVertexBuilder) vertexConsumer;
-
-                extendedVertexBuilder.vertex(x, y, z, packedColor, u, v, overlay, light, packedNormal);
+                ExtendedVertexBuilder.emit(vertexConsumer, x, y, z, packedColor, u, v, overlay, light, packedNormal);
             }
         }
     }

@@ -43,8 +43,6 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
     @Shadow protected abstract it.unimi.dsi.fastutil.ints.IntConsumer intConsumer(int i, VertexFormat.IndexType indexType);
 
     private long bufferPtr;
-    private long ptr;
-    private int offset;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void setPtrC(int initialCapacity, CallbackInfo ci) {
@@ -56,88 +54,25 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
         this.bufferPtr = MemoryUtil.memAddress0(this.buffer);
     }
 
+    @Override
     public void vertex(float x, float y, float z, int packedColor, float u, float v, int overlay, int light, int packedNormal) {
-        this.ptr = this.nextElementPtr();
-
-        if(this.format == DefaultVertexFormat.NEW_ENTITY) {
-            MemoryUtil.memPutFloat(ptr + 0, x);
+        if (this.format == DefaultVertexFormat.NEW_ENTITY) {
+            long ptr = this.nextElementPtr();
+            MemoryUtil.memPutFloat(ptr, x);
             MemoryUtil.memPutFloat(ptr + 4, y);
             MemoryUtil.memPutFloat(ptr + 8, z);
-
             MemoryUtil.memPutInt(ptr + 12, packedColor);
-
             MemoryUtil.memPutFloat(ptr + 16, u);
             MemoryUtil.memPutFloat(ptr + 20, v);
-
             MemoryUtil.memPutInt(ptr + 24, overlay);
-
             MemoryUtil.memPutInt(ptr + 28, light);
             MemoryUtil.memPutInt(ptr + 32, packedNormal);
-
-            this.nextElementByte += 36;
+            this.nextElementByte += DefaultVertexFormat.NEW_ENTITY.getVertexSize();
             this.endVertex();
-
-        }
-        else {
-            this.vertex(x, y, z);
-            this.fastColor(packedColor);
-            this.fastUv(u, v);
-            this.fastOverlay(overlay);
-            this.light(light);
-            this.fastNormal(packedNormal);
-            this.endVertex();
-//            throw new RuntimeException("unaccepted format: " + this.format);
+            return;
         }
 
-    }
-
-    public void vertex(float x, float y, float z) {
-        MemoryUtil.memPutFloat(ptr + 0, x);
-        MemoryUtil.memPutFloat(ptr + 4, y);
-        MemoryUtil.memPutFloat(ptr + 8, z);
-
-        this.nextElement();
-    }
-
-    public void fastColor(int packedColor) {
-        if (this.currentElement.getUsage() != VertexFormatElement.Usage.COLOR) return;
-
-        MemoryUtil.memPutFloat(ptr + 12, packedColor);
-
-        this.nextElement();
-    }
-
-    public void fastUv(float u, float v) {
-        if (this.currentElement.getUsage() != VertexFormatElement.Usage.UV) return;
-
-        MemoryUtil.memPutFloat(ptr + 16, u);
-        MemoryUtil.memPutFloat(ptr + 20, v);
-
-        this.nextElement();
-    }
-
-    public void fastOverlay(int o) {
-        if (this.currentElement.getUsage() != VertexFormatElement.Usage.UV) return;
-
-        MemoryUtil.memPutInt(ptr + 24, o);
-
-        this.nextElement();
-    }
-
-    public void light(int l) {
-        if (this.currentElement.getUsage() != VertexFormatElement.Usage.UV) return;
-
-        MemoryUtil.memPutInt(ptr + 28, l);
-
-        this.nextElement();
-    }
-
-    public void fastNormal(int packedNormal) {
-        if (this.currentElement.getUsage() != VertexFormatElement.Usage.NORMAL) return;
-
-        MemoryUtil.memPutInt(ptr + 32, packedNormal);
-
-        this.nextElement();
+        ExtendedVertexBuilder.emitFallback(this, x, y, z, packedColor, u, v, overlay, light, packedNormal);
     }
 
     /**

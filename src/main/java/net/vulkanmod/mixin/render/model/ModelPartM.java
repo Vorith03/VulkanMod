@@ -30,9 +30,8 @@ public class ModelPartM {
     protected void compile(PoseStack.Pose pose, VertexConsumer vertexConsumer, int i, int j, float r, float g, float b, float a) {
         Matrix4f matrix4f = pose.pose();
         Matrix3f matrix3f = pose.normal();
-        ExtendedVertexBuilder vertexBuilder = (ExtendedVertexBuilder)vertexConsumer;
-
-        int packedColor = VertexUtil.packColor(r, g, b, a);
+        ExtendedVertexBuilder vertexBuilder = vertexConsumer instanceof ExtendedVertexBuilder extended ? extended : null;
+        int packedColor = vertexBuilder != null ? VertexUtil.packColor(r, g, b, a) : 0;
 
         for (ModelPart.Cube cube : this.cubes) {
             ModelPartCubeMixed cubeMixed = (ModelPartCubeMixed)(cube);
@@ -66,7 +65,12 @@ public class ModelPartM {
 
                     Vector3f pos = vertex.pos;
 //                    vertexConsumer.vertex(pos.x(), pos.y(), pos.z(), r, g, b, a, vertex.u, vertex.v, j, i, l, m, n);
-                    vertexBuilder.vertex(pos.x(), pos.y(), pos.z(), packedColor, vertex.u, vertex.v, j, i, packedNormal);
+                    if (vertexBuilder != null) {
+                        vertexBuilder.vertex(pos.x(), pos.y(), pos.z(), packedColor, vertex.u, vertex.v, j, i, packedNormal);
+                    } else {
+                        vertexConsumer.vertex(pos.x(), pos.y(), pos.z(), r, g, b, a, vertex.u, vertex.v, j, i,
+                                vector3f.x(), vector3f.y(), vector3f.z());
+                    }
                 }
             }
         }
