@@ -30,6 +30,9 @@ public final class LegacyTextureUnitContractTest {
                 "GlStateManager._activeTexture() must update VulkanMod's active texture unit");
         require(glState.bindDelegatesToGlTexture,
                 "GlStateManager._bindTexture() must delegate through emulated GL texture state");
+        require(glState.texLevelQueryReadsActiveUnit
+                        && glState.texLevelQueryReadsLegacyBinding,
+                "Texture-level queries must resolve the active legacy texture unit");
 
         GlTextureVisitor glTexture = inspect(
                 "net/vulkanmod/gl/GlTexture.class",
@@ -40,6 +43,9 @@ public final class LegacyTextureUnitContractTest {
                 "GlTexture.bindTexture() must bind the currently active unit");
         require(glTexture.bindUpdatesSelector,
                 "GlTexture.bindTexture() must update the matching Vulkan selector unit");
+        require(glTexture.allocationRefreshesAllBindings
+                        && glTexture.refreshUpdatesSelector,
+                "Texture reallocation must refresh every legacy unit bound to that GL texture");
 
         SelectorVisitor selector = inspect(
                 "net/vulkanmod/vulkan/texture/VTextureSelector.class",
@@ -94,6 +100,8 @@ public final class LegacyTextureUnitContractTest {
     private static final class GlStateVisitor extends ClassVisitor {
         boolean activeTextureUpdatesSelector;
         boolean bindDelegatesToGlTexture;
+        boolean texLevelQueryReadsActiveUnit;
+        boolean texLevelQueryReadsLegacyBinding;
 
         GlStateVisitor() {
             super(Opcodes.ASM9);
@@ -113,6 +121,21 @@ public final class LegacyTextureUnitContractTest {
                         if(owner.equals("net/vulkanmod/gl/GlTexture")
                                 && methodName.equals("bindTexture"))
                             bindDelegatesToGlTexture = true;
+                    }
+                };
+            }
+
+            if("_getTexLevelParameter".equals(name)) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String methodName,
+                                                String methodDescriptor, boolean isInterface) {
+                        if(!owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector"))
+                            return;
+                        if(methodName.equals("getActiveTextureUnit"))
+                            texLevelQueryReadsActiveUnit = true;
+                        if(methodName.equals("getLegacyTextureUnit"))
+                            texLevelQueryReadsLegacyBinding = true;
                     }
                 };
             }
@@ -137,6 +160,8 @@ public final class LegacyTextureUnitContractTest {
         boolean hasPerUnitTextures;
         boolean bindReadsActiveUnit;
         boolean bindUpdatesSelector;
+        boolean allocationRefreshesAllBindings;
+        boolean refreshUpdatesSelector;
 
         GlTextureVisitor() {
             super(Opcodes.ASM9);
@@ -156,21 +181,46 @@ public final class LegacyTextureUnitContractTest {
         @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
-            if(!"bindTexture".equals(name))
-                return null;
+            if("bindTexture".equals(name)) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String methodName,
+                                                String methodDescriptor, boolean isInterface) {
+                        if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                                && methodName.equals("getActiveTextureUnit"))
+                            bindReadsActiveUnit = true;
+                        if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                                && methodName.equals("bindActiveTexture"))
+                            bindUpdatesSelector = true;
+                    }
+                };
+            }
 
-            return new MethodVisitor(Opcodes.ASM9) {
-                @Override
-                public void visitMethodInsn(int opcode, String owner, String methodName,
-                                            String methodDescriptor, boolean isInterface) {
-                    if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
-                            && methodName.equals("getActiveTextureUnit"))
-                        bindReadsActiveUnit = true;
-                    if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
-                            && methodName.equals("bindActiveTexture"))
-                        bindUpdatesSelector = true;
-                }
-            };
+            if("allocateVulkanImage".equals(name)) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String methodName,
+                                                String methodDescriptor, boolean isInterface) {
+                        if(owner.equals("net/vulkanmod/gl/GlTexture")
+                                && methodName.equals("refreshSelectorBindings"))
+                            allocationRefreshesAllBindings = true;
+                    }
+                };
+            }
+
+            if("refreshSelectorBindings".equals(name)) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String methodName,
+                                                String methodDescriptor, boolean isInterface) {
+                        if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                                && methodName.equals("bindLegacyTextureUnit"))
+                            refreshUpdatesSelector = true;
+                    }
+                };
+            }
+
+            return null;
         }
     }
 

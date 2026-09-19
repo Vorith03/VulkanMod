@@ -131,7 +131,8 @@ public class GlStateManagerM {
             throw new IllegalArgumentException("Negative texture mip level: " + level);
         }
 
-        VulkanImage image = VTextureSelector.getBoundTexture();
+        VulkanImage image = VTextureSelector.getLegacyTextureUnit(
+                VTextureSelector.getActiveTextureUnit());
         if(image == null) {
             throw new IllegalStateException("No Vulkan texture bound for texture-level query");
         }

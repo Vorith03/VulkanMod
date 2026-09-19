@@ -103,6 +103,10 @@ public class GlTexture {
             throw new IllegalArgumentException("Unknown texture id: " + id);
 
         texture.vulkanImage = vulkanImage;
+        refreshSelectorBindings(id, vulkanImage);
+    }
+
+    private static void refreshSelectorBindings(int id, VulkanImage vulkanImage) {
         for(int unit = 0; unit < boundTextureIds.length; ++unit) {
             if(boundTextureIds[unit] == id)
                 VTextureSelector.bindLegacyTextureUnit(unit, vulkanImage);
@@ -125,7 +129,7 @@ public class GlTexture {
             this.vulkanImage.free();
 
         this.vulkanImage = new VulkanImage.Builder(width, height).createVulkanImage();
-        VTextureSelector.bindActiveTexture(this.vulkanImage);
+        refreshSelectorBindings(this.id, this.vulkanImage);
     }
 
     private void uploadImage(@Nullable ByteBuffer pixels) {
