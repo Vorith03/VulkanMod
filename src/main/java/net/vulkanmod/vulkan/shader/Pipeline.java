@@ -465,7 +465,11 @@ public abstract class Pipeline {
             if(this.manualUBO != null)
                 this.UBOs.add(this.manualUBO);
 
-            return new GraphicsPipeline(this);
+            try {
+                return new GraphicsPipeline(this);
+            } finally {
+                releaseCompiledShaders();
+            }
         }
 
         public void setUniforms(List<UBO> UBOs, List<Image> images) {
@@ -474,15 +478,57 @@ public abstract class Pipeline {
         }
 
         public void compileShaders() {
-            String resourcePath = SPIRVUtils.class.getResource("/assets/vulkanmod/shaders/").toExternalForm();
-
-            this.vertShaderSPIRV = compileShaderAbsoluteFile(String.format("%s%s.vsh", resourcePath, this.shaderPath), ShaderKind.VERTEX_SHADER);
-            this.fragShaderSPIRV = compileShaderAbsoluteFile(String.format("%s%s.fsh", resourcePath, this.shaderPath), ShaderKind.FRAGMENT_SHADER);
+            String resourcePath =
+                    SPIRVUtils.class.getResource("/assets/vulkanmod/shaders/").toExternalForm();
+            replaceCompiledShaders(
+                    () -> compileShaderAbsoluteFile(
+                            String.format("%s%s.vsh", resourcePath, this.shaderPath),
+                            ShaderKind.VERTEX_SHADER),
+                    () -> compileShaderAbsoluteFile(
+                            String.format("%s%s.fsh", resourcePath, this.shaderPath),
+                            ShaderKind.FRAGMENT_SHADER));
         }
 
         public void compileShaders(String vsh, String fsh) {
-            this.vertShaderSPIRV = compileShader("vertex shader", vsh, ShaderKind.VERTEX_SHADER);
-            this.fragShaderSPIRV = compileShader("fragment shader", fsh, ShaderKind.FRAGMENT_SHADER);
+            replaceCompiledShaders(
+                    () -> compileShader("vertex shader", vsh, ShaderKind.VERTEX_SHADER),
+                    () -> compileShader("fragment shader", fsh, ShaderKind.FRAGMENT_SHADER));
+        }
+
+        private void replaceCompiledShaders(
+                java.util.function.Supplier<SPIRV> vertexCompiler,
+                java.util.function.Supplier<SPIRV> fragmentCompiler) {
+            releaseCompiledShaders();
+
+            SPIRV newVertex = null;
+            SPIRV newFragment = null;
+            boolean published = false;
+            try {
+                newVertex = vertexCompiler.get();
+                newFragment = fragmentCompiler.get();
+                this.vertShaderSPIRV = newVertex;
+                this.fragShaderSPIRV = newFragment;
+                published = true;
+            } finally {
+                if(!published) {
+                    if(newFragment != null)
+                        newFragment.free();
+                    if(newVertex != null)
+                        newVertex.free();
+                }
+            }
+        }
+
+        private void releaseCompiledShaders() {
+            SPIRV vertex = this.vertShaderSPIRV;
+            SPIRV fragment = this.fragShaderSPIRV;
+            this.vertShaderSPIRV = null;
+            this.fragShaderSPIRV = null;
+
+            if(fragment != null)
+                fragment.free();
+            if(vertex != null)
+                vertex.free();
         }
 
         public void parseBindingsJSON() {

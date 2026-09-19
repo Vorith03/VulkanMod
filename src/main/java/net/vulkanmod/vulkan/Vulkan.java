@@ -10,6 +10,7 @@ import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.queue.Queue;
 import net.vulkanmod.vulkan.queue.TransferQueue;
 import net.vulkanmod.vulkan.shader.Pipeline;
+import net.vulkanmod.vulkan.shader.SPIRVUtils;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.PointerBuffer;
@@ -228,6 +229,7 @@ public class Vulkan {
         swapChain.cleanUp();
 
         Renderer.getInstance().cleanUpResources();
+        SPIRVUtils.destroyCompiler();
         freeStagingBuffers();
 
         try {

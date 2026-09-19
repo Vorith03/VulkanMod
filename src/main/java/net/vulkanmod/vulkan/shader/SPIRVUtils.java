@@ -76,7 +76,7 @@ public class SPIRVUtils {
         }
     }
 
-    public static SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
+    public static synchronized SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
 
         if(compiler == 0) compiler = shaderc_compiler_initialize();
 
@@ -85,42 +85,70 @@ public class SPIRVUtils {
         }
 
         long options = shaderc_compile_options_initialize();
-
         if(options == NULL) {
             throw new RuntimeException("Failed to create compiler options");
         }
 
-        if(OPTIMIZATIONS)
-            shaderc_compile_options_set_optimization_level(options, shaderc_optimization_level_performance);
+        long result = NULL;
+        boolean resultTransferred = false;
+        try {
+            if(OPTIMIZATIONS)
+                shaderc_compile_options_set_optimization_level(
+                        options, shaderc_optimization_level_performance);
 
-        if(DEBUG)
-            shaderc_compile_options_set_generate_debug_info(options);
+            if(DEBUG)
+                shaderc_compile_options_set_generate_debug_info(options);
 
-        long result = shaderc_compile_into_spv(compiler, source, shaderKind.kind, filename, "main", options);
+            result = shaderc_compile_into_spv(
+                    compiler, source, shaderKind.kind, filename, "main", options);
+            if(result == NULL) {
+                throw new RuntimeException(
+                        "Failed to compile shader " + filename + " into SPIR-V");
+            }
 
-        if(result == NULL) {
-            throw new RuntimeException("Failed to compile shader " + filename + " into SPIR-V");
+            if(shaderc_result_get_compilation_status(result)
+                    != shaderc_compilation_status_success) {
+                throw new RuntimeException(
+                        "Failed to compile shader " + filename + " into SPIR-V:\n"
+                                + shaderc_result_get_error_message(result));
+            }
+
+            SPIRV spirv = SPIRV.shadercResult(result, shaderc_result_get_bytes(result));
+            resultTransferred = true;
+            return spirv;
+        } finally {
+            if(result != NULL && !resultTransferred)
+                shaderc_result_release(result);
+            shaderc_compile_options_release(options);
         }
-
-        if(shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
-            throw new RuntimeException("Failed to compile shader " + filename + " into SPIR-V:\n" + shaderc_result_get_error_message(result));
-        }
-
-        return new SPIRV(result, shaderc_result_get_bytes(result));
     }
 
     private static SPIRV readFromStream(InputStream inputStream) {
+        ByteBuffer buffer = null;
+        boolean transferred = false;
         try {
             byte[] bytes = inputStream.readAllBytes();
-            ByteBuffer buffer = MemoryUtil.memAlloc(bytes.length);
+            buffer = MemoryUtil.memAlloc(bytes.length);
             buffer.put(bytes);
-            buffer.position(0);
+            buffer.flip();
 
-            return new SPIRV(MemoryUtil.memAddress(buffer), buffer);
-        } catch (Exception e) {
-            e.printStackTrace();
+            SPIRV spirv = SPIRV.nativeBuffer(buffer);
+            transferred = true;
+            return spirv;
+        } catch(IOException failure) {
+            throw new RuntimeException("Unable to read SPIR-V input stream", failure);
+        } finally {
+            if(buffer != null && !transferred)
+                MemoryUtil.memFree(buffer);
         }
-        throw new RuntimeException("unable to read inputStream");
+    }
+
+    public static synchronized void destroyCompiler() {
+        if(compiler == NULL)
+            return;
+
+        shaderc_compiler_release(compiler);
+        compiler = NULL;
     }
 
     public enum ShaderKind {
@@ -137,24 +165,49 @@ public class SPIRVUtils {
     }
 
     public static final class SPIRV implements NativeResource {
-
-        private final long handle;
-        private ByteBuffer bytecode;
-
-        public SPIRV(long handle, ByteBuffer bytecode) {
-            this.handle = handle;
-            this.bytecode = bytecode;
+        private enum Origin {
+            SHADERC_RESULT,
+            NATIVE_BUFFER
         }
 
-        public ByteBuffer bytecode() {
-            return bytecode;
+        private final long handle;
+        private final Origin origin;
+        private ByteBuffer bytecode;
+        private boolean freed;
+
+        private SPIRV(long handle, ByteBuffer bytecode, Origin origin) {
+            this.handle = handle;
+            this.bytecode = bytecode;
+            this.origin = origin;
+        }
+
+        static SPIRV shadercResult(long handle, ByteBuffer bytecode) {
+            return new SPIRV(handle, bytecode, Origin.SHADERC_RESULT);
+        }
+
+        static SPIRV nativeBuffer(ByteBuffer bytecode) {
+            return new SPIRV(NULL, bytecode, Origin.NATIVE_BUFFER);
+        }
+
+        public synchronized ByteBuffer bytecode() {
+            if(this.freed || this.bytecode == null)
+                throw new IllegalStateException("SPIR-V bytecode has already been released");
+            return this.bytecode;
         }
 
         @Override
-        public void free() {
-//            shaderc_result_release(handle);
-            bytecode = null; // Help the GC
+        public synchronized void free() {
+            if(this.freed)
+                return;
+
+            if(this.origin == Origin.SHADERC_RESULT) {
+                shaderc_result_release(this.handle);
+            } else if(this.bytecode != null) {
+                MemoryUtil.memFree(this.bytecode);
+            }
+
+            this.bytecode = null;
+            this.freed = true;
         }
     }
-
 }
