@@ -16,6 +16,9 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static org.lwjgl.opengl.GL11.GL_LINEAR;
 import static org.lwjgl.opengl.GL11.GL_NEAREST;
@@ -60,12 +63,12 @@ public class RenderTargetMixin {
 
     /**
      * Forge's enableStencil() contract requires the recreated depth image to
-     * actually contain a stencil aspect. VulkanMod does not implement that
-     * attachment path yet, so reject the request before Forge can mark the
-     * target stencil-enabled.
+     * actually contain a stencil aspect. This is a Forge-added, unmapped method,
+     * so intercept it without remapping and reject the request before Forge can
+     * mark the target stencil-enabled.
      */
-    @Overwrite
-    public void enableStencil() {
+    @Inject(method = "enableStencil", at = @At("HEAD"), remap = false)
+    private void vulkanmod$rejectStencil(CallbackInfo ci) {
         throw new UnsupportedOperationException(
                 "VulkanMod does not currently support stencil RenderTarget attachments");
     }
