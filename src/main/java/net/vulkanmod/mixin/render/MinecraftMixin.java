@@ -249,11 +249,6 @@ public class MinecraftMixin {
 
     }
 
-    @Redirect(method = "run", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;emergencySave()V"))
-    private void skipEmergencySave(Minecraft instance) {
-
-    }
-
     @Inject(method = "resizeDisplay", at = @At("HEAD"))
     public void onResolutionChanged(CallbackInfo ci) {
         Renderer.scheduleSwapChainUpdate();
