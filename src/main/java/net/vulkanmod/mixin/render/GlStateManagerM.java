@@ -297,6 +297,30 @@ public class GlStateManagerM {
 
     }
 
+    @Overwrite(remap = false)
+    public static void _stencilFunc(int function, int reference, int mask) {
+        RenderSystem.assertOnRenderThread();
+        VRenderSystem.stencilFunc(function, reference, mask);
+    }
+
+    @Overwrite(remap = false)
+    public static void _stencilMask(int mask) {
+        RenderSystem.assertOnRenderThread();
+        VRenderSystem.stencilMask(mask);
+    }
+
+    @Overwrite(remap = false)
+    public static void _stencilOp(int fail, int depthFail, int pass) {
+        RenderSystem.assertOnRenderThread();
+        VRenderSystem.stencilOp(fail, depthFail, pass);
+    }
+
+    @Overwrite(remap = false)
+    public static void _clearStencil(int value) {
+        RenderSystem.assertOnRenderThread();
+        VRenderSystem.clearStencil(value);
+    }
+
     /**
      * @author
      */

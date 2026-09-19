@@ -87,8 +87,13 @@ public class RenderPass {
                 depthAttachment.samples(VK_SAMPLE_COUNT_1_BIT);
                 depthAttachment.loadOp(depthAttachmentInfo.loadOp);
                 depthAttachment.storeOp(depthAttachmentInfo.storeOp);
-                depthAttachment.stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
-                depthAttachment.stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE);
+                if(framebuffer.hasStencilAttachment()) {
+                    depthAttachment.stencilLoadOp(depthAttachmentInfo.loadOp);
+                    depthAttachment.stencilStoreOp(depthAttachmentInfo.storeOp);
+                } else {
+                    depthAttachment.stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
+                    depthAttachment.stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE);
+                }
                 depthAttachment.initialLayout(depthAttachmentInfo.initialLayout);
                 depthAttachment.finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
@@ -226,6 +231,9 @@ public class RenderPass {
             depthAttachment.clearValue(clearValues.get(1));
 
             renderingInfo.pDepthAttachment(depthAttachment);
+            if(framebuffer.hasStencilAttachment()) {
+                renderingInfo.pStencilAttachment(depthAttachment);
+            }
         }
 
         KHRDynamicRendering.vkCmdBeginRenderingKHR(commandBuffer, renderingInfo);

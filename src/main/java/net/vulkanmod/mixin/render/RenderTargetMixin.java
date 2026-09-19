@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
@@ -62,15 +63,17 @@ public class RenderTargetMixin {
     }
 
     /**
-     * Forge's enableStencil() contract requires the recreated depth image to
-     * actually contain a stencil aspect. This is a Forge-added, unmapped method,
-     * so intercept it without remapping and reject the request before Forge can
-     * mark the target stencil-enabled.
+     * Generic off-screen RenderTargets can satisfy Forge's stencil contract with
+     * a combined Vulkan depth/stencil attachment. MainTarget is different: it is
+     * backed by the swapchain and has no replaceable per-target attachment here,
+     * so keep that unsupported case fail-closed.
      */
     @Inject(method = "enableStencil", at = @At("HEAD"), remap = false)
-    private void vulkanmod$rejectStencil(CallbackInfo ci) {
-        throw new UnsupportedOperationException(
-                "VulkanMod does not currently support stencil RenderTarget attachments");
+    private void vulkanmod$rejectMainTargetStencil(CallbackInfo ci) {
+        if((Object)this instanceof MainTarget) {
+            throw new UnsupportedOperationException(
+                    "VulkanMod does not currently support stencil on the swapchain MainTarget");
+        }
     }
 
     /**
@@ -101,9 +104,13 @@ public class RenderTargetMixin {
         if(width <= 0 || height <= 0)
             return;
 
-        this.framebuffer = new Framebuffer.Builder(width, height, 1, this.useDepth)
-                .setLinearFiltering(this.filterMode == GL_LINEAR)
-                .build();
+        Framebuffer.Builder framebufferBuilder = new Framebuffer.Builder(width, height, 1, this.useDepth)
+                .setLinearFiltering(this.filterMode == GL_LINEAR);
+        if(this.useDepth && ((RenderTarget)(Object)this).isStencilEnabled()) {
+            framebufferBuilder.setDepthFormat(Device.findDepthStencilFormat());
+        }
+
+        this.framebuffer = framebufferBuilder.build();
         this.vulkanmod$renderPass = new RenderPass.Builder(this.framebuffer)
                 .setLoadOp(VK_ATTACHMENT_LOAD_OP_LOAD)
                 .build();

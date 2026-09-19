@@ -222,6 +222,10 @@ public class Framebuffer {
 
     public int getDepthFormat() { return this.depthFormat; }
 
+    public boolean hasStencilAttachment() {
+        return this.depthAttachment != null && VulkanImage.hasStencilComponent(this.depthFormat);
+    }
+
     public static class Builder {
         final int width, height;
         int format, depthFormat;
@@ -256,6 +260,12 @@ public class Framebuffer {
 
         public Builder setFormat(int format) {
             this.format = format;
+
+            return this;
+        }
+
+        public Builder setDepthFormat(int depthFormat) {
+            this.depthFormat = depthFormat;
 
             return this;
         }

@@ -14,6 +14,8 @@ public class PipelineState {
     public static final DepthState DEFAULT_DEPTH_STATE = defaultDepthState();
     public static final LogicOpState DEFAULT_LOGICOP_STATE = new LogicOpState(false, 0);
     public static final ColorMask DEFAULT_COLORMASK = new ColorMask(true, true, true, true);
+    public static final StencilState DEFAULT_STENCIL_STATE =
+            new StencilState(false, 519, 0, ~0, ~0, 7680, 7680, 7680);
 
     public static PipelineState.BlendInfo blendInfo = PipelineState.defaultBlendInfo();
     public static PipelineState.BlendState currentBlendState;
@@ -37,7 +39,8 @@ public class PipelineState {
             // never tries to use a retired VkRenderPass handle from an older target.
             if(currentState.renderPass != renderPass) {
                 currentState = new PipelineState(currentState.blendState, currentState.depthState,
-                        currentState.logicOpState, currentState.colorMask, renderPass);
+                        currentState.logicOpState, currentState.colorMask, renderPass,
+                        currentState.stencilState);
             }
             return currentState;
         }
@@ -53,13 +56,21 @@ public class PipelineState {
     final DepthState depthState;
     final ColorMask colorMask;
     final LogicOpState logicOpState;
+    final StencilState stencilState;
     final boolean cullState;
     final RenderPass renderPass;
 
-    public PipelineState(BlendState blendState, DepthState depthState, LogicOpState logicOpState, ColorMask colorMask, RenderPass renderPass) {
+    public PipelineState(BlendState blendState, DepthState depthState, LogicOpState logicOpState,
+                         ColorMask colorMask, RenderPass renderPass) {
+        this(blendState, depthState, logicOpState, colorMask, renderPass, VRenderSystem.getStencilState());
+    }
+
+    public PipelineState(BlendState blendState, DepthState depthState, LogicOpState logicOpState,
+                         ColorMask colorMask, RenderPass renderPass, StencilState stencilState) {
         this.blendState = blendState;
         this.depthState = depthState;
         this.logicOpState = new LogicOpState(logicOpState.enabled, logicOpState.getLogicOp());
+        this.stencilState = stencilState;
         this.colorMask = colorMask;
         this.renderPass = renderPass;
         this.cullState = VRenderSystem.cull;
@@ -71,6 +82,10 @@ public class PipelineState {
                 && this.colorMask.colorMask == colorMask
                 && this.blendState.matches(blendInfo)
                 && this.depthState.matches(VRenderSystem.depthTest, VRenderSystem.depthMask, VRenderSystem.depthFun)
+                && this.stencilState.matches(
+                        VRenderSystem.stencilTest, VRenderSystem.stencilFun, VRenderSystem.stencilRef,
+                        VRenderSystem.stencilCompareMask, VRenderSystem.stencilWriteMask,
+                        VRenderSystem.stencilFailOp, VRenderSystem.stencilDepthFailOp, VRenderSystem.stencilPassOp)
                 && this.logicOpState.equals(currentLogicOpState);
     }
 
@@ -116,13 +131,14 @@ public class PipelineState {
         if (o == null || getClass() != o.getClass()) return false;
         PipelineState that = (PipelineState) o;
         return blendState.equals(that.blendState) && depthState.equals(that.depthState)
+                && stencilState.equals(that.stencilState)
                 && renderPassesCompatible(this.renderPass, that.renderPass)
                 && logicOpState.equals(that.logicOpState) && (cullState == that.cullState) && colorMask.equals(that.colorMask);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState, depthState, logicOpState, cullState,
+        return Objects.hash(blendState, depthState, stencilState, logicOpState, cullState,
                 renderPassCompatibilityHash(renderPass), colorMask.colorMask);
     }
 
@@ -324,6 +340,90 @@ public class PipelineState {
             if (o == null || getClass() != o.getClass()) return false;
             ColorMask colorMask = (ColorMask) o;
             return this.colorMask == colorMask.colorMask;
+        }
+    }
+
+    public static class StencilState {
+        public final boolean enabled;
+        public final int function;
+        public final int reference;
+        public final int compareMask;
+        public final int writeMask;
+        public final int failOp;
+        public final int depthFailOp;
+        public final int passOp;
+
+        public StencilState(boolean enabled, int function, int reference, int compareMask, int writeMask,
+                            int failOp, int depthFailOp, int passOp) {
+            this.enabled = enabled;
+            this.function = compareOp(function);
+            this.reference = reference;
+            this.compareMask = compareMask;
+            this.writeMask = writeMask;
+            this.failOp = convertStencilOp(failOp);
+            this.depthFailOp = convertStencilOp(depthFailOp);
+            this.passOp = convertStencilOp(passOp);
+        }
+
+        boolean matches(boolean enabled, int function, int reference, int compareMask, int writeMask,
+                        int failOp, int depthFailOp, int passOp) {
+            return this.enabled == enabled
+                    && this.function == compareOp(function)
+                    && this.reference == reference
+                    && this.compareMask == compareMask
+                    && this.writeMask == writeMask
+                    && this.failOp == convertStencilOp(failOp)
+                    && this.depthFailOp == convertStencilOp(depthFailOp)
+                    && this.passOp == convertStencilOp(passOp);
+        }
+
+        private static int compareOp(int value) {
+            return switch (value) {
+                case 512 -> VK_COMPARE_OP_NEVER;
+                case 513 -> VK_COMPARE_OP_LESS;
+                case 514 -> VK_COMPARE_OP_EQUAL;
+                case 515 -> VK_COMPARE_OP_LESS_OR_EQUAL;
+                case 516 -> VK_COMPARE_OP_GREATER;
+                case 517 -> VK_COMPARE_OP_NOT_EQUAL;
+                case 518 -> VK_COMPARE_OP_GREATER_OR_EQUAL;
+                case 519 -> VK_COMPARE_OP_ALWAYS;
+                default -> throw new IllegalArgumentException("Unknown stencil comparison: " + value);
+            };
+        }
+
+        private static int convertStencilOp(int value) {
+            return switch (value) {
+                case 0 -> VK_STENCIL_OP_ZERO;
+                case 5386 -> VK_STENCIL_OP_INVERT;
+                case 7680 -> VK_STENCIL_OP_KEEP;
+                case 7681 -> VK_STENCIL_OP_REPLACE;
+                case 7682 -> VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+                case 7683 -> VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+                case 34055 -> VK_STENCIL_OP_INCREMENT_AND_WRAP;
+                case 34056 -> VK_STENCIL_OP_DECREMENT_AND_WRAP;
+                default -> throw new IllegalArgumentException("Unknown stencil operation: " + value);
+            };
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if(this == o) return true;
+            if(o == null || getClass() != o.getClass()) return false;
+            StencilState that = (StencilState)o;
+            return enabled == that.enabled
+                    && function == that.function
+                    && reference == that.reference
+                    && compareMask == that.compareMask
+                    && writeMask == that.writeMask
+                    && failOp == that.failOp
+                    && depthFailOp == that.depthFailOp
+                    && passOp == that.passOp;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(enabled, function, reference, compareMask, writeMask,
+                    failOp, depthFailOp, passOp);
         }
     }
 

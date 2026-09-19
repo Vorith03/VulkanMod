@@ -26,6 +26,16 @@ public class VRenderSystem {
     public static boolean depthMask = true;
     public static int depthFun = 515;
 
+    public static boolean stencilTest = false;
+    public static int stencilFun = 519;
+    public static int stencilRef = 0;
+    public static int stencilCompareMask = ~0;
+    public static int stencilWriteMask = ~0;
+    public static int stencilFailOp = 7680;
+    public static int stencilDepthFailOp = 7680;
+    public static int stencilPassOp = 7680;
+    public static int clearStencil = 0;
+
     public static int colorMask = PipelineState.ColorMask.getColorMask(true, true, true, true);
 
     public static boolean cull = true;
@@ -229,6 +239,40 @@ public class VRenderSystem {
 
     public static PipelineState.DepthState getDepthState() {
         return new PipelineState.DepthState(depthTest, depthMask, depthFun);
+    }
+
+    public static PipelineState.StencilState getStencilState() {
+        return new PipelineState.StencilState(
+                stencilTest, stencilFun, stencilRef, stencilCompareMask, stencilWriteMask,
+                stencilFailOp, stencilDepthFailOp, stencilPassOp);
+    }
+
+    public static void enableStencilTest() {
+        stencilTest = true;
+    }
+
+    public static void disableStencilTest() {
+        stencilTest = false;
+    }
+
+    public static void stencilFunc(int function, int reference, int mask) {
+        stencilFun = function;
+        stencilRef = reference;
+        stencilCompareMask = mask;
+    }
+
+    public static void stencilMask(int mask) {
+        stencilWriteMask = mask;
+    }
+
+    public static void stencilOp(int fail, int depthFail, int pass) {
+        stencilFailOp = fail;
+        stencilDepthFailOp = depthFail;
+        stencilPassOp = pass;
+    }
+
+    public static void clearStencil(int value) {
+        clearStencil = value;
     }
 
     public static void colorMask(boolean b, boolean b1, boolean b2, boolean b3) {

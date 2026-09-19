@@ -557,52 +557,51 @@ public class Renderer {
         if(skipRendering)
             return;
 
+        final int colorBit = 0x4000;
+        final int depthBit = 0x0100;
+        final int stencilBit = 0x0400;
+        if((v & ~(colorBit | depthBit | stencilBit)) != 0)
+            throw new IllegalArgumentException("Unsupported clear mask: 0x" + Integer.toHexString(v));
+
+        Framebuffer framebuffer = INSTANCE.boundFramebuffer;
+        boolean clearColor = (v & colorBit) != 0
+                && framebuffer != null && framebuffer.getColorAttachment() != null;
+        boolean clearDepth = (v & depthBit) != 0
+                && framebuffer != null && framebuffer.getDepthAttachment() != null;
+        boolean clearStencil = (v & stencilBit) != 0
+                && framebuffer != null && framebuffer.hasStencilAttachment();
+
+        int attachmentsCount = (clearColor ? 1 : 0) + ((clearDepth || clearStencil) ? 1 : 0);
+        if(attachmentsCount == 0)
+            return;
+
         VkCommandBuffer commandBuffer = INSTANCE.currentCmdBuffer;
 
         try(MemoryStack stack = stackPush()) {
-            //ClearValues have to be different for each attachment to clear, it seems it works like a buffer: color and depth attributes override themselves
-            VkClearValue colorValue = VkClearValue.calloc(stack);
-            colorValue.color().float32(VRenderSystem.clearColor);
+            VkClearAttachment.Buffer pAttachments = VkClearAttachment.calloc(attachmentsCount, stack);
+            int attachmentIndex = 0;
 
-            VkClearValue depthValue = VkClearValue.calloc(stack);
-            depthValue.depthStencil().depth(VRenderSystem.clearDepth);
+            if(clearColor) {
+                VkClearValue colorValue = VkClearValue.calloc(stack);
+                colorValue.color().float32(VRenderSystem.clearColor);
 
-            int attachmentsCount;
-            VkClearAttachment.Buffer pAttachments;
-            if (v == 0x100) {
-                attachmentsCount = 1;
-
-                pAttachments = VkClearAttachment.calloc(attachmentsCount, stack);
-
-                VkClearAttachment clearDepth = pAttachments.get(0);
-                clearDepth.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
-                clearDepth.clearValue(depthValue);
-            } else if (v == 0x4000) {
-                attachmentsCount = 1;
-
-                pAttachments = VkClearAttachment.calloc(attachmentsCount, stack);
-
-                VkClearAttachment clearColor = pAttachments.get(0);
-                clearColor.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-                clearColor.colorAttachment(0);
-                clearColor.clearValue(colorValue);
-            } else if (v == 0x4100) {
-                attachmentsCount = 2;
-
-                pAttachments = VkClearAttachment.calloc(attachmentsCount, stack);
-
-                VkClearAttachment clearColor = pAttachments.get(0);
-                clearColor.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-                clearColor.clearValue(colorValue);
-
-                VkClearAttachment clearDepth = pAttachments.get(1);
-                clearDepth.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
-                clearDepth.clearValue(depthValue);
-            } else {
-                throw new RuntimeException("unexpected value");
+                VkClearAttachment colorAttachment = pAttachments.get(attachmentIndex++);
+                colorAttachment.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
+                colorAttachment.colorAttachment(0);
+                colorAttachment.clearValue(colorValue);
             }
 
-            //Rect to clear
+            if(clearDepth || clearStencil) {
+                VkClearValue depthStencilValue = VkClearValue.calloc(stack);
+                depthStencilValue.depthStencil().set(VRenderSystem.clearDepth, VRenderSystem.clearStencil);
+
+                int aspectMask = (clearDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : 0)
+                        | (clearStencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0);
+                VkClearAttachment depthStencilAttachment = pAttachments.get(attachmentIndex);
+                depthStencilAttachment.aspectMask(aspectMask);
+                depthStencilAttachment.clearValue(depthStencilValue);
+            }
+
             VkRect2D renderArea = VkRect2D.calloc(stack);
             renderArea.offset(VkOffset2D.calloc(stack).set(0, 0));
             renderArea.extent(VkExtent2D.calloc(stack).set(width, height));

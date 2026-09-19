@@ -7,6 +7,7 @@ import net.vulkanmod.interfaces.VertexFormatMixed;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
@@ -56,7 +57,9 @@ public class GraphicsPipeline extends Pipeline {
         createShaderModules(builder.vertShaderSPIRV, builder.fragShaderSPIRV);
 
         if(builder.renderPass != null) {
-            PipelineState defaultState = new PipelineState(DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE, DEFAULT_COLORMASK, builder.renderPass);
+            PipelineState defaultState = new PipelineState(
+                    DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE,
+                    DEFAULT_COLORMASK, builder.renderPass, DEFAULT_STENCIL_STATE);
             graphicsPipelines.computeIfAbsent(new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST), this::createGraphicsPipeline);
         }
 
@@ -162,7 +165,29 @@ public class GraphicsPipeline extends Pipeline {
             depthStencil.depthBoundsTestEnable(false);
             depthStencil.minDepthBounds(0.0f); // Optional
             depthStencil.maxDepthBounds(1.0f); // Optional
-            depthStencil.stencilTestEnable(false);
+            depthStencil.stencilTestEnable(state.stencilState.enabled);
+            VkStencilOpState frontStencil = depthStencil.front();
+            frontStencil
+                    .failOp(state.stencilState.failOp)
+                    .passOp(state.stencilState.passOp)
+                    .depthFailOp(state.stencilState.depthFailOp)
+                    .compareOp(state.stencilState.function)
+                    .compareMask(state.stencilState.compareMask)
+                    .writeMask(state.stencilState.writeMask)
+                    .reference(state.stencilState.reference);
+            VkStencilOpState backStencil = depthStencil.back();
+            backStencil
+                    .failOp(state.stencilState.failOp)
+                    .passOp(state.stencilState.passOp)
+                    .depthFailOp(state.stencilState.depthFailOp)
+                    .compareOp(state.stencilState.function)
+                    .compareMask(state.stencilState.compareMask)
+                    .writeMask(state.stencilState.writeMask)
+                    .reference(state.stencilState.reference);
+
+            if(state.stencilState.enabled && !state.renderPass.getFramebuffer().hasStencilAttachment()) {
+                throw new IllegalStateException("Stencil test enabled without a stencil-capable RenderTarget");
+            }
 
             // ===> COLOR BLENDING <===
 
@@ -218,8 +243,12 @@ public class GraphicsPipeline extends Pipeline {
                 //dyn-rendering
                 VkPipelineRenderingCreateInfoKHR renderingInfo = VkPipelineRenderingCreateInfoKHR.calloc(stack);
                 renderingInfo.sType(KHRDynamicRendering.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR);
-                renderingInfo.pColorAttachmentFormats(stack.ints(state.renderPass.getFramebuffer().getFormat()));
-                renderingInfo.depthAttachmentFormat(state.renderPass.getFramebuffer().getDepthFormat());
+                Framebuffer framebuffer = state.renderPass.getFramebuffer();
+                renderingInfo.pColorAttachmentFormats(stack.ints(framebuffer.getFormat()));
+                renderingInfo.depthAttachmentFormat(framebuffer.getDepthFormat());
+                if(framebuffer.hasStencilAttachment()) {
+                    renderingInfo.stencilAttachmentFormat(framebuffer.getDepthFormat());
+                }
                 pipelineInfo.pNext(renderingInfo);
             }
 

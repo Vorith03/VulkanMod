@@ -84,7 +84,7 @@ public class VulkanImage {
         VulkanImage image = new VulkanImage(format, 1, width, height, usage, 0);
         try {
             image.createImage(1, width, height, format, usage);
-            image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+            image.imageView = createImageView(image.id, format, aspectMaskForFormat(format), 1);
             image.createTextureSampler(blur, clamp, false);
             return image;
         } catch(RuntimeException | Error failure) {
@@ -497,7 +497,7 @@ public class VulkanImage {
         return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 
-    private static boolean hasStencilComponent(int format) {
+    public static boolean hasStencilComponent(int format) {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 

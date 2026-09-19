@@ -2,6 +2,7 @@ package net.vulkanmod.mixin.compatibility.gl;
 
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Drawer;
+import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL11C;
@@ -52,6 +53,8 @@ public class GL11M {
     @NativeType("GLboolean")
     @Overwrite(remap = false)
     public static boolean glIsEnabled(@NativeType("GLenum") int cap) {
+        if(cap == GL11.GL_STENCIL_TEST)
+            return VRenderSystem.stencilTest;
         return false;
     }
 
@@ -144,7 +147,8 @@ public class GL11M {
      */
     @Overwrite(remap = false)
     public static void glEnable(@NativeType("GLenum") int target) {
-
+        if(target == GL11.GL_STENCIL_TEST)
+            VRenderSystem.enableStencilTest();
     }
 
     /**
@@ -153,5 +157,7 @@ public class GL11M {
      */
     @Overwrite(remap = false)
     public static void glDisable(@NativeType("GLenum") int target) {
+        if(target == GL11.GL_STENCIL_TEST)
+            VRenderSystem.disableStencilTest();
     }
 }
