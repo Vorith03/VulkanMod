@@ -131,18 +131,18 @@ Mixed-section APPEND (fresh or rebuild) additionally requires:
 
 Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cube subset, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid ranges, face-predicate disagreement, and failed GPU work must remain CPU/recovery paths.
 
+## Active codebase audit checkpoint
+
+The user intentionally inserted a full adversarial codebase audit before the pending RX 6900 XT/Create Chronicles functional test. The audit is pinned to `5e17f013` (executable code `8e553bb6`) and is **in progress**.
+
+The durable handoff is `docs/CODEBASE_AUDIT_CHECKPOINT_2026-09-18.md`. It records confirmed defects, investigated-and-cleared hypotheses, unresolved candidates, completed audit surfaces, and the remaining continuation order. A fresh session must continue from that document and the live delta rather than restarting the audit or jumping directly to the hardware test.
+
 ## Next action
 
-1. Repeat the narrow RX 6900 XT/RADV **functional** Create Chronicles run using CI #690 artifact `VulkanMod-Forge-build-690` (artifact id `10563794462`; JAR `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.690-g8e553bb6-all.jar`) with REPLACE + APPEND enabled:
-   `-Dvulkanmod.experimentalGpuTerrainMesher=true`
-   `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`
-   `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`
-   `-Dvulkanmod.experimentalGpuTerrainHybrid=true`
-2. First verify the prior Immersive Portals `No GLCapabilities` / raw-stencil crash is gone and that the run reaches VulkanMod GPU-terrain markers. Look through an actual portal and check for terrain leaking across the portal plane or wrong-dimension/stale terrain, then exercise normal terrain plus at least one dirty mixed-section rebuild so pair-to-pair APPEND replacement is actually used. Check for missing/duplicated terrain, stale geometry, flicker during rebuild, portal/render regressions, and CPU-recovery behavior.
-3. Treat this as a correctness test, not an FPS benchmark. If hardware correctness is clean, collect comparable Phase 5/6 performance evidence before making any speedup/default-path claim.
-4. Do not enlarge the 32-slot descriptor pool or add dispatch retries without saturation evidence.
-
-Prior user evidence remains valid; do not repeat settled sparse-lighting density collection or unrelated compatibility tests unless new hardware evidence contradicts them.
+1. Continue and complete the adversarial full-codebase audit from `docs/CODEBASE_AUDIT_CHECKPOINT_2026-09-18.md`, using delta-based recovery from audited SHA `5e17f013`.
+2. Preserve the distinction between confirmed defects, unresolved candidates, and concerns already disproved by contract tracing. Do not re-investigate cleared hypotheses without new evidence.
+3. After the audit is complete, repair significant confirmed findings in small logical changes with focused validation and CI.
+4. Only then resume the previously planned narrow RX 6900 XT/RADV Create Chronicles correctness run, unless the audit itself produces a question that specifically requires hardware evidence.
 
 ## Outstanding RX evidence / performance boundary
 
