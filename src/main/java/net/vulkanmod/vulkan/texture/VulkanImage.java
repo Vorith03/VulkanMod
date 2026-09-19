@@ -68,22 +68,28 @@ public class VulkanImage {
 
     public static VulkanImage createTextureImage(int format, int mipLevels, int width, int height, int usage, int formatSize, boolean blur, boolean clamp) {
         VulkanImage image = new VulkanImage(format, mipLevels, width, height, usage, formatSize);
-
-        image.createImage(mipLevels, width, height, format, usage);
-        image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
-        image.createTextureSampler(blur, clamp, mipLevels > 1);
-
-        return image;
+        try {
+            image.createImage(mipLevels, width, height, format, usage);
+            image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+            image.createTextureSampler(blur, clamp, mipLevels > 1);
+            return image;
+        } catch(RuntimeException | Error failure) {
+            image.destroyFailedConstruction();
+            throw failure;
+        }
     }
 
     public static VulkanImage createDepthImage(int format, int width, int height, int usage, boolean blur, boolean clamp) {
         VulkanImage image = new VulkanImage(format, 1, width, height, usage, 0);
-
-        image.createImage(1, width, height, format, usage);
-        image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-        image.createTextureSampler(blur, clamp, false);
-
-        return image;
+        try {
+            image.createImage(1, width, height, format, usage);
+            image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+            image.createTextureSampler(blur, clamp, false);
+            return image;
+        } catch(RuntimeException | Error failure) {
+            image.destroyFailedConstruction();
+            throw failure;
+        }
     }
 
     public static VulkanImage createWhiteTexture() {
@@ -100,11 +106,9 @@ public class VulkanImage {
     }
 
     private void createImage(int mipLevels, int width, int height, int format, int usage) {
-
         try(MemoryStack stack = stackPush()) {
-
             LongBuffer pTextureImage = stack.mallocLong(1);
-            PointerBuffer pAllocation = stack.pointers(0L);
+            PointerBuffer pAllocation = stack.pointers(VK_NULL_HANDLE);
 
             MemoryManager.createImage(width, height, mipLevels,
                     format, VK_IMAGE_TILING_OPTIMAL,
@@ -113,13 +117,9 @@ public class VulkanImage {
                     pTextureImage,
                     pAllocation);
 
-            id = pTextureImage.get(0);
-            allocation = pAllocation.get(0);
-
+            this.id = pTextureImage.get(0);
+            this.allocation = pAllocation.get(0);
             MemoryManager.addImage(this);
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
@@ -346,10 +346,15 @@ public class VulkanImage {
                 throw new RuntimeException("Failed to create texture sampler");
             }
 
-            textureSampler = new Sampler(this, pTextureSampler.get(0));
-
-            byte mask = (byte) ((blur ? 1 : 0) | (mipmap ? 2 : 0));
-            this.samplers.put(mask, textureSampler.sampler);
+            long sampler = pTextureSampler.get(0);
+            try {
+                textureSampler = new Sampler(this, sampler);
+                byte mask = (byte) ((blur ? 1 : 0) | (mipmap ? 2 : 0));
+                this.samplers.put(mask, sampler);
+            } catch(RuntimeException | Error failure) {
+                vkDestroySampler(getDevice(), sampler, null);
+                throw failure;
+            }
         }
     }
 
@@ -506,15 +511,35 @@ public class VulkanImage {
         if(this.freed)
             return;
 
-        for (long sampler : samplers.values()) {
+        destroyNativeResources();
+        this.freed = true;
+    }
+
+    private synchronized void destroyFailedConstruction() {
+        if(this.freed)
+            return;
+
+        destroyNativeResources();
+        this.freed = true;
+    }
+
+    private void destroyNativeResources() {
+        for(long sampler : this.samplers.values()) {
             vkDestroySampler(Vulkan.getDevice(), sampler, null);
         }
-        samplers.clear();
+        this.samplers.clear();
+        this.textureSampler = null;
 
-        vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
-        MemoryManager.freeImage(this.id, this.allocation);
+        if(this.imageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
+            this.imageView = VK_NULL_HANDLE;
+        }
 
-        this.freed = true;
+        if(this.id != VK_NULL_HANDLE) {
+            MemoryManager.freeImage(this.id, this.allocation);
+            this.id = VK_NULL_HANDLE;
+            this.allocation = VK_NULL_HANDLE;
+        }
     }
 
     public long getEstimatedSizeBytes() {
