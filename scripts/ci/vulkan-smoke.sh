@@ -11,6 +11,101 @@ usage() {
   exit 2
 }
 
+fixture_backup_dir="$(mktemp -d)"
+restore_build_gradle=0
+restore_fml_toml=0
+restore_ci_mods=0
+restore_vk_layer_settings=0
+vk_layer_settings_existed=0
+
+snapshot_build_gradle() {
+  if [[ "$restore_build_gradle" -eq 0 ]]; then
+    cp -a build.gradle "$fixture_backup_dir/build.gradle"
+    restore_build_gradle=1
+  fi
+}
+
+snapshot_fml_toml() {
+  if [[ "$restore_fml_toml" -eq 0 ]]; then
+    test -f run/config/fml.toml
+    cp -a run/config/fml.toml "$fixture_backup_dir/fml.toml"
+    restore_fml_toml=1
+  fi
+}
+
+snapshot_ci_mods() {
+  if [[ "$restore_ci_mods" -ne 0 ]]; then
+    return
+  fi
+
+  mkdir -p "$fixture_backup_dir/mods"
+  mkdir -p run/mods
+  shopt -s nullglob
+  local jar
+  for jar in run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar; do
+    cp -a "$jar" "$fixture_backup_dir/mods/"
+  done
+  shopt -u nullglob
+  restore_ci_mods=1
+}
+
+clear_ci_mods() {
+  snapshot_ci_mods
+  rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+}
+
+snapshot_vk_layer_settings() {
+  if [[ "$restore_vk_layer_settings" -ne 0 ]]; then
+    return
+  fi
+
+  mkdir -p run
+  if [[ -f run/vk_layer_settings.txt ]]; then
+    cp -a run/vk_layer_settings.txt "$fixture_backup_dir/vk_layer_settings.txt"
+    vk_layer_settings_existed=1
+  fi
+  restore_vk_layer_settings=1
+}
+
+restore_fixture_state() {
+  local status=$?
+  set +e
+
+  if [[ "$restore_vk_layer_settings" -ne 0 ]]; then
+    mkdir -p run
+    if [[ "$vk_layer_settings_existed" -ne 0 ]]; then
+      cp -a "$fixture_backup_dir/vk_layer_settings.txt" run/vk_layer_settings.txt
+    else
+      rm -f run/vk_layer_settings.txt
+    fi
+  fi
+
+  if [[ "$restore_build_gradle" -ne 0 ]]; then
+    cp -a "$fixture_backup_dir/build.gradle" build.gradle
+  fi
+
+  if [[ "$restore_fml_toml" -ne 0 ]]; then
+    mkdir -p run/config
+    cp -a "$fixture_backup_dir/fml.toml" run/config/fml.toml
+  fi
+
+  if [[ "$restore_ci_mods" -ne 0 ]]; then
+    mkdir -p run/mods
+    clear_ci_mods
+    shopt -s nullglob
+    local jar
+    for jar in "$fixture_backup_dir"/mods/*.jar; do
+      cp -a "$jar" run/mods/
+    done
+    shopt -u nullglob
+  fi
+
+  rm -rf "$fixture_backup_dir"
+  exit "$status"
+}
+
+trap restore_fixture_state EXIT
+
 configure_lavapipe() {
   local lvp_icd
   lvp_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
@@ -48,7 +143,7 @@ case "$mode" in
     ;;
 
   no-splash)
-    test -f run/config/fml.toml
+    snapshot_fml_toml
     if grep -Fq 'earlyWindowControl = true' run/config/fml.toml; then
       sed -i 's/^earlyWindowControl = true$/earlyWindowControl = false/' run/config/fml.toml
     fi
@@ -68,7 +163,8 @@ case "$mode" in
     ;;
 
   gpu-indirect-shadow)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
+    snapshot_vk_layer_settings
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
@@ -85,13 +181,14 @@ case "$mode" in
     ;;
 
   post-chain)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
     run_client "-Dvulkanmod.ciPostChainSmoke=true" vulkan-post-chain-smoke.log
     grep -F "Vulkan vanilla post-chain execution smoke passed" vulkan-post-chain-smoke.log
     ;;
 
   depth-post-chain)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
+    snapshot_vk_layer_settings
     mkdir -p run
     # The smoke must reject invalid Vulkan that happens not to crash Lavapipe.
     # Layer settings enable synchronization validation on Ubuntu's layer version.
@@ -108,7 +205,8 @@ case "$mode" in
     ;;
 
   screenshot)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
+    snapshot_vk_layer_settings
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
@@ -124,7 +222,7 @@ case "$mode" in
 
   crash-assistant)
     mkdir -p run/mods
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
     curl -fL --retry 3 \
       'https://cdn.modrinth.com/data/ix1qq8Ux/versions/mcLRynoF/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar' \
       -o 'run/mods/CrashAssistant-forge-1.19.2-1.20.1-1.9.7.jar'
@@ -144,7 +242,8 @@ case "$mode" in
 
   chat-heads)
     mkdir -p run/mods
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
+    snapshot_build_gradle
 
     # runClient uses Mojmap-named development classes while Chat Heads is a
     # production/SRG mod. Feed the exact 0.13.18 Forge artifact through
@@ -173,7 +272,8 @@ EOF
     ;;
 
   flywheel)
-    rm -f run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar
+    clear_ci_mods
+    snapshot_build_gradle
 
     # runClient uses Mojmap-named development classes, while the published
     # Flywheel JAR is reobfuscated. Add its dev-runtime dependency only for this

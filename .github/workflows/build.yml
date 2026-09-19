@@ -37,6 +37,8 @@ jobs:
           sed -i "s/^mod_version=.*/mod_version=${ci_version}/" gradle.properties
           echo "CI mod version: ${ci_version}"
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
+      - name: Validate smoke fixture isolation
+        run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
       - name: Install software Vulkan smoke-test dependencies
