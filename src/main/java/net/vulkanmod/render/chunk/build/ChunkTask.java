@@ -68,6 +68,7 @@ public class ChunkTask {
 
         @Nullable
         protected RenderChunkRegion region;
+        private final BlockPos origin;
         private final long voxelGeneration;
         private final boolean gpuTerrainCpuRecoveryRequired;
         private final boolean gpuTerrainHadReadyCpuFallback;
@@ -80,10 +81,11 @@ public class ChunkTask {
         private float buildTime;
         private boolean submitted = false;
 
-        public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, boolean highPriority,
-                         TaskDispatcher taskDispatcher) {
+        public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, BlockPos origin,
+                         boolean highPriority, TaskDispatcher taskDispatcher) {
             super(renderSection, taskDispatcher);
             this.region = renderChunkRegion;
+            this.origin = origin.immutable();
             this.voxelGeneration = renderSection.getVoxelGeneration();
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
@@ -175,7 +177,7 @@ public class ChunkTask {
         private CompileResults compile(float camX, float camY, float camZ,
                                        ThreadBuilderPack chunkBufferBuilderPack) {
             CompileResults compileResults = new CompileResults();
-            BlockPos blockPos = new BlockPos(renderSection.xOffset(), renderSection.yOffset(), renderSection.zOffset()).immutable();
+            BlockPos blockPos = this.origin;
             BlockPos blockPos2 = blockPos.offset(15, 15, 15);
             VisGraph visGraph = new VisGraph();
             RenderChunkRegion renderChunkRegion = this.region;

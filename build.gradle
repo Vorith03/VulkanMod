@@ -288,6 +288,7 @@ tasks.named('check').configure {
     dependsOn 'testTextureUploadLayout'
     dependsOn 'testMemoryPressurePolicy'
     dependsOn 'testForgeRenderStageContract'
+    dependsOn 'testChunkTaskOriginSnapshot'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -318,6 +319,12 @@ tasks.register('testForgeRenderStageContract', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.mixin.chunk.ForgeRenderStageMixinTest'
+}
+
+tasks.register('testChunkTaskOriginSnapshot', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.build.ChunkTaskOriginSnapshotTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

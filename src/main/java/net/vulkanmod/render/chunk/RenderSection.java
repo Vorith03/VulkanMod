@@ -149,7 +149,7 @@ public class RenderSection {
             throw new IllegalStateException("RenderSection has no owning world renderer");
         RenderChunkRegion renderchunkregion = renderRegionCache.createRegion(this.worldRenderer.getLevel(), blockpos.offset(-1, -1, -1), blockpos.offset(16, 16, 16), 1);
         boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
-        this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, !flag1 || flag, dispatcher);
+        this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, blockpos, !flag1 || flag, dispatcher);
         return this.compileStatus.rebuildTask;
     }
 
