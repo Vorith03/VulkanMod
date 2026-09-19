@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * be consumed from a non-blocking helper-fence poll; the frame-fence callback remains
  * the guaranteed exactly-once fallback.</p>
  */
-final class GpuTerrainSectionMesherBridge {
+public final class GpuTerrainSectionMesherBridge {
     static final String PROPERTY = "vulkanmod.experimentalGpuTerrainMesher";
     static final String CPU_BYPASS_PROPERTY = "vulkanmod.experimentalGpuTerrainCpuBypass";
     static final String DRAW_HANDOFF_PROPERTY = "vulkanmod.experimentalGpuTerrainDrawHandoff";
@@ -48,7 +48,9 @@ final class GpuTerrainSectionMesherBridge {
     private static final AtomicBoolean FAILURE_LOGGED = new AtomicBoolean();
     private static final AtomicBoolean RECOVERY_LOGGED = new AtomicBoolean();
 
-    private static boolean mesherAttempted;
+    private static final int MAX_MESHER_INITIALIZATION_ATTEMPTS = 2;
+
+    private static int mesherInitializationAttempts;
     private static GpuTerrainSectionMesher mesher;
     private static GpuTerrainModelGpuStore modelStore;
     private static GpuTerrainModelTable modelTable;
@@ -73,6 +75,39 @@ final class GpuTerrainSectionMesherBridge {
             return;
         RenderSystem.assertOnRenderThread();
         mesher.pollCompletions();
+    }
+
+    /**
+     * Global owner hook. Vulkan.cleanUp() calls this only after vkDeviceWaitIdle(),
+     * while the render-thread world state still exists, so pending completion
+     * callbacks can retire deterministically before device destruction.
+     */
+    public static synchronized void shutdownAfterDeviceIdle() {
+        RuntimeException completionFailure = null;
+        GpuTerrainSectionMesher activeMesher = mesher;
+        mesher = null;
+
+        if(activeMesher != null) {
+            try {
+                activeMesher.shutdownAfterDeviceIdle();
+            } catch(RuntimeException failure) {
+                completionFailure = failure;
+            }
+        }
+
+        if(modelStore != null) {
+            modelStore.close();
+            modelStore = null;
+        }
+        modelTable = null;
+        failedModelGeneration = Long.MIN_VALUE;
+        mesherInitializationAttempts = 0;
+
+        if(completionFailure != null) {
+            Initializer.LOGGER.warn(
+                    "GPU terrain mesher completion callback failed during Vulkan teardown; native mesher resources were still retired",
+                    completionFailure);
+        }
     }
 
     static TerrainRenderType outputLayer() {
@@ -618,16 +653,26 @@ final class GpuTerrainSectionMesherBridge {
     record Qualification(long modelGeneration, int faceCount) {}
 
     private static boolean ensureGpuResources() {
-        if(!mesherAttempted) {
-            mesherAttempted = true;
+        if(mesher == null) {
+            if(mesherInitializationAttempts >= MAX_MESHER_INITIALIZATION_ATTEMPTS)
+                return false;
+
+            mesherInitializationAttempts++;
             try {
                 mesher = new GpuTerrainSectionMesher();
-            } catch(RuntimeException error) {
+                mesherInitializationAttempts = 0;
+            } catch(UnsupportedOperationException error) {
+                // Unsupported queue capabilities are permanent for this device.
+                mesherInitializationAttempts = MAX_MESHER_INITIALIZATION_ATTEMPTS;
                 reportInitializationFailure(error);
+                return false;
+            } catch(RuntimeException error) {
+                // One later dispatch may retry a transient creation failure. A
+                // second failure leaves the optional path disabled for the session.
+                reportInitializationFailure(error);
+                return false;
             }
         }
-        if(mesher == null)
-            return false;
 
         long generation = GpuTerrainModelRegistry.generation();
         if(modelTable != null && modelTable.generation() == generation
@@ -636,22 +681,30 @@ final class GpuTerrainSectionMesherBridge {
         if(failedModelGeneration == generation)
             return false;
 
-        if(modelStore != null)
-            modelStore.close();
-        modelStore = new GpuTerrainModelGpuStore();
+        GpuTerrainModelGpuStore previousStore = modelStore;
+        modelStore = null;
         modelTable = null;
+        if(previousStore != null)
+            previousStore.close();
 
+        GpuTerrainModelGpuStore newStore = null;
         try {
+            newStore = new GpuTerrainModelGpuStore();
             GpuTerrainModelTable table = GpuTerrainModelTable.captureCurrent();
             if(table.generation() != generation || table.templateCount() <= 0
-                    || !modelStore.upload(table)) {
+                    || !newStore.upload(table)) {
+                newStore.close();
                 failedModelGeneration = generation;
                 return false;
             }
+
+            modelStore = newStore;
             modelTable = table;
             failedModelGeneration = Long.MIN_VALUE;
             return true;
         } catch(RuntimeException error) {
+            if(newStore != null)
+                newStore.close();
             failedModelGeneration = generation;
             reportInitializationFailure(error);
             return false;

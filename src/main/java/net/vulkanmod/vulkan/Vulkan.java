@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan;
 
+import net.vulkanmod.render.chunk.GpuTerrainSectionMesherBridge;
 import net.vulkanmod.vulkan.framebuffer.SwapChain;
 import net.vulkanmod.vulkan.memory.Buffer;
 import net.vulkanmod.vulkan.memory.MemoryManager;
@@ -219,6 +220,7 @@ public class Vulkan {
 
     public static void cleanUp() {
         vkDeviceWaitIdle(Device.device);
+        GpuTerrainSectionMesherBridge.shutdownAfterDeviceIdle();
         vkDestroyCommandPool(Device.device, commandPool, null);
         vkDestroyFence(Device.device, immediateFence, null);
 

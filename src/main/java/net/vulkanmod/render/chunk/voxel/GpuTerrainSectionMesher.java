@@ -73,9 +73,19 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         if(!graphicsQueueSupportsCompute())
             throw new UnsupportedOperationException(
                     "Graphics queue family does not support compute dispatch");
-        createDescriptorResources();
-        createPipelineLayout();
-        createPipeline();
+
+        try {
+            createDescriptorResources();
+            createPipelineLayout();
+            createPipeline();
+        } catch(RuntimeException | Error failure) {
+            // Construction owns every native handle it creates. If a later step
+            // fails, retire the earlier handles before allowing the exception to
+            // escape so a failed bridge initialization cannot leak device objects.
+            closed = true;
+            destroyResources();
+            throw failure;
+        }
     }
 
     /**
@@ -184,6 +194,33 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
             if(Synchronization.checkFenceStatus(token.fence))
                 completePending(token);
         }
+    }
+
+    /**
+     * Global Vulkan teardown calls this only after vkDeviceWaitIdle(). At that
+     * point every helper submission is complete, so drain all outstanding
+     * completion tokens without another fence wait and destroy descriptor/pipeline
+     * resources synchronously before VkDevice destruction.
+     */
+    public void shutdownAfterDeviceIdle() {
+        PendingCompletion[] snapshot;
+        synchronized(this) {
+            snapshot = this.pendingCompletions.toArray(new PendingCompletion[0]);
+        }
+
+        RuntimeException firstFailure = null;
+        for(PendingCompletion token : snapshot) {
+            try {
+                completePending(token);
+            } catch(RuntimeException failure) {
+                if(firstFailure == null)
+                    firstFailure = failure;
+            }
+        }
+
+        close();
+        if(firstFailure != null)
+            throw firstFailure;
     }
 
     private void completePending(PendingCompletion token) {
@@ -687,14 +724,22 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
         if(resourcesDestroyed)
             return;
         resourcesDestroyed = true;
-        if(pipeline != VK_NULL_HANDLE)
+        if(pipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(Device.device, pipeline, null);
-        if(pipelineLayout != VK_NULL_HANDLE)
+            pipeline = VK_NULL_HANDLE;
+        }
+        if(pipelineLayout != VK_NULL_HANDLE) {
             vkDestroyPipelineLayout(Device.device, pipelineLayout, null);
-        if(descriptorPool != VK_NULL_HANDLE)
+            pipelineLayout = VK_NULL_HANDLE;
+        }
+        if(descriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(Device.device, descriptorPool, null);
-        if(descriptorSetLayout != VK_NULL_HANDLE)
+            descriptorPool = VK_NULL_HANDLE;
+        }
+        if(descriptorSetLayout != VK_NULL_HANDLE) {
             vkDestroyDescriptorSetLayout(Device.device, descriptorSetLayout, null);
+            descriptorSetLayout = VK_NULL_HANDLE;
+        }
     }
 
     private static final class PendingCompletion {
