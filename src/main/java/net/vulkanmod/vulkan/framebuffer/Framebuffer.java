@@ -176,27 +176,36 @@ public class Framebuffer {
     }
 
     public void cleanUp() {
-        if(this.colorAttachment != null)
-            this.colorAttachment.free();
-
-        if(this.depthAttachment != null)
-            this.depthAttachment.free();
-
+        final VulkanImage retiredColor = this.colorAttachment;
+        final VulkanImage retiredDepth = this.depthAttachment;
         final VkDevice device = Vulkan.getDevice();
+        final ObjectArrayList<Long> retiredFramebuffers =
+                new ObjectArrayList<>(this.framebufferIds.size());
+        this.framebufferIds.forEach((renderPass, id) -> retiredFramebuffers.add(id));
 
-        // A RenderTarget can be resized or closed while the current primary
-        // command buffer already contains a render pass using this framebuffer.
-        // Keep the native framebuffer alive until that frame slot's fence proves
-        // every submitted use has retired, matching the deferred attachment images.
-        framebufferIds.forEach((renderPass, id) -> {
-            final long framebufferId = id;
-            MemoryManager.getInstance().addFrameOp(
-                    () -> vkDestroyFramebuffer(device, framebufferId, null)
-            );
-        });
+        // Keep the dependency chain in one frame-slot retirement unit. The frame
+        // fence makes prior GPU use safe, but VkFramebuffer must still die before
+        // any attachment view it references.
+        if(!retiredFramebuffers.isEmpty() || retiredColor != null || retiredDepth != null) {
+            MemoryManager.getInstance().addFrameOp(() ->
+                    retireNativeResources(device, retiredFramebuffers, retiredColor, retiredDepth));
+        }
 
-        framebufferIds.clear();
+        this.framebufferIds.clear();
+        this.colorAttachment = null;
+        this.depthAttachment = null;
+    }
 
+    private static void retireNativeResources(
+            VkDevice device, ObjectArrayList<Long> framebufferIds,
+            VulkanImage colorAttachment, VulkanImage depthAttachment) {
+        for(long framebufferId : framebufferIds)
+            vkDestroyFramebuffer(device, framebufferId, null);
+
+        if(colorAttachment != null)
+            colorAttachment.doFree();
+        if(depthAttachment != null && depthAttachment != colorAttachment)
+            depthAttachment.doFree();
     }
 
     public long getDepthImageView() { return depthAttachment.getImageView(); }

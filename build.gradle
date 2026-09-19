@@ -290,6 +290,7 @@ tasks.named('check').configure {
     dependsOn 'testForgeRenderStageContract'
     dependsOn 'testChunkTaskOriginSnapshot'
     dependsOn 'testGpuTerrainMesherLifecycle'
+    dependsOn 'testFramebufferRetirementOrder'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -332,6 +333,12 @@ tasks.register('testGpuTerrainMesherLifecycle', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.chunk.voxel.GpuTerrainMesherLifecycleTest'
+}
+
+tasks.register('testFramebufferRetirementOrder', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.framebuffer.FramebufferRetirementOrderTest'
 }
 
 tasks.withType(JavaCompile).configureEach {
