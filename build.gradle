@@ -294,6 +294,7 @@ tasks.named('check').configure {
     dependsOn 'testVulkanImageCreationContract'
     dependsOn 'testSpirvNativeLifetime'
     dependsOn 'testVmaMappingContract'
+    dependsOn 'testAutoIndexBufferWidth'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -360,6 +361,12 @@ tasks.register('testVmaMappingContract', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.vulkan.memory.VmaMappingContractTest'
+}
+
+tasks.register('testAutoIndexBufferWidth', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.memory.AutoIndexBufferWidthTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

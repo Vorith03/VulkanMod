@@ -34,7 +34,7 @@ public class Drawer {
 
     public Drawer() {
         //Index buffers
-        quadsIndexBuffer = new AutoIndexBuffer(100000, AutoIndexBuffer.DrawType.QUADS);
+        quadsIndexBuffer = new AutoIndexBuffer(65536, AutoIndexBuffer.DrawType.QUADS);
         triangleFanIndexBuffer = new AutoIndexBuffer(1000, AutoIndexBuffer.DrawType.TRIANGLE_FAN);
         triangleStripIndexBuffer = new AutoIndexBuffer(1000, AutoIndexBuffer.DrawType.TRIANGLE_STRIP);
     }
@@ -96,7 +96,7 @@ public class Drawer {
 
         autoIndexBuffer.checkCapacity(vertexCount);
 
-        drawIndexed(vertexBuffer, autoIndexBuffer.getIndexBuffer(), indexCount);
+        drawIndexed(vertexBuffer, autoIndexBuffer.getIndexBuffer(), indexCount, autoIndexBuffer.getVkIndexType());
     }
 
     public AutoIndexBuffer getQuadsIndexBuffer() {
@@ -110,13 +110,17 @@ public class Drawer {
     public UniformBuffers getUniformBuffers() { return this.uniformBuffers; }
 
     public void drawIndexed(VertexBuffer vertexBuffer, IndexBuffer indexBuffer, int indexCount) {
+        drawIndexed(vertexBuffer, indexBuffer, indexCount, VK_INDEX_TYPE_UINT16);
+    }
+
+    public void drawIndexed(VertexBuffer vertexBuffer, IndexBuffer indexBuffer, int indexCount, int indexType) {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
 
         VUtil.UNSAFE.putLong(pBuffers, vertexBuffer.getId());
         VUtil.UNSAFE.putLong(pOffsets, vertexBuffer.getOffset());
         nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), indexType);
         vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, 0, 0);
     }
 
@@ -140,7 +144,7 @@ public class Drawer {
         }
         IndexBuffer indexBuffer = autoIndexBuffer.getIndexBuffer();
 
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), autoIndexBuffer.getVkIndexType());
     }
 
     public void cleanUpResources() {

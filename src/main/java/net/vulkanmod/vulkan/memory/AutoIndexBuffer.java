@@ -3,12 +3,17 @@ package net.vulkanmod.vulkan.memory;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
+
+import static org.lwjgl.vulkan.VK10.VK_INDEX_TYPE_UINT16;
+import static org.lwjgl.vulkan.VK10.VK_INDEX_TYPE_UINT32;
 
 public class AutoIndexBuffer {
     int vertexCount;
     DrawType drawType;
     IndexBuffer indexBuffer;
+    IndexBuffer.IndexType indexType;
 
     public AutoIndexBuffer(int vertexCount, DrawType type) {
         this.drawType = type;
@@ -18,29 +23,26 @@ public class AutoIndexBuffer {
 
     private void createIndexBuffer(int vertexCount) {
         this.vertexCount = vertexCount;
-        int size;
-        ByteBuffer buffer;
+        this.indexType = indexTypeForVertexCount(vertexCount);
 
-        switch (drawType) {
-            case QUADS -> {
-                size = vertexCount * 3 / 2 * IndexBuffer.IndexType.SHORT.size;
-                buffer = genQuadIdxs(vertexCount);
-            }
-            case TRIANGLE_FAN -> {
-                size = (vertexCount - 2) * 3 * IndexBuffer.IndexType.SHORT.size;
-                buffer = genTriangleFanIdxs(vertexCount);
-            }
-            case TRIANGLE_STRIP -> {
-                size = (vertexCount - 2) * 3 * IndexBuffer.IndexType.SHORT.size;
-                buffer = genTriangleStripIdxs(vertexCount);
-            }
-            default -> throw new RuntimeException("unknown drawType");
-        }
+        int indexCount = switch (drawType) {
+            case QUADS -> vertexCount * 3 / 2;
+            case TRIANGLE_FAN, TRIANGLE_STRIP -> (vertexCount - 2) * 3;
+        };
+        int size = Math.multiplyExact(indexCount, this.indexType.size);
+
+        ByteBuffer buffer = switch (drawType) {
+            case QUADS -> genQuadIdxs(vertexCount, this.indexType);
+            case TRIANGLE_FAN -> genTriangleFanIdxs(vertexCount, this.indexType);
+            case TRIANGLE_STRIP -> genTriangleStripIdxs(vertexCount, this.indexType);
+        };
 
         indexBuffer = new IndexBuffer(size, MemoryTypes.GPU_MEM);
-        indexBuffer.copyBuffer(buffer);
-
-        MemoryUtil.memFree(buffer);
+        try {
+            indexBuffer.copyBuffer(buffer);
+        } finally {
+            MemoryUtil.memFree(buffer);
+        }
     }
 
     public void checkCapacity(int vertexCount) {
@@ -54,75 +56,120 @@ public class AutoIndexBuffer {
         }
     }
 
+    static IndexBuffer.IndexType indexTypeForVertexCount(int vertexCount) {
+        if(vertexCount < 0)
+            throw new IllegalArgumentException("vertexCount must be non-negative");
+        return vertexCount <= 0x10000
+                ? IndexBuffer.IndexType.SHORT
+                : IndexBuffer.IndexType.INT;
+    }
+
     public static ByteBuffer genQuadIdxs(int vertexCount) {
-        //short[] idxs = {0, 1, 2, 0, 2, 3};
+        return genQuadIdxs(vertexCount, indexTypeForVertexCount(vertexCount));
+    }
 
+    static ByteBuffer genQuadIdxs(int vertexCount, IndexBuffer.IndexType type) {
         int indexCount = vertexCount * 3 / 2;
-        ByteBuffer buffer = MemoryUtil.memAlloc(indexCount * Short.BYTES);
-        ShortBuffer idxs = buffer.asShortBuffer();
-        //short[] idxs = new short[indexCount];
+        ByteBuffer buffer = MemoryUtil.memAlloc(Math.multiplyExact(indexCount, type.size));
 
-        int j = 0;
-        for(int i = 0; i < vertexCount; i += 4) {
-
-            idxs.put(j, (short) i);
-            idxs.put(j + 1, (short) (i + 1));
-            idxs.put(j + 2, (short) (i + 2));
-            idxs.put(j + 3, (short) (i));
-            idxs.put(j + 4, (short) (i + 2));
-            idxs.put(j + 5, (short) (i + 3));
-
-            j += 6;
+        if(type == IndexBuffer.IndexType.SHORT) {
+            ShortBuffer idxs = buffer.asShortBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount; i += 4) {
+                idxs.put(j, (short)i);
+                idxs.put(j + 1, (short)(i + 1));
+                idxs.put(j + 2, (short)(i + 2));
+                idxs.put(j + 3, (short)i);
+                idxs.put(j + 4, (short)(i + 2));
+                idxs.put(j + 5, (short)(i + 3));
+                j += 6;
+            }
+        } else {
+            IntBuffer idxs = buffer.asIntBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount; i += 4) {
+                idxs.put(j, i);
+                idxs.put(j + 1, i + 1);
+                idxs.put(j + 2, i + 2);
+                idxs.put(j + 3, i);
+                idxs.put(j + 4, i + 2);
+                idxs.put(j + 5, i + 3);
+                j += 6;
+            }
         }
 
         return buffer;
-        //this.type.copyIndexBuffer(this, bufferSize, idxs);
     }
 
     public static ByteBuffer genTriangleFanIdxs(int vertexCount) {
+        return genTriangleFanIdxs(vertexCount, indexTypeForVertexCount(vertexCount));
+    }
+
+    static ByteBuffer genTriangleFanIdxs(int vertexCount, IndexBuffer.IndexType type) {
         int indexCount = (vertexCount - 2) * 3;
-        ByteBuffer buffer = MemoryUtil.memAlloc(indexCount * Short.BYTES);
-        ShortBuffer idxs = buffer.asShortBuffer();
+        ByteBuffer buffer = MemoryUtil.memAlloc(Math.multiplyExact(indexCount, type.size));
 
-        //short[] idxs = byteBuffer.asShortBuffer().array();
-
-        int j = 0;
-        for (int i = 0; i < vertexCount - 2; ++i) {
-//            idxs[j] = 0;
-//            idxs[j + 1] = (short) (i + 1);
-//            idxs[j + 2] = (short) (i + 2);
-
-            idxs.put(j, (short) 0);
-            idxs.put(j + 1, (short) (i + 1));
-            idxs.put(j + 2, (short) (i + 2));
-
-            j += 3;
+        if(type == IndexBuffer.IndexType.SHORT) {
+            ShortBuffer idxs = buffer.asShortBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount - 2; ++i) {
+                idxs.put(j, (short)0);
+                idxs.put(j + 1, (short)(i + 1));
+                idxs.put(j + 2, (short)(i + 2));
+                j += 3;
+            }
+        } else {
+            IntBuffer idxs = buffer.asIntBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount - 2; ++i) {
+                idxs.put(j, 0);
+                idxs.put(j + 1, i + 1);
+                idxs.put(j + 2, i + 2);
+                j += 3;
+            }
         }
 
-        buffer.rewind();
         return buffer;
     }
 
     public static ByteBuffer genTriangleStripIdxs(int vertexCount) {
+        return genTriangleStripIdxs(vertexCount, indexTypeForVertexCount(vertexCount));
+    }
+
+    static ByteBuffer genTriangleStripIdxs(int vertexCount, IndexBuffer.IndexType type) {
         int indexCount = (vertexCount - 2) * 3;
+        ByteBuffer buffer = MemoryUtil.memAlloc(Math.multiplyExact(indexCount, type.size));
 
-        ByteBuffer buffer = MemoryUtil.memAlloc(indexCount * Short.BYTES);
-        ShortBuffer idxs = buffer.asShortBuffer();
-
-        int j = 0;
-        for (int i = 0; i < vertexCount - 2; ++i) {
-            idxs.put(j, (short) i);
-            idxs.put(j + 1, (short) (i + 1));
-            idxs.put(j + 2, (short) (i + 2));
-
-            j += 3;
+        if(type == IndexBuffer.IndexType.SHORT) {
+            ShortBuffer idxs = buffer.asShortBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount - 2; ++i) {
+                idxs.put(j, (short)i);
+                idxs.put(j + 1, (short)(i + 1));
+                idxs.put(j + 2, (short)(i + 2));
+                j += 3;
+            }
+        } else {
+            IntBuffer idxs = buffer.asIntBuffer();
+            int j = 0;
+            for(int i = 0; i < vertexCount - 2; ++i) {
+                idxs.put(j, i);
+                idxs.put(j + 1, i + 1);
+                idxs.put(j + 2, i + 2);
+                j += 3;
+            }
         }
 
-        buffer.rewind();
         return buffer;
     }
 
     public IndexBuffer getIndexBuffer() { return indexBuffer; }
+
+    public int getVkIndexType() {
+        return this.indexType == IndexBuffer.IndexType.INT
+                ? VK_INDEX_TYPE_UINT32
+                : VK_INDEX_TYPE_UINT16;
+    }
 
     public enum DrawType {
         QUADS(7),

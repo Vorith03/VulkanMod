@@ -14,6 +14,8 @@ import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
 
+import static org.lwjgl.vulkan.VK10.VK_INDEX_TYPE_UINT16;
+
 public class VBO {
     private VertexBuffer vertexBuffer;
     private IndexBuffer indexBuffer;
@@ -23,6 +25,7 @@ public class VBO {
     private VertexFormat.Mode mode;
 
     private boolean autoIndexed = false;
+    private int indexType = VK_INDEX_TYPE_UINT16;
 
     public VBO() {}
 
@@ -78,9 +81,11 @@ public class VBO {
             if(autoIndexBuffer != null) {
                 autoIndexBuffer.checkCapacity(vertexCount);
                 indexBuffer = autoIndexBuffer.getIndexBuffer();
+                this.indexType = autoIndexBuffer.getVkIndexType();
             }
             else {
                 indexBuffer = null;
+                this.indexType = VK_INDEX_TYPE_UINT16;
             }
 
             this.autoIndexed = true;
@@ -92,6 +97,7 @@ public class VBO {
             this.indexBuffer = new IndexBuffer(data.remaining(), MemoryTypes.GPU_MEM);
 //            this.indexBuffer = new AsyncIndexBuffer(data.remaining());
             indexBuffer.copyBuffer(data);
+            this.indexType = VK_INDEX_TYPE_UINT16;
             this.autoIndexed = false;
         }
 
@@ -120,7 +126,7 @@ public class VBO {
             renderer.uploadAndBindUBOs(pipeline);
 
             if(indexBuffer != null)
-                Renderer.getDrawer().drawIndexed(vertexBuffer, indexBuffer, indexCount);
+                Renderer.getDrawer().drawIndexed(vertexBuffer, indexBuffer, indexCount, this.indexType);
             else
                 Renderer.getDrawer().draw(vertexBuffer, vertexCount);
 
@@ -133,7 +139,7 @@ public class VBO {
         if (this.indexCount != 0) {
 
             RenderSystem.assertOnRenderThread();
-            Renderer.getDrawer().drawIndexed(vertexBuffer, indexBuffer, indexCount);
+            Renderer.getDrawer().drawIndexed(vertexBuffer, indexBuffer, indexCount, this.indexType);
         }
     }
 
