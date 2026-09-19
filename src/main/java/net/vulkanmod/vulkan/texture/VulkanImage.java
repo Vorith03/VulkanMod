@@ -29,6 +29,7 @@ public class VulkanImage {
     private long id;
     private long allocation;
     private long imageView;
+    private long attachmentImageView;
 
     private final Byte2LongMap samplers = new Byte2LongArrayMap();
     private Sampler textureSampler;
@@ -84,7 +85,13 @@ public class VulkanImage {
         VulkanImage image = new VulkanImage(format, 1, width, height, usage, 0);
         try {
             image.createImage(1, width, height, format, usage);
-            image.imageView = createImageView(image.id, format, aspectMaskForFormat(format), 1);
+            // Sampled depth descriptors must expose exactly one aspect. Combined
+            // depth/stencil attachments need a second view for framebuffer use.
+            image.imageView = createImageView(image.id, format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+            if(hasStencilComponent(format)) {
+                image.attachmentImageView = createImageView(
+                        image.id, format, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1);
+            }
             image.createTextureSampler(blur, clamp, false);
             return image;
         } catch(RuntimeException | Error failure) {
@@ -542,6 +549,11 @@ public class VulkanImage {
         this.samplers.clear();
         this.textureSampler = null;
 
+        if(this.attachmentImageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(Vulkan.getDevice(), this.attachmentImageView, null);
+            this.attachmentImageView = VK_NULL_HANDLE;
+        }
+
         if(this.imageView != VK_NULL_HANDLE) {
             vkDestroyImageView(Vulkan.getDevice(), this.imageView, null);
             this.imageView = VK_NULL_HANDLE;
@@ -586,6 +598,9 @@ public class VulkanImage {
     public long getId() { return id;}
     public long getAllocation() { return allocation;}
     public long getImageView() { return imageView; }
+    public long getAttachmentImageView() {
+        return attachmentImageView != VK_NULL_HANDLE ? attachmentImageView : imageView;
+    }
     public Sampler getTextureSampler() { return textureSampler; }
 
     public static class Builder {

@@ -104,11 +104,11 @@ public class Framebuffer {
 
             LongBuffer attachments;
             if(colorAttachment != null && depthAttachment != null) {
-                attachments = stack.longs(colorAttachment.getImageView(), depthAttachment.getImageView());
+                attachments = stack.longs(colorAttachment.getImageView(), depthAttachment.getAttachmentImageView());
             } else if(colorAttachment != null) {
                 attachments = stack.longs(colorAttachment.getImageView());
             } else {
-                attachments = stack.longs(depthAttachment.getImageView());
+                attachments = stack.longs(depthAttachment.getAttachmentImageView());
             }
 
             LongBuffer pFramebuffer = stack.mallocLong(1);
@@ -208,7 +208,7 @@ public class Framebuffer {
             depthAttachment.doFree();
     }
 
-    public long getDepthImageView() { return depthAttachment.getImageView(); }
+    public long getDepthImageView() { return depthAttachment.getAttachmentImageView(); }
 
     public VulkanImage getDepthAttachment() { return depthAttachment; }
 

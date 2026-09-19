@@ -43,6 +43,8 @@ public final class RenderTargetStencilSmokeTest {
             require(depthStencil != null, "Stencil-enabled RenderTarget has no Vulkan depth attachment");
             require(VulkanImage.hasStencilComponent(depthStencil.format),
                     "Stencil-enabled RenderTarget did not allocate a combined depth/stencil format");
+            require(depthStencil.getImageView() != depthStencil.getAttachmentImageView(),
+                    "Combined depth/stencil RenderTarget reused its attachment view for depth sampling");
         } finally {
             offscreen.destroyBuffers();
         }

@@ -224,8 +224,8 @@ public class SwapChain extends Framebuffer {
 
             for(int i = 0; i < swapChainImages.size(); ++i) {
 
-//                LongBuffer attachments = stack.longs(imageViews.get(i), depthAttachment.getImageView());
-                LongBuffer attachments = stack.longs(this.swapChainImages.get(i).getImageView(), depthAttachment.getImageView());
+//                LongBuffer attachments = stack.longs(imageViews.get(i), depthAttachment.getAttachmentImageView());
+                LongBuffer attachments = stack.longs(this.swapChainImages.get(i).getImageView(), depthAttachment.getAttachmentImageView());
 
                 //attachments = stack.mallocLong(1);
                 LongBuffer pFramebuffer = stack.mallocLong(1);
