@@ -11,10 +11,10 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Latest executable checkpoint is `1aa6be81c2baf0f736073d2fb57ccf5b84ec9af6` (`compat: preserve Minecraft emergency save`), fully validated by CI #706 / run `35433204178`.
-- The adversarial audit repair effort has closed clusters 1–4. Current progress is **1 repair cluster remaining / 5**; cluster 5 is the only open audit-repair cluster.
+- Latest executable checkpoint is `6f55112a5974e00c413d3a07f626f4a7554ccd2d` (`lifecycle: release process native state`), fully validated by CI #711.
+- The adversarial audit repair effort is complete. Current progress is **0 repair clusters remaining / 5**; clusters 1–5 are closed and CI-validated.
 - The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward; subsequent compatibility/preflight and audit-repair work is directly on `forge-1.20.1`.
-- CI #706 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel all pass. Clusters 1–4 now cover Forge vertex/shader/stage/stencil contracts, terrain/native lifetime fixes, VMA mapping, automatic index width, sampler wrap identity, and preservation of Minecraft emergency save behavior.
+- CI #711 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel all pass. The completed audit repairs now cover Forge vertex/shader/stage/stencil contracts, terrain/native lifetime, VMA mapping, automatic index width, sampler wrap identity, emergency-save behavior, hermetic CI fixtures, legacy active texture-unit coherence, config persistence/recovery, and deterministic process-lifetime native teardown.
 - Preflight after the first RX/Create Chronicles IP crash closed additional downstream issues before another user test: per-`LevelRenderer` terrain/world/camera/dispatcher ownership for IP secondary dimensions, IP recursive `RenderBuffers` use for block entities, Vulkan terrain clip-plane support in direct/indirect/region pipelines, preservation of IP's reload guards/fan-out despite VulkanMod cancelling vanilla `allChanged()`, and the debug lifecycle mixin constructor descriptor after the renderer refactor.
 - The first RX 6900 XT/Create Chronicles attempt remains useful evidence: it reached IP's framebuffer compatibility renderer and stopped at a raw `GL11.glDisable(GL_STENCIL_TEST)` before terrain evidence. That raw-GL path and the downstream preflight issues above are now regression-covered in CI #690; a repeat full-pack hardware run is still required.
 - Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
@@ -136,32 +136,27 @@ Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cu
 
 The full adversarial audit inserted before the pending RX 6900 XT/Create Chronicles functional run is complete. The durable report is `docs/CODEBASE_AUDIT_2026-09-18.md`.
 
-Repair clusters 1–4 are closed and individually CI-validated. Current progress is **1 / 5 repair clusters remaining**.
+Repair clusters 1–5 are closed and individually CI-validated. Current progress is **0 / 5 repair clusters remaining**.
 
 Validated audit-repair milestones now include:
 
 - cluster 1: `94c459f17f45` / CI #691 — Forge vertex consumer contracts;
 - cluster 2: `5c39a9183ac6` / CI #692, `412095343fc1` / CI #693, and `0cf261b54b37` / CI #696 — Forge shader registration, render stages, and truthful stencil rejection;
 - cluster 3: `c1fda8897431` / CI #698 through `6d077ed36ee2` / CI #702 — terrain origin/lifecycle, framebuffer/image retirement, and SPIR-V native lifetime;
-- cluster 4: `67a9aebd2f74` / CI #703, `4367ac2d2681` / CI #704, `1b81d8f44d4c` / CI #705, and `1aa6be81c2ba` / CI #706 — VMA mapping lifetime, automatic-index width, sampler wrap identity, and Minecraft emergency save.
+- cluster 4: `67a9aebd2f74` / CI #703, `4367ac2d2681` / CI #704, `1b81d8f44d4c` / CI #705, and `1aa6be81c2ba` / CI #706 — VMA mapping lifetime, automatic-index width, sampler wrap identity, and Minecraft emergency save;
+- cluster 5: `f5b6fc3f6987` / CI #707 — hermetic generic Vulkan smoke fixtures; `7a55b3186686` / CI #708 plus `8165c2a6ba7d` / CI #709 — coherent legacy active texture-unit state including active-unit metadata queries and multi-unit reallocation refresh; `2acffea1f34a` / CI #710 — config persistence/recovery with behavioral malformed-config round trip; `6f55112a5974` / CI #711 — process-lifetime native ownership/teardown, idempotence, stale stack-backed surface-state removal, and complete queue teardown.
 
-Cluster 5 remains the only open audit-repair cluster. Prepared descendants exist for A18 hermetic CI fixtures, A17 active texture-unit coherence, A19 config persistence/recovery, and A7 process-lifetime native allocations, but they are implementation candidates rather than authority. Review findings already established before landing them:
-
-- A18 must also preserve a pre-existing `run/vk_layer_settings.txt`; unconditional deletion is not hermetic fixture restoration.
-- A17 production mapping correctly distinguishes shader sampler slots from legacy GL active texture units, but its regression oracle should explicitly lock the intentional slot/unit 1↔2 semantics.
-- A19 production persistence/recovery logic is plausible, but its prepared bytecode oracle incorrectly looks for a catch type via `visitTypeInsn` and does not actually prove `ATOMIC_MOVE`; fix the oracle before landing.
-- A7 semaphore/fence collections are tracking structures, not owners; owned synchronization handles remain destroyed by their `CommandPool` during `Device.destroy()`. Teardown must stay after device idle and before owner destruction, with idempotence preserved.
+The audit repair sequence is finished. Do not reopen any repair cluster without contradictory live Git/CI/runtime evidence.
 
 Several suspicious areas were explicitly cleared by the audit: frame-slot vs image-index semaphore ownership is correct; GPU-terrain async completion/descriptor return is exactly-once; worker shutdown joins producers before publication cleanup; in-flight GPU reservations protect region reuse; Java/GLSL terrain ABIs and inspected barriers match; temporary stale CPU fallback publication was not an ownership violation; and Immersive Portals cull redirects do update Vulkan pipeline state.
 
 ## Next action
 
-1. Continue cluster 5 only. Start with A18, but repair its `vk_layer_settings.txt` restoration gap before pushing.
-2. Then take A17, strengthening its regression oracle to assert both shader-slot and legacy-unit 1↔2 mappings before validation.
-3. Then take A19, correcting its malformed-JSON/atomic-move oracle before validation.
-4. Finish with A7, rechecking teardown order, idempotence, and native ownership immediately before push.
-5. Keep each slice isolated and CI-green before the next push. Do not reopen clusters 1–4 without contradictory live evidence.
-6. Do not request another RX 6900 XT/Create Chronicles hardware run until cluster 5 is closed.
+1. Resume the deferred RX 6900 XT / RADV Create Chronicles correctness run now that all statically provable audit repairs are green.
+2. Use the existing full-pack test boundary rather than recollecting already-settled evidence: enable the experimental REPLACE + APPEND path, enter the target world, exercise a real Immersive Portals portal, and force at least one dirty mixed-section rebuild.
+3. Capture only evidence that distinguishes correctness/fallback outcomes: visible terrain/portal artifacts, crashes, relevant logs, and whether dirty rebuilds preserve complete geometry.
+4. If correctness is clean, proceed to comparable Phase 5/6 frame-time A/B evidence before making any performance or default-path claim.
+5. Keep accelerated consumption default-off until representative RX 6900 XT correctness/performance evidence is complete.
 
 ## Outstanding RX evidence / performance boundary
 
