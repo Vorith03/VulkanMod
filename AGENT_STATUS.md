@@ -131,18 +131,28 @@ Mixed-section APPEND (fresh or rebuild) additionally requires:
 
 Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cube subset, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid ranges, face-predicate disagreement, and failed GPU work must remain CPU/recovery paths.
 
-## Active codebase audit checkpoint
+## Completed adversarial codebase audit
 
-The user intentionally inserted a full adversarial codebase audit before the pending RX 6900 XT/Create Chronicles functional test. The audit is pinned to `5e17f013` (executable code `8e553bb6`) and is **in progress**.
+The full adversarial audit inserted before the pending RX 6900 XT/Create Chronicles functional run is complete. The durable report is `docs/CODEBASE_AUDIT_2026-09-18.md`.
 
-The durable handoff is `docs/CODEBASE_AUDIT_CHECKPOINT_2026-09-18.md`. It records confirmed defects, investigated-and-cleared hypotheses, unresolved candidates, completed audit surfaces, and the remaining continuation order. A fresh session must continue from that document and the live delta rather than restarting the audit or jumping directly to the hardware test.
+The report is pinned to executable SHA `8e553bb6991c16f86098227aa35639189d4e4aaf`; later branch commits through the audit-completion documentation checkpoint are docs-only. CI #690 remains the last fully green executable checkpoint, but green CI is no longer sufficient reason to proceed directly to hardware testing because the audit established significant untested defects.
+
+Highest-priority repair clusters are:
+
+- generic/Forge rendering contracts: non-`NEW_ENTITY` BufferBuilder fast-path corruption, lost Forge baked-light/normal/alpha semantics, unsafe `ExtendedVertexBuilder` casts, missing Forge shader-registration lifecycle, false stencil capability, and lost block-layer render-stage events;
+- runtime/lifetime correctness: mutable section-origin/captured-region worker race, missing/failure-unsafe GPU mesher lifecycle, framebuffer dependent-object retirement ordering, `VulkanImage` failure propagation, shaderc/SPIR-V reload leaks, and VMA map error handling;
+- general correctness/data safety: UINT16 automatic-index overflow, sampler wrap-state loss, and suppressed Minecraft emergency save;
+- CI quality: smoke fixtures are not fully hermetic and no current oracle covers several Forge public contracts or native failure paths.
+
+Several suspicious areas were explicitly cleared: frame-slot vs image-index semaphore ownership is correct; GPU-terrain async completion/descriptor return is exactly-once; worker shutdown joins producers before publication cleanup; in-flight GPU reservations protect region reuse; the Java/GLSL terrain ABIs and inspected barriers match; temporary stale CPU fallback publication was not an ownership violation; and Immersive Portals cull redirects do update Vulkan pipeline state.
 
 ## Next action
 
-1. Continue and complete the adversarial full-codebase audit from `docs/CODEBASE_AUDIT_CHECKPOINT_2026-09-18.md`, using delta-based recovery from audited SHA `5e17f013`.
-2. Preserve the distinction between confirmed defects, unresolved candidates, and concerns already disproved by contract tracing. Do not re-investigate cleared hypotheses without new evidence.
-3. After the audit is complete, repair significant confirmed findings in small logical changes with focused validation and CI.
-4. Only then resume the previously planned narrow RX 6900 XT/RADV Create Chronicles correctness run, unless the audit itself produces a question that specifically requires hardware evidence.
+1. Start repairs from `docs/CODEBASE_AUDIT_2026-09-18.md`; do not restart the full audit.
+2. Prefer the normal-path Forge/vertex compatibility cluster first, then terrain/native lifetime, in small logical commits with focused regression oracles.
+3. Preserve current fail-closed GPU-terrain boundaries while fixing ownership/lifetime issues.
+4. Keep CI green between repair clusters and make compatibility/failure-path tests assert public contracts rather than implementation markers.
+5. Only after significant proven findings are repaired should the pending narrow RX 6900 XT/RADV Create Chronicles correctness run resume, unless one repair specifically requires hardware evidence.
 
 ## Outstanding RX evidence / performance boundary
 

@@ -1,3 +1,5 @@
+> **Superseded:** The adversarial audit is complete. The final report is `docs/CODEBASE_AUDIT_2026-09-18.md`. This file remains as the mid-audit continuation record only. Do **not** continue the "Remaining audit work" list unless a live executable delta invalidates the final report.
+
 # Full codebase audit checkpoint — 2026-09-18
 
 This is a **continuation checkpoint**, not the final audit report.
