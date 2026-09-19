@@ -229,6 +229,9 @@ public class Vulkan {
         swapChain.cleanUp();
 
         Renderer.getInstance().cleanUpResources();
+        Synchronization.INSTANCE.cleanUpNativeState();
+        Drawer.destroyNativeState();
+        VRenderSystem.cleanUpNativeState();
         SPIRVUtils.destroyCompiler();
         freeStagingBuffers();
 

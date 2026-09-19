@@ -22,6 +22,7 @@ public class Drawer {
     private static final LongBuffer offsets = MemoryUtil.memAllocLong(1);
     private static final long pBuffers = MemoryUtil.memAddress0(buffers);
     private static final long pOffsets = MemoryUtil.memAddress0(offsets);
+    private static boolean nativeStateFreed;
 
     private int framesNum;
     private VertexBuffer[] vertexBuffers;
@@ -145,6 +146,14 @@ public class Drawer {
         IndexBuffer indexBuffer = autoIndexBuffer.getIndexBuffer();
 
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), autoIndexBuffer.getVkIndexType());
+    }
+
+    public static synchronized void destroyNativeState() {
+        if(nativeStateFreed)
+            return;
+        MemoryUtil.memFree(buffers);
+        MemoryUtil.memFree(offsets);
+        nativeStateFreed = true;
     }
 
     public void cleanUpResources() {

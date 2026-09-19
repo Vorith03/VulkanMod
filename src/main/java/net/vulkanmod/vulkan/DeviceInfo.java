@@ -22,7 +22,7 @@ import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK11.vkEnumerateInstanceVersion;
 import static org.lwjgl.vulkan.VK11.vkGetPhysicalDeviceFeatures2;
 
-public class DeviceInfo {
+public class DeviceInfo implements AutoCloseable {
 
     public static final String cpuInfo;
     public static final List<GraphicsCard> graphicsCards;
@@ -42,6 +42,7 @@ public class DeviceInfo {
 //    public final boolean vulkan13Support;
 
     private boolean drawIndirectSupported;
+    private boolean closed;
 
     static {
         CentralProcessor centralProcessor = new SystemInfo().getHardware().getProcessor();
@@ -168,14 +169,14 @@ public class DeviceInfo {
                 VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.callocStack(stack);
                 vkGetPhysicalDeviceProperties(device, deviceProperties);
 
-                DeviceInfo info = new DeviceInfo(device, deviceProperties);
+                try(DeviceInfo info = new DeviceInfo(device, deviceProperties)) {
+                    stringBuilder.append(String.format("Device %d: ", i)).append(info.deviceName).append("\n");
+                    stringBuilder.append(info.unsupportedExtensions(requiredExtensions)).append("\n");
 
-                stringBuilder.append(String.format("Device %d: ", i)).append(info.deviceName).append("\n");
-                stringBuilder.append(info.unsupportedExtensions(requiredExtensions)).append("\n");
-
-                Device.SurfaceProperties surfaceProperties = Device.querySurfaceProperties(device, stack);
-                boolean swapChainAdequate = surfaceProperties.formats.hasRemaining() && surfaceProperties.presentModes.hasRemaining() ;
-                stringBuilder.append("Swapchain supported: ").append(swapChainAdequate ? "true" : "false").append("\n");
+                    Device.SurfaceProperties surfaceProperties = Device.querySurfaceProperties(device, stack);
+                    boolean swapChainAdequate = surfaceProperties.formats.hasRemaining() && surfaceProperties.presentModes.hasRemaining();
+                    stringBuilder.append("Swapchain supported: ").append(swapChainAdequate ? "true" : "false").append("\n");
+                }
             }
 
             return stringBuilder.toString();
@@ -189,5 +190,18 @@ public class DeviceInfo {
     public boolean isRegionBatchingSupported() {
         return availableFeatures.features().multiDrawIndirect()
                 && availableFeatures.features().drawIndirectFirstInstance();
+    }
+
+    @Override
+    public synchronized void close() {
+        if(this.closed)
+            return;
+
+        this.closed = true;
+        try {
+            this.availableFeatures11.free();
+        } finally {
+            this.availableFeatures.free();
+        }
     }
 }

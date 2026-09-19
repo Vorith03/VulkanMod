@@ -50,6 +50,25 @@ public class VRenderSystem {
     public static float alphaCutout = 0.0f;
 
     private static final float[] depthBias = new float[2];
+    private static boolean nativeStateFreed;
+
+    public static synchronized void cleanUpNativeState() {
+        if(nativeStateFreed)
+            return;
+
+        MemoryUtil.memFree(clearColor);
+        modelViewMatrix.free();
+        projectionMatrix.free();
+        TextureMatrix.free();
+        MVP.free();
+        ChunkOffset.free();
+        lightDirection0.free();
+        lightDirection1.free();
+        shaderColor.free();
+        shaderFogColor.free();
+        screenSize.free();
+        nativeStateFreed = true;
+    }
 
     public static void initRenderer()
     {

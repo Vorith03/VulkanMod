@@ -34,6 +34,7 @@ public class Synchronization {
     private long fenceWaitedCount;
     private long fenceWaitNanos;
     private long mainFrameSubmissions;
+    private boolean nativeStateFreed;
 
     Synchronization(int allocSize) {
         this.fences = MemoryUtil.memAllocLong(allocSize);
@@ -174,6 +175,18 @@ public class Synchronization {
     public synchronized void retireSameQueueCommandBuffersAfterQueueIdle() {
         this.sameQueueCommandBuffers.forEach(CommandPool.CommandBuffer::reset);
         this.sameQueueCommandBuffers.clear();
+    }
+
+    public synchronized void cleanUpNativeState() {
+        if(this.nativeStateFreed)
+            return;
+
+        this.fenceCommandBuffers.clear();
+        this.semaphoreCommandBuffers.clear();
+        this.sameQueueCommandBuffers.clear();
+        this.semaphores.clear();
+        MemoryUtil.memFree(this.fences);
+        this.nativeStateFreed = true;
     }
 
     public synchronized String getStats() {

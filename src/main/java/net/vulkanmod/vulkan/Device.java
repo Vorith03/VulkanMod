@@ -31,8 +31,6 @@ public class Device {
     public static VkPhysicalDeviceProperties deviceProperties;
     public static VkPhysicalDeviceMemoryProperties memoryProperties;
 
-    public static SurfaceProperties surfaceProperties;
-
     static GraphicsQueue graphicsQueue;
     static PresentQueue presentQueue;
     static TransferQueue transferQueue;
@@ -95,8 +93,6 @@ public class Device {
 
             memoryProperties = VkPhysicalDeviceMemoryProperties.malloc();
             vkGetPhysicalDeviceMemoryProperties(physicalDevice, memoryProperties);
-
-            surfaceProperties = querySurfaceProperties(physicalDevice, stack);
 
             deviceInfo = new DeviceInfo(physicalDevice, deviceProperties);
         }
@@ -312,8 +308,22 @@ public class Device {
 
     public static void destroy() {
         graphicsQueue.cleanUp();
+        presentQueue.cleanUp();
         transferQueue.cleanUp();
         computeQueue.cleanUp();
+
+        if(deviceInfo != null) {
+            deviceInfo.close();
+            deviceInfo = null;
+        }
+        if(deviceProperties != null) {
+            deviceProperties.free();
+            deviceProperties = null;
+        }
+        if(memoryProperties != null) {
+            memoryProperties.free();
+            memoryProperties = null;
+        }
 
         vkDestroyDevice(device, null);
     }
