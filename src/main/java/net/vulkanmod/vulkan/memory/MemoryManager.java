@@ -216,18 +216,27 @@ public class MemoryManager {
 
         try(MemoryStack stack = stackPush()) {
             PointerBuffer data = stack.mallocPointer(1);
+            int result = vmaMapMemory(allocator, allocation, data);
+            if(result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to map VMA allocation: " + result);
+            }
 
-            vmaMapMemory(allocator, allocation, data);
-            consumer.accept(data);
-            vmaUnmapMemory(allocator, allocation);
+            try {
+                consumer.accept(data);
+            } finally {
+                vmaUnmapMemory(allocator, allocation);
+            }
         }
 
     }
 
     public PointerBuffer Map(long allocation) {
         PointerBuffer data = MemoryUtil.memAllocPointer(1);
-
-        vmaMapMemory(allocator, allocation, data);
+        int result = vmaMapMemory(allocator, allocation, data);
+        if(result != VK_SUCCESS) {
+            MemoryUtil.memFree(data);
+            throw new RuntimeException("Failed to map VMA allocation: " + result);
+        }
 
         return data;
     }

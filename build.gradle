@@ -293,6 +293,7 @@ tasks.named('check').configure {
     dependsOn 'testFramebufferRetirementOrder'
     dependsOn 'testVulkanImageCreationContract'
     dependsOn 'testSpirvNativeLifetime'
+    dependsOn 'testVmaMappingContract'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -353,6 +354,12 @@ tasks.register('testSpirvNativeLifetime', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.vulkan.shader.SpirvNativeLifetimeTest'
+}
+
+tasks.register('testVmaMappingContract', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.memory.VmaMappingContractTest'
 }
 
 tasks.withType(JavaCompile).configureEach {
