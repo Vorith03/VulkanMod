@@ -116,7 +116,10 @@ public abstract class RenderSystemMixin {
      * @author
      */
     @Overwrite(remap = false)
-    public static void activeTexture(int texture) {}
+    public static void activeTexture(int texture) {
+        assertOnRenderThread();
+        VTextureSelector.setActiveTexture(texture);
+    }
 
     /**
      * @author

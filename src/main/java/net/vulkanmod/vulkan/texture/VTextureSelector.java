@@ -20,6 +20,9 @@ import java.util.HashSet;
 import java.util.Set;
 
 public abstract class VTextureSelector {
+    public static final int MAX_LEGACY_TEXTURE_UNITS = 32;
+    private static final int GL_TEXTURE0 = 33984;
+
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
     private static final int MAX_SINGLE_TEXTURE_STAGING = 512 * 1024 * 1024;
     private static final int MAX_UNBATCHED_TEXTURE_SUBMISSIONS = 256;
@@ -37,6 +40,8 @@ public abstract class VTextureSelector {
     private static VulkanImage overlayTexture;
     private static VulkanImage framebufferTexture;
     private static VulkanImage framebufferTexture2;
+    private static final VulkanImage[] additionalLegacyTextures =
+            new VulkanImage[MAX_LEGACY_TEXTURE_UNITS];
 
     private static final VulkanImage whiteTexture = VulkanImage.createWhiteTexture();
     private static final Set<String> missingSamplerWarnings = new HashSet<>();
@@ -53,12 +58,44 @@ public abstract class VTextureSelector {
         boundTexture = texture;
     }
 
+    /**
+     * Bind a Minecraft shader sampler slot. These are not the same numbering
+     * contract as legacy OpenGL active texture units: Sampler1 is overlay and
+     * Sampler2 is lightmap.
+     */
     public static void bindTexture(int i, VulkanImage texture) {
-        switch (i) {
+        switch(i) {
+            case 0 -> boundTexture = texture;
+            case 1 -> overlayTexture = texture;
+            case 2 -> lightTexture = texture;
+            default -> {
+                // Higher fixed shader slots use their dedicated selectors below.
+            }
+        }
+    }
+
+    public static void bindActiveTexture(VulkanImage texture) {
+        bindLegacyTextureUnit(activeTexture, texture);
+    }
+
+    public static void bindLegacyTextureUnit(int unit, VulkanImage texture) {
+        validateLegacyTextureUnit(unit);
+        switch(unit) {
             case 0 -> boundTexture = texture;
             case 1 -> lightTexture = texture;
             case 2 -> overlayTexture = texture;
+            default -> additionalLegacyTextures[unit] = texture;
         }
+    }
+
+    public static VulkanImage getLegacyTextureUnit(int unit) {
+        validateLegacyTextureUnit(unit);
+        return switch(unit) {
+            case 0 -> boundTexture;
+            case 1 -> lightTexture;
+            case 2 -> overlayTexture;
+            default -> additionalLegacyTextures[unit];
+        };
     }
 
     public static void bindTexture2(VulkanImage texture) {
@@ -78,13 +115,13 @@ public abstract class VTextureSelector {
     }
 
     public static void uploadSubTexture(int mipLevel, int width, int height, int xOffset, int yOffset, int unpackSkipRows, int unpackSkipPixels, int unpackRowLength, ByteBuffer buffer) {
-        VulkanImage texture;
-        if(activeTexture == 0) texture = boundTexture;
-        else if(activeTexture == 1) texture = lightTexture;
-        else texture = overlayTexture;
+        VulkanImage texture = getLegacyTextureUnit(activeTexture);
 
         if(width <= 0 || height <= 0)
             return;
+        if(texture == null)
+            throw new IllegalStateException(
+                    "No Vulkan texture bound to active legacy texture unit " + activeTexture);
 
         long mainFrameSubmissions = Synchronization.INSTANCE.getMainFrameSubmissionCount();
         if(mainFrameSubmissions != observedMainFrameSubmissions) {
@@ -250,8 +287,22 @@ public abstract class VTextureSelector {
 
     public static void setOverlayTexture(VulkanImage texture) { overlayTexture = texture; }
 
-    public static void setActiveTexture(int activeTexture) {
-        VTextureSelector.activeTexture = activeTexture;
+    public static void setActiveTexture(int texture) {
+        int unit = texture >= GL_TEXTURE0 ? texture - GL_TEXTURE0 : texture;
+        validateLegacyTextureUnit(unit);
+        activeTexture = unit;
+    }
+
+    public static int getActiveTextureUnit() {
+        return activeTexture;
+    }
+
+    private static void validateLegacyTextureUnit(int unit) {
+        if(unit < 0 || unit >= MAX_LEGACY_TEXTURE_UNITS) {
+            throw new IllegalArgumentException(
+                    "Unsupported legacy texture unit " + unit
+                            + " (expected 0-" + (MAX_LEGACY_TEXTURE_UNITS - 1) + ")");
+        }
     }
 
     public static VulkanImage getLightTexture() {

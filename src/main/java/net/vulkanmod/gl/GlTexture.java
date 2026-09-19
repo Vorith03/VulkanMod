@@ -16,8 +16,10 @@ public class GlTexture {
     // emulated binding instead of aliasing the first allocated texture.
     private static int ID_COUNT = 1;
     private static final Int2ReferenceOpenHashMap<GlTexture> map = new Int2ReferenceOpenHashMap<>();
-    private static int boundTextureId = 0;
-    private static GlTexture boundTexture;
+    private static final int[] boundTextureIds =
+            new int[VTextureSelector.MAX_LEGACY_TEXTURE_UNITS];
+    private static final GlTexture[] boundTextures =
+            new GlTexture[VTextureSelector.MAX_LEGACY_TEXTURE_UNITS];
 
     public static int genTextureId() {
         int id = ID_COUNT;
@@ -27,31 +29,32 @@ public class GlTexture {
     }
 
     public static void bindTexture(int i) {
-        boundTextureId = i;
+        int unit = VTextureSelector.getActiveTextureUnit();
+        boundTextureIds[unit] = i;
 
         if(i == 0) {
-            boundTexture = null;
-            VTextureSelector.bindTexture(null);
+            boundTextures[unit] = null;
+            VTextureSelector.bindActiveTexture(null);
             return;
         }
 
-        boundTexture = map.get(i);
-
-        if(boundTexture == null)
+        GlTexture texture = map.get(i);
+        if(texture == null)
             throw new NullPointerException("bound texture is null");
 
-        VulkanImage vulkanImage = boundTexture.vulkanImage;
-        if(vulkanImage != null)
-            VTextureSelector.bindTexture(vulkanImage);
+        boundTextures[unit] = texture;
+        VTextureSelector.bindActiveTexture(texture.vulkanImage);
     }
 
     public static void glDeleteTextures(int i) {
         GlTexture texture = map.remove(i);
 
-        if(boundTextureId == i) {
-            boundTextureId = 0;
-            boundTexture = null;
-            VTextureSelector.bindTexture(null);
+        for(int unit = 0; unit < boundTextureIds.length; ++unit) {
+            if(boundTextureIds[unit] == i) {
+                boundTextureIds[unit] = 0;
+                boundTextures[unit] = null;
+                VTextureSelector.bindLegacyTextureUnit(unit, null);
+            }
         }
 
         if(texture != null && texture.vulkanImage != null)
@@ -72,6 +75,7 @@ public class GlTexture {
         if(width == 0 || height == 0)
             return;
 
+        GlTexture boundTexture = getActiveBoundTexture();
         if(boundTexture == null)
             throw new IllegalStateException("No texture bound for glTexImage2D");
 
@@ -87,7 +91,7 @@ public class GlTexture {
         if(width == 0 || height == 0)
             return;
 
-        if(boundTexture == null)
+        if(getActiveBoundTexture() == null)
             throw new IllegalStateException("No texture bound for glTexSubImage2D");
 
         VTextureSelector.uploadSubTexture(level, width, height, xOffset, yOffset,0, 0, width, pixels);
@@ -99,6 +103,14 @@ public class GlTexture {
             throw new IllegalArgumentException("Unknown texture id: " + id);
 
         texture.vulkanImage = vulkanImage;
+        for(int unit = 0; unit < boundTextureIds.length; ++unit) {
+            if(boundTextureIds[unit] == id)
+                VTextureSelector.bindLegacyTextureUnit(unit, vulkanImage);
+        }
+    }
+
+    private static GlTexture getActiveBoundTexture() {
+        return boundTextures[VTextureSelector.getActiveTextureUnit()];
     }
 
     final int id;
@@ -113,7 +125,7 @@ public class GlTexture {
             this.vulkanImage.free();
 
         this.vulkanImage = new VulkanImage.Builder(width, height).createVulkanImage();
-        VTextureSelector.bindTexture(this.vulkanImage);
+        VTextureSelector.bindActiveTexture(this.vulkanImage);
     }
 
     private void uploadImage(@Nullable ByteBuffer pixels) {

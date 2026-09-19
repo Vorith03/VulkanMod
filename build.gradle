@@ -297,6 +297,7 @@ tasks.named('check').configure {
     dependsOn 'testAutoIndexBufferWidth'
     dependsOn 'testTextureSamplerState'
     dependsOn 'testEmergencySaveMixinContract'
+    dependsOn 'testLegacyTextureUnitContract'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {
@@ -381,6 +382,12 @@ tasks.register('testEmergencySaveMixinContract', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.mixin.render.EmergencySaveMixinContractTest'
+}
+
+tasks.register('testLegacyTextureUnitContract', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.texture.LegacyTextureUnitContractTest'
 }
 
 tasks.withType(JavaCompile).configureEach {

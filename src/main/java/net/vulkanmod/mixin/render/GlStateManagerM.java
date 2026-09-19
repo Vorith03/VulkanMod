@@ -21,6 +21,12 @@ import java.util.function.Consumer;
 @Mixin(GlStateManager.class)
 public class GlStateManagerM {
 
+    @Overwrite(remap = false)
+    public static void _activeTexture(int texture) {
+        RenderSystem.assertOnRenderThread();
+        VTextureSelector.setActiveTexture(texture);
+    }
+
     /**
      * @author
      */
