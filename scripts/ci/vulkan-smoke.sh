@@ -40,6 +40,7 @@ case "$mode" in
     grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke.log
     grep -F "Vertex/Forge consumer contract smoke passed" vulkan-smoke.log
     grep -F "Forge shader registration/reload contract smoke passed" vulkan-smoke.log
+    grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke.log
     grep -F "Terrain region batching: enabled" vulkan-smoke.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=false)" vulkan-smoke.log
@@ -60,6 +61,7 @@ case "$mode" in
     grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Vertex/Forge consumer contract smoke passed" vulkan-smoke-no-splash.log
     grep -F "Forge shader registration/reload contract smoke passed" vulkan-smoke-no-splash.log
+    grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-no-splash.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log

@@ -101,6 +101,8 @@ public class MinecraftMixin {
                 net.vulkanmod.render.LiquidVertexSmokeTest.verify(
                         Class.forName("net.minecraft.client.renderer.block.LiquidBlockRenderer"));
                 net.vulkanmod.render.vertex.VertexConsumerContractSmokeTest.verify();
+                net.vulkanmod.render.RenderTargetStencilSmokeTest.verify(
+                        ((Minecraft)(Object)this).getMainRenderTarget());
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException("Could not load late render targets during Vulkan smoke test", e);
             }

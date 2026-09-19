@@ -59,6 +59,18 @@ public class RenderTargetMixin {
     }
 
     /**
+     * Forge's enableStencil() contract requires the recreated depth image to
+     * actually contain a stencil aspect. VulkanMod does not implement that
+     * attachment path yet, so reject the request before Forge can mark the
+     * target stencil-enabled.
+     */
+    @Overwrite
+    public void enableStencil() {
+        throw new UnsupportedOperationException(
+                "VulkanMod does not currently support stencil RenderTarget attachments");
+    }
+
+    /**
      * @author
      * @reason Allocate real sampled Vulkan color/depth images for generic
      * RenderTargets instead of leaving them unbacked.
