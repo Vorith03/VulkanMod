@@ -14,13 +14,15 @@ This document tracks Phase 4 compatibility evidence for the Forge 1.20.1 port. I
 
 ## Current Phase 4 retest artifact
 
-Verified on 2026-09-19: [CI #715](https://github.com/Vorith03/VulkanMod/actions/runs/35487899273) passed the complete build/distributable and Vulkan smoke matrix at source `4abc931918a2e43ff76f5428ce855bfcd3309537`.
+Verified on 2026-09-20: [CI #720](https://github.com/Vorith03/VulkanMod/actions/runs/35493996611) passed the complete build/distributable and Vulkan smoke matrix at source `b9910cfb067504ec766fbb2488cc379e1d98e5c8`.
 
-- Download the `VulkanMod-Forge-build-715` artifact and install its `-all.jar`.
+- Download the `VulkanMod-Forge-build-720` artifact and install its `-all.jar`.
 - Keep `config/fml.toml` -> `earlyWindowControl = false`.
 - Retain the established renderer-replacement baseline; do **not** disable PickupNotifier solely because of the old #310 instruction. PickupNotifier 8.0.0 now has a dedicated green compatibility gate in CI #715.
 - Build #711 on the real Create Chronicles instance exposed Create 0.5.1.j's startup call to `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; the client aborted because VulkanMod still rejected stencil targets.
-- The #715 tree implements real off-screen Vulkan depth/stencil targets, keeps depth sampling on a depth-only image view, and redirects Create's direct `GL_STENCIL_TEST` toggles in `StencilElement` to Vulkan state. The exact Create 0.5.1.j artifact is loaded by the CI fixture, and the log confirms `CreateStencilElementMixin` is applied with no OpenGL context.
+- The current tree implements real off-screen Vulkan depth/stencil targets, keeps depth sampling on a depth-only image view, and redirects Create's direct `GL_STENCIL_TEST` toggles in `StencilElement` to Vulkan state. The exact Create 0.5.1.j artifact is loaded by the CI fixture, and the log confirms `CreateStencilElementMixin` is applied with no OpenGL context.
+- Build #711 also exposed two shader-path problems during Immersive Portals rebuilding. The `last char is not ;` parser exception was already present in older build #676 and was caused by declaration-like text inside multi-line GLSL comments; `647c13e225b4` fixes that parser behavior. Restoring Forge `RegisterShadersEvent` additionally exposed Twilight Forest's `red_thread` shader aliasing vanilla `rendertype_cutout`: IP transformed the program but did not create its name-keyed clipping `Uniform`. `b9910cfb0675` directly binds VulkanMod's authoritative pre-model-view terrain clip plane for these aliased terrain programs while keeping non-terrain transforms fail-closed.
+- CI #720 proves the aliased `rendertype_cutout` shape creates a Vulkan pipeline and logs `VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK`; the old parser and missing-clipping-uniform exceptions are absent from that smoke run.
 - The rest of the prior compatibility matrix remains green in the same run: FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel.
 - No process/system memory safety limit was weakened.
 
@@ -53,7 +55,7 @@ A second signal is now under investigation: between the 00:09:00 diagnostic snap
 | Heavy 16K atlas workload | #308 verifies packed upload staging in the real pack; the old reload failure occurred with only 22 MiB staging in use | Preserve comparable workload if memory behavior regresses; staging is not the leading suspect from that evidence. |
 | Animated atlas images | Reload retirement preserves animated sprite source/mip data | Verify animated textures still advance after the #715 reload/re-entry cycle. |
 | Create stencil GUI path | Real build #711 aborted in `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; CI #715 now loads exact Create 0.5.1.j and applies `CreateStencilElementMixin` | Full-pack RX confirmation is pending; startup must pass the old fatal site and Create stencil-backed UI must not issue raw OpenGL calls. |
-| Immersive Portals shader conversion | Build #711 logged repeated `IllegalArgumentException: last char is not ;` from VulkanMod's shader parser during IP shader rebuilding before the later fatal stencil crash | Not proven fatal in #711; retain the exact exception if it still occurs on #715 so it can be classified rather than silently ignored. |
+| Immersive Portals shader conversion | Build #711 logged repeated parser failures and then a fatal Twilight Forest registration error because `red_thread` aliases IP-transformed `rendertype_cutout`; the parser exception is also present in older build #676 | `647c13e225b4` ignores declaration-like text inside GLSL comments; `b9910cfb0675` binds the authoritative terrain clip plane for aliased IP terrain programs. CI #720 covers both and the old exceptions are absent. Full-pack RX confirmation remains pending. |
 | Create/Flywheel gameplay | Historical #226 water wheel rendered; Flywheel and exact Create startup fixtures are green in CI #715 | Current full-pack contraption visual test remains pending. |
 
 These findings are evidence for Phase 4 compatibility only. CI startup coverage does not close full-pack gameplay gates.

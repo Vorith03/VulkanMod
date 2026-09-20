@@ -317,13 +317,15 @@ workers omit only the GPU-owned ordinary-cube subset while preserving unsupporte
 geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
 stage CPU exception geometry and GPU output independently, retain the previous complete
 pair, and switch both halves atomically only when the replacement generation is ready.
-CI #690 validates the current combined terrain/compatibility tree, including transition,
+CI #720 validates the current combined terrain/compatibility tree, including transition,
 face-policy, readback, overflow/fallback, hybrid command-count/section-count oracles,
 the GLSL declaration-parser regression, Immersive Portals framebuffer rendering under
 VulkanMod's no-OpenGL-context window, per-portal-world `LevelRenderer` ownership,
 recursive render-buffer use, terrain clip-plane propagation across all three Vulkan
-terrain pipelines, and IP reload-hook compatibility. Distant Horizons 3.2.0-b is
-explicitly fail-closed under Vulkan by suppressing its OpenGL LOD draw/fade passes.
+terrain pipelines, IP reload-hook compatibility, and a Forge-namespaced shader that
+aliases IP-transformed vanilla `rendertype_cutout` while receiving the authoritative
+terrain clip-plane binding. Distant Horizons 3.2.0-b is explicitly fail-closed under
+Vulkan by suppressing its OpenGL LOD draw/fade passes.
 
 The hybrid implementation gate is therefore closed. The first attempted narrow
 Create Chronicles/RX 6900 XT run stopped before terrain evidence because Immersive
@@ -332,11 +334,14 @@ multi-world/clipping hazards are covered by CI #690. A later full-pack build #71
 then exposed a separate Create 0.5.1.j startup requirement: its GUI helper creates an
 off-screen stencil RenderTarget, so the audit-era fail-closed stencil rejection was not
 sufficient. Off-screen Vulkan stencil support plus a call-site bridge for Create's raw
-`GL_STENCIL_TEST` toggles are now implemented, and CI #715 includes an exact Create
-0.5.1.j fixture that loads the transformed `StencilElement` under a no-OpenGL-context
-Vulkan window. The next evidence boundary is a repeat functional run with REPLACE +
-APPEND enabled, including looking through a real portal and performing a dirty
-mixed-section rebuild.
+`GL_STENCIL_TEST` toggles are implemented and covered by the exact Create fixture. The
+same #711 run also exposed parser noise and a Twilight Forest/Immersive Portals aliased-
+program failure once Forge shader registration was correctly restored: `647c13e225b4`
+fixes comment text being parsed as GLSL declarations, and `b9910cfb0675` binds the
+correct pre-model-view IP clip plane when a namespaced Forge shader aliases one of IP's
+terrain programs. CI #720 is green for the combined fixes. The next evidence boundary is
+a repeat functional run with REPLACE + APPEND enabled, including looking through a real
+portal and performing a dirty mixed-section rebuild.
 This remains a correctness test, not a performance claim. Live GPU visibility/section-
 selection correctness and broader lifecycle/Forge preservation gates remain open until
 representative runtime evidence supports them.
@@ -406,10 +411,11 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `4abc931918a2e43ff76f5428ce855bfcd3309537`, CI #715
-  (run `35487899273`) is fully green on the current production tree, including
-  Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, and an exact Create
-  0.5.1.j stencil compatibility fixture.
+- Latest executable checkpoint: `b9910cfb067504ec766fbb2488cc379e1d98e5c8`, CI #720
+  (run `35493996611`) is fully green on the current production tree, including
+  Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, the exact Create 0.5.1.j
+  stencil compatibility fixture, the GLSL comment-parser regression, and an IP-transformed
+  aliased-terrain Forge shader.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
@@ -417,13 +423,14 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
   stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
   recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
-- Runtime compatibility progressed through two distinct full-pack blockers: the earlier
-  Immersive Portals raw-GL framebuffer gap is covered by CI #690, while build #711 later
-  proved Create 0.5.1.j requires a real off-screen stencil target and direct stencil-toggle
-  bridging. CI #715 covers the latter with the exact Create artifact and transformed
-  `StencilElement`. The next useful gate evidence is a repeat full-pack correctness run
-  with REPLACE + APPEND enabled, including looking through a real portal and at least one
-  dirty mixed-section rebuild.
+- Runtime compatibility progressed through the earlier Immersive Portals raw-GL framebuffer
+  gap plus the build #711 full-pack blockers. Create's off-screen stencil target/direct
+  toggle path is covered by the exact Create fixture; #711's pre-existing GLSL comment
+  parser failure is fixed; and the Twilight Forest `red_thread` / IP `rendertype_cutout`
+  alias mismatch now receives the authoritative terrain clip plane. CI #720 covers the
+  combined tree. The next useful gate evidence is a repeat full-pack correctness run with
+  REPLACE + APPEND enabled, including looking through a real portal and at least one dirty
+  mixed-section rebuild.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
   comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
