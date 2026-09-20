@@ -35,8 +35,48 @@ public final class GlslConverterParsingTest {
         require(converter.getFshConverted().contains("layout(location = 0) in vec4 vertexColor;"),
                 "Fragment input declaration survived trailing comment");
 
+        verifyMultilineCommentDoesNotBecomeDeclaration();
         verifyFailureContext();
         System.out.println("GLSL declaration parsing tests passed");
+    }
+
+    private static void verifyMultilineCommentDoesNotBecomeDeclaration() {
+        String vertex = """
+                #version 150
+                in vec3 Position;
+                out vec4 vertexColor;
+                void main() {
+                    gl_Position = vec4(Position, 1.0);
+                    vertexColor = vec4(1.0);
+                }
+                """;
+        String fragment = """
+                #version 150
+                in vec4 vertexColor;
+                out vec4 fragColor;
+                void main() {
+                    fragColor = vertexColor;
+                }
+
+                // MIT License...
+                /* Copyright (c)2014 David Hoskins.
+
+                Permission is hereby granted, free of charge, to any person obtaining a copy
+                of this software and associated documentation files (the "Software"), to deal
+                in the Software without restriction, including without limitation the rights
+                to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+                copies of the Software.
+                SOFTWARE.*/
+                """;
+
+        GlslConverter converter = new GlslConverter();
+        converter.process(DefaultVertexFormat.POSITION_COLOR, vertex, fragment);
+
+        require(converter.getFshConverted().contains(
+                        "in the Software without restriction, including without limitation the rights"),
+                "Multi-line comment text was not preserved in converted shader source");
+        require(converter.getFshConverted().contains("layout(location = 0) in vec4 vertexColor;"),
+                "Fragment declaration parsing did not recover after multi-line comment handling");
     }
 
     private static void verifyFailureContext() {
