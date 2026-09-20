@@ -26,6 +26,8 @@ public final class ForgeShaderContractSmokeTest {
             new ResourceLocation(Initializer.MOD_ID, "ci_ip_alias");
     private static final ResourceLocation IP_ALIASED_MODEL_VIEW_SHADER =
             new ResourceLocation(Initializer.MOD_ID, "ci_ip_model_view_alias");
+    private static final ResourceLocation IP_ALIASED_PARTICLE_SHADER =
+            new ResourceLocation(Initializer.MOD_ID, "ci_ip_particle_alias");
     private static final String STALE_KEY = Initializer.MOD_ID + ":ci_stale_reload_entry";
 
     private static ShaderInstance registeredShader;
@@ -34,6 +36,8 @@ public final class ForgeShaderContractSmokeTest {
     private static ShaderInstance loadedIpAliasedTerrainShader;
     private static ShaderInstance registeredIpAliasedModelViewShader;
     private static ShaderInstance loadedIpAliasedModelViewShader;
+    private static ShaderInstance registeredIpAliasedParticleShader;
+    private static ShaderInstance loadedIpAliasedParticleShader;
     private static boolean sawEvent;
 
     private ForgeShaderContractSmokeTest() {
@@ -52,6 +56,8 @@ public final class ForgeShaderContractSmokeTest {
         loadedIpAliasedTerrainShader = null;
         registeredIpAliasedModelViewShader = null;
         loadedIpAliasedModelViewShader = null;
+        registeredIpAliasedParticleShader = null;
+        loadedIpAliasedParticleShader = null;
         sawEvent = false;
 
         // A correct reload replaces the map. Keeping this alias would reproduce
@@ -100,6 +106,22 @@ public final class ForgeShaderContractSmokeTest {
                             "IP aliased-model-view callback received a different shader instance");
                     loadedIpAliasedModelViewShader = loaded;
                 });
+
+                // Build the other exact model-view alias shape seen in the
+                // full Create Chronicles run: Moonlight and Quark both reuse
+                // vanilla's IP-transformed particle program under namespaced
+                // ShaderInstance names.
+                ShaderInstance ipAliasedParticleShader = new ShaderInstance(
+                        event.getResourceProvider(),
+                        IP_ALIASED_PARTICLE_SHADER,
+                        DefaultVertexFormat.PARTICLE
+                );
+                registeredIpAliasedParticleShader = ipAliasedParticleShader;
+                event.registerShader(ipAliasedParticleShader, loaded -> {
+                    require(loaded == registeredIpAliasedParticleShader,
+                            "IP aliased-particle callback received a different shader instance");
+                    loadedIpAliasedParticleShader = loaded;
+                });
             }
         } catch(IOException e) {
             throw new IllegalStateException("Could not create namespaced Forge shader smoke fixture", e);
@@ -138,6 +160,15 @@ public final class ForgeShaderContractSmokeTest {
                     "IP aliased-model-view shader was not installed under its authoritative name");
             require(((ShaderMixed)(Object)loadedIpAliasedModelViewShader).getPipeline() != null,
                     "IP aliased-model-view shader did not create a Vulkan pipeline");
+
+            require(registeredIpAliasedParticleShader != null,
+                    "IP aliased-particle shader was not registered");
+            require(loadedIpAliasedParticleShader == registeredIpAliasedParticleShader,
+                    "IP aliased-particle registered-shader callback did not run");
+            require(shaders.get(IP_ALIASED_PARTICLE_SHADER.toString()) == loadedIpAliasedParticleShader,
+                    "IP aliased-particle shader was not installed under its authoritative name");
+            require(((ShaderMixed)(Object)loadedIpAliasedParticleShader).getPipeline() != null,
+                    "IP aliased-particle shader did not create a Vulkan pipeline");
 
             // Force initialization of the exact IP 3.0.7 entity/weather clipping
             // reflection bridge. Clipping is inactive in this startup smoke, so the
