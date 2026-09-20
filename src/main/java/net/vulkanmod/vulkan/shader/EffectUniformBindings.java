@@ -22,10 +22,21 @@ public final class EffectUniformBindings implements AutoCloseable {
     private final List<ByteBuffer> fallbackUniformBuffers = new ArrayList<>();
 
     public void bind(UBO ubo, Map<String, Uniform> uniformMap) {
+        bind(ubo, uniformMap, Map.of());
+    }
+
+    public void bind(UBO ubo, Map<String, Uniform> uniformMap,
+                     Map<String, MappedBuffer> directBindings) {
         this.close();
 
         try {
             for(Field field : ubo.getFields()) {
+                MappedBuffer directBinding = directBindings.get(field.getName());
+                if(directBinding != null) {
+                    field.setSupplier(() -> directBinding);
+                    continue;
+                }
+
                 Uniform uniform = uniformMap.get(field.getName());
                 ByteBuffer byteBuffer;
 

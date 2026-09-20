@@ -22,6 +22,7 @@ import net.vulkanmod.vulkan.shader.ShaderRenderState;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.Field;
 import net.vulkanmod.vulkan.shader.parser.GlslConverter;
+import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -58,6 +59,7 @@ public class ShaderInstanceM implements ShaderMixed {
     @Shadow @Final @Nullable public Uniform LINE_WIDTH;
     private GraphicsPipeline pipeline;
     private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
+    private boolean vulkanmod$refreshImmersivePortalsTerrainClipPlane;
     boolean isLegacy = false;
 
 
@@ -115,6 +117,7 @@ public class ShaderInstanceM implements ShaderMixed {
             this.pipeline = null;
         }
         this.vulkanmod$uniformBindings.close();
+        this.vulkanmod$refreshImmersivePortalsTerrainClipPlane = false;
     }
 
     /**
@@ -145,6 +148,10 @@ public class ShaderInstanceM implements ShaderMixed {
 //            if (this.LINE_WIDTH != null) {
 //                this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
 //            }
+
+            if(this.vulkanmod$refreshImmersivePortalsTerrainClipPlane) {
+                ImmersivePortalsShaderCompat.refreshTerrainClipPlane();
+            }
 
             // Mod shaders commonly bind RenderTarget, AbstractTexture, or direct
             // texture ids under arbitrary JSON sampler names and then use
@@ -262,11 +269,29 @@ public class ShaderInstanceM implements ShaderMixed {
             for(Uniform uniform : this.uniforms) {
                 bindingUniforms.putIfAbsent(uniform.getName(), uniform);
             }
+            Map<String, MappedBuffer> directBindings = Collections.emptyMap();
             if(immersivePortalsClippingShader && !bindingUniforms.containsKey("imm_ptl_ClippingEquation")) {
-                throw new IllegalStateException(
-                        "Immersive Portals clipping uniform was not attached to shader " + vertexName);
+                // IP decides whether to create its ShaderInstance Uniform from the
+                // ShaderInstance name, while Program transformation is keyed by the
+                // underlying program name. Forge mods can therefore alias a vanilla
+                // terrain program (Twilight Forest's red_thread -> rendertype_cutout)
+                // without receiving IP's dynamic Uniform. VulkanMod already mirrors
+                // the authoritative pre-model-view terrain clip equation for its
+                // native terrain pipelines, so bind that same storage directly.
+                // Keep every non-terrain transform fail-closed because IP uses a
+                // different coordinate space for those shaders.
+                if(!ImmersivePortalsShaderCompat.usesTerrainClipPlane(vertexName)) {
+                    throw new IllegalStateException(
+                            "Immersive Portals clipping uniform was not attached to shader " + vertexName);
+                }
+
+                directBindings = Collections.singletonMap(
+                        "imm_ptl_ClippingEquation",
+                        ImmersivePortalsShaderCompat.getTerrainClipPlane()
+                );
+                this.vulkanmod$refreshImmersivePortalsTerrainClipPlane = true;
             }
-            this.vulkanmod$uniformBindings.bind(ubo, bindingUniforms);
+            this.vulkanmod$uniformBindings.bind(ubo, bindingUniforms, directBindings);
 
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
             builder.compileShaders(converter.getVshConverted(), converter.getFshConverted());
@@ -283,6 +308,13 @@ public class ShaderInstanceM implements ShaderMixed {
                     && Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
                 Initializer.LOGGER.info(
                         "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline");
+            }
+            if(this.vulkanmod$refreshImmersivePortalsTerrainClipPlane
+                    && Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
+                Initializer.LOGGER.info(
+                        "VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK: {} -> {}",
+                        location, vertexName
+                );
             }
 
         } catch (Throwable throwable) {

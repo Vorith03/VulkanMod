@@ -9,6 +9,7 @@ import net.vulkanmod.vulkan.util.MappedBuffer;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -26,6 +27,17 @@ public final class ImmersivePortalsShaderCompat {
             "qouteall.imm_ptl.core.render.MyRenderHelper";
     private static final String FRONT_CLIPPING_CLASS =
             "qouteall.imm_ptl.core.render.FrontClipping";
+
+    // Immersive Portals 3.0.7 uses the camera-relative, pre-model-view clipping
+    // equation for these vanilla terrain programs. Keep this deliberately narrow:
+    // entity/particle transforms use a different coordinate space and must not
+    // silently fall back to the terrain equation.
+    private static final Set<String> TERRAIN_CLIPPING_SHADERS = Set.of(
+            "rendertype_solid",
+            "rendertype_cutout",
+            "rendertype_cutout_mipped",
+            "rendertype_translucent"
+    );
 
     private static boolean initialized;
     private static boolean available;
@@ -96,6 +108,10 @@ public final class ImmersivePortalsShaderCompat {
      */
     public static MappedBuffer getTerrainClipPlane() {
         return TERRAIN_CLIP_PLANE;
+    }
+
+    public static boolean usesTerrainClipPlane(String shaderName) {
+        return TERRAIN_CLIPPING_SHADERS.contains(shaderName);
     }
 
     public static void refreshTerrainClipPlane() {

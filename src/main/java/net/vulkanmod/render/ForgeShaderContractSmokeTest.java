@@ -21,10 +21,14 @@ import java.util.Map;
 public final class ForgeShaderContractSmokeTest {
     private static final ResourceLocation TEST_SHADER =
             new ResourceLocation(Initializer.MOD_ID, "ci_namespaced");
+    private static final ResourceLocation IP_ALIASED_TERRAIN_SHADER =
+            new ResourceLocation(Initializer.MOD_ID, "ci_ip_alias");
     private static final String STALE_KEY = Initializer.MOD_ID + ":ci_stale_reload_entry";
 
     private static ShaderInstance registeredShader;
     private static ShaderInstance loadedShader;
+    private static ShaderInstance registeredIpAliasedTerrainShader;
+    private static ShaderInstance loadedIpAliasedTerrainShader;
     private static boolean sawEvent;
 
     private ForgeShaderContractSmokeTest() {
@@ -39,6 +43,8 @@ public final class ForgeShaderContractSmokeTest {
                 "Shader reload smoke expected the preloaded shader map to be non-empty");
         registeredShader = null;
         loadedShader = null;
+        registeredIpAliasedTerrainShader = null;
+        loadedIpAliasedTerrainShader = null;
         sawEvent = false;
 
         // A correct reload replaces the map. Keeping this alias would reproduce
@@ -62,6 +68,20 @@ public final class ForgeShaderContractSmokeTest {
                         "RegisterShadersEvent callback received a different shader instance");
                 loadedShader = loaded;
             });
+
+            if(Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
+                ShaderInstance ipAliasedTerrainShader = new ShaderInstance(
+                        event.getResourceProvider(),
+                        IP_ALIASED_TERRAIN_SHADER,
+                        DefaultVertexFormat.BLOCK
+                );
+                registeredIpAliasedTerrainShader = ipAliasedTerrainShader;
+                event.registerShader(ipAliasedTerrainShader, loaded -> {
+                    require(loaded == registeredIpAliasedTerrainShader,
+                            "IP aliased-terrain callback received a different shader instance");
+                    loadedIpAliasedTerrainShader = loaded;
+                });
+            }
         } catch(IOException e) {
             throw new IllegalStateException("Could not create namespaced Forge shader smoke fixture", e);
         }
@@ -80,6 +100,17 @@ public final class ForgeShaderContractSmokeTest {
                 "Namespaced Forge shader was not installed under its authoritative name");
         require(((ShaderMixed)(Object)loadedShader).getPipeline() != null,
                 "Namespaced Forge shader did not create a Vulkan pipeline");
+
+        if(Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
+            require(registeredIpAliasedTerrainShader != null,
+                    "IP aliased-terrain shader was not registered");
+            require(loadedIpAliasedTerrainShader == registeredIpAliasedTerrainShader,
+                    "IP aliased-terrain registered-shader callback did not run");
+            require(shaders.get(IP_ALIASED_TERRAIN_SHADER.toString()) == loadedIpAliasedTerrainShader,
+                    "IP aliased-terrain shader was not installed under its authoritative name");
+            require(((ShaderMixed)(Object)loadedIpAliasedTerrainShader).getPipeline() != null,
+                    "IP aliased-terrain shader did not create a Vulkan pipeline");
+        }
 
         Initializer.LOGGER.info("Forge shader registration/reload contract smoke passed");
     }
