@@ -112,26 +112,33 @@ public class GlslConverter {
             return line;
         }
 
-        if(tokenizer.countTokens() < 2) {
-            throw new IllegalArgumentException("Less than 3 tokens present");
-        }
-
-        if(feedToken(token)) {
-            return null;
-        }
-
-        while (tokenizer.hasMoreTokens()) {
-            token = tokenizer.nextToken();
-
-            // One declaration is parsed per source line. Once the declaration is
-            // complete, ignore trailing whitespace/comment tokens instead of
-            // treating them as a second declaration.
-            if(feedToken(token)) {
-                break;
+        try {
+            if(tokenizer.countTokens() < 2) {
+                throw new IllegalArgumentException("Less than 3 tokens present");
             }
-        }
 
-        return null;
+            if(feedToken(token)) {
+                return null;
+            }
+
+            while (tokenizer.hasMoreTokens()) {
+                token = tokenizer.nextToken();
+
+                // One declaration is parsed per source line. Once the declaration is
+                // complete, ignore trailing whitespace/comment tokens instead of
+                // treating them as a second declaration.
+                if(feedToken(token)) {
+                    break;
+                }
+            }
+
+            return null;
+        } catch(RuntimeException failure) {
+            throw new IllegalArgumentException(
+                    "Failed to parse " + this.shaderStage + " shader declaration: " + line.trim(),
+                    failure
+            );
+        }
     }
 
     private boolean feedToken(String token) {

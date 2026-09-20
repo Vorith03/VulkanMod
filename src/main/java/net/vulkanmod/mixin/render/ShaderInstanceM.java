@@ -207,12 +207,14 @@ public class ShaderInstanceM implements ShaderMixed {
 
     private void createLegacyShader(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format) {
         boolean immersivePortalsClippingShader = false;
+        String vertexName = "<unresolved>";
+        String fragmentName = "<unresolved>";
 
         try (Reader reader = resourceProvider.openAsReader(location)) {
             JsonObject jsonObject = GsonHelper.parse(reader);
 
-            String vertexName = GsonHelper.getAsString(jsonObject, "vertex");
-            String fragmentName = GsonHelper.getAsString(jsonObject, "fragment");
+            vertexName = GsonHelper.getAsString(jsonObject, "vertex");
+            fragmentName = GsonHelper.getAsString(jsonObject, "fragment");
 
             String vshSrc;
             ResourceLocation vertexLocation = vulkanmod$coreProgramResource(vertexName, ".vsh");
@@ -283,6 +285,10 @@ public class ShaderInstanceM implements ShaderMixed {
 
         } catch (Throwable throwable) {
             this.vulkanmod$uniformBindings.close();
+            Initializer.LOGGER.error(
+                    "Failed to build legacy Vulkan shader {} (vertex={}, fragment={})",
+                    location, vertexName, fragmentName, throwable
+            );
 
             // A transformed IP shader without a usable Vulkan pipeline renders
             // portal geometry with incorrect clipping. Do not silently fall back
@@ -297,7 +303,6 @@ public class ShaderInstanceM implements ShaderMixed {
                 throw new IllegalStateException("Failed to build Immersive Portals clipping shader", throwable);
             }
 
-            throwable.printStackTrace();
         }
     }
 }

@@ -34,7 +34,39 @@ public final class GlslConverterParsingTest {
                 "Vertex output declaration survived trailing comment");
         require(converter.getFshConverted().contains("layout(location = 0) in vec4 vertexColor;"),
                 "Fragment input declaration survived trailing comment");
+
+        verifyFailureContext();
         System.out.println("GLSL declaration parsing tests passed");
+    }
+
+    private static void verifyFailureContext() {
+        String brokenVertex = """
+                #version 150
+                in vec3 Position
+                void main() {
+                    gl_Position = vec4(Position, 1.0);
+                }
+                """;
+        String fragment = """
+                #version 150
+                out vec4 fragColor;
+                void main() {
+                    fragColor = vec4(1.0);
+                }
+                """;
+
+        try {
+            new GlslConverter().process(DefaultVertexFormat.POSITION, brokenVertex, fragment);
+            throw new AssertionError("Malformed declaration unexpectedly parsed");
+        } catch(IllegalArgumentException expected) {
+            require(expected.getMessage().contains("Vertex shader declaration"),
+                    "Parser failure did not identify the shader stage");
+            require(expected.getMessage().contains("in vec3 Position"),
+                    "Parser failure did not preserve the offending declaration");
+            require(expected.getCause() != null
+                            && expected.getCause().getMessage().contains("last char is not ;"),
+                    "Parser failure did not retain the underlying cause");
+        }
     }
 
     private static void require(boolean condition, String message) {
