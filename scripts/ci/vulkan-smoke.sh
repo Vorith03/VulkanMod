@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel}" >&2
+  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel|create}" >&2
   exit 2
 }
 
@@ -42,7 +42,7 @@ snapshot_ci_mods() {
   mkdir -p run/mods
   shopt -s nullglob
   local jar
-  for jar in run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar; do
+  for jar in run/mods/CrashAssistant-*.jar run/mods/chat_heads-*.jar run/mods/flywheel-*.jar run/mods/create-*.jar; do
     cp -a "$jar" "$fixture_backup_dir/mods/"
   done
   shopt -u nullglob
@@ -294,6 +294,36 @@ EOF
     run_client "-Dvulkanmod.smokeTest=true" vulkan-smoke-flywheel.log
     grep -F "Vulkan smoke test passed" vulkan-smoke-flywheel.log
     grep -F "Flywheel 0.6 compatibility smoke test passed" vulkan-smoke-flywheel.log
+    ;;
+
+  create)
+    clear_ci_mods
+    snapshot_build_gradle
+
+    # Exercise the exact Create 0.5.1.j artifact from the user's modpack family.
+    # Loading StencilElement forces Sponge Mixin to validate the raw-LWJGL
+    # stencil redirects against Create's real bytecode.
+    if ! grep -Fq '// VULKANMOD_CI_CREATE_RUNTIME' build.gradle; then
+      cat >> build.gradle <<'EOF'
+
+// VULKANMOD_CI_CREATE_RUNTIME
+repositories {
+    maven { url = 'https://api.modrinth.com/maven' }
+}
+dependencies {
+    runtimeOnly fg.deobf('maven.modrinth:LNytGWDc:6R069CcK')
+}
+EOF
+    fi
+
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.ciCreateStencilSmoke=true" vulkan-smoke-create.log
+    grep -F "Vulkan smoke test passed" vulkan-smoke-create.log
+    grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-create.log
+    grep -F "Create 0.5.1.j stencil compatibility mixin target loaded" vulkan-smoke-create.log
+    if grep -F "No context is current or a function that is not available in the current context was called" vulkan-smoke-create.log; then
+      echo "Create attempted an unbridged OpenGL call without a current context" >&2
+      exit 1
+    fi
     ;;
 
   *)

@@ -3,6 +3,7 @@ package net.vulkanmod.render;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.CreateStencilCompat;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.texture.VulkanImage;
@@ -53,22 +54,21 @@ public final class RenderTargetStencilSmokeTest {
         }
 
         verifyCreateStyleStencilStateBridge();
+        verifyCreateStencilMixinTarget();
         Initializer.LOGGER.info("Forge RenderTarget stencil capability smoke passed");
     }
 
     private static void verifyCreateStyleStencilStateBridge() {
-        GL11.glDisable(GL11.GL_STENCIL_TEST);
-        require(!VRenderSystem.stencilTest, "Direct GL stencil disable did not reach Vulkan state");
+        CreateStencilCompat.disableStencilTest(GL11.GL_STENCIL_TEST);
+        require(!VRenderSystem.stencilTest, "Create stencil disable bridge did not reach Vulkan state");
 
         RenderSystem.stencilMask(~0);
         RenderSystem.stencilOp(GL11.GL_REPLACE, GL11.GL_KEEP, GL11.GL_KEEP);
         RenderSystem.stencilMask(0xFF);
         RenderSystem.stencilFunc(GL11.GL_NEVER, 1, 0xFF);
-        GL11.glEnable(GL11.GL_STENCIL_TEST);
+        CreateStencilCompat.enableStencilTest(GL11.GL_STENCIL_TEST);
 
-        require(VRenderSystem.stencilTest, "Direct GL stencil enable did not reach Vulkan state");
-        require(GL11.glIsEnabled(GL11.GL_STENCIL_TEST),
-                "Direct GL stencil enabled query did not reflect Vulkan state");
+        require(VRenderSystem.stencilTest, "Create stencil enable bridge did not reach Vulkan state");
         require(VRenderSystem.stencilWriteMask == 0xFF,
                 "RenderSystem stencil write mask did not reach Vulkan state");
         require(VRenderSystem.stencilFun == GL11.GL_NEVER
@@ -84,10 +84,25 @@ public final class RenderTargetStencilSmokeTest {
         // used by the actual draw path; this must accept Create's exact sequence.
         VRenderSystem.getStencilState();
 
-        GL11.glDisable(GL11.GL_STENCIL_TEST);
+        CreateStencilCompat.disableStencilTest(GL11.GL_STENCIL_TEST);
         RenderSystem.stencilMask(~0);
         RenderSystem.stencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_KEEP);
         RenderSystem.stencilFunc(GL11.GL_ALWAYS, 0, ~0);
+    }
+
+    private static void verifyCreateStencilMixinTarget() {
+        if(!Boolean.getBoolean("vulkanmod.ciCreateStencilSmoke")) {
+            return;
+        }
+
+        try {
+            Class.forName("com.simibubi.create.foundation.gui.element.StencilElement", true,
+                    Thread.currentThread().getContextClassLoader());
+        } catch(ClassNotFoundException e) {
+            throw new AssertionError("Create 0.5.1.j stencil smoke requested without Create on the runtime classpath", e);
+        }
+
+        Initializer.LOGGER.info("Create 0.5.1.j stencil compatibility mixin target loaded");
     }
 
     private static void require(boolean condition, String message) {

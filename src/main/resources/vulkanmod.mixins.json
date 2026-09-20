@@ -17,6 +17,7 @@
     "compatibility.EffectInstanceM",
     "compatibility.PostPassM",
     "compatibility.FlywheelBackendMixin",
+    "compatibility.CreateStencilElementMixin",
     "compatibility.FTBLibraryGuiHelperMixin",
     "compatibility.FTBLibraryScissorMixin",
     "compatibility.ImmersivePortalsCHelperMixin",

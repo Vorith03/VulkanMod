@@ -36,12 +36,15 @@ require_literal 'cp -a "$fixture_backup_dir/vk_layer_settings.txt" run/vk_layer_
 require_in_mode no-splash snapshot_fml_toml
 require_in_mode chat-heads snapshot_build_gradle
 require_in_mode flywheel snapshot_build_gradle
+require_in_mode create snapshot_build_gradle
+require_in_mode create 'maven.modrinth:LNytGWDc:6R069CcK'
+require_in_mode create 'vulkanmod.ciCreateStencilSmoke=true'
 
 for mode in gpu-indirect-shadow depth-post-chain screenshot; do
   require_in_mode "$mode" snapshot_vk_layer_settings
 done
 
-for mode in gpu-indirect-shadow post-chain depth-post-chain screenshot crash-assistant chat-heads flywheel; do
+for mode in gpu-indirect-shadow post-chain depth-post-chain screenshot crash-assistant chat-heads flywheel create; do
   require_in_mode "$mode" clear_ci_mods
 done
 
