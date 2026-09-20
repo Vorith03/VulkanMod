@@ -317,14 +317,14 @@ workers omit only the GPU-owned ordinary-cube subset while preserving unsupporte
 geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
 stage CPU exception geometry and GPU output independently, retain the previous complete
 pair, and switch both halves atomically only when the replacement generation is ready.
-CI #720 validates the current combined terrain/compatibility tree, including transition,
+CI #721 validates the current combined terrain/compatibility tree, including transition,
 face-policy, readback, overflow/fallback, hybrid command-count/section-count oracles,
 the GLSL declaration-parser regression, Immersive Portals framebuffer rendering under
 VulkanMod's no-OpenGL-context window, per-portal-world `LevelRenderer` ownership,
 recursive render-buffer use, terrain clip-plane propagation across all three Vulkan
-terrain pipelines, IP reload-hook compatibility, and a Forge-namespaced shader that
-aliases IP-transformed vanilla `rendertype_cutout` while receiving the authoritative
-terrain clip-plane binding. Distant Horizons 3.2.0-b is explicitly fail-closed under
+terrain pipelines, IP reload-hook compatibility, an aliased `rendertype_cutout` terrain
+shader, and an aliased `rendertype_entity_translucent` model-view shader that mirrors
+IP's entity/projection/weather clipping state machine. Distant Horizons 3.2.0-b is explicitly fail-closed under
 Vulkan by suppressing its OpenGL LOD draw/fade passes.
 
 The hybrid implementation gate is therefore closed. The first attempted narrow
@@ -339,8 +339,12 @@ same #711 run also exposed parser noise and a Twilight Forest/Immersive Portals 
 program failure once Forge shader registration was correctly restored: `647c13e225b4`
 fixes comment text being parsed as GLSL declarations, and `b9910cfb0675` binds the
 correct pre-model-view IP clip plane when a namespaced Forge shader aliases one of IP's
-terrain programs. CI #720 is green for the combined fixes. The next evidence boundary is
-a repeat functional run with REPLACE + APPEND enabled, including looking through a real
+terrain programs. The next RX run on build #720 confirmed those fixes but exposed the
+same IP name/program mismatch in Alex's Caves: `rendertype_sepia` aliases transformed
+`rendertype_entity_translucent`. `5964641c5428` adds the corresponding model-view alias
+bridge using IP's own entity/projection/weather clipping semantics, and CI #721 is green
+for both alias classes plus the existing Create stencil fixture. The next evidence boundary
+is a repeat functional run with REPLACE + APPEND enabled, including looking through a real
 portal and performing a dirty mixed-section rebuild.
 This remains a correctness test, not a performance claim. Live GPU visibility/section-
 selection correctness and broader lifecycle/Forge preservation gates remain open until
@@ -411,11 +415,11 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `b9910cfb067504ec766fbb2488cc379e1d98e5c8`, CI #720
-  (run `35493996611`) is fully green on the current production tree, including
+- Latest executable checkpoint: `5964641c5428dedb3df02e3f3a31bc949b12f7eb`, CI #721
+  (run `35497298400`) is fully green on the current production tree, including
   Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, the exact Create 0.5.1.j
-  stencil compatibility fixture, the GLSL comment-parser regression, and an IP-transformed
-  aliased-terrain Forge shader.
+  stencil compatibility fixture, the GLSL comment-parser regression, and both IP alias
+  classes (`rendertype_cutout` terrain plus `rendertype_entity_translucent` model-view).
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
@@ -424,13 +428,13 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
   recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
 - Runtime compatibility progressed through the earlier Immersive Portals raw-GL framebuffer
-  gap plus the build #711 full-pack blockers. Create's off-screen stencil target/direct
-  toggle path is covered by the exact Create fixture; #711's pre-existing GLSL comment
-  parser failure is fixed; and the Twilight Forest `red_thread` / IP `rendertype_cutout`
-  alias mismatch now receives the authoritative terrain clip plane. CI #720 covers the
-  combined tree. The next useful gate evidence is a repeat full-pack correctness run with
-  REPLACE + APPEND enabled, including looking through a real portal and at least one dirty
-  mixed-section rebuild.
+  gap plus the build #711 and #720 full-pack blockers. Build #720 confirmed Create's stencil,
+  the GLSL comment parser, and Twilight Forest's terrain alias no longer blocked startup,
+  then exposed Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`. The
+  model-view alias bridge in `5964641c5428` mirrors IP's runtime clip-space selection and
+  CI #721 covers it alongside the previous gates. The next useful evidence is another
+  full-pack correctness run with REPLACE + APPEND enabled, including a real portal and at
+  least one dirty mixed-section rebuild.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
   comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
