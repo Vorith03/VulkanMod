@@ -243,6 +243,8 @@ The inherited Forge `isStencilEnabled()` can therefore return true while no sten
 
 **Repair direction:** either implement the Forge stencil contract with an explicitly stencil-capable format and correct aspect handling, or fail the capability request explicitly rather than reporting a false success.
 
+**Post-audit runtime update (2026-09-19):** the audit finding itself remains valid, but real Create Chronicles evidence resolved the implementation choice. Build #711 reached Create 0.5.1.j's `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()` startup path and failed because the then-current repair explicitly rejected stencil targets. Off-screen Vulkan depth/stencil support was implemented in `8a9a374bafb`, combined depth-sampling/attachment image views were corrected in `f2323d254473` (CI #713), and `4abc931918a2` redirects Create's direct `GL_STENCIL_TEST` toggles at the actual `StencilElement` call sites. CI #715 passes the exact Create 0.5.1.j fixture. This is contradictory post-audit runtime evidence refining the repair choice, not a reason to rerun the audit.
+
 ## A15 — Medium Forge compatibility: block-layer `RenderLevelStageEvent` callbacks are removed
 
 Relevant code:

@@ -14,14 +14,14 @@ This document tracks Phase 4 compatibility evidence for the Forge 1.20.1 port. I
 
 ## Current Phase 4 retest artifact
 
-Verified on 2026-09-12: [CI #310](https://github.com/Vorith03/VulkanMod/actions/runs/34680822349) passed build and all configured smoke-test gates at source `1b6cf44284f4b82e680e75aaea5d43753fb3c800`.
+Verified on 2026-09-19: [CI #715](https://github.com/Vorith03/VulkanMod/actions/runs/35487899273) passed the complete build/distributable and Vulkan smoke matrix at source `4abc931918a2e43ff76f5428ce855bfcd3309537`.
 
-- Download the `VulkanMod-Forge-build-310` artifact and install its `-all.jar`.
+- Download the `VulkanMod-Forge-build-715` artifact and install its `-all.jar`.
 - Keep `config/fml.toml` -> `earlyWindowControl = false`.
-- Disable PickupNotifier 8.0.0 for this retest; retain the existing renderer-replacement baseline below.
-- Build #308's packed texture staging remains in #310 and was verified in the real pack: large upload batches staged only requested texels instead of source-row gaps.
-- Build #310 additionally purges allocator-cached pages immediately after old static atlas CPU pixels are closed and before replacement resource decoding starts. The existing post-success purge remains in place.
-- Build #310 also logs this process' DRM-client resident VRAM/GTT alongside the existing device-wide AMDGPU counters so a reload-time GTT surge can be attributed instead of guessed at.
+- Retain the established renderer-replacement baseline; do **not** disable PickupNotifier solely because of the old #310 instruction. PickupNotifier 8.0.0 now has a dedicated green compatibility gate in CI #715.
+- Build #711 on the real Create Chronicles instance exposed Create 0.5.1.j's startup call to `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; the client aborted because VulkanMod still rejected stencil targets.
+- The #715 tree implements real off-screen Vulkan depth/stencil targets, keeps depth sampling on a depth-only image view, and redirects Create's direct `GL_STENCIL_TEST` toggles in `StencilElement` to Vulkan state. The exact Create 0.5.1.j artifact is loaded by the CI fixture, and the log confirms `CreateStencilElementMixin` is applied with no OpenGL context.
+- The rest of the prior compatibility matrix remains green in the same run: FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, and Flywheel.
 - No process/system memory safety limit was weakened.
 
 ### Build #308 full-pack reload evidence — 2026-09-12
@@ -48,11 +48,13 @@ A second signal is now under investigation: between the 00:09:00 diagnostic snap
 
 | Path | Evidence | Required action / remaining gate |
 | --- | --- | --- |
-| PickupNotifier 8.0.0 transparency framebuffer | Build #303 launcher stack: `GL30C.glGetInteger` -> `TransparencyBuffer.prepareExtraFramebuffer`; LWJGL aborted because the Vulkan window has no OpenGL context | Disable PickupNotifier for the baseline. No compatible configuration or replacement implementation has been verified. |
-| Full-pack resource reload | #308 reaches in-world `F3+T`, retires 922 MiB of old static NativeImages, then hits the unchanged system-memory guard during replacement preparation | Retest #310. Compare the pre-decode allocator-purge RSS/MemAvailable result and process DRM-client GTT trajectory. Do not lower the guard. |
-| Heavy 16K atlas workload | #308 verifies packed upload staging in the real pack; reload failure occurs with only 22 MiB staging in use | Preserve the same resource-pack workload for comparison. Staging is no longer the leading memory suspect. |
-| Animated atlas images | Reload retirement preserves animated sprite source/mip data; #308 failure occurs before reload completion | Verify animated textures continue after a successful reload. |
-| Create/Flywheel gameplay | Historical #226 water wheel rendered; #310 Flywheel startup smoke passes | Current full-pack contraption visual test remains pending. |
+| PickupNotifier 8.0.0 transparency framebuffer | Historical #303 raw-GL failure; dedicated compatibility smoke is green in CI #715 | Supported baseline in CI; retain normal full-pack coverage rather than disabling it preemptively. |
+| Full-pack resource reload | #308 documented the old memory-guard failure; later user evidence recorded in `AGENT_STATUS.md` includes successful `F3+T` and world re-entry | Recheck during the #715 full-pack run; repeated lifecycle stability remains a final gate, but the old #308 failure is not the current primary blocker. |
+| Heavy 16K atlas workload | #308 verifies packed upload staging in the real pack; the old reload failure occurred with only 22 MiB staging in use | Preserve comparable workload if memory behavior regresses; staging is not the leading suspect from that evidence. |
+| Animated atlas images | Reload retirement preserves animated sprite source/mip data | Verify animated textures still advance after the #715 reload/re-entry cycle. |
+| Create stencil GUI path | Real build #711 aborted in `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; CI #715 now loads exact Create 0.5.1.j and applies `CreateStencilElementMixin` | Full-pack RX confirmation is pending; startup must pass the old fatal site and Create stencil-backed UI must not issue raw OpenGL calls. |
+| Immersive Portals shader conversion | Build #711 logged repeated `IllegalArgumentException: last char is not ;` from VulkanMod's shader parser during IP shader rebuilding before the later fatal stencil crash | Not proven fatal in #711; retain the exact exception if it still occurs on #715 so it can be classified rather than silently ignored. |
+| Create/Flywheel gameplay | Historical #226 water wheel rendered; Flywheel and exact Create startup fixtures are green in CI #715 | Current full-pack contraption visual test remains pending. |
 
 These findings are evidence for Phase 4 compatibility only. CI startup coverage does not close full-pack gameplay gates.
 
@@ -122,16 +124,19 @@ Do not re-enable renderer replacements in bulk. If Phase 4 later tests them, add
 
 ## Mandatory current-artifact test sequence
 
-Run these against build #310 in the real Create Chronicles instance. Disable PickupNotifier 8.0.0 and keep the known-good renderer-replacement set disabled initially. Preserve the same resource-pack workload and do not use diagnostic memory-safety overrides.
+Run these against build #715 in the real Create Chronicles instance. Keep the known-good renderer-replacement set disabled initially, but do not disable otherwise supported pack mods solely because of old baseline instructions. Preserve the same resource-pack workload and do not use diagnostic memory-safety overrides.
 
-1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT.
+For the Phase 7 correctness boundary, use the existing experimental flags together: `-Dvulkanmod.experimentalGpuTerrainMesher=true`, `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`, `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`, and `-Dvulkanmod.experimentalGpuTerrainHybrid=true`.
+
+1. Launch to the title screen and confirm the log contains `Vulkan renderer active:` for the RX 6900 XT and does not terminate at Create's old `CustomRenderTarget.enableStencil()` path.
 2. Enter the normal test world and inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement.
-3. Exercise a visible Create/Flywheel contraption (water wheel is sufficient for the first pass; a moving contraption is better for follow-up coverage).
-4. Press `F3+T` and wait for resource reload to finish. In the log, retain the `Native allocator purge` line and the adjacent `resource reload after pre-decode native allocator purge` snapshot; the new snapshots should also include `process DRM clients` and resident VRAM/GTT.
-5. If reload succeeds, verify rendering remains correct, exit to the title screen, re-enter the same world, and play for at least two minutes. Check item pickups, animated textures and the same Create contraption again.
-6. Exit normally.
+3. Exercise a visible Create/Flywheel contraption and at least one Create GUI/overlay path that uses the normal UI rendering stack; any raw-OpenGL-context abort is a regression.
+4. Look through a real Immersive Portals portal. If the earlier `last char is not ;` shader-conversion exception still appears, retain its surrounding log even if gameplay continues.
+5. Force at least one dirty mixed-section rebuild while REPLACE + APPEND are enabled and verify complete geometry is preserved rather than blinking/disappearing.
+6. Press `F3+T` and wait for resource reload to finish; verify rendering remains correct, then exit to the title screen and re-enter the same world.
+7. Play for at least two minutes after re-entry, checking item pickups, animated textures, the same Create contraption, and portal rendering again, then exit normally.
 
-If reload trips the memory guard again, stop there and retain `logs/latest.log`; the pre-decode purge and per-process DRM fields are specifically intended to make that single failure sufficient to choose the next source-level target.
+If the run fails, stop at the first new blocking failure and retain `logs/latest.log` plus any crash report. One precise failure from #715 is more useful than continuing through cascading errors.
 
 ## Evidence to retain after each run
 
@@ -142,7 +147,7 @@ Keep:
 - screenshots of visible rendering defects;
 - exact enabled/disabled state of renderer-changing mods;
 - whether launch, world entry, Create/Flywheel rendering, `F3+T`, world re-entry and clean exit passed;
-- the build-310 pre-decode allocator-purge before/after RSS and `MemAvailable` values;
+- allocator-purge / RSS / `MemAvailable` and process DRM-client VRAM/GTT snapshots if memory pressure or reload behavior is involved;
 - the build-310 process DRM-client resident VRAM/GTT values around reload growth and any safety trip.
 
 ## Current gate status

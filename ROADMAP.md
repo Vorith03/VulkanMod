@@ -327,10 +327,16 @@ explicitly fail-closed under Vulkan by suppressing its OpenGL LOD draw/fade pass
 
 The hybrid implementation gate is therefore closed. The first attempted narrow
 Create Chronicles/RX 6900 XT run stopped before terrain evidence because Immersive
-Portals still issued a raw stencil GL call. That regression and the downstream portal
-multi-world/clipping hazards found during preflight are now fixed and covered by CI #690.
-The next evidence boundary is a repeat functional run with REPLACE + APPEND enabled,
-including looking through a real portal and performing a dirty mixed-section rebuild.
+Portals still issued a raw stencil GL call; that regression and the downstream portal
+multi-world/clipping hazards are covered by CI #690. A later full-pack build #711 run
+then exposed a separate Create 0.5.1.j startup requirement: its GUI helper creates an
+off-screen stencil RenderTarget, so the audit-era fail-closed stencil rejection was not
+sufficient. Off-screen Vulkan stencil support plus a call-site bridge for Create's raw
+`GL_STENCIL_TEST` toggles are now implemented, and CI #715 includes an exact Create
+0.5.1.j fixture that loads the transformed `StencilElement` under a no-OpenGL-context
+Vulkan window. The next evidence boundary is a repeat functional run with REPLACE +
+APPEND enabled, including looking through a real portal and performing a dirty
+mixed-section rebuild.
 This remains a correctness test, not a performance claim. Live GPU visibility/section-
 selection correctness and broader lifecycle/Forge preservation gates remain open until
 representative runtime evidence supports them.
@@ -400,9 +406,10 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `8e553bb6991c16f86098227aa35639189d4e4aaf`, CI #690
-  (run `35385931592`) is fully green on the current production tree, including
-  Immersive Portals 3.0.7 and Distant Horizons 3.2.0-b compatibility smokes.
+- Latest executable checkpoint: `4abc931918a2e43ff76f5428ce855bfcd3309537`, CI #715
+  (run `35487899273`) is fully green on the current production tree, including
+  Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, and an exact Create
+  0.5.1.j stencil compatibility fixture.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
@@ -410,11 +417,13 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
   stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
   recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
-- The first attempted RX 6900 XT/Create Chronicles functional run exposed the IP raw-GL
-  gap and stopped before terrain evidence. CI #690 now directly covers that repaired
-  framebuffer path plus the downstream portal-world/clipping preflight. The next useful
-  gate evidence is a repeat full-pack correctness run with REPLACE + APPEND enabled,
-  including looking through a real portal and at least one dirty mixed-section rebuild.
+- Runtime compatibility progressed through two distinct full-pack blockers: the earlier
+  Immersive Portals raw-GL framebuffer gap is covered by CI #690, while build #711 later
+  proved Create 0.5.1.j requires a real off-screen stencil target and direct stencil-toggle
+  bridging. CI #715 covers the latter with the exact Create artifact and transformed
+  `StencilElement`. The next useful gate evidence is a repeat full-pack correctness run
+  with REPLACE + APPEND enabled, including looking through a real portal and at least one
+  dirty mixed-section rebuild.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
   comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
