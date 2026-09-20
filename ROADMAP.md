@@ -317,7 +317,7 @@ workers omit only the GPU-owned ordinary-cube subset while preserving unsupporte
 geometry, fluids, block entities, and protected neighbors on CPU. Dirty APPEND rebuilds
 stage CPU exception geometry and GPU output independently, retain the previous complete
 pair, and switch both halves atomically only when the replacement generation is ready.
-CI #721 validates the current combined terrain/compatibility tree, including transition,
+CI #723 validates the current combined terrain/compatibility tree, including transition,
 face-policy, readback, overflow/fallback, hybrid command-count/section-count oracles,
 the GLSL declaration-parser regression, Immersive Portals framebuffer rendering under
 VulkanMod's no-OpenGL-context window, per-portal-world `LevelRenderer` ownership,
@@ -342,8 +342,10 @@ correct pre-model-view IP clip plane when a namespaced Forge shader aliases one 
 terrain programs. The next RX run on build #720 confirmed those fixes but exposed the
 same IP name/program mismatch in Alex's Caves: `rendertype_sepia` aliases transformed
 `rendertype_entity_translucent`. `5964641c5428` adds the corresponding model-view alias
-bridge using IP's own entity/projection/weather clipping semantics, and CI #721 is green
-for both alias classes plus the existing Create stencil fixture. The next evidence boundary
+bridge using IP's own entity/projection/weather clipping semantics. `a12fb862873c` adds the
+observed `particle` alias shape to the IP smoke and `860961c6b636` adds a selected-resource-
+pack retention oracle; CI #723 is green for all of them plus the existing Create stencil
+fixture. The next evidence boundary
 is a repeat functional run with REPLACE + APPEND enabled, including looking through a real
 portal and performing a dirty mixed-section rebuild.
 This remains a correctness test, not a performance claim. Live GPU visibility/section-
@@ -415,8 +417,8 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `5964641c5428dedb3df02e3f3a31bc949b12f7eb`, CI #721
-  (run `35497298400`) is fully green on the current production tree, including
+- Latest executable checkpoint: `860961c6b6361e16dd7f1a1c0543930c3b161954`, CI #723
+  (run `35529020266`) is fully green. Production runtime behavior remains at `5964641c5428`; the later commits add regression coverage, including selected-resource-pack retention. The current tree includes
   Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, the exact Create 0.5.1.j
   stencil compatibility fixture, the GLSL comment-parser regression, and both IP alias
   classes (`rendertype_cutout` terrain plus `rendertype_entity_translucent` model-view).
@@ -431,8 +433,9 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   gap plus the build #711 and #720 full-pack blockers. Build #720 confirmed Create's stencil,
   the GLSL comment parser, and Twilight Forest's terrain alias no longer blocked startup,
   then exposed Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`. The
-  model-view alias bridge in `5964641c5428` mirrors IP's runtime clip-space selection and
-  CI #721 covers it alongside the previous gates. The next useful evidence is another
+  model-view alias bridge in `5964641c5428` mirrors IP's runtime clip-space selection;
+  CI #723 additionally covers the observed `particle` alias and proves a selected synthetic
+  resource pack is not discarded by the reproduced rollback path. The next useful evidence is another
   full-pack correctness run with REPLACE + APPEND enabled, including a real portal and at
   least one dirty mixed-section rebuild.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
