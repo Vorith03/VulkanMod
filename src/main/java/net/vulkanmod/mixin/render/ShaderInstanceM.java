@@ -209,6 +209,8 @@ public class ShaderInstanceM implements ShaderMixed {
         boolean immersivePortalsClippingShader = false;
         String vertexName = "<unresolved>";
         String fragmentName = "<unresolved>";
+        Resource vertexResource = null;
+        Resource fragmentResource = null;
 
         try (Reader reader = resourceProvider.openAsReader(location)) {
             JsonObject jsonObject = GsonHelper.parse(reader);
@@ -218,7 +220,7 @@ public class ShaderInstanceM implements ShaderMixed {
 
             String vshSrc;
             ResourceLocation vertexLocation = vulkanmod$coreProgramResource(vertexName, ".vsh");
-            Resource vertexResource = resourceProvider.getResourceOrThrow(vertexLocation);
+            vertexResource = resourceProvider.getResourceOrThrow(vertexLocation);
             try (InputStream inputStream = vertexResource.open()) {
                 vshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
@@ -233,7 +235,7 @@ public class ShaderInstanceM implements ShaderMixed {
 
             String fshSrc;
             ResourceLocation fragmentLocation = vulkanmod$coreProgramResource(fragmentName, ".fsh");
-            Resource fragmentResource = resourceProvider.getResourceOrThrow(fragmentLocation);
+            fragmentResource = resourceProvider.getResourceOrThrow(fragmentLocation);
             try (InputStream inputStream = fragmentResource.open()) {
                 fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
             }
@@ -286,8 +288,13 @@ public class ShaderInstanceM implements ShaderMixed {
         } catch (Throwable throwable) {
             this.vulkanmod$uniformBindings.close();
             Initializer.LOGGER.error(
-                    "Failed to build legacy Vulkan shader {} (vertex={}, fragment={})",
-                    location, vertexName, fragmentName, throwable
+                    "Failed to build legacy Vulkan shader {} (vertex={} from {}, fragment={} from {})",
+                    location,
+                    vertexName,
+                    vertexResource == null ? "<unresolved>" : vertexResource.sourcePackId(),
+                    fragmentName,
+                    fragmentResource == null ? "<unresolved>" : fragmentResource.sourcePackId(),
+                    throwable
             );
 
             // A transformed IP shader without a usable Vulkan pipeline renders
