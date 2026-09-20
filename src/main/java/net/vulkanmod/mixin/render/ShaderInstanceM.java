@@ -60,6 +60,7 @@ public class ShaderInstanceM implements ShaderMixed {
     private GraphicsPipeline pipeline;
     private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
     private boolean vulkanmod$refreshImmersivePortalsTerrainClipPlane;
+    private boolean vulkanmod$refreshImmersivePortalsModelViewClipPlane;
     boolean isLegacy = false;
 
 
@@ -118,6 +119,7 @@ public class ShaderInstanceM implements ShaderMixed {
         }
         this.vulkanmod$uniformBindings.close();
         this.vulkanmod$refreshImmersivePortalsTerrainClipPlane = false;
+        this.vulkanmod$refreshImmersivePortalsModelViewClipPlane = false;
     }
 
     /**
@@ -151,6 +153,9 @@ public class ShaderInstanceM implements ShaderMixed {
 
             if(this.vulkanmod$refreshImmersivePortalsTerrainClipPlane) {
                 ImmersivePortalsShaderCompat.refreshTerrainClipPlane();
+            }
+            if(this.vulkanmod$refreshImmersivePortalsModelViewClipPlane) {
+                ImmersivePortalsShaderCompat.refreshModelViewClipPlane();
             }
 
             // Mod shaders commonly bind RenderTarget, AbstractTexture, or direct
@@ -273,23 +278,30 @@ public class ShaderInstanceM implements ShaderMixed {
             if(immersivePortalsClippingShader && !bindingUniforms.containsKey("imm_ptl_ClippingEquation")) {
                 // IP decides whether to create its ShaderInstance Uniform from the
                 // ShaderInstance name, while Program transformation is keyed by the
-                // underlying program name. Forge mods can therefore alias a vanilla
-                // terrain program (Twilight Forest's red_thread -> rendertype_cutout)
-                // without receiving IP's dynamic Uniform. VulkanMod already mirrors
-                // the authoritative pre-model-view terrain clip equation for its
-                // native terrain pipelines, so bind that same storage directly.
-                // Keep every non-terrain transform fail-closed because IP uses a
-                // different coordinate space for those shaders.
-                if(!ImmersivePortalsShaderCompat.usesTerrainClipPlane(vertexName)) {
+                // underlying program name. Forge mods can therefore alias vanilla
+                // programs without receiving IP's dynamic Uniform. Bind the same
+                // authoritative storage IP would have updated for that program:
+                // pre-model-view for terrain, or IP's runtime-selected model-view
+                // path for entities/projections/weather. Unknown transform groups
+                // remain fail-closed.
+                if(ImmersivePortalsShaderCompat.usesTerrainClipPlane(vertexName)) {
+                    directBindings = Collections.singletonMap(
+                            "imm_ptl_ClippingEquation",
+                            ImmersivePortalsShaderCompat.getTerrainClipPlane()
+                    );
+                    this.vulkanmod$refreshImmersivePortalsTerrainClipPlane = true;
+                }
+                else if(ImmersivePortalsShaderCompat.usesModelViewClipPlane(vertexName)) {
+                    directBindings = Collections.singletonMap(
+                            "imm_ptl_ClippingEquation",
+                            ImmersivePortalsShaderCompat.getModelViewClipPlane()
+                    );
+                    this.vulkanmod$refreshImmersivePortalsModelViewClipPlane = true;
+                }
+                else {
                     throw new IllegalStateException(
                             "Immersive Portals clipping uniform was not attached to shader " + vertexName);
                 }
-
-                directBindings = Collections.singletonMap(
-                        "imm_ptl_ClippingEquation",
-                        ImmersivePortalsShaderCompat.getTerrainClipPlane()
-                );
-                this.vulkanmod$refreshImmersivePortalsTerrainClipPlane = true;
             }
             this.vulkanmod$uniformBindings.bind(ubo, bindingUniforms, directBindings);
 
@@ -313,6 +325,13 @@ public class ShaderInstanceM implements ShaderMixed {
                     && Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
                 Initializer.LOGGER.info(
                         "VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK: {} -> {}",
+                        location, vertexName
+                );
+            }
+            if(this.vulkanmod$refreshImmersivePortalsModelViewClipPlane
+                    && Boolean.getBoolean("vulkanmod.ciImmersivePortalsSmoke")) {
+                Initializer.LOGGER.info(
+                        "VULKANMOD_IP_ALIASED_MODEL_VIEW_CLIP_OK: {} -> {}",
                         location, vertexName
                 );
             }

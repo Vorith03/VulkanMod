@@ -27,16 +27,38 @@ public final class ImmersivePortalsShaderCompat {
             "qouteall.imm_ptl.core.render.MyRenderHelper";
     private static final String FRONT_CLIPPING_CLASS =
             "qouteall.imm_ptl.core.render.FrontClipping";
+    private static final String CROSS_PORTAL_ENTITY_RENDERER_CLASS =
+            "qouteall.imm_ptl.core.render.CrossPortalEntityRenderer";
+    private static final String RENDER_STATES_CLASS =
+            "qouteall.imm_ptl.core.render.context_management.RenderStates";
 
-    // Immersive Portals 3.0.7 uses the camera-relative, pre-model-view clipping
-    // equation for these vanilla terrain programs. Keep this deliberately narrow:
-    // entity/particle transforms use a different coordinate space and must not
-    // silently fall back to the terrain equation.
+    // IP transforms terrain Position + ChunkOffset against the camera-relative,
+    // pre-model-view equation.
     private static final Set<String> TERRAIN_CLIPPING_SHADERS = Set.of(
             "rendertype_solid",
             "rendertype_cutout",
             "rendertype_cutout_mipped",
             "rendertype_translucent"
+    );
+
+    // IP's second vanilla transformation group clips raw Position. Its normal
+    // RenderSystem hook supplies the after-model-view equation while rendering
+    // entities/projections, the pre-model-view equation for portal weather, and
+    // disables the uniform otherwise. Aliased Forge shaders must preserve that
+    // runtime selection instead of borrowing the terrain equation.
+    private static final Set<String> MODEL_VIEW_CLIPPING_SHADERS = Set.of(
+            "rendertype_entity_solid",
+            "rendertype_entity_cutout",
+            "rendertype_entity_cutout_no_cull",
+            "rendertype_entity_cutout_no_cull_z_offset",
+            "rendertype_item_entity_translucent_cull",
+            "rendertype_entity_translucent_cull",
+            "rendertype_entity_translucent",
+            "rendertype_entity_smooth_cutout",
+            "rendertype_beacon_beam",
+            "rendertype_entity_translucent_emissive",
+            "portal_area",
+            "particle"
     );
 
     private static boolean initialized;
@@ -49,13 +71,21 @@ public final class ImmersivePortalsShaderCompat {
     private static Method emitShaderSignal;
 
     private static final MappedBuffer TERRAIN_CLIP_PLANE = new MappedBuffer(4 * Float.BYTES);
+    private static final MappedBuffer MODEL_VIEW_CLIP_PLANE = new MappedBuffer(4 * Float.BYTES);
     private static boolean terrainClippingInitialized;
     private static boolean terrainClippingAvailable;
     private static java.lang.reflect.Field clippingEnabled;
     private static Method getActiveClipPlane;
+    private static boolean modelViewClippingInitialized;
+    private static boolean modelViewClippingAvailable;
+    private static Method getActiveClipPlaneAfterModelView;
+    private static java.lang.reflect.Field renderingEntityNormally;
+    private static java.lang.reflect.Field renderingEntityProjection;
+    private static java.lang.reflect.Field renderingPortalWeather;
 
     static {
         clearTerrainClipPlane();
+        clearModelViewClipPlane();
     }
 
     private ImmersivePortalsShaderCompat() {
@@ -114,6 +144,14 @@ public final class ImmersivePortalsShaderCompat {
         return TERRAIN_CLIPPING_SHADERS.contains(shaderName);
     }
 
+    public static MappedBuffer getModelViewClipPlane() {
+        return MODEL_VIEW_CLIP_PLANE;
+    }
+
+    public static boolean usesModelViewClipPlane(String shaderName) {
+        return MODEL_VIEW_CLIPPING_SHADERS.contains(shaderName);
+    }
+
     public static void refreshTerrainClipPlane() {
         initializeTerrainClipping();
         if(!terrainClippingAvailable) {
@@ -146,14 +184,68 @@ public final class ImmersivePortalsShaderCompat {
     }
 
     public static void clearTerrainClipPlane() {
-        setTerrainClipPlane(0.0f, 0.0f, 0.0f, 1.0f);
+        setClipPlane(TERRAIN_CLIP_PLANE, 0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    public static void refreshModelViewClipPlane() {
+        initializeModelViewClipping();
+        if(!modelViewClippingAvailable) {
+            clearModelViewClipPlane();
+            return;
+        }
+
+        try {
+            if(!clippingEnabled.getBoolean(null)) {
+                clearModelViewClipPlane();
+                return;
+            }
+
+            boolean isRenderingEntity =
+                    renderingEntityNormally.getBoolean(null)
+                            || renderingEntityProjection.getBoolean(null);
+            Object value;
+            if(isRenderingEntity) {
+                value = getActiveClipPlaneAfterModelView.invoke(null);
+            }
+            else if(renderingPortalWeather.getBoolean(null)) {
+                value = getActiveClipPlane.invoke(null);
+            }
+            else {
+                clearModelViewClipPlane();
+                return;
+            }
+
+            if(!(value instanceof double[] equation) || equation.length < 4) {
+                throw new IllegalStateException(
+                        "Immersive Portals clipping is enabled without a valid model-view clip equation");
+            }
+            setClipPlane(
+                    MODEL_VIEW_CLIP_PLANE,
+                    (float) equation[0],
+                    (float) equation[1],
+                    (float) equation[2],
+                    (float) equation[3]
+            );
+        } catch(IllegalAccessException e) {
+            throw new IllegalStateException("Cannot access Immersive Portals model-view clipping state", e);
+        } catch(InvocationTargetException e) {
+            throw propagate("Immersive Portals model-view clipping lookup failed", e);
+        }
+    }
+
+    public static void clearModelViewClipPlane() {
+        setClipPlane(MODEL_VIEW_CLIP_PLANE, 0.0f, 0.0f, 0.0f, 1.0f);
     }
 
     private static void setTerrainClipPlane(float x, float y, float z, float w) {
-        TERRAIN_CLIP_PLANE.putFloat(0, x);
-        TERRAIN_CLIP_PLANE.putFloat(Float.BYTES, y);
-        TERRAIN_CLIP_PLANE.putFloat(2 * Float.BYTES, z);
-        TERRAIN_CLIP_PLANE.putFloat(3 * Float.BYTES, w);
+        setClipPlane(TERRAIN_CLIP_PLANE, x, y, z, w);
+    }
+
+    private static void setClipPlane(MappedBuffer target, float x, float y, float z, float w) {
+        target.putFloat(0, x);
+        target.putFloat(Float.BYTES, y);
+        target.putFloat(2 * Float.BYTES, z);
+        target.putFloat(3 * Float.BYTES, w);
     }
 
     /**
@@ -235,6 +327,39 @@ public final class ImmersivePortalsShaderCompat {
             terrainClippingAvailable = false;
         } catch(ReflectiveOperationException e) {
             throw new IllegalStateException("Unsupported Immersive Portals terrain clipping API", e);
+        }
+    }
+
+    private static synchronized void initializeModelViewClipping() {
+        if(modelViewClippingInitialized) {
+            return;
+        }
+
+        modelViewClippingInitialized = true;
+        initializeTerrainClipping();
+        if(!terrainClippingAvailable) {
+            modelViewClippingAvailable = false;
+            return;
+        }
+
+        try {
+            ClassLoader classLoader = ImmersivePortalsShaderCompat.class.getClassLoader();
+            Class<?> frontClipping = Class.forName(FRONT_CLIPPING_CLASS, false, classLoader);
+            Class<?> entityRenderer = Class.forName(
+                    CROSS_PORTAL_ENTITY_RENDERER_CLASS, false, classLoader);
+            Class<?> renderStates = Class.forName(RENDER_STATES_CLASS, false, classLoader);
+
+            getActiveClipPlaneAfterModelView =
+                    frontClipping.getMethod("getActiveClipPlaneEquationAfterModelView");
+            renderingEntityNormally = entityRenderer.getField("isRenderingEntityNormally");
+            renderingEntityProjection = entityRenderer.getField("isRenderingEntityProjection");
+            renderingPortalWeather = renderStates.getField("isRenderingPortalWeather");
+            modelViewClippingAvailable = true;
+        } catch(ClassNotFoundException ignored) {
+            modelViewClippingAvailable = false;
+        } catch(ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Unsupported Immersive Portals model-view clipping API", e);
         }
     }
 

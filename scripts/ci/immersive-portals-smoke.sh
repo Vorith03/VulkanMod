@@ -54,6 +54,7 @@ timeout 240s xvfb-run -a ./gradlew --init-script "$init_script" runClient --stac
 grep -F "Immersive Portals 3.0.7 compatibility mixin smoke passed" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK: vulkanmod:shaders/core/ci_ip_alias.json -> rendertype_cutout" vulkan-smoke-immersive-portals.log
+grep -F "VULKANMOD_IP_ALIASED_MODEL_VIEW_CLIP_OK: vulkanmod:shaders/core/ci_ip_model_view_alias.json -> rendertype_entity_translucent" vulkan-smoke-immersive-portals.log
 grep -F "Vulkan smoke test passed" vulkan-smoke-immersive-portals.log
 if grep -E 'Validation Error|SYNC-HAZARD' vulkan-smoke-immersive-portals.log; then
   echo "Immersive Portals compatibility smoke produced invalid Vulkan" >&2
