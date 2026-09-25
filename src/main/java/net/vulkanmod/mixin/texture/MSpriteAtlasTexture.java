@@ -180,9 +180,9 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
 
     @Inject(method = "upload", at = @At("RETURN"))
     private void vulkanmod$finishAtlasUploadBatch(CallbackInfo ci) {
-        this.vulkanmod$closeAtlasUploadBatch();
+        boolean submittedAtlasBatch = this.vulkanmod$closeAtlasUploadBatch();
 
-        if(this.vulkanmod$traceLargeAtlasUpload && !this.vulkanmod$ownsAtlasUploadBatch) {
+        if(this.vulkanmod$traceLargeAtlasUpload && submittedAtlasBatch) {
             double elapsedMs = (System.nanoTime() - this.vulkanmod$atlasUploadStartNanos) / 1_000_000.0D;
             Initializer.LOGGER.info(
                     "Batched Vulkan atlas upload {}x{} completed in {} ms",
@@ -200,10 +200,11 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
     }
 
     @Unique
-    private void vulkanmod$closeAtlasUploadBatch() {
+    private boolean vulkanmod$closeAtlasUploadBatch() {
         VAbstractTextureI texture = (VAbstractTextureI)(this);
         VulkanImage image = texture.getVulkanImage();
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        boolean ownedBatch = this.vulkanmod$ownsAtlasUploadBatch;
 
         // Make the atlas readable in the same command stream as its final copies.
         // When this mixin owns the batch, submission below makes the whole upload
@@ -214,7 +215,7 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
                 image.readOnlyLayout(graphicsQueue.getCommandBuffer());
             }
         } finally {
-            if(this.vulkanmod$ownsAtlasUploadBatch) {
+            if(ownedBatch) {
                 // Drop logical ownership before submission. GraphicsQueue likewise
                 // releases currentCmdBuffer before it submits, so even a submission
                 // failure cannot make a later reload believe this batch is still ours.
@@ -222,6 +223,8 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
                 graphicsQueue.endRecordingAndSubmit();
             }
         }
+
+        return ownedBatch;
     }
 
     @Unique
