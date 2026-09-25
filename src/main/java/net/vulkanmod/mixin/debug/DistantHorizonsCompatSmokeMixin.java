@@ -39,6 +39,9 @@ public abstract class DistantHorizonsCompatSmokeMixin {
             Class<?> forgeRenderWrapper = Class.forName(
                     "com.seibel.distanthorizons.common.wrappers.minecraft.MinecraftRenderWrapper_forge",
                     false, loader);
+            Class<?> forgeClientProxy = Class.forName(
+                    "com.seibel.distanthorizons.forge.ForgeClientProxy", true, loader);
+
             // Class loading applies the exact Forge lightmap guard. require=1 on
             // that mixin rejects DH versions with a missing updateLightmap target.
             if(Arrays.stream(forgeRenderWrapper.getDeclaredMethods())
@@ -60,6 +63,20 @@ public abstract class DistantHorizonsCompatSmokeMixin {
             Method transparentFade = clientApi.getMethod("renderFadeTransparent");
             opaqueFade.invoke(instance);
             transparentFade.invoke(instance);
+
+            // The full Create Chronicles run reached this Forge wrapper after the
+            // LOD draw had already been suppressed, then hard-aborted in
+            // GL11.glGetInteger because VulkanMod has no OpenGL context. Invoke the
+            // exact transformed method with a null event: the Vulkan guard cancels at
+            // HEAD before the event can be dereferenced or any native GL call can run.
+            Method afterLevelRenderEvent = Arrays.stream(forgeClientProxy.getDeclaredMethods())
+                    .filter(method -> method.getName().equals("afterLevelRenderEvent"))
+                    .filter(method -> method.getParameterCount() == 1)
+                    .findFirst()
+                    .orElseThrow(() -> new NoSuchMethodException(
+                            "Distant Horizons Forge afterLevelRenderEvent"));
+            Object forgeClientProxyInstance = forgeClientProxy.getDeclaredConstructor().newInstance();
+            afterLevelRenderEvent.invoke(forgeClientProxyInstance, new Object[]{null});
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
             throw new IllegalStateException("Distant Horizons compatibility smoke invocation failed", cause);
