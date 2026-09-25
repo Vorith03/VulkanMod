@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.memory;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.queue.Queue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
@@ -48,6 +49,7 @@ public class MemoryManager {
     private int currentFrame = 0;
 
     private ObjectArrayList<Buffer.BufferInfo>[] freeableBuffers = new ObjectArrayList[Frames];
+    private ObjectArrayList<Buffer.BufferInfo>[] freeableStagingBuffers = new ObjectArrayList[Frames];
     private ObjectArrayList<VulkanImage>[] freeableImages = new ObjectArrayList[Frames];
 
     private ObjectArrayList<Runnable>[] frameOps = new ObjectArrayList[Frames];
@@ -72,6 +74,7 @@ public class MemoryManager {
     MemoryManager() {
         for(int i = 0; i < Frames; ++i) {
             freeableBuffers[i] = new ObjectArrayList<>();
+            freeableStagingBuffers[i] = new ObjectArrayList<>();
             freeableImages[i] = new ObjectArrayList<>();
 
             frameOps[i] = new ObjectArrayList<>();
@@ -308,7 +311,14 @@ public class MemoryManager {
             traceBuffer("enqueued from " + buffer.getClass().getSimpleName() +
                     " in frame slot " + currentFrame, bufferInfo.id());
 
-        freeableBuffers[currentFrame].add(bufferInfo);
+        if(buffer instanceof StagingBuffer) {
+            // Uploads may be submitted after this slot's last frame fence, or
+            // still be recorded in a shared atlas batch. That fence alone does
+            // not prove a resized staging buffer is safe to destroy.
+            freeableStagingBuffers[currentFrame].add(bufferInfo);
+        } else {
+            freeableBuffers[currentFrame].add(bufferInfo);
+        }
 
         if(DEBUG)
             stackTraces[currentFrame].add(new Throwable().getStackTrace());
@@ -332,6 +342,19 @@ public class MemoryManager {
     }
 
     private void freeBuffers(int frame) {
+
+        List<Buffer.BufferInfo> stagingBuffers = freeableStagingBuffers[frame];
+        if(!stagingBuffers.isEmpty() && !Device.getGraphicsQueue().hasActiveUploadBatch()) {
+            // Both queues can copy from staging memory. Waiting only for the
+            // frame fence misses uploads submitted after that frame. Never wait
+            // while a batch is recording: it may still reference these buffers.
+            Device.getGraphicsQueue().waitIdle();
+            Device.getTransferQueue().waitIdle();
+            for(Buffer.BufferInfo bufferInfo : stagingBuffers) {
+                freeBuffer(bufferInfo);
+            }
+            stagingBuffers.clear();
+        }
 
         List<Buffer.BufferInfo> bufferList = freeableBuffers[frame];
         for(Buffer.BufferInfo bufferInfo : bufferList) {
