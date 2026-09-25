@@ -7,121 +7,59 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Treat checkpoint material dated **today and the immediately preceding calendar day** as a protected recent window; rewrite it only to correct or reconcile facts.
 - Once material ages out, collapse it into durable current-state sections. Preserve validated capabilities/gates, unresolved regressions, unique user-machine evidence, measurements that should not be recollected, safety/fallback constraints, and focused-document pointers.
 - Prefer removing superseded chronology, stale next steps, obsolete run detail, and repeated implementation narrative already preserved by Git/CI.
-- Normally review for compaction at most once per calendar day. When the protected window permits, aim for roughly 100 lines or fewer; correctness wins over size.
+- Normally review for compaction at most once per calendar day. Aim for roughly 100 lines or fewer when practical; correctness wins over size.
 
-## Repository state
+## Repository state — 2026-09-25
 
-- Latest executable checkpoint is `860961c6b6361e16dd7f1a1c0543930c3b161954` (`test: cover selected resource pack retention`), fully validated by CI #723. Production runtime behavior is unchanged since `5964641c5428dedb3df02e3f3a31bc949b12f7eb`; the two later commits add regression coverage for the observed IP alias family and selected-resource-pack rollback.
-- The adversarial audit repair effort is complete. Current progress is **0 repair clusters remaining / 5**; clusters 1–5 are closed and CI-validated.
-- The former GPU-terrain, compatibility, and validation workstreams are consolidated. PR #4 is merged by fast-forward; subsequent compatibility/preflight and audit-repair work is directly on `forge-1.20.1`.
-- CI #723 is fully green on one coherent executable tree: build/distributable, both Vulkan startup smokes, persistent GPU-indirect, vanilla post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel, and the exact Create 0.5.1.j stencil fixture all pass. The Immersive Portals smoke covers `rendertype_cutout`, `rendertype_entity_translucent`, and the separate `particle` model-view alias shape observed from Moonlight/Quark in build #720. It also launches with a selected `file/vulkanmod-ci-selected-pack`, confirms the pack is present in `Reloading ResourceManager:` and remains listed in `options.txt`, and fails on Minecraft's `Caught error loading resourcepacks, removing all selected resourcepacks` recovery signature.
-- The Distant Horizons renderer suppression now also guards its Forge lightmap upload, which uses OpenGL; the exact 3.2.0-b class is checked by the DH fixture smoke. This guard is pending build and runtime validation.
-- Preflight after the first RX/Create Chronicles IP crash closed additional downstream issues before another user test: per-`LevelRenderer` terrain/world/camera/dispatcher ownership for IP secondary dimensions, IP recursive `RenderBuffers` use for block entities, Vulkan terrain clip-plane support in direct/indirect/region pipelines, preservation of IP's reload guards/fan-out despite VulkanMod cancelling vanilla `allChanged()`, and the debug lifecycle mixin constructor descriptor after the renderer refactor.
-- The first RX 6900 XT/Create Chronicles attempt remains useful evidence: it reached IP's framebuffer compatibility renderer and stopped at a raw `GL11.glDisable(GL_STENCIL_TEST)` before terrain evidence. That IP raw-GL path and the downstream preflight issues are regression-covered in CI #690.
-- A later real full-pack run with build #711 contradicted the audit-era assumption that explicit stencil rejection was sufficient: Create 0.5.1.j called `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()` during startup and VulkanMod aborted. `8a9a374bafb` implemented off-screen stencil targets; `f2323d254473` corrected combined depth/stencil image-view ownership and passed CI #713; CI #714 then deliberately exposed that global `GL11M` overwrites do not reliably intercept direct LWJGL calls. `4abc931918a2` therefore redirects Create's actual `StencilElement` raw stencil toggles at the call site and CI #715 proves that exact Create 0.5.1.j mixin target loads without an OpenGL context.
-- The build #711 shader failures are now classified rather than left as an unknown signal. The repeated `IllegalArgumentException: last char is not ;` parser exception already existed in older build #676, so it was not introduced by the audit cleanup; `647c13e225b4` fixes declaration-like text inside multi-line GLSL comments and CI #719 covers the parser regression. Separately, restoring Forge `RegisterShadersEvent` in audit repair `5c39a9183ac6` exposed a real compatibility hole: Twilight Forest's namespaced `red_thread` shader aliases vanilla `rendertype_cutout`, so Immersive Portals transformed the underlying program but did not create its name-keyed clipping `Uniform`. `b9910cfb0675` binds VulkanMod's authoritative pre-model-view terrain clip plane directly for these aliased terrain programs.
-- The RX 6900 XT full-pack build #720 run confirmed the #711 fixes moved the failure frontier: Vulkan activated, the old parser exception and Create stencil abort did not recur, but the initial resource reload failed when Alex's Caves registered `alexscaves:rendertype_sepia`, whose vertex program aliases IP-transformed `rendertype_entity_translucent`. Minecraft explicitly logged `Caught error loading resourcepacks, removing all selected resourcepacks`, dropped the selected PureBDcraft packs, and retried without them. Re-selecting the packs later reproduced the same rollback. The visible user-facing regression is therefore **resource packs cannot remain loaded**, with the Alex's Caves/IP shader exception as the demonstrated cause. `5964641c5428` mirrors IP's own runtime state machine for aliased model-view shaders: after-model-view clipping during entity/projection rendering, pre-model-view during portal weather, disabled otherwise; unknown transform groups remain fail-closed. `a12fb862873c` adds the other observed model-view alias (`particle`) to the exact IP smoke, and `860961c6b636` adds a selected-resource-pack retention oracle. CI #723 proves a selected synthetic pack survives this reproduced failure mechanism, but only the real RX/Create Chronicles run can prove both PureBDcraft packs remain enabled.
-- The build #720 failed-reload shutdown ended in glibc `double free or corruption (!prev)`. Treat that as a separate pre-existing shutdown/native-lifetime defect: a 2026-09-13 full-pack session already ended in `double free or corruption (out)`. Current evidence does not identify VulkanMod as the allocator owner or prove repeated `Vulkan.cleanUp()`; do not make speculative ownership changes without a native backtrace.
-- Still-relevant validation is in the production history. The real Minecraft/Forge `Block.shouldRenderFace` glass/glass disagreement oracle runs in the main smoke flow; current async-completion and dirty-transition coverage supersede the old isolated validation branches.
-- Mixed APPEND rebuild omission remains experimental/default-off and transactionally stages CPU exception geometry plus GPU output while retaining the previous complete draw until replacement is ready. Stale/failure paths remain fail-closed.
-- `RegionBatchStats.sections` now counts rendered sections rather than indirect commands, so one hybrid APPEND section emitting CPU+GPU commands is counted once; `RegionBatchSmokeTest` locks pending/ready/fallback/visibility cases.
-- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. Active roadmap remains **Phase 7 — GPU-driven terrain and hybrid meshing**; accelerated-default and performance gates remain open.
+- Current `forge-1.20.1` executable head is `5e04d1e12c14f24da9a816ddc5beebc27a789642` (`Preserve atlas batch ownership in completion tracing`). CI **#728** is fully green at that exact SHA: distributable build, both Vulkan startup smokes, persistent GPU-indirect, post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b fail-closed fixture, Crash Assistant, Chat Heads, Flywheel, and exact Create 0.5.1.j stencil coverage all pass.
+- The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
+- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The strategic roadmap remains Phase 7 GPU-terrain/hybrid work under the existing priority override; the current resource-pack work is an explicit compatibility detour requested by the user.
 
-## Task-relevant references
+## Real resource-pack gate — newly automated and green
 
-Always use `AGENTS.md` and the active `ROADMAP.md` gate. Primary terrain contracts remain `docs/GPU_TERRAIN_BOUNDARY.md`, `docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md`, `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`, and `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`. Live code supersedes older wording that says production GPU dispatch/draw consumption or fresh-section CPU bypass do not exist.
+The two user-supplied PureBDcraft ZIPs now live only in private `Vorith03/storage` release assets and are exercised by `.github/workflows/real-resource-packs.yml`; do not copy their bytes or logs containing private payload data into the public repository.
 
-## Current GPU-terrain checkpoint
+- Storage CI verifies immutable SHA-256 values before use, checks out the current public `forge-1.20.1` branch, and runs `scripts/ci/immersive-portals-smoke.sh` with both real packs selected together.
+- The storage workflow runs on release/manual dispatch, hourly schedule, and immediately when its workflow/support code changes. Scheduled runs key a cache marker by public VulkanMod commit so unchanged public heads are not needlessly retested.
+- Public VulkanMod CI contains optional private-pack steps, but repository variable/secret configuration is absent, so those steps are currently skipped. **The private storage workflow is the authoritative real-pack CI gate.**
+- Storage run **#8** on 2026-09-25 passed against public head `5e04d1e12c14f24da9a816ddc5beebc27a789642` with Vulkan validation enabled. `Reloading ResourceManager:` contained both `file/vulkanmod-real-base-64x.zip` and `file/vulkanmod-real-overlay-64x.zip`; the 16384x8192 atlas completed batched upload; selected-pack retention verification passed; `Vulkan smoke test passed`; and the workflow's `Validation Error|SYNC-HAZARD` rejection gate stayed clean.
+- In that run the first 16384x8192 upload completed in about **3.6 s**. Logged peak/late-state values included NativeImage peak ~797 MiB, VulkanImage estimated peak ~1430 MiB, staging high-water ~169 MiB, and MemAvailable still ~1560 MiB at the later large-atlas completion.
+- The private disposable 8 GiB runner keeps VulkanMod's normal 10% adaptive reserve (~794 MiB there) but sets `-Dvulkanmod.systemAvailableReserveMinMiB=768` so the CI-specific minimum does not become 1–2 GiB. This is **test infrastructure only**. Do not carry that override into the user's Create Chronicles run or lower the user's normal safety floor to make a test pass.
+- A rerun of the older storage #7 job using its 1 GiB CI reserve also passed against the current public head, reinforcing that #8 is not a one-off functional success.
 
-The bounded compute path classifies qualified ordinary cubes, reconstructs complete 20-byte terrain vertices, and writes exact-generation output directly into persistent `ChunkArea` vertex storage. Unsupported Forge content remains CPU-owned.
+## Texture upload/runtime blocker sequence — 2026-09-25
 
-`GpuTerrainSectionMesherBridge` can make a fully-qualified **fresh section** GPU-first: workers capture immutable voxel/lighting/preflight inputs, skip ordinary CPU `renderBatched(...)`, preserve expected terrain-layer metadata, and allow exact GPU residency to become the first draw. Qualified REPLACE rebuilds can skip new CPU tessellation while retaining an older complete CPU mesh. Mixed APPEND rebuilds can now omit the conservative GPU-owned subset too: the output-layer CPU exceptions and matching GPU output are staged out of band and atomically replace either a complete CPU fallback or a retained complete APPEND pair.
+User-side Create Chronicles evidence after #723 moved the failure frontier into large texture upload/lifetime behavior. Subsequent fixes are now CI-validated:
 
-The synchronous helper-fence wait is validation/smoke-only. Production submission and completion are non-blocking on the render thread.
+1. `414c645f0d535573dc13e5757efdb4dc6a870785` / CI **#726** fixed a real staging-buffer lifetime hazard: growing/replacing texture staging storage must not destroy a buffer while the active shared upload command buffer can still reference it.
+2. The original storage #7 real-pack attempt then reached the real 16K atlas but tripped its CI-only 1 GiB system-memory reserve at ~972 MiB available. After vanilla began fallback reload, Vulkan validation reported the atlas image expected as `SHADER_READ_ONLY_OPTIMAL` while still in `TRANSFER_DST_OPTIMAL`.
+3. The stack proved the first resource-load exception arose inside `TextureAtlasSprite.uploadFirstFrame()`. VulkanMod had opened a shared atlas upload batch earlier in `TextureAtlas.upload()`, but cleanup existed only at normal `RETURN`; an exceptional upload could therefore strand the batch/layout.
+4. `fd49c5f790447326d1a0d90f478c08b2a48f6579` adds exception-safe cleanup around that exact sprite-upload call. It closes/submits only a batch owned by the atlas mixin, records the read-only transition in the same command stream, preserves the original resource exception, and attaches any cleanup failure as suppressed rather than masking it.
+5. `5e04d1e12c14f24da9a816ddc5beebc27a789642` preserves explicit ownership information for normal completion timing/bookkeeping. CI #728 and both current-head private real-pack runs are green.
 
-### Fail-closed publication and lock order
+Do not interpret the old post-exception validation cascade as an independent current renderer failure unless it reproduces on a current-head run. The current successful private runs contain no Vulkan validation errors.
 
-Any current-generation publication, qualification, reservation, submission, readback, output-count, overflow, or generation failure requests ordinary CPU recovery for a GPU-first section. Recovery disables CPU bypass until CPU reconstruction succeeds.
+## Current Create Chronicles compatibility boundary
 
-`08622966` fixed a real lock inversion: normal publication takes `RenderSection -> ChunkArea`, while input failure previously attempted `ChunkArea -> RenderSection`. Recovery is deferred until the area monitor is released, and `RegionVoxelGpuStore` construction is inside the fail-closed upload exception path.
+The earlier build #720 blocker is superseded: the parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, and Moonlight/Quark `particle` alias family now have direct fixes/regression coverage. The real two-pack Lavapipe workload is also automated and green.
 
-### Upload -> compute handoff
+What CI still cannot prove is the full ~300-mod RX 6900 XT/RADV environment, world entry, real Create/Flywheel gameplay, portal visuals, dirty hybrid terrain rebuilds, in-world `F3+T`, and world exit/re-entry. Those require the user's machine.
 
-`b0beef0` removed the same-frame-slot recycle delay before compute. `AreaUploadManager` publishes input residency after its copy command buffer is submitted, then runs post-submit consumers outside its monitor. `ChunkArea` dispatches meshing from that path.
+A separate historical shutdown/native-lifetime signal remains unresolved: build #720's failed-reload shutdown ended in glibc `double free or corruption (!prev)`, and a 2026-09-13 full-pack session had already ended in the same allocator-abort family. Current evidence does not identify VulkanMod as the allocator owner. Do not make speculative ownership changes without a native backtrace or a current-head reproduction.
 
-Voxel, lighting, and model inputs use explicit transfer-write -> shader-read barriers on the same graphics queue, so production order is upload copy -> barrier -> compute without a render-thread fence wait or an `AreaUploadManager -> ChunkArea` lock edge.
+Focused compatibility evidence and the full user test sequence live in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`.
 
-### Compute completion and bounded capacity
+## GPU-terrain durable contract
 
-`1fdae3f`, `27e765ae`, and `49395be` complete the non-blocking lifecycle. Each helper owns a `PendingCompletion` token and fence. Once per render frame the mesher checks helper fences with non-blocking `Synchronization.checkFenceStatus(...)`.
+The bounded compute path classifies qualified ordinary cubes, reconstructs complete terrain vertices, and writes exact-generation output into persistent `ChunkArea` storage. Unsupported Forge content remains CPU-owned.
 
-A signaled helper can read its result, publish through exact-generation checks, release result/readback ownership, and return its descriptor slot early. The original `MemoryManager` frame callback remains the guaranteed fallback; an exactly-once token makes it a no-op after early completion. Command-buffer recycling remains owned by the existing main-frame retirement path.
+- REPLACE may GPU-own a fully qualified section. APPEND may combine CPU exception geometry with GPU ordinary-cube geometry only behind the additional hybrid flag.
+- Fresh GPU-first sections and dirty rebuilds retain the last complete visible handoff until a complete replacement exists. Incomplete CPU geometry must never become visible without its matching GPU half.
+- APPEND rebuilds use generation-scoped, non-visible CPU/GPU staging and atomically switch both halves only after both are ready. Failure/stale/overflow paths remain fail-closed to retained complete geometry or ordinary CPU recovery.
+- Authoritative `Block.shouldRenderFace(...)` disagreement demotes GPU ownership; device-to-host mesher readback has the required transfer-write -> host-read dependency. These 2026-09-17 validation blockers are fixed and regression-covered.
+- Production completion is non-blocking; the synchronous helper-fence wait is smoke/validation only. `MAX_IN_FLIGHT = 32` remains bounded and should not be enlarged without evidence.
 
-The fixed `MAX_IN_FLIGHT = 32` descriptor pool remains unchanged. Do not enlarge it or add pending-dispatch retries without evidence that saturation materially matters.
-
-## Mixed-section hybrid contract
-
-APPEND supports both fresh/uncompiled sections and qualified rebuilds. Fresh sections may publish their first CPU-exception/GPU pair once both halves are available. Rebuilds use an atomic two-source replacement protocol: stage a generation-bound CPU output-layer allocation (including an explicit empty allocation when no CPU opaque exceptions remain) plus a staged GPU reservation, keep the previous complete draw visible, then switch both halves together on the render thread only after exact GPU completion and CPU upload readiness.
-
-`GpuTerrainHybridMask` derives a conservative ownership plan over all 4096 section cells. Qualified ordinary cubes may become GPU-owned only when interior and not adjacent to visible CPU-owned exception geometry. Visible unsupported block-model geometry, fluids, and block entities remain CPU-owned; invisible exceptions do not poison unrelated neighbors, and boundary demotion does not recursively propagate inward.
-
-APPEND intentionally avoids a voxel ABI bump. The worker creates a filtered **v4** snapshot where only the GPU-owned subset retains `GPU_FULL_CUBE`; state IDs, non-ownership semantic flags, and the exact halo remain unchanged. Sparse-lighting capture runs after filtering.
-
-`RenderSection` stages explicit generation-scoped ownership:
-
-- `REPLACE`: whole-section GPU ownership; legacy/default preflights remain REPLACE.
-- `APPEND`: CPU exception geometry and GPU ordinary-cube geometry coexist for one generation.
-
-APPEND is never inferred from CPU mesh presence. Generation invalidation clears/stales the staged ownership contract.
-
-`RegionDrawBatch.FrameBatch` can emit CPU then GPU indirect commands for APPEND. Capacity is bounded at 1024 commands (two per 512 sections). If the CPU exception upload is pending, **neither** half is recorded; both retry together when ready. Stale/missing exact GPU residency keeps/falls back to the CPU side rather than drawing an unmatched GPU half.
-
-The worker prefers stronger whole-section REPLACE qualification first. APPEND is considered only when all three existing acceleration gates plus `-Dvulkanmod.experimentalGpuTerrainHybrid=true` are enabled, REPLACE did not take ownership, and the conservative subset/model/lighting checks succeed. A rebuild may omit the GPU-owned subset only when it has either a complete CPU fallback or an exact retained APPEND pair to keep visible during staging. Repeated dirty APPEND rebuilds may replace pair-to-pair even while CPU recovery is flagged, provided the retained old pair is still exact and complete. Pre-omission failures restore the original snapshot and complete CPU tessellation; later staging/dispatch/completion failures retire staged work and request CPU recovery without exposing an unmatched half.
-
-### Atomic APPEND rebuild transaction
-
-`DrawBuffers` now supports non-visible generation-bound CPU staging, including explicit empty output-layer state; `GpuTerrainOutputStore` supports non-visible staged GPU output for a future generation or the already-advanced current generation. Explicit same-generation invalidation still revokes staged work. `RenderSection` owns the pending CPU stage so generation turnover cannot accidentally commit stale geometry.
-
-`GpuTerrainAppendRebuildTransaction` prevalidates section/generation/ownership, CPU readiness, and GPU readiness. Its render-thread commit swaps GPU residency, CPU draw parameters, and visible APPEND handoff without a fallible operation after the visibility switch. Buffer growth remains safe because `AreaBuffer` drains prior uploads, copies the complete old backing allocation in graphics-queue order, and preserves segment offsets before retiring the old buffer.
-
-CI #662 exposed only a smoke-state collision: a new current-generation oracle reused section slot 7 and advanced it from generation 10 to 70 before an older generation-10 retry assertion. `ead33f4c` isolates that oracle on slot 4. CI #664 then passes both startup variants and the full terrain/renderer sequence through Pick Up Notifier.
-
-## Dirty GPU-first transition contract
-
-`6482799d` fixes a correctness hole in fresh GPU-first sections: their CPU mesh can be absent (REPLACE) or intentionally partial (APPEND), so a dirty rebuild must not revoke the last complete GPU handoff before complete replacement geometry exists. `RenderSection` now distinguishes the build/input generation from the generation currently safe to draw, retains a complete visible GPU handoff during forced CPU recovery, keeps incomplete CPU geometry hidden when its matching GPU half is unavailable, and retires the old GPU output only when complete CPU geometry publishes.
-
-`RegionBatchSmokeTest` covers the APPEND transition end to end: partial fresh CPU exceptions remain hidden, matching GPU publication exposes one complete CPU+GPU pair, dirty invalidation retains that previous pair while advancing the input generation, and complete CPU recovery retires the old GPU output and exposes one complete CPU command. CI #624 exposed a harness-only problem because the normal startup smoke leaves `RegionVoxelStore.ENABLED` false; `f7633ee1` scopes that gate on only for this oracle and restores it afterward. CI #627 passes both startup variants and logs `VULKANMOD_GPU_TERRAIN_TRANSITION_OK` repeatedly. No production fallback semantics were loosened by the harness fix.
-
-## Resolved validation blockers from 2026-09-17
-
-The validation workstream found two real correctness gaps; both are now fixed and regression-covered.
-
-1. **Device-to-host readback visibility:** `e629121e` adds a buffer dependency over the full actual readback range after the transfer copies and before submission: source `TRANSFER / TRANSFER_WRITE`, destination `HOST / HOST_READ`. Production header-only and validation full-payload readbacks use the same helper. `b0e0f241` adds smoke-only execution counting plus a locked stage/access contract; CI #620 ran those assertions successfully without introducing a CPU wait.
-2. **Authoritative face semantics:** `56f317e9` makes worker capture compare every candidate direction with `Block.shouldRenderFace(...)` while `RenderChunkRegion` and its halo are available. Any disagreement clears GPU ownership, which makes REPLACE fail closed and APPEND retain that cell plus conservatively protected neighbors on CPU. `b0e0f241` factors the shader/authoritative equivalence predicate into shared production code and exhaustively truth-table tests all four boolean cases.
-
-These terrain findings no longer block the combined Create Chronicles RX functional test. The Immersive Portals framebuffer raw-GL regression discovered by the first attempted full-pack run is now fixed and directly exercised in CI #678; the hardware terrain test itself remains pending because that attempted run stopped before GPU-terrain evidence was reached.
-
-## Validation evidence
-
-`661efe51` covers post-submit ordering/outside-lock execution, bounded descriptor saturation, deterministic signaled-helper polling, exact single publication, duplicate suppression when later frame callbacks drain, and validation-hook gating behind `vulkanmod.smokeTest`.
-
-Hybrid-focused commits add tests for conservative cell ownership/demotion, filtered-v4 preservation of all non-ownership data and halo, generation-scoped REPLACE/APPEND staging, and actual mapped APPEND batch layout including CPU-before-GPU ordering, atomic pending-upload suppression, retry, and stale-GPU CPU fallback.
-
-`b0e0f241` additionally proves that both actual section-mesher readback paths record the required transfer-to-host barrier during CI smoke execution, and that the production face-ownership comparison cannot silently invert authoritative visibility semantics. CI #620 exercised these tests successfully.
-
-## Compatibility intersection
-
-Compatibility is no longer an independent workstream. The relevant Forge 1.20.1 compatibility stack is integrated into the current `forge-1.20.1` executable head `860961c6b636` and validated by CI #723; production compatibility behavior itself remains at `5964641c5428`, with the later commits adding regression oracles.
-
-Immersive Portals 3.0.7 passes shader transformation, all three helper-shader Vulkan-pipeline checks, `VULKANMOD_IP_CLIPPING_SHADER_OK`, aliased-terrain `rendertype_cutout` clipping (`VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK`), aliased model-view `rendertype_entity_translucent` clipping (`VULKANMOD_IP_ALIASED_MODEL_VIEW_CLIP_OK`), renderer-mode selection, the real framebuffer renderer's `prepareRendering()` path under a no-OpenGL-context Vulkan window, construction/cleanup of a second real `LevelRenderer`, and the portal reload-hook API check. VulkanMod terrain state is per `LevelRenderer`; async tasks retain their owning world/camera/dispatcher, recursive block-entity rendering uses the active IP-swapped `RenderBuffers`, and the direct/legacy-indirect/region terrain shaders consume IP's camera-relative clip equation. IP reload cancellation during recursive rendering and secondary-renderer reload fan-out are explicitly preserved despite VulkanMod's HEAD cancellation of vanilla `allChanged()`.
-
-Distant Horizons 3.2.0-b currently operates fail-closed: its OpenGL LOD draw/fade passes are suppressed under Vulkan while DH data and render-thread maintenance remain active. CI #690 logs that suppression and passes the DH compatibility smoke; do not describe this as working DH LOD rendering.
-
-FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads, and Flywheel compatibility smokes are green on the same executable head. The old compatibility PR and isolated validation PRs are superseded by the landed production tree and should not be treated as active ownership boundaries.
-
-## Fail-closed boundary
-
-Whole-section CPU bypass requires:
+Whole-section CPU bypass requires all three flags:
 
 ```text
 -Dvulkanmod.experimentalGpuTerrainMesher=true
@@ -129,42 +67,26 @@ Whole-section CPU bypass requires:
 -Dvulkanmod.experimentalGpuTerrainDrawHandoff=true
 ```
 
-Mixed-section APPEND (fresh or rebuild) additionally requires:
+Mixed-section APPEND additionally requires:
 
 ```text
 -Dvulkanmod.experimentalGpuTerrainHybrid=true
 ```
 
-Arbitrary Forge callbacks, unsupported model work outside the proven ordinary-cube subset, block entities, fluids, translucent/tripwire terrain, stale generations, missing residency, output overflow, invalid ranges, face-predicate disagreement, and failed GPU work must remain CPU/recovery paths.
+Keep accelerated consumption default-off until representative RX correctness and comparable frame-time evidence are complete. Primary contracts: `docs/GPU_TERRAIN_BOUNDARY.md`, `docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md`, `docs/GPU_TERRAIN_BOUNDED_OUTPUT_2026-09-14.md`, and `docs/GPU_TERRAIN_MODEL_INSTANCE_CONTRACT_2026-09-14.md`.
 
-## Completed adversarial codebase audit
+## Safety constraints that remain authoritative
 
-The full adversarial audit inserted before the pending RX 6900 XT/Create Chronicles functional run is complete. The durable report is `docs/CODEBASE_AUDIT_2026-09-18.md`.
-
-Repair clusters 1–5 are closed and individually CI-validated. Current progress is **0 / 5 repair clusters remaining**.
-
-Validated audit-repair milestones now include:
-
-- cluster 1: `94c459f17f45` / CI #691 — Forge vertex consumer contracts;
-- cluster 2: `5c39a9183ac6` / CI #692, `412095343fc1` / CI #693, and `0cf261b54b37` / CI #696 — Forge shader registration, render stages, and the audit-era fail-closed stencil rejection. Post-audit build #711 runtime evidence later required implementing off-screen stencil support; that follow-up is additive and does not reopen the completed audit sequence;
-- cluster 3: `c1fda8897431` / CI #698 through `6d077ed36ee2` / CI #702 — terrain origin/lifecycle, framebuffer/image retirement, and SPIR-V native lifetime;
-- cluster 4: `67a9aebd2f74` / CI #703, `4367ac2d2681` / CI #704, `1b81d8f44d4c` / CI #705, and `1aa6be81c2ba` / CI #706 — VMA mapping lifetime, automatic-index width, sampler wrap identity, and Minecraft emergency save;
-- cluster 5: `f5b6fc3f6987` / CI #707 — hermetic generic Vulkan smoke fixtures; `7a55b3186686` / CI #708 plus `8165c2a6ba7d` / CI #709 — coherent legacy active texture-unit state including active-unit metadata queries and multi-unit reallocation refresh; `2acffea1f34a` / CI #710 — config persistence/recovery with behavioral malformed-config round trip; `6f55112a5974` / CI #711 — process-lifetime native ownership/teardown, idempotence, stale stack-backed surface-state removal, and complete queue teardown.
-
-The audit repair sequence is finished. Do not reopen any repair cluster without contradictory live Git/CI/runtime evidence.
-
-Several suspicious areas were explicitly cleared by the audit: frame-slot vs image-index semaphore ownership is correct; GPU-terrain async completion/descriptor return is exactly-once; worker shutdown joins producers before publication cleanup; in-flight GPU reservations protect region reuse; Java/GLSL terrain ABIs and inspected barriers match; temporary stale CPU fallback publication was not an ownership violation; and Immersive Portals cull redirects do update Vulkan pipeline state.
+- Do not weaken correctness or production memory safety merely to make CI/user testing pass. The storage-run reserve override is isolated to the disposable CI runner.
+- The user's prior heavy-pack machine has suffered system-wide OOM behavior and historically had no swap during relevant failures; preserve adaptive host-memory protection unless new machine-specific evidence justifies a deliberate diagnostic override.
+- Distant Horizons 3.2.0-b remains **fail-closed** under Vulkan: its OpenGL LOD draw/fade/lightmap paths are suppressed; do not call that working DH LOD rendering.
+- Arbitrary Forge callbacks, block entities, fluids, unsupported/translucent terrain, stale generations, missing residency, invalid ranges, overflow, face-predicate disagreement, and failed GPU work remain CPU/recovery territory.
 
 ## Next action
 
-1. Use CI #723 / `860961c6b6361e16dd7f1a1c0543930c3b161954` for the next RX 6900 XT / RADV Create Chronicles correctness run. Production behavior is the `5964641c5428` alias fix; #723 additionally proves the observed `particle` alias class and a selected synthetic resource pack survive the reproduced rollback mechanism. Build #720 is superseded.
-2. Keep the same four experimental REPLACE + APPEND flags. The two selected PureBDcraft packs must survive the initial resource reload and remain enabled; the log must not contain `Caught error loading resourcepacks, removing all selected resourcepacks`. Startup should also pass Create's old stencil site, Twilight Forest's `red_thread -> rendertype_cutout`, and Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`; the old parser and both missing-clipping-uniform signatures should be absent.
-3. Only after the resource-pack load succeeds, enter the target world, exercise a real Immersive Portals portal, and force at least one dirty mixed-section rebuild. Capture only evidence that distinguishes correctness/fallback outcomes: visible terrain/entity/portal artifacts, crashes, relevant logs, and whether dirty rebuilds preserve complete geometry.
-4. If correctness is clean, proceed to comparable Phase 5/6 frame-time A/B evidence before making any performance or default-path claim.
-5. Keep accelerated consumption default-off until representative RX 6900 XT correctness/performance evidence is complete.
-
-## Outstanding RX evidence / performance boundary
-
-Prior user evidence remains valid: experimental GPU-indirect consumption had clean initial comparator samples; F3+T and world re-entry worked; FTB Chunks large-map terrain remained black due to its null-`BlockState` map task; the prior center/world-edge artifact disappeared when the death marker was removed. Do not repeat sparse-lighting density telemetry.
-
-Do not claim a speedup yet. CPU tessellation can be bypassed for the fully qualified subset, APPEND now covers fresh sections and transactionally staged mixed rebuilds behind the additional experimental gate, upload-to-compute/completion latency is shortened, and terrain-side CI covers the 2026-09-17 correctness findings plus the atomic rebuild ownership contract. Representative RX 6900 XT/RADV correctness and comparable Phase 5/6 frame-time evidence are still required before any performance or default-path conclusion.
+1. **Use CI build #728 / `5e04d1e12c14f24da9a816ddc5beebc27a789642` for the next RX 6900 XT / RADV Create Chronicles run.** Build #723 and earlier test artifacts are superseded.
+2. Use the same four experimental terrain flags above. Do **not** add the storage CI memory-reserve override.
+3. Launch with both real PureBDcraft packs selected. First gate: initial reload completes, both packs remain selected, Vulkan reports the RX 6900 XT/RADV renderer, and the log contains neither resource-pack rollback nor Vulkan validation/device-loss failure.
+4. If that succeeds, enter the target world and exercise a visible Create/Flywheel contraption, a real Immersive Portals portal, and at least one dirty mixed-section rebuild. Then `F3+T`, wait for completion, exit to title, re-enter the same world, and play briefly again.
+5. On the first new blocker, retain `latest.log`, `debug.log` when useful, any crash report, and a screenshot only for a visible rendering defect. Do not repeat already-settled telemetry without a new question it can answer.
+6. If correctness is clean, return to comparable Phase 5/6 frame-time A/B evidence before making any performance/default-path claim.
