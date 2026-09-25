@@ -48,6 +48,7 @@ export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvu
 timeout 240s xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-distant-horizons.log
 
 grep -F "Distant Horizons OpenGL LOD rendering is unavailable under Vulkan" vulkan-smoke-distant-horizons.log
+grep -F "Distant Horizons Forge framebuffer query is unavailable under Vulkan" vulkan-smoke-distant-horizons.log
 grep -F "Distant Horizons 3.2.0-b compatibility smoke passed" vulkan-smoke-distant-horizons.log
 grep -F "Vulkan smoke test passed" vulkan-smoke-distant-horizons.log
 if grep -E 'FATAL ERROR in native method|No context is current|Validation Error|SYNC-HAZARD' vulkan-smoke-distant-horizons.log; then
