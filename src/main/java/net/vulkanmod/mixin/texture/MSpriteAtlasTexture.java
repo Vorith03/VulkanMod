@@ -3,6 +3,7 @@ package net.vulkanmod.mixin.texture;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VAbstractTextureI;
@@ -155,31 +156,38 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
         }
     }
 
+    @Redirect(method = "upload", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;uploadFirstFrame()V"))
+    private void vulkanmod$uploadFirstFrame(TextureAtlasSprite sprite) throws Throwable {
+        try {
+            sprite.uploadFirstFrame();
+        } catch(Throwable throwable) {
+            // TextureAtlas catches failures from this call and turns them into its
+            // normal crash report, but an @Inject(RETURN) callback never runs on
+            // that exceptional path. Close our shared command buffer first so a
+            // recoverable resource-reload failure cannot strand the graphics queue
+            // in an active upload scope or leave the atlas in TRANSFER_DST.
+            try {
+                this.vulkanmod$closeAtlasUploadBatch();
+            } catch(Throwable cleanupFailure) {
+                throwable.addSuppressed(cleanupFailure);
+            } finally {
+                this.vulkanmod$traceLargeAtlasUpload = false;
+            }
+
+            throw throwable;
+        }
+    }
+
     @Inject(method = "upload", at = @At("RETURN"))
     private void vulkanmod$finishAtlasUploadBatch(CallbackInfo ci) {
-        VAbstractTextureI texture = (VAbstractTextureI)(this);
-        VulkanImage image = texture.getVulkanImage();
-        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        this.vulkanmod$closeAtlasUploadBatch();
 
-        // Make the atlas readable in the same command stream as its final copies.
-        // When this mixin owns the batch, submission below makes the whole upload
-        // visible as one same-queue dependency. If an outer scope owns the batch,
-        // leave submission to that owner after recording the required barrier.
-        if(image != null && graphicsQueue.hasActiveUploadBatch()) {
-            image.readOnlyLayout(graphicsQueue.getCommandBuffer());
-        }
-
-        if(this.vulkanmod$ownsAtlasUploadBatch) {
-            graphicsQueue.endRecordingAndSubmit();
-            this.vulkanmod$ownsAtlasUploadBatch = false;
-
-            if(this.vulkanmod$traceLargeAtlasUpload) {
-                double elapsedMs = (System.nanoTime() - this.vulkanmod$atlasUploadStartNanos) / 1_000_000.0D;
-                Initializer.LOGGER.info(
-                        "Batched Vulkan atlas upload {}x{} completed in {} ms",
-                        this.vulkanmod$traceAtlasWidth, this.vulkanmod$traceAtlasHeight,
-                        String.format(java.util.Locale.ROOT, "%.1f", elapsedMs));
-            }
+        if(this.vulkanmod$traceLargeAtlasUpload && !this.vulkanmod$ownsAtlasUploadBatch) {
+            double elapsedMs = (System.nanoTime() - this.vulkanmod$atlasUploadStartNanos) / 1_000_000.0D;
+            Initializer.LOGGER.info(
+                    "Batched Vulkan atlas upload {}x{} completed in {} ms",
+                    this.vulkanmod$traceAtlasWidth, this.vulkanmod$traceAtlasHeight,
+                    String.format(java.util.Locale.ROOT, "%.1f", elapsedMs));
         }
 
         if(this.vulkanmod$traceLargeAtlasUpload) {
@@ -188,6 +196,31 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
             MemoryDiagnostics.logSnapshot(
                     "atlas " + this.vulkanmod$traceAtlasWidth + "x" + this.vulkanmod$traceAtlasHeight + " upload complete");
             this.vulkanmod$traceLargeAtlasUpload = false;
+        }
+    }
+
+    @Unique
+    private void vulkanmod$closeAtlasUploadBatch() {
+        VAbstractTextureI texture = (VAbstractTextureI)(this);
+        VulkanImage image = texture.getVulkanImage();
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+
+        // Make the atlas readable in the same command stream as its final copies.
+        // When this mixin owns the batch, submission below makes the whole upload
+        // visible as one same-queue dependency. If an outer scope owns the batch,
+        // leave submission to that owner after recording the required barrier.
+        try {
+            if(image != null && graphicsQueue.hasActiveUploadBatch()) {
+                image.readOnlyLayout(graphicsQueue.getCommandBuffer());
+            }
+        } finally {
+            if(this.vulkanmod$ownsAtlasUploadBatch) {
+                // Drop logical ownership before submission. GraphicsQueue likewise
+                // releases currentCmdBuffer before it submits, so even a submission
+                // failure cannot make a later reload believe this batch is still ours.
+                this.vulkanmod$ownsAtlasUploadBatch = false;
+                graphicsQueue.endRecordingAndSubmit();
+            }
         }
     }
 
