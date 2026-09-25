@@ -600,6 +600,20 @@ When user action is needed, provide:
 
 Do not dump an entire development workflow onto the user when the agent can perform it itself.
 
+For resource-pack compatibility work, first check the user's available project
+files for the actual packs. When available, use their bytes in a local test
+through `scripts/ci/immersive-portals-smoke.sh` with both
+`VULKANMOD_REAL_BASE_PACK` and `VULKANMOD_REAL_OVERLAY_PACK` set, and verify
+the first reload and final selection with `scripts/ci/resource-pack-retention.py`.
+The ordinary CI job's synthetic selected pack tests the rollback mechanism
+only. When the private fixture repository variable and read-only token secret
+are configured, trusted branch pushes additionally run the real-pack smoke;
+verify that this specific step passed before claiming real-pack CI coverage.
+Keep private pack ZIPs out of this Git repository and public CI artifacts.
+State explicitly when a local
+Minecraft runtime or full modpack is unavailable and retain the pack test as
+pending rather than asking for new copies of files already available.
+
 ---
 
 # 25. Logs Are Evidence

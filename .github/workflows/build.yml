@@ -12,6 +12,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      PRIVATE_PACK_TOKEN_CONFIGURED: ${{ secrets.VULKANMOD_PRIVATE_PACK_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +64,26 @@ jobs:
       - name: Smoke-test Pick Up Notifier 8.0.0 compatibility
         run: bash scripts/ci/pickup-notifier-smoke.sh
       - name: Smoke-test Immersive Portals 3.0.7 compatibility
+        run: bash scripts/ci/immersive-portals-smoke.sh
+      - name: Check private resource pack fixture configuration
+        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
+        run: |
+          echo 'Configure both VULKANMOD_PRIVATE_PACK_REPO (variable) and VULKANMOD_PRIVATE_PACK_TOKEN (secret), or neither.' >&2
+          exit 1
+      - name: Download private resource pack fixtures
+        if: github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.VULKANMOD_PRIVATE_PACK_TOKEN }}
+          PRIVATE_PACK_REPO: ${{ vars.VULKANMOD_PRIVATE_PACK_REPO }}
+        run: |
+          mkdir -p .ci-private-packs
+          gh release download test-packs --repo "$PRIVATE_PACK_REPO" \
+            --pattern base.zip --pattern overlay.zip --dir .ci-private-packs
+      - name: Smoke-test both real resource packs
+        if: github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
+        env:
+          VULKANMOD_REAL_BASE_PACK: .ci-private-packs/base.zip
+          VULKANMOD_REAL_OVERLAY_PACK: .ci-private-packs/overlay.zip
         run: bash scripts/ci/immersive-portals-smoke.sh
       - name: Smoke-test Distant Horizons 3.2.0-b compatibility
         run: bash scripts/ci/distant-horizons-smoke.sh

@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 
 /** CI-only runtime target/signature smoke against Distant Horizons 3.2.0-b. */
 @Mixin(Minecraft.class)
@@ -35,6 +36,15 @@ public abstract class DistantHorizonsCompatSmokeMixin {
         try {
             Class<?> clientApi = Class.forName(
                     "com.seibel.distanthorizons.core.api.internal.ClientApi", true, loader);
+            Class<?> forgeRenderWrapper = Class.forName(
+                    "com.seibel.distanthorizons.common.wrappers.minecraft.MinecraftRenderWrapper_forge",
+                    false, loader);
+            // Class loading applies the exact Forge lightmap guard. require=1 on
+            // that mixin rejects DH versions with a missing updateLightmap target.
+            if(Arrays.stream(forgeRenderWrapper.getDeclaredMethods())
+                    .noneMatch(method -> method.getName().equals("updateLightmap"))) {
+                throw new NoSuchMethodException("Distant Horizons Forge updateLightmap");
+            }
             Object instance = clientApi.getField("INSTANCE").get(null);
 
             // Force resolution of the normal/deferred entry points. Loading ClientApi
