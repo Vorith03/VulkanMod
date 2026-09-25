@@ -23,6 +23,15 @@ import static org.lwjgl.vulkan.VK10.*;
 
 public class MemoryManager {
     private static final boolean DEBUG = false;
+    // Opt-in trace for a validation-reported buffer handle. This records the
+    // allocation and retirement call sites without logging every GPU object.
+    private static final long TRACE_BUFFER_ID = Long.getLong("vulkanmod.traceBufferId", -1L);
+
+    private static void traceBuffer(String event, long id) {
+        if(id == TRACE_BUFFER_ID)
+            new Throwable("Vulkan buffer " + Long.toHexString(id) + " " + event)
+                    .printStackTrace(System.err);
+    }
 
     private static MemoryManager INSTANCE;
 
@@ -123,6 +132,8 @@ public class MemoryManager {
             if(result != VK_SUCCESS) {
                 throw new RuntimeException("Failed to create buffer:" + result);
             }
+            if(pBuffer.get(0) == TRACE_BUFFER_ID)
+                traceBuffer("created (size=" + size + ", usage=" + usage + ")", pBuffer.get(0));
 
         }
     }
@@ -242,6 +253,7 @@ public class MemoryManager {
     }
 
     public static void freeBuffer(long buffer, long allocation) {
+        traceBuffer("destroyed directly", buffer);
         vmaDestroyBuffer(allocator, buffer, allocation);
 
         buffers.remove(buffer);
@@ -253,6 +265,7 @@ public class MemoryManager {
             MemoryUtil.memFree(bufferInfo.data());
         }
 
+        traceBuffer("destroyed after frame retirement", bufferInfo.id());
         vmaDestroyBuffer(allocator, bufferInfo.id(), bufferInfo.allocation());
 
         if(bufferInfo.type() == MemoryType.Type.DEVICE_LOCAL) {
@@ -291,6 +304,9 @@ public class MemoryManager {
         Buffer.BufferInfo bufferInfo = buffer.getBufferInfo();
 
         checkBuffer(bufferInfo);
+        if(bufferInfo.id() == TRACE_BUFFER_ID)
+            traceBuffer("enqueued from " + buffer.getClass().getSimpleName() +
+                    " in frame slot " + currentFrame, bufferInfo.id());
 
         freeableBuffers[currentFrame].add(bufferInfo);
 
