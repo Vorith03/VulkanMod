@@ -34,19 +34,21 @@ This is the concise Phase 4 compatibility/known-limitations matrix for the Forge
 | Representative particles / translucency / ordinary GUI | **Pending current visual gate** | CI covers important mechanics, but representative full-pack appearance has not yet closed the Phase 4 visual gate. |
 | Resource reload (`F3+T`) | **Deferred / open** | Explicitly deferred for the current pass; historical evidence remains in the detailed ledger. |
 | World exit / re-entry | **Deferred / open** | Explicitly deferred for the current pass. |
-| Embeddium 0.3.31 | **Intentionally disabled; minimization gate open** | Known-good Vulkan baseline disables it. Embeddium replaces terrain rendering and optimizes immediate-mode entity/GUI paths, directly overlapping VulkanMod's renderer; individual 1.20.1 coexistence has not been validated and should not be assumed. |
-| Oculus 1.8.0 | **Intentionally disabled; out of initial shaderpack scope** | Known-good baseline disables it. Full Iris/Oculus-style shaderpack support is not an initial Phase 4 blocker; no compatibility claim is made. |
-| Rubidium Extra 0.5.4.4 | **Intentionally disabled pending dependency/minimization proof** | It is an Embeddium/Rubidium companion rather than an independent renderer target. Do not re-enable it in bulk with renderer replacements. |
-| Oculus-Flywheel-Compat 2.0.3 | **Intentionally disabled with Oculus** | It has no useful baseline role while Oculus is absent; no independent incompatibility claim is made. |
+| Embeddium 0.3.31 | **Required disabled baseline** | Exact 1.20.1/Forge 47.3.0 source uses an OpenGL `GLRenderDevice` and raw LWJGL OpenGL calls. VulkanMod intentionally owns a `GLFW_NO_API` window, so coexistence would require a new compatibility architecture rather than a configuration tweak. |
+| Oculus 1.8.0 | **Required disabled baseline** | Exact 1.20.1 metadata requires Embeddium. Full Iris/Oculus-style shaderpack support is outside the initial Phase 4 blocker scope. |
+| Rubidium Extra 0.5.4.4 | **Required disabled with Embeddium** | Exact 1.20.1 metadata requires Embeddium; it has no independent role after the OpenGL renderer backend is removed. |
+| Oculus-Flywheel-Compat 2.0.3 | **Required disabled with Oculus** | Exact Forge 1.20.1 metadata requires Oculus. Flywheel itself remains enabled and separately covered. |
+
+Detailed renderer-stack evidence: `docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md`.
 
 ## Current required configuration / safety boundaries
 
 - Keep `config/fml.toml` -> `earlyWindowControl = false` so Forge's early OpenGL splash does not conflict with VulkanMod's `GLFW_NO_API` game window.
-- Keep the established renderer-replacement baseline disabled for the current #745 retest; do not bulk-enable Embeddium/Oculus-family components while diagnosing VulkanMod visuals.
+- Keep Embeddium, Oculus, Rubidium Extra, and Oculus-Flywheel-Compat disabled for the current Vulkan baseline. They form one OpenGL renderer/dependency stack; do not disable Flywheel itself.
 - Keep the four established experimental GPU-terrain flags together for the current hardware pass when reproducing the established baseline.
 - Do not add the private-CI memory-reserve override to the user's machine and do not weaken production host-memory safety to make a test pass.
 - Preserve CPU/fail-closed handling for unsupported Forge terrain callbacks/content and all documented GPU-terrain ownership/lifecycle boundaries.
 
 ## Phase 4 interpretation
 
-This matrix closes the roadmap's documentation gate only: a concise, committed compatibility/known-limitations summary now exists. It does **not** close the separate gates for current Create/Flywheel visuals, representative particles/translucency/entities/GUI, renderer-replacement minimization, or the deferred reload/re-entry lifecycle.
+This matrix closes two independent roadmap gates: the concise compatibility/known-limitations matrix is committed, and the incompatible renderer-replacement set is now evidence-backed and minimized for the target scope. It does **not** close the separate gates for current Create/Flywheel visuals, representative particles/translucency/entities/GUI, or the deferred reload/re-entry lifecycle.
