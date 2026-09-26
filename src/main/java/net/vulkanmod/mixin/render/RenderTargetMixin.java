@@ -9,6 +9,7 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
+import net.vulkanmod.vulkan.framebuffer.MainTargetIdentity;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.texture.VulkanImage;
@@ -64,13 +65,14 @@ public class RenderTargetMixin {
 
     /**
      * Generic off-screen RenderTargets can satisfy Forge's stencil contract with
-     * a combined Vulkan depth/stencil attachment. MainTarget is different: it is
-     * backed by the swapchain and has no replaceable per-target attachment here,
-     * so keep that unsupported case fail-closed.
+     * a combined Vulkan depth/stencil attachment. Only Minecraft's primary
+     * MainTarget is different: it is backed by the swapchain and has no
+     * replaceable per-target attachment here, so keep that case fail-closed.
      */
     @Inject(method = "enableStencil", at = @At("HEAD"), remap = false)
     private void vulkanmod$rejectMainTargetStencil(CallbackInfo ci) {
-        if((Object)this instanceof MainTarget) {
+        if((Object)this instanceof MainTarget mainTarget
+                && MainTargetIdentity.isPrimary(mainTarget)) {
             throw new UnsupportedOperationException(
                     "VulkanMod does not currently support stencil on the swapchain MainTarget");
         }
@@ -83,10 +85,11 @@ public class RenderTargetMixin {
      */
     @Overwrite
     public void resize(int width, int height, boolean getError) {
-        // MainTarget is owned by the swapchain. Window resize already schedules
-        // swapchain recreation, so do not allocate an unused generic framebuffer
-        // merely because MainTarget inherits RenderTarget.resize.
-        if((Object)this instanceof MainTarget) {
+        // Minecraft's primary MainTarget is owned by the swapchain. Auxiliary
+        // MainTargets created by mods are ordinary off-screen targets and must
+        // receive the generic Vulkan framebuffer backing below.
+        if((Object)this instanceof MainTarget mainTarget
+                && MainTargetIdentity.isPrimary(mainTarget)) {
             this.viewWidth = width;
             this.viewHeight = height;
             this.width = width;
@@ -244,9 +247,9 @@ public class RenderTargetMixin {
     }
 
     private static VulkanImage vulkanmod$getDepthAttachment(RenderTarget target) {
-        // VulkanMod renders MainTarget directly into the swapchain rather than
-        // allocating the synthetic off-screen backing used by generic targets.
-        if(target instanceof MainTarget)
+        // Only Minecraft's primary MainTarget maps to the swapchain. Mods may
+        // construct auxiliary MainTargets that use generic off-screen backing.
+        if(target instanceof MainTarget mainTarget && MainTargetIdentity.isPrimary(mainTarget))
             return Vulkan.getSwapChain().getDepthAttachment();
 
         int textureId = target.getDepthTextureId();

@@ -1,11 +1,14 @@
 package net.vulkanmod.render;
 
+import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.CreateStencilCompat;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.VRenderSystem;
+import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.framebuffer.MainTargetIdentity;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.opengl.GL11;
 
@@ -19,6 +22,10 @@ public final class RenderTargetStencilSmokeTest {
             return;
         }
 
+        require(mainTarget instanceof MainTarget,
+                "Minecraft main target is not a MainTarget");
+        require(MainTargetIdentity.isPrimary((MainTarget)mainTarget),
+                "Minecraft main target was not classified as the swapchain target");
         require(!mainTarget.isStencilEnabled(),
                 "MainTarget unexpectedly reported stencil support before enableStencil()");
 
@@ -32,6 +39,8 @@ public final class RenderTargetStencilSmokeTest {
         require(rejected, "Swapchain MainTarget unexpectedly accepted Forge stencil enablement");
         require(!mainTarget.isStencilEnabled(),
                 "Rejected MainTarget stencil enablement still marked it stencil-enabled");
+
+        verifyAuxiliaryMainTarget();
 
         RenderTarget offscreen = new RenderTarget(true) { };
         try {
@@ -56,6 +65,27 @@ public final class RenderTargetStencilSmokeTest {
         verifyCreateStyleStencilStateBridge();
         verifyCreateStencilMixinTarget();
         Initializer.LOGGER.info("Forge RenderTarget stencil capability smoke passed");
+    }
+
+    private static void verifyAuxiliaryMainTarget() {
+        MainTarget auxiliary = new MainTarget(8, 8);
+        try {
+            require(!MainTargetIdentity.isPrimary(auxiliary),
+                    "Auxiliary MainTarget was incorrectly classified as the swapchain target");
+
+            VulkanImage color = GlTexture.getVulkanImage(auxiliary.getColorTextureId());
+            VulkanImage depth = GlTexture.getVulkanImage(auxiliary.getDepthTextureId());
+            require(color != null && depth != null,
+                    "Auxiliary MainTarget did not allocate Vulkan color/depth attachments");
+            require(color != Vulkan.getSwapChain().getColorAttachment(),
+                    "Auxiliary MainTarget color attachment aliased the swapchain");
+            require(depth != Vulkan.getSwapChain().getDepthAttachment(),
+                    "Auxiliary MainTarget depth attachment aliased the swapchain");
+            require(color.width == 8 && color.height == 8,
+                    "Auxiliary MainTarget did not preserve its requested off-screen extent");
+        } finally {
+            auxiliary.destroyBuffers();
+        }
     }
 
     private static void verifyCreateStyleStencilStateBridge() {
