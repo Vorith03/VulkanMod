@@ -22,6 +22,8 @@ public final class EmergencySaveMixinContractTest {
         require(visitor.emergencySaveReferences == 0,
                 "VulkanMod's Minecraft mixin must not intercept Minecraft.emergencySave()");
         System.out.println("Emergency save mixin contract passed");
+
+        BufferUploaderShaderLifecycleContractTest.main(args);
     }
 
     private static EmergencySaveVisitor inspectMinecraftMixin() throws IOException {
