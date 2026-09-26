@@ -22,6 +22,7 @@ const uint COMMAND_WORDS = 5u;
 const uint OUTPUT_HEADER_WORDS = 4u;
 const uint READY = 1u;
 const uint GRAPH_VISIBLE = 2u;
+const uint DIRECT_SEED = 4u;
 const uint LAYER_SHIFT = 8u;
 const uint LAYER_MASK = 15u;
 
@@ -68,11 +69,12 @@ void main() {
     uint source = HEADER_WORDS + candidate * RECORD_WORDS;
     uint flags = inputTable.words[source + 5u];
     uint requiredFlags = READY | GRAPH_VISIBLE;
+    bool directSeed = (flags & DIRECT_SEED) != 0u;
     if ((flags & requiredFlags) != requiredFlags
             || ((flags >> LAYER_SHIFT) & LAYER_MASK) != parameters.words[2]
             || inputTable.words[source] == 0u
             || inputTable.words[source + 1u] == 0u
-            || !intersectsFrustum(inputTable.words[source + 4u]))
+            || (!directSeed && !intersectsFrustum(inputTable.words[source + 4u])))
         return;
 
     uint slot = atomicAdd(outputCommands.words[0], 1u);

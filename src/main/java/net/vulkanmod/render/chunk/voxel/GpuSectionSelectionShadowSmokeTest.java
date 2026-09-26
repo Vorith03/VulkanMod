@@ -111,8 +111,8 @@ public final class GpuSectionSelectionShadowSmokeTest {
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK: {} exact persistent storage+indirect commands from 512 live candidates; compute-to-indirect barrier and zero-tail output verified",
-                    fixture.expectedCount);
+                    "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK: {} exact persistent storage+indirect commands from 512 live candidates; {} off-frustum direct traversal seeds preserved; ordinary frustum rejection, compute-to-indirect barrier and zero-tail output verified",
+                    fixture.expectedCount, fixture.directSeedBypassCount);
         } finally {
             if(readbackBuffer != VK_NULL_HANDLE)
                 MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
@@ -133,6 +133,8 @@ public final class GpuSectionSelectionShadowSmokeTest {
         boolean[] expected = new boolean[RegionBatchLayout.MAX_SECTIONS];
         int[][] commands = new int[RegionBatchLayout.MAX_SECTIONS][COMMAND_WORDS];
         int expectedCount = 0;
+        int directSeedBypassCount = 0;
+        int ordinaryFrustumRejectCount = 0;
 
         for(int packed = 0; packed < RegionBatchLayout.MAX_SECTIONS; ++packed) {
             int indexCount = packed % 11 == 0 ? 0 : 6 + (packed % 5) * 6;
@@ -141,8 +143,9 @@ public final class GpuSectionSelectionShadowSmokeTest {
             int vertexOffset = -1200 + packed * 5;
             boolean ready = packed % 3 != 0;
             boolean graphVisible = packed % 4 != 0;
+            boolean directSeed = (packed & 7) == 1;
             int layer = packed % 7 == 0 ? TARGET_LAYER - 1 : TARGET_LAYER;
-            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, layer);
+            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
 
             builder.add(indexCount, instanceCount, firstIndex, vertexOffset, packed, flags);
             commands[packed][0] = indexCount;
@@ -154,18 +157,30 @@ public final class GpuSectionSelectionShadowSmokeTest {
             int minX = REGION_X + ((packed & 7) << 4);
             int minY = REGION_Y + (((packed >>> 3) & 7) << 4);
             int minZ = REGION_Z + (((packed >>> 6) & 7) << 4);
-            boolean selected = indexCount != 0 && instanceCount != 0
-                    && ready && graphVisible && layer == TARGET_LAYER
-                    && frustum.cubeInFrustum(minX, minY, minZ,
+            boolean inFrustum = frustum.cubeInFrustum(minX, minY, minZ,
                     minX + 16, minY + 16, minZ + 16) < 0;
+            boolean otherwiseEligible = indexCount != 0 && instanceCount != 0
+                    && ready && graphVisible && layer == TARGET_LAYER;
+            boolean selected = otherwiseEligible && (directSeed || inFrustum);
             expected[packed] = selected;
             if(selected)
                 expectedCount++;
+            if(otherwiseEligible && !inFrustum) {
+                if(directSeed)
+                    directSeedBypassCount++;
+                else
+                    ordinaryFrustumRejectCount++;
+            }
         }
 
         if(expectedCount <= 0 || expectedCount >= RegionBatchLayout.MAX_SECTIONS)
             throw new IllegalStateException("Shadow smoke fixture did not produce a selective frustum set");
-        return new Fixture(builder.finish(), frustum, expected, commands, expectedCount);
+        if(directSeedBypassCount <= 0)
+            throw new IllegalStateException("Shadow smoke fixture produced no off-frustum direct seed");
+        if(ordinaryFrustumRejectCount <= 0)
+            throw new IllegalStateException("Shadow smoke fixture produced no ordinary frustum rejection");
+        return new Fixture(builder.finish(), frustum, expected, commands,
+                expectedCount, directSeedBypassCount);
     }
 
     private static void validateResult(int[] result, Fixture fixture) {
@@ -212,5 +227,6 @@ public final class GpuSectionSelectionShadowSmokeTest {
     }
 
     private record Fixture(GpuRegionCandidateTable table, VFrustum frustum,
-                           boolean[] expected, int[][] commands, int expectedCount) {}
+                           boolean[] expected, int[][] commands, int expectedCount,
+                           int directSeedBypassCount) {}
 }

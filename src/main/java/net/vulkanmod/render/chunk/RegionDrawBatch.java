@@ -218,7 +218,10 @@ final class RegionDrawBatch {
      * generation-owned GPU candidate ABI. GRAPH_VISIBLE is the CPU graph/smart-cull
      * result before the frustum check; the GPU probe therefore owns the frustum
      * decision over a true superset while production rendering stays CPU-driven by
-     * default. The separate indirect-draw gate may consume only a successfully
+     * default. Direct traversal seeds are already authoritative CPU queue entries,
+     * so DIRECT_SEED preserves that provenance and exempts only those candidates
+     * from the GPU frustum predicate.
+     * The separate indirect-draw gate may consume only a successfully
      * dispatched, generation-matched shadow result.
      */
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
@@ -246,7 +249,8 @@ final class RegionDrawBatch {
             boolean ready = parameters.indexCount != 0
                     && parameters.vertexBufferSegment.isReady();
             boolean graphVisible = area.isGraphVisible(section);
-            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, layer);
+            boolean directSeed = graphVisible && !section.hasMainDirection();
+            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
             builder.add(parameters.indexCount, 1, parameters.firstIndex,
                     parameters.vertexOffset, slot, flags);
 
@@ -437,7 +441,6 @@ final class RegionDrawBatch {
                         pendingUploads = true;
                         continue;
                     }
-
                     int drawCountBeforeSection = drawCount;
                     int packedSection = packSection(section.xOffset - area.position.x,
                             section.yOffset - area.position.y,

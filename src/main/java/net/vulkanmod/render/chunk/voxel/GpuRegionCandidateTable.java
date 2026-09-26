@@ -15,6 +15,7 @@ public final class GpuRegionCandidateTable {
 
     public static final int READY = 1;
     public static final int GRAPH_VISIBLE = 1 << 1;
+    public static final int DIRECT_SEED = 1 << 2;
     public static final int LAYER_SHIFT = 8;
     public static final int LAYER_MASK = 0xf << LAYER_SHIFT;
 
@@ -62,10 +63,14 @@ public final class GpuRegionCandidateTable {
     }
 
     public static int flags(boolean ready, boolean graphVisible, int layer) {
+        return flags(ready, graphVisible, false, layer);
+    }
+
+    public static int flags(boolean ready, boolean graphVisible, boolean directSeed, int layer) {
         if(layer < 0 || layer > 15)
             throw new IllegalArgumentException("Terrain layer must fit four bits");
         return (ready ? READY : 0) | (graphVisible ? GRAPH_VISIBLE : 0)
-                | (layer << LAYER_SHIFT);
+                | (directSeed ? DIRECT_SEED : 0) | (layer << LAYER_SHIFT);
     }
 
     public static final class Builder {
@@ -94,7 +99,7 @@ public final class GpuRegionCandidateTable {
                 throw new IllegalStateException("GPU candidate region exceeds 512 sections");
             if(packedSection < 0 || packedSection >= RegionBatchLayout.MAX_SECTIONS)
                 throw new IllegalArgumentException("Packed section is outside its region");
-            if((flags & ~(READY | GRAPH_VISIBLE | LAYER_MASK)) != 0)
+            if((flags & ~(READY | GRAPH_VISIBLE | DIRECT_SEED | LAYER_MASK)) != 0)
                 throw new IllegalArgumentException("Unknown GPU candidate flags");
             int base = count++ * RECORD_WORDS;
             records[base] = indexCount;
