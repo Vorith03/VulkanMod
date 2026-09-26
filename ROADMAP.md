@@ -148,13 +148,13 @@ Phase 3 is complete. Automated Lavapipe pixel/validation coverage and the RX 690
 
 ### Phase 3 exit rule
 
-Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule; the user has since explicitly prioritized bounded GPU-terrain groundwork while Phase 4 remains parked. Phase 5 measurements are still required for performance claims.
+Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule. The earlier bounded GPU-terrain priority produced Phase 7 groundwork; the user has now returned the active priority to Phase 4. Phase 5 measurements are still required for performance claims.
 
 ---
 
 # Phase 4 — Create Chronicles compatibility baseline
 
-**Status: PARKED BY USER PRIORITY OVERRIDE**
+**Status: ACTIVE BY USER DIRECTION (2026-09-26); RELOAD AND RE-ENTRY DEFERRED**
 
 Goal: prove the renderer works in the user's actual target environment and identify the minimum incompatible renderer-replacement set.
 
@@ -171,9 +171,12 @@ Mandatory gates:
 
 **Progress: 3/8**
 
-**Parked work:** full-pack reload/compatibility closure remains open. See
-`docs/TERRAIN_PRIORITY_OVERRIDE_2026-09-12.md`. Do not return to F3+T or lower memory
-safety floors while pursuing the explicitly requested terrain/GPU track.
+**Current focus:** first prove that the #742 full-pack world renders beyond the
+former Distant Horizons AFTER_LEVEL abort, then check Create/Flywheel contraptions,
+Create UI, representative effects, and a real portal. The user explicitly deferred
+the reload and world re-entry gate for this pass; its checkbox stays open. Keep
+production memory safety intact. The earlier terrain priority override is historical
+context rather than the current sequencing instruction.
 
 ### Shaderpack scope
 
@@ -238,7 +241,7 @@ This phase should make terrain data **persistent, compact, and batch-friendly**.
 
 # Phase 7 — GPU-driven terrain and hybrid meshing
 
-**Status: ACTIVE BOUNDED GROUNDWORK BY EXPLICIT USER DIRECTION**
+**Status: BOUNDED GROUNDWORK VERIFIED; PAUSED FOR CURRENT PHASE 4 PRIORITY**
 
 Target sequence: persistent regions -> GPU visibility/section selection -> GPU
 indirect commands -> GPU terrain representation -> hybrid meshing -> optional mesh
@@ -425,15 +428,17 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   and real GPU-terrain execution, then stopped at a Distant Horizons Forge
   framebuffer query that is now suppressed and CI-covered.
 - Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
+- Phase 3 complete; Phase 4 active 3/8 (reload/re-entry deferred); Phase 5 3/7;
+  Phase 6 7/10; Phase 7 paused 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
   conservative hybrid APPEND, atomic dirty APPEND replacement, authoritative face-policy
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
   stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
   recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
 - The next RX full-pack run should test progress beyond the former DH AFTER_LEVEL
-  abort, then visible Create/Flywheel, a real portal, a dirty mixed-section rebuild,
-  in-world reload, and world re-entry with REPLACE + APPEND enabled. Pack retention,
+  abort, then visible Create/Flywheel, representative effects and GUI, and a real
+  portal with the established REPLACE + APPEND flags. Reload and world re-entry
+  are deferred by the user; they remain open roadmap gates. Pack retention,
   RADV activation, and initial GPU-terrain execution were already demonstrated in
   the #728 run; do not treat them as still-unanswered investigative questions.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and

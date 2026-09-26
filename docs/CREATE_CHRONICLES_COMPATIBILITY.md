@@ -14,10 +14,29 @@ This document tracks Phase 4 compatibility evidence for the Forge 1.20.1 port. I
 
 ## Current Phase 4 retest artifact
 
-Verified on 2026-09-20: [CI #723](https://github.com/Vorith03/VulkanMod/actions/runs/35529020266) passed the complete build/distributable and Vulkan smoke matrix at source `860961c6b6361e16dd7f1a1c0543930c3b161954`. Production runtime behavior is unchanged since `5964641c5428dedb3df02e3f3a31bc949b12f7eb`; the later commits strengthen regression coverage.
+**Current executable:** build **#742** / `185cf90672dea41abf97eab8c2d9dba8fa0f260e`, [full public CI green](https://github.com/Vorith03/VulkanMod/actions/runs/36227539709). Install its `-all.jar`; keep `config/fml.toml` -> `earlyWindowControl = false` and the established renderer-replacement baseline. The 2026-09-26 Phase 4 focus is world rendering past the Distant Horizons framebuffer abort, moving Create/Flywheel visuals, Create UI, representative effects, and a real portal. The user deferred `F3+T`, forced dirty hybrid rebuild, and world re-entry for this pass. Use `docs/CREATE_CHRONICLES_RETEST_2026-09-25.md` for the short current test sequence.
 
-- Download the `VulkanMod-Forge-build-723` artifact and install its `-all.jar`.
-- Keep `config/fml.toml` -> `earlyWindowControl = false`.
+**Evidence distinction:** the user's build #728 RX 6900 XT run retained both actual PureBDcraft packs, activated Vulkan on RADV, and exercised the GPU terrain path before Distant Horizons 3.2.0-b called `GL11.glGetInteger(GL_FRAMEBUFFER_BINDING)` at Forge AFTER_LEVEL and aborted. The current build cancels only that OpenGL-only DH callback; CI #742 validates the compatibility target without loading DH's Forge proxy too early. A current full-pack run past that point has not yet occurred. DH LOD rendering remains unavailable under Vulkan. The private two-pack CI passed on an earlier head and the user's #728 run confirmed pack retention; neither proves the current full-pack visuals.
+
+### Current compatibility matrix
+
+| Component or path | Established evidence | Current Phase 4 status |
+| --- | --- | --- |
+| VulkanMod on RX 6900 XT / RADV | #728 full-pack activation and real terrain execution | PASS for launch; sustained world visuals after DH fix pending |
+| Both PureBDcraft packs | #728 retained both through actual client reloads; private two-pack CI passed on an earlier head | PASS for #728 retention; monitor normal #742 startup for regression |
+| Create 0.5.1.j stencil startup | #720 passed former fatal `RenderTarget.enableStencil()` site; exact Create CI fixture green in #742 | PASS for startup; stencil-backed GUI appearance pending |
+| Flywheel 0.6.11-13 | #742 CI keeps its OpenGL backend off and Create's fallback available; historical #226 water wheel spun | Current moving contraption appearance pending |
+| Distant Horizons 3.2.0-b | #728 AFTER_LEVEL raw-GL abort; #742 CI exercises the scoped Forge callback guard | Current RX world continuation pending; LOD draw remains suppressed |
+| Immersive Portals 3.0.7 | Framebuffer, shader aliases, clip plane and reload hook covered by CI #742 | Real portal view pending |
+| FTB Library, Pick Up Notifier, Crash Assistant, Chat Heads | Exact compatibility fixtures green in CI #742 | Supported baseline; broader visuals pending where relevant |
+| Embeddium, Oculus, Rubidium Extra, Oculus-Flywheel-Compat | Disabled in the known-good instance; no isolated individual incompatibility proof | Keep baseline disabled; minimization gate still open |
+
+The table records demonstrated behavior and open questions. It does not claim that a green startup fixture proves a moving Create contraption or that the disabled renderer replacements were individually tested.
+
+### Historical build #723 context
+
+Verified on 2026-09-20: [CI #723](https://github.com/Vorith03/VulkanMod/actions/runs/35529020266) passed the complete build/distributable and Vulkan smoke matrix at source `860961c6b6361e16dd7f1a1c0543930c3b161954`. Production runtime behavior at that point was unchanged since `5964641c5428dedb3df02e3f3a31bc949b12f7eb`; later commits strengthened regression coverage and moved the runtime frontier.
+
 - Retain the established renderer-replacement baseline; do **not** disable PickupNotifier solely because of the old #310 instruction. PickupNotifier 8.0.0 now has a dedicated green compatibility gate in CI #715.
 - Build #711 on the real Create Chronicles instance exposed Create 0.5.1.j's startup call to `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; the client aborted because VulkanMod still rejected stencil targets.
 - The current tree implements real off-screen Vulkan depth/stencil targets, keeps depth sampling on a depth-only image view, and redirects Create's direct `GL_STENCIL_TEST` toggles in `StencilElement` to Vulkan state. The exact Create 0.5.1.j artifact is loaded by the CI fixture, and the log confirms `CreateStencilElementMixin` is applied with no OpenGL context.
@@ -57,11 +76,11 @@ A second signal is now under investigation: between the 00:09:00 diagnostic snap
 | Path | Evidence | Required action / remaining gate |
 | --- | --- | --- |
 | PickupNotifier 8.0.0 transparency framebuffer | Historical #303 raw-GL failure; dedicated compatibility smoke is green in CI #723 | Supported baseline in CI; retain normal full-pack coverage rather than disabling it preemptively. |
-| Full-pack resource reload | #308 documented the old memory-guard failure; later user evidence recorded in `AGENT_STATUS.md` includes successful `F3+T` and world re-entry | Recheck during the #715 full-pack run; repeated lifecycle stability remains a final gate, but the old #308 failure is not the current primary blocker. |
+| Full-pack resource reload | #308 documented the old memory-guard failure; later evidence recorded in `AGENT_STATUS.md` includes successful `F3+T` and world re-entry | Deferred by the user for this Phase 4 visual pass; repeated lifecycle stability remains open. |
 | Heavy 16K atlas workload | #308 verifies packed upload staging in the real pack; the old reload failure occurred with only 22 MiB staging in use | Preserve comparable workload if memory behavior regresses; staging is not the leading suspect from that evidence. |
-| Animated atlas images | Reload retirement preserves animated sprite source/mip data | Verify animated textures still advance after the #723 reload/re-entry cycle. |
+| Animated atlas images | Reload retirement preserves animated sprite source/mip data | Check animation during ordinary #742 gameplay; reload-specific coverage is deferred. |
 | Create stencil GUI path | Real build #711 aborted in `UIRenderHelper$CustomRenderTarget.create() -> RenderTarget.enableStencil()`; CI uses exact Create 0.5.1.j and applies `CreateStencilElementMixin` | Build #720 progressed well beyond the old fatal site, so startup-path RX confirmation is PASS. Create stencil-backed UI still needs normal in-world visual exercise. |
-| Immersive Portals shader conversion / selected resource packs | Build #711 exposed the parser plus Twilight Forest `red_thread -> rendertype_cutout`; build #720 confirmed those no longer block the full pack, then Alex's Caves `rendertype_sepia -> rendertype_entity_translucent` aborted resource reload and Minecraft removed all selected resource packs, including both PureBDcraft packs. Moonlight and Quark also exposed the same missing name-keyed Uniform mechanism through aliased `particle`. | `647c13e225b4` fixes GLSL comments; `b9910cfb0675` binds aliased terrain clipping; `5964641c5428` binds aliased model-view clipping with IP's entity/projection/weather semantics. CI #723 covers `rendertype_entity_translucent`, `particle`, the terrain alias, and selected synthetic-pack retention without the rollback signature. Full-pack #723 must still prove the two real PureBDcraft packs remain enabled after initial reload and are not auto-removed. |
+| Immersive Portals shader conversion / selected resource packs | Build #711 exposed the parser plus Twilight Forest `red_thread -> rendertype_cutout`; build #720 exposed Alex's Caves `rendertype_sepia -> rendertype_entity_translucent` and Moonlight/Quark `particle` aliases. | `647c13e225b4`, `b9910cfb0675`, and `5964641c5428` fix the parser and aliased clipping. CI #742 covers these aliases; #728 already confirmed both real PureBDcraft packs remain enabled. A real portal view remains pending. |
 | Create/Flywheel gameplay | Historical #226 water wheel rendered; Flywheel and exact Create startup fixtures are green in CI #723 | Current full-pack contraption visual test remains pending. |
 
 These findings are evidence for Phase 4 compatibility only. CI startup coverage does not close full-pack gameplay gates.
@@ -132,19 +151,7 @@ Do not re-enable renderer replacements in bulk. If Phase 4 later tests them, add
 
 ## Mandatory current-artifact test sequence
 
-Run these against build #723 in the real Create Chronicles instance. Keep the known-good renderer-replacement set disabled initially, but do not disable otherwise supported pack mods solely because of old baseline instructions. Preserve the same resource-pack workload and do not use diagnostic memory-safety overrides.
-
-For the Phase 7 correctness boundary, use the existing experimental flags together: `-Dvulkanmod.experimentalGpuTerrainMesher=true`, `-Dvulkanmod.experimentalGpuTerrainCpuBypass=true`, `-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true`, and `-Dvulkanmod.experimentalGpuTerrainHybrid=true`.
-
-1. Launch with both PureBDcraft packs selected. Confirm the initial reload completes with them still enabled; the log must not say `Caught error loading resourcepacks, removing all selected resourcepacks`, and a subsequent `Reloading ResourceManager:` line must still include both `file/PureBDcraft 64x MC120.zip` and `file/Create Chronicles_ Bosses and Beyond 64x PureBDcraft.zip`. Also confirm `Vulkan renderer active:` for the RX 6900 XT and no Create `CustomRenderTarget.enableStencil()` abort.
-2. Enter the normal test world only after the selected resource packs remain loaded, then inspect terrain, entities, GUI, particles and translucent blocks/liquids during ordinary movement.
-3. Exercise a visible Create/Flywheel contraption and at least one Create GUI/overlay path that uses the normal UI rendering stack; any raw-OpenGL-context abort is a regression.
-4. Look through a real Immersive Portals portal. If the earlier `last char is not ;` shader-conversion exception still appears, retain its surrounding log even if gameplay continues.
-5. Force at least one dirty mixed-section rebuild while REPLACE + APPEND are enabled and verify complete geometry is preserved rather than blinking/disappearing.
-6. Press `F3+T` and wait for resource reload to finish; verify rendering remains correct, then exit to the title screen and re-enter the same world.
-7. Play for at least two minutes after re-entry, checking item pickups, animated textures, the same Create contraption, and portal rendering again, then exit normally.
-
-If the run fails, stop at the first new blocking failure and retain `logs/latest.log` plus any crash report. One precise failure from #723 is more useful than continuing through cascading errors.
+Use the focused #742 steps in `docs/CREATE_CHRONICLES_RETEST_2026-09-25.md`. Keep the known-good renderer-replacement set disabled initially, preserve both real PureBDcraft packs and the established four experimental terrain flags, and do not override the production memory guard. This pass ends after ordinary Create/portal gameplay and normal exit; it does not require `F3+T`, forced dirty hybrid rebuild, or world re-entry.
 
 ## Evidence to retain after each run
 
@@ -154,7 +161,7 @@ Keep:
 - any crash report;
 - screenshots of visible rendering defects;
 - exact enabled/disabled state of renderer-changing mods;
-- whether launch, world entry, Create/Flywheel rendering, `F3+T`, world re-entry and clean exit passed;
+- whether launch, world entry, Create/Flywheel rendering, representative effects, portal view and normal exit passed;
 - allocator-purge / RSS / `MemAvailable` and process DRM-client VRAM/GTT snapshots if memory pressure or reload behavior is involved;
 - the build-310 process DRM-client resident VRAM/GTT values around reload growth and any safety trip.
 
@@ -164,7 +171,7 @@ Keep:
 - Crash Assistant CI startup: **PASS**
 - current full-pack launch with Vulkan active: **PASS**
 - current Create/Flywheel gameplay rendering: **PENDING CURRENT-ARTIFACT RETEST**
-- world enter/leave/re-enter + resource reload: **PENDING** — #308 failed during reload preparation; #720 did not reach gameplay because of the Alex's Caves/IP shader alias; #723 is the current retest artifact
+- world enter/leave/re-enter + resource reload: **PENDING, DEFERRED THIS PASS** — earlier mixed results remain in the historical ledger; do not use this pass to re-investigate them
 - representative particles/translucency/entities/GUI: **PENDING**
 - minimized incompatible renderer-replacement set: **PARTIAL** — known-good disabled set is recorded, but individual incompatibility is not yet proven
 - final concise compatibility/known-limitations matrix: **IN PROGRESS** — this file is the evidence ledger and will become the final matrix as gates close

@@ -1,4 +1,4 @@
-# Create Chronicles RX retest — 2026-09-25
+# Create Chronicles RX visual retest — updated 2026-09-26
 
 This is the current short-form hardware retest sheet. Historical compatibility evidence remains in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`; live Git/CI/runtime evidence wins if this sheet becomes stale.
 
@@ -42,19 +42,18 @@ Keep the four established experimental terrain flags together:
 
 Keep the established renderer-replacement baseline. Do not broadly re-enable Embeddium/Rubidium/Oculus-style renderer replacements for this test.
 
-## Retest sequence
+## Focused Phase 4 retest sequence
 
 The previous RX run already established pack retention, RADV Vulkan activation, and real GPU-terrain execution. A new launch inherently exercises those paths again, but do not spend the run re-investigating them unless they regress.
 
+The user has deferred resource reload, forced dirty hybrid rebuild, and world re-entry for this pass. Their roadmap gates remain open.
+
 1. Start Create Chronicles normally with both real PureBDcraft packs selected and enter the normal target world.
 2. **Primary gate:** verify world rendering continues past the point where #728 immediately aborted in Distant Horizons' AFTER_LEVEL framebuffer query. If a new first blocker appears, stop there.
-3. If stable, inspect ordinary terrain, entities, GUI, particles, liquids/translucency, and animated textures for obvious regressions.
-4. Exercise a visible Create/Flywheel contraption and at least one Create GUI/overlay path.
-5. Look through a real Immersive Portals portal.
-6. Force at least one dirty mixed-section terrain rebuild with all four experimental flags active; complete geometry should remain visible rather than blinking/disappearing during replacement.
-7. Press `F3+T` and wait for reload completion. Confirm rendering remains correct and both packs remain selected.
-8. Exit to title, re-enter the same world, and play briefly. Recheck the Create contraption, portal rendering, item pickups, and animated textures.
-9. Exit normally.
+3. If stable, inspect ordinary terrain, entities, particles, liquids/translucency, animated textures, and a normal GUI for obvious regressions while moving through the world.
+4. Watch a moving Create contraption (a spinning water wheel or another visible kinetic machine is sufficient), then open a Create GUI/overlay. Record whether the moving parts, textures, and UI are visible and correct. The CI Flywheel smoke only proves that its OpenGL backend stays off; it cannot prove the fallback visuals.
+5. Look through a real Immersive Portals portal and check both the scene beyond it and the portal edge.
+6. Exit normally.
 
 ## Stop condition / evidence
 
@@ -66,4 +65,4 @@ On the first new meaningful failure retain:
 - a screenshot only for a visible rendering defect;
 - a short note identifying which numbered step failed.
 
-If steps 1–9 complete cleanly, that closes the remaining representative full-pack correctness gates for this artifact. It would **not** by itself prove a performance improvement; comparable Phase 5/6 frame-time A/B evidence is still required before any speedup or default-path claim.
+If steps 1–6 complete cleanly, the current Phase 4 visual questions gain representative RX evidence. Reload, world re-entry, forced dirty hybrid replacement, renderer-replacement minimization, and performance measurements remain separate open gates.

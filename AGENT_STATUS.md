@@ -14,7 +14,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Current `forge-1.20.1` executable head is `185cf90672dea41abf97eab8c2d9dba8fa0f260e`. CI **#742** passed the complete distributable/Vulkan/compatibility smoke matrix. This default-off GPU candidate-selection follow-up retries rejected uploads when the CPU scene is unchanged; it does not change the four-flag GPU-terrain path or the pending RX full-pack gate.
 - The September 24 local branch's three unpushed resource-pack commits are superseded: their CI scripts and standing instructions are already identical on the shared branch, and the shared release-asset download replaces the old private-LFS checkout. PR #11 preserved the one useful #723 historical observation in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`. CI #736/#737 failed only because their new shadow fixture put every direct seed inside the frustum. PR #11 moved some graph-visible seeds clearly outside and retained separate ordinary off-frustum candidates; #740 passed that oracle. Do not replay the older local commits.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
-- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The strategic roadmap remains Phase 7 GPU-terrain/hybrid work under the existing priority override; the current full-pack work is a compatibility/correctness detour requested by the user.
+- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The user reprioritized Phase 4 on 2026-09-26. Phase 7 GPU-terrain/hybrid work is paused at 6/11 while full-pack Create/Flywheel and representative visual correctness are checked. Reload and world re-entry remain open gates but are explicitly deferred for this pass.
 
 ## Real resource-pack gate — automated and RX-confirmed
 
@@ -62,7 +62,7 @@ Distant Horizons remains **fail-closed** under Vulkan: OpenGL LOD draw/fade, DH 
 
 The parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, Moonlight/Quark `particle` aliases, and the real two-pack reload/retention path are all closed by direct fixes plus current CI/hardware evidence. The #728 RX run also closes Vulkan activation and demonstrates real GPU-terrain execution on RADV.
 
-Still requiring current-user-machine evidence after the DH fix:
+Still requiring current-user-machine evidence after the DH fix (the last two items are deferred by the user's 2026-09-26 Phase 4 priority):
 
 - sustained world rendering past the former DH AFTER_LEVEL abort;
 - visible Create/Flywheel contraption and Create UI/overlay correctness;
@@ -110,9 +110,9 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next action
 
-1. **Use CI build #742 / `185cf90672dea41abf97eab8c2d9dba8fa0f260e` for the next RX 6900 XT / RADV Create Chronicles run.** #741 and earlier artifacts are superseded.
+1. **Use CI build #742 / `185cf90672dea41abf97eab8c2d9dba8fa0f260e` for the next RX 6900 XT / RADV Create Chronicles run.** #741 and earlier artifacts are superseded. This pass prioritizes Phase 4 and does not require reload or world re-entry.
 2. Keep the same four experimental terrain flags. Do **not** add the private-CI memory-reserve override.
 3. Launch normally with the two real PureBDcraft packs. The first new question is whether the target world now renders past the former Distant Horizons framebuffer-query abort; pack retention, RX/RADV Vulkan activation, and initial GPU-terrain execution are already established evidence unless they regress.
-4. If world rendering survives, continue directly with the unresolved gates: visible Create/Flywheel contraption + Create UI, real portal visuals, dirty mixed-section rebuild, in-world `F3+T`, exit/re-entry, brief continued play, then normal exit.
+4. If world rendering survives, check a visible moving Create contraption, a Create GUI/overlay, representative particles/translucency/entities, and a real Immersive Portals view. Note any terrain holes during ordinary movement. Exit normally; leave `F3+T`, forced dirty hybrid rebuild, and world re-entry for later.
 5. Stop at the first new meaningful blocker. Retain `latest.log`, `debug.log` when useful, any crash report, and a screenshot only for a visible rendering defect. State which gate was reached.
 6. If correctness is clean, return to comparable Phase 5/6 frame-time A/B evidence before making any performance/default-path claim.
