@@ -167,16 +167,11 @@ Mandatory gates:
 - [ ] world enter/leave/re-enter and resource reload paths survive in the modpack;
 - [ ] representative particles/translucency/entities/GUI paths are checked for visible regressions;
 - [ ] incompatible renderer replacements (for example Embeddium/Rubidium/Oculus if applicable) are evidence-backed and minimized;
-- [ ] a concise compatibility/known-limitations matrix is committed.
+- [x] a concise compatibility/known-limitations matrix is committed (`docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`).
 
-**Progress: 3/8**
+**Progress: 4/8**
 
-**Current focus:** first prove that the #742 full-pack world renders beyond the
-former Distant Horizons AFTER_LEVEL abort, then check Create/Flywheel contraptions,
-Create UI, representative effects, and a real portal. The user explicitly deferred
-the reload and world re-entry gate for this pass; its checkbox stays open. Keep
-production memory safety intact. The earlier terrain priority override is historical
-context rather than the current sequencing instruction.
+**Current focus:** use #745 for the next narrow RX visual gate: Creative block/item imagery and third-person/player or another representative entity. #744 repairs auxiliary `MainTarget` ownership and #745 restores fixed core sampler reconciliation, but both remain unconfirmed on the RX machine. If that gate passes, continue with Create/Flywheel contraptions, Create UI, representative effects, and a real portal. The user explicitly deferred reload and world re-entry for this pass; its checkbox stays open. Keep production memory safety intact. The earlier terrain priority override is historical context rather than the current sequencing instruction.
 
 ### Shaderpack scope
 
@@ -377,77 +372,3 @@ Mandatory gates:
 - [ ] final compatibility matrix and required mod/configuration changes are documented;
 - [ ] final OpenGL vs Vulkan benchmark report is recorded, including cases where Vulkan is not faster;
 - [ ] installable release-candidate JAR is produced from green CI with concise test/install notes.
-
-**Progress: 0/8**
-
----
-
-# Optional/stretch work after the core roadmap
-
-These are valuable but must not silently displace the active roadmap:
-
-- broader Oculus/Iris-style shaderpack interoperability research;
-- multithreaded Vulkan command generation;
-- dedicated asynchronous transfer/upload queues if profiling justifies them;
-- advanced GPU occlusion structures beyond the Phase 7 minimum;
-- additional platform/GPU compatibility beyond the user's primary AMD/Linux target;
-- modern resource/texture compression experiments that require Minecraft asset-pipeline changes.
-
----
-
-# Required roadmap report format
-
-On request, at a substantial checkpoint, or before a chat handoff, report using this shape:
-
-## Roadmap report
-
-- **HEAD:** `<commit>`
-- **Latest CI:** `#<run> — green/failing/in progress`
-- **Highest completed legacy milestone:** `<AGENTS.md milestone>`
-- **Active phase:** `Phase N — name`
-- **Phase progress:** `X/Y mandatory gates (Z%)`
-- **Active gate:** `PN.N — exact gate`
-- **Completed since last report:** concise evidence-backed items
-- **Current blocker/risk:** exact issue, or `none`
-- **Next three actions:** ordered concrete actions
-- **RX 6900 XT testing:** `not useful yet` / `useful now`, with reason and exact test if useful
-- **Performance evidence:** latest comparable measurement, or `no new benchmark evidence`
-- **Roadmap changes:** `none`, or list any user-approved/evidence-driven sequencing changes
-
-Do not report a phase gate as complete merely because a patch was pushed; report it complete after the corresponding evidence is green/observed.
-
----
-
-# Current roadmap snapshot
-
-- Current executable head is `185cf90672dea41abf97eab8c2d9dba8fa0f260e`.
-  CI #742 passed the complete build and compatibility matrix. Its default-off
-  candidate-publication retry does not close the live GPU-selection gate.
-  The real two-pack workload passed private storage CI before the subsequent
-  direct-seed selection changes; the user's #728 RX run confirmed pack retention
-  and real GPU-terrain execution, then stopped at a Distant Horizons Forge
-  framebuffer query that is now suppressed and CI-covered.
-- Highest demonstrated milestone: 6, playable world.
-- Phase 3 complete; Phase 4 active 3/8 (reload/re-entry deferred); Phase 5 3/7;
-  Phase 6 7/10; Phase 7 paused 6/11.
-- P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
-  conservative hybrid APPEND, atomic dirty APPEND replacement, authoritative face-policy
-  qualification, bounded indirect/output fallback, and the integrated mod-compatibility
-  stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
-  recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
-- The next RX full-pack run should test progress beyond the former DH AFTER_LEVEL
-  abort, then visible Create/Flywheel, representative effects and GUI, and a real
-  portal with the established REPLACE + APPEND flags. Reload and world re-entry
-  are deferred by the user; they remain open roadmap gates. Pack retention,
-  RADV activation, and initial GPU-terrain execution were already demonstrated in
-  the #728 run; do not treat them as still-unanswered investigative questions.
-  Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
-  comparable A/B performance evidence remain open.
-- No new RX 6900 XT A/B performance measurement or performance claim exists.
-
-See `AGENT_STATUS.md` for the current continuation checkpoint. Read task-specific GPU
-terrain contract documents only when the active change touches those contracts;
-`docs/GPU_TERRAIN_OUTPUT_OWNERSHIP_2026-09-16.md` and
-`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md` remain the main ownership and
-indirect-handoff references. Documentation-only follow-ups use `[skip ci]`. Recheck live
-source/CI before the next implementation step.
