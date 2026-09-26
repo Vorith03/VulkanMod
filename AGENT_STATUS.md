@@ -11,7 +11,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current branch HEAD is docs-only `602630f23b97424d659f2d2121e3e445ff66645f` (`docs: advance RX icon model retest to build 747 [skip ci]`) followed by this checkpoint commit. The current executable candidate is build **#747** / `5d164d2773b01fc89bef173facd82dbe6cc3b462` (`render: apply converted shaders before ordinary draws`). Public CI #747 / run `36272605360` passed the complete distributable/Vulkan/compatibility smoke matrix on the first attempt, including Immersive Portals 3.0.7, Flywheel 0.6, and Create 0.5.1.j.
+- The current pre-checkpoint code/test HEAD is `a663e861a767e13cb3d4d490c81fe417faba80b4` (`test: tighten shader lifecycle cleanup contract`). It adds no production behavior beyond build **#747** / `5d164d2773b01fc89bef173facd82dbe6cc3b462` (`render: apply converted shaders before ordinary draws`), which remains the executable RX candidate.
+- Public CI **#749** / run `36275100742` is fully green at `a663e861a767e13cb3d4d490c81fe417faba80b4`. Its compiled-bytecode contract now guards the ordinary converted-shader lifecycle: `ShaderInstance.apply()` must precede fixed-sampler reconciliation and the Vulkan draw, normal cleanup must call `clear()` after the draw, and exceptional cleanup must call `clear()` before rethrow. The full distributable/Vulkan/compatibility matrix passed, including screenshot readback, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel 0.6, and Create 0.5.1.j.
 - Phase 4 remains **5/8** and is the active priority. Open gates are current Create/Flywheel visuals, representative particles/translucency/entities/GUI, and reload/re-entry. Reload and world re-entry remain explicitly deferred for this pass. Phase 7 GPU-terrain/hybrid work remains paused at 6/11 while representative full-pack visual correctness is repaired.
 - Phase 5 procedure-definition work remains **4/7**. `docs/TERRAIN_PERFORMANCE_BASELINE.md` fixes seed `2026092601`, a 2560x1440 profile, stationary camera, and a 1024-block eastbound spectator route. Numeric OpenGL/Vulkan/frame-time baselines remain open and no performance win is claimed.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
@@ -29,6 +30,7 @@ Hardware progression:
 - #745 restored vanilla-style fixed Sampler0/1/2 reconciliation immediately before ordinary draws. **The user's RX #745 test showed no change at all in the missing Creative imagery or player/entity models.** Treat fixed sampler reconciliation as a valid contract repair but as hardware-disproven for the broad visual defect.
 - #746 / `7cb7119aa6f4a7ea5c602a52a598453a43157923` added bounded `NEW_ENTITY` diagnostics without intentionally changing rendering. Up to 48 distinct states log shader/pipeline, projection hash, depth/cull/color state, actual descriptor-facing Sampler0/1/2 image identities, buffer byte count, and representative first-vertex data.
 - #747 / `5d164d2773b01fc89bef173facd82dbe6cc3b462` restores the missing vanilla `ShaderInstance.apply() -> draw -> clear()` lifecycle around ordinary Vulkan draws and keeps the #746 diagnostics. Full CI is green; RX confirmation is the next gate.
+- #748 was superseded by the tightened test follow-up and cancelled by normal workflow concurrency. #749 is the authoritative post-#747 regression-guard run and is fully green.
 
 Why #747 is a substantially stronger candidate than #745:
 
@@ -38,8 +40,9 @@ Why #747 is a substantially stronger candidate than #745:
 - VulkanMod's overwritten ordinary `BufferUploader.drawWithShader()` had been binding/uploading/drawing the Vulkan pipeline without calling `ShaderInstance.apply()` or `clear()`.
 - Therefore a valid item/entity Vulkan pipeline could execute with stale/default converted-shader matrices and state. Stale/identity projection or model-view data can clip both GUI item models and world entities while terrain and non-model GUI chrome continue to render.
 - #747 restores the lifecycle before texture preparation and UBO upload, then clears it in `finally`. Packaged core shaders remain on their direct `VRenderSystem` bindings; converted shaders now receive the state contract they already depended on.
+- Static follow-up review found no separate concrete bug in converted named-sampler resolution, fixed-sampler fallback, attachment preparation, or the active converted-shader state boundary. Do not make another speculative state patch before RX evidence.
 
-The #747 Immersive Portals smoke passed after this change, as did the entire remaining compatibility matrix. Do not claim the visual blocker closed until the RX machine confirms it.
+The #747 Immersive Portals smoke passed after this change, as did the entire remaining compatibility matrix. #749 additionally locks the lifecycle ordering and cleanup into CI. Do not claim the visual blocker closed until the RX machine confirms it.
 
 ## Next RX gate
 
