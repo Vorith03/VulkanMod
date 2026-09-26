@@ -39,8 +39,16 @@ public abstract class DistantHorizonsCompatSmokeMixin {
             Class<?> forgeRenderWrapper = Class.forName(
                     "com.seibel.distanthorizons.common.wrappers.minecraft.MinecraftRenderWrapper_forge",
                     false, loader);
+
+            // Load/transform the Forge proxy without initializing it. Its static
+            // PACKET_SENDER is populated through DH's dependency injector during the
+            // normal Forge client lifecycle; initializing this class from the early
+            // CI menu smoke would cache null and poison the later client-setup event.
+            // Loading with initialize=false is still sufficient for Mixin to transform
+            // the published class, so require=1 on the production mixin verifies the
+            // exact afterLevelRenderEvent target without perturbing DH initialization.
             Class<?> forgeClientProxy = Class.forName(
-                    "com.seibel.distanthorizons.forge.ForgeClientProxy", true, loader);
+                    "com.seibel.distanthorizons.forge.ForgeClientProxy", false, loader);
 
             // Class loading applies the exact Forge lightmap guard. require=1 on
             // that mixin rejects DH versions with a missing updateLightmap target.
@@ -66,17 +74,20 @@ public abstract class DistantHorizonsCompatSmokeMixin {
 
             // The full Create Chronicles run reached this Forge wrapper after the
             // LOD draw had already been suppressed, then hard-aborted in
-            // GL11.glGetInteger because VulkanMod has no OpenGL context. Invoke the
-            // exact transformed method with a null event: the Vulkan guard cancels at
-            // HEAD before the event can be dereferenced or any native GL call can run.
-            Method afterLevelRenderEvent = Arrays.stream(forgeClientProxy.getDeclaredMethods())
+            // GL11.glGetInteger because VulkanMod has no OpenGL context. Do not invoke
+            // this method from the early CI hook: constructing ForgeClientProxy would
+            // initialize its dependency-injected static fields before DH is ready.
+            // Instead, resolve the transformed method while leaving class initialization
+            // to DH's normal lifecycle. The production mixin's require=1 makes a missing
+            // or changed target fail class transformation rather than silently passing.
+            Arrays.stream(forgeClientProxy.getDeclaredMethods())
                     .filter(method -> method.getName().equals("afterLevelRenderEvent"))
                     .filter(method -> method.getParameterCount() == 1)
                     .findFirst()
                     .orElseThrow(() -> new NoSuchMethodException(
                             "Distant Horizons Forge afterLevelRenderEvent"));
-            Object forgeClientProxyInstance = forgeClientProxy.getDeclaredConstructor().newInstance();
-            afterLevelRenderEvent.invoke(forgeClientProxyInstance, new Object[]{null});
+            Initializer.LOGGER.info(
+                    "Distant Horizons Forge afterLevelRenderEvent compatibility target verified without early class initialization");
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() == null ? e : e.getCause();
             throw new IllegalStateException("Distant Horizons compatibility smoke invocation failed", cause);
