@@ -11,10 +11,11 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Build #743 / `63e23f22d46c5075597f6f882ac2e039b6fd8b93` passed the complete distributable/Vulkan/compatibility smoke matrix on [run attempt 2](https://github.com/Vorith03/VulkanMod/actions/runs/36229149682). Its first attempt stopped in Forge's early splash resource setup during the FTB fixture before exercising Vulkan draw code; the retry passed that fixture. The 2026-09-26 RX full-pack run of #742 reached the world but exposed invisible inventory icons/player and an Iceberg framebuffer sampling crash. #743 has a scoped follow-up for that crash; RX validation and the separate visible defects remain open. The default-off GPU candidate-selection change in #742 retries rejected uploads when the CPU scene is unchanged; it does not change the four-flag GPU-terrain path.
-- The September 24 local branch's three unpushed resource-pack commits are superseded: their CI scripts and standing instructions are already identical on the shared branch, and the shared release-asset download replaces the old private-LFS checkout. PR #11 preserved the one useful #723 historical observation in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`. CI #736/#737 failed only because their new shadow fixture put every direct seed inside the frustum. PR #11 moved some graph-visible seeds clearly outside and retained separate ordinary off-frustum candidates; #740 passed that oracle. Do not replay the older local commits.
+- Current executable head is build **#744** / `0577fafaa7791093cecae54d8005d25248007f10` (`render: distinguish auxiliary MainTarget framebuffers`). Public CI #744 / run `36232799966` passed the complete distributable/Vulkan/compatibility smoke matrix on the first attempt. Artifact `VulkanMod-Forge-build-744` was published for that exact SHA.
+- #744 fixes an ownership error exposed by the user's #743 RX run: VulkanMod had treated every `MainTarget` instance as Minecraft's swapchain target, but Forge mods may construct auxiliary `MainTarget`s for off-screen rendering. Iceberg 1.1.25 does exactly that for its 96x96 item-icon framebuffer. The primary window target remains swapchain-backed; later auxiliary `MainTarget`s now receive normal Vulkan off-screen color/depth backing and normal RenderTarget semantics.
+- The #744 runtime stencil smoke now constructs an auxiliary `MainTarget`, verifies it is not classified as the primary target, verifies real Vulkan color/depth attachments exist at its requested extent, and verifies neither attachment aliases the swapchain. Both general Vulkan startup smokes passed this oracle before the rest of #744's matrix completed green.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
-- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The user reprioritized Phase 4 on 2026-09-26. Phase 7 GPU-terrain/hybrid work is paused at 6/11 while full-pack Create/Flywheel and representative visual correctness are checked. Reload and world re-entry remain open gates but are explicitly deferred for this pass.
+- Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The user reprioritized Phase 4 on 2026-09-26. Phase 7 GPU-terrain/hybrid work is paused at 6/11 while representative full-pack visual correctness is repaired. Reload and world re-entry remain open gates but are explicitly deferred for this pass.
 
 ## Real resource-pack gate — automated and RX-confirmed
 
@@ -23,50 +24,56 @@ The two user-supplied PureBDcraft ZIPs live only in private `Vorith03/storage` r
 - Storage CI verifies immutable SHA-256 values before use, checks out the current public `forge-1.20.1` branch, and runs `scripts/ci/immersive-portals-smoke.sh` with both real packs selected together.
 - Public VulkanMod CI contains optional private-pack steps, but repository variable/secret configuration is absent, so those steps are skipped. **The private storage workflow is the authoritative automated real-pack gate.**
 - Storage run #8 passed the real 16384x8192 atlas workload against `5e04d1e...` with both packs retained, Vulkan validation clean, and `Vulkan smoke test passed`. The first large upload completed in about 3.6 s; representative peaks were NativeImage ~797 MiB, VulkanImage estimate ~1430 MiB, and staging high-water ~169 MiB.
-- Scheduled storage run #9 attempt 1 later failed only because the disposable 8 GiB runner crossed VulkanMod's intentional host-memory guard: MemAvailable fell to ~771 MiB while the unchanged adaptive reserve was ~793 MiB. The renderer still reached `Vulkan smoke test passed`; selected-pack retention could not remain valid after safety fallback. Do not classify this as a renderer regression.
-- Storage #9 was rerun against the then-current public branch **without weakening the memory threshold** and passed. Its two-pack result predates the later direct-seed selection changes; do not claim that the exact `5984ed3` head has a separate private-pack pass merely because public CI is green.
-- The CI runner's `-Dvulkanmod.systemAvailableReserveMinMiB=768` remains test infrastructure only; the normal 10% adaptive reserve still applies (~794 MiB on that runner). Do not carry this override into the user's Create Chronicles run or reduce production/user safety merely to make a test pass.
+- Scheduled storage run #9 attempt 1 later failed only because the disposable 8 GiB runner crossed VulkanMod's intentional host-memory guard; its rerun passed without weakening the memory threshold. Do not classify the first attempt as a renderer regression.
+- The CI runner's `-Dvulkanmod.systemAvailableReserveMinMiB=768` remains test infrastructure only. Do not carry this override into the user's Create Chronicles run or reduce production/user safety merely to make a test pass.
 
-## RX 6900 XT full-pack evidence — 2026-09-25
+## RX 6900 XT full-pack evidence — 2026-09-25 to 2026-09-26
 
-The user tested build #728 / `5e04d1e12c14f24da9a816ddc5beebc27a789642` in the real Create Chronicles instance with both PureBDcraft packs and all four experimental GPU-terrain flags.
+Build #728 / `5e04d1e12c14f24da9a816ddc5beebc27a789642` established the heavy-pack baseline with both real PureBDcraft packs and all four experimental GPU-terrain flags:
 
 - Vulkan activated as `AMD Radeon RX 6900 XT (RADV NAVI21)`.
-- The real base and Create Chronicles PureBDcraft packs remained in the active `Reloading ResourceManager:` list. Both observed client reloads completed; the old `Caught error loading resourcepacks, removing all selected resourcepacks` rollback did not recur.
+- Both real packs remained selected through observed client reloads; the old resource-pack rollback did not recur.
 - The reviewed log contained no `Validation Error`, `SYNC-HAZARD`, or `VK_ERROR_DEVICE_LOST` signature.
-- The GPU-terrain path was genuinely active on RADV: sparse-lighting capture ran; fresh whole-section and APPEND/hybrid CPU-bypass samples published successfully; an unsupported visible Forbidden Arcanus model was correctly rejected to CPU fallback (`unsupported_visible_model`). This is representative hardware evidence for the intended fail-closed split, not merely CI coverage.
-- World rendering progressed far enough to execute terrain work and Forge's AFTER_LEVEL render stage. The first meaningful blocker was then a native LWJGL abort from Distant Horizons 3.2.0-b calling `GL11.glGetInteger(GL_FRAMEBUFFER_BINDING)` in `ForgeClientProxy.afterLevelRenderEvent()` despite VulkanMod's existing LOD/fade suppression.
+- The GPU-terrain path was genuinely active on RADV: sparse-lighting capture ran; fresh whole-section and APPEND/hybrid CPU-bypass samples published successfully; unsupported visible content correctly fell back to CPU terrain.
+- The first blocker was Distant Horizons 3.2.0-b calling raw OpenGL `GL11.glGetInteger(GL_FRAMEBUFFER_BINDING)` at Forge AFTER_LEVEL. The scoped DH callback guard fixed that without claiming DH LOD rendering support.
 
-Do **not** ask the user to repeat the already-settled pack-retention/RADV/GPU-terrain activation checks as an investigative task. A new launch necessarily exercises them, but the next test question is whether the DH fix moves the runtime frontier forward.
+Build #742 then reached the world and Creative menu past the former DH abort. World blocks rendered, but Creative item/block icons and the player's rendered model were invisible. Its later Advancement Plaques/Iceberg path exposed an attachment-layout sampling failure. Build #743 prepared framebuffer attachment samplers before ordinary GUI/VBO pipeline binding and passed CI.
+
+The user's **#743** RX retest is now the current hardware frontier:
+
+- The same broad visible defect remained: GUI chrome/text/tooltips rendered, while Creative item/block imagery and the player/entity rendering were absent.
+- The world continued to render and the GPU-terrain path continued publishing; Distant Horizons remained correctly fail-closed and Immersive Portals selected its framebuffer compatibility renderer.
+- When Advancement Plaques 1.6.9 used Iceberg 1.1.25's `CustomItemRenderer`, the new sampler-preparation path failed explicitly with `UnsupportedOperationException: Post effect cannot sample its own output attachment` in `RenderTargetManager.prepareSampledImages`.
+- Iceberg constructs a separate `new MainTarget(96, 96)` for icon rendering. VulkanMod's old broad `instanceof MainTarget` handling mapped that auxiliary target to the live swapchain. Therefore Iceberg's subsequent blit appeared to sample the current output attachment itself. #744 repairs that ownership boundary rather than weakening the self-sampling safety check.
+
+Do **not** claim #744 has restored Creative/player visuals until it is tested on the RX machine. It directly addresses the demonstrated Iceberg auxiliary-framebuffer alias and its #743 crash; the broader missing item/entity rendering may share that cause or may remain a separate defect.
 
 ## Distant Horizons Forge framebuffer blocker — fixed
 
-DH 3.2.0-b's Forge `afterLevelRenderEvent(RenderLevelStageEvent)` callback only caches the currently bound OpenGL framebuffer ID for DH's native OpenGL renderer. Under VulkanMod the window is `GLFW_NO_API`, and DH LOD rendering is already deliberately suppressed, so this query has no valid Vulkan meaning and can hard-abort before Java can recover.
+DH 3.2.0-b's Forge `afterLevelRenderEvent(RenderLevelStageEvent)` callback only caches the currently bound OpenGL framebuffer ID for DH's native OpenGL renderer. Under VulkanMod the window is `GLFW_NO_API`, and DH LOD rendering is already deliberately suppressed, so this query has no valid Vulkan meaning.
 
-- `DistantHorizonsForgeClientProxyMixin` now cancels only that callback at HEAD (`require=1`). DH chunk/data/network/input lifecycle remains intact; this is still a fail-closed bridge, not Vulkan DH LOD rendering.
-- CI #733 initially went red after the new regression smoke itself initialized `ForgeClientProxy` too early. That prematurely cached DH's dependency-injected static `PACKET_SENDER` as null, broke Forge mod setup, skipped model-baking events, and secondarily caused VulkanMod's GPU-terrain model-table validation to report only 1/1815 states resolved. This was a **test-induced lifecycle bug**, not a production terrain regression.
-- `c7af550787fc207743706afdf5a62da73d927670` makes the smoke load/transform the Forge proxy without class initialization. `1c2040686d8da86a72e41fc8a011b70d9ed65037` updates the fixture assertion accordingly.
-- In CI #735 the DH smoke logs `Distant Horizons Forge afterLevelRenderEvent compatibility target verified without early class initialization`, then `Distant Horizons 3.2.0-b compatibility smoke passed`; normal terrain model generation returns to 1730/24135 qualified templates and the overall Vulkan smoke passes. All downstream compatibility fixtures are green.
+- `DistantHorizonsForgeClientProxyMixin` cancels only that callback at HEAD (`require=1`). DH chunk/data/network/input lifecycle remains intact.
+- CI #733's first smoke accidentally initialized DH's proxy too early; `c7af550787fc207743706afdf5a62da73d927670` and `1c2040686d8da86a72e41fc8a011b70d9ed65037` corrected the test lifecycle. CI #735 and later fixtures are green.
+- The #742/#743 RX runs progressed beyond the former AFTER_LEVEL abort, so the guard is hardware-confirmed.
 
-Distant Horizons remains **fail-closed** under Vulkan: OpenGL LOD draw/fade, DH lightmap upload, and this Forge framebuffer probe are suppressed. Do not describe DH LOD rendering itself as supported.
+Distant Horizons remains **fail-closed** under Vulkan: OpenGL LOD draw/fade, DH lightmap upload, and the Forge framebuffer probe are suppressed. Do not describe DH LOD rendering itself as supported.
 
 ## Texture upload/runtime blocker sequence — settled
 
 1. `414c645f0d535573dc13e5757efdb4dc6a870785` / CI #726 fixed staging-buffer replacement while the shared upload command buffer still referenced old storage.
-2. The first private 16K-atlas attempt exposed exception cleanup: an upload safety exception could leave an atlas-owned shared upload batch/layout stranded.
-3. `fd49c5f790447326d1a0d90f478c08b2a48f6579` adds exception-safe atlas batch cleanup while preserving the original resource exception.
-4. `5e04d1e12c14f24da9a816ddc5beebc27a789642` preserves explicit atlas batch ownership for normal completion timing/bookkeeping.
-5. Public CI, private real-pack CI, and the user's RX run now agree that the old real-pack upload/rollback blocker is closed. Do not reinterpret old post-exception validation cascades as current failures unless reproduced on a current head.
+2. `fd49c5f790447326d1a0d90f478c08b2a48f6579` made atlas-batch cleanup exception-safe.
+3. `5e04d1e12c14f24da9a816ddc5beebc27a789642` preserved explicit atlas batch ownership for normal completion timing/bookkeeping.
+4. Public CI, private real-pack CI, and the user's RX run agree that the old real-pack upload/rollback blocker is closed. Do not reinterpret old post-exception validation cascades as current failures unless reproduced on a current head.
 
 ## Current Create Chronicles compatibility boundary
 
-The parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, Moonlight/Quark `particle` aliases, and the real two-pack reload/retention path are all closed by direct fixes plus current CI/hardware evidence. The #728 RX run also closes Vulkan activation and demonstrates real GPU-terrain execution on RADV.
+The parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, Moonlight/Quark `particle` aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, and the Distant Horizons raw-GL AFTER_LEVEL abort are closed by direct fixes plus current CI/hardware evidence.
 
-Still requiring current-user-machine evidence after the DH fix (the last two items are deferred by the user's 2026-09-26 Phase 4 priority):
+Still requiring current-user-machine evidence (the last two items remain deferred by the user's 2026-09-26 Phase 4 priority):
 
-- sustained world rendering past the former DH AFTER_LEVEL abort;
+- **first:** #744 Creative item/block icons, player/entity rendering, and Iceberg/Advancement Plaques off-screen icon rendering;
 - visible Create/Flywheel contraption and Create UI/overlay correctness;
-- real Immersive Portals portal visuals;
+- representative particles/translucency/entities and a real Immersive Portals portal view;
 - a dirty mixed-section hybrid terrain rebuild without incomplete-geometry blink/disappearance;
 - in-world `F3+T` after gameplay, followed by continued correct rendering;
 - exit to title, re-entry, brief continued play, and normal final exit.
@@ -110,6 +117,8 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next action
 
-1. Build #742 / `185cf90672dea41abf97eab8c2d9dba8fa0f260e` reached the RX 6900 XT world and Creative menu past DH's former AFTER_LEVEL abort. World blocks appeared, but the user reported invisible creative item/block icons and their character. The first fatal log event came later, on an Ice Bucket Challenge advancement: `IllegalStateException: Unexpected texture layout before shader read: 2` in Iceberg's `GuiHelper.innerBlit` / VulkanMod descriptor sampling. See `docs/CREATE_CHRONICLES_COMPATIBILITY.md` for details. Do not claim Phase 4 visual success or attribute the broad defect to isolated model warnings.
-2. Build #743 prepares attachment samplers before ordinary GUI/VBO draw pipeline binding using the existing primary-frame pass transition. CI is green; the exact Iceberg advancement rendering path and icon/player appearance require the next RX full-pack run. Obtain screenshots of the affected Creative screen and third-person view if the visible defect persists.
-3. Keep the same four experimental terrain flags and the two real PureBDcraft packs. Do **not** add the private-CI memory-reserve override. Stop on the first meaningful blocker; retain `latest.log`, any crash report, and a screenshot for the visible defect. Continue with Create contraption, Create GUI, particles/translucency/entities, and a real portal only after the icons/player are visible. Reload and world re-entry remain deferred.
+1. **Use build #744 / `0577fafaa7791093cecae54d8005d25248007f10` for the next RX 6900 XT/Create Chronicles run.** Public CI is fully green and the distributable artifact exists.
+2. Keep the same four experimental terrain flags and the two real PureBDcraft packs. Do **not** add the private-CI memory-reserve override.
+3. Make the test narrow: enter the existing world, open Creative, confirm whether item/block icons are visible, and check third-person/player or another representative entity. If an Advancement Plaques/Iceberg item icon appears, confirm the #743 `Post effect cannot sample its own output attachment` crash does not recur.
+4. If those visuals are still absent, stop there and retain `latest.log` plus one screenshot; the next investigation should target the ordinary dynamic item/entity draw path rather than the now-covered auxiliary framebuffer ownership path.
+5. Only if icons/player are correct, continue with a moving Create contraption, Create GUI/overlay, representative particles/translucency/entities, and a real portal. Reload and world re-entry remain deferred.
