@@ -9,9 +9,10 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Prefer removing superseded chronology, stale next steps, obsolete run detail, and repeated implementation narrative already preserved by Git/CI.
 - Normally review for compaction at most once per calendar day. Aim for roughly 100 lines or fewer when practical; correctness wins over size.
 
-## Repository state — 2026-09-25
+## Repository state
 
-- Current `forge-1.20.1` executable head is `1c2040686d8da86a72e41fc8a011b70d9ed65037` (`test: keep DH proxy smoke lifecycle-safe`). Public CI **#735** is fully green at that exact SHA: distributable build, both Vulkan startup smokes, persistent GPU-indirect, post/depth chains, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b fail-closed fixture, Crash Assistant, Chat Heads, Flywheel, and exact Create 0.5.1.j stencil coverage all pass.
+- Current `forge-1.20.1` executable head is `5984ed361b1f13d4d081d59678af527c763bf101` (overlap reconciliation and direct-seed fixture correction). PR #11 CI **#740** and exact-head push CI **#741** both passed the complete distributable/Vulkan/compatibility smoke matrix.
+- The September 24 local branch's three unpushed resource-pack commits are superseded: their CI scripts and standing instructions are already identical on the shared branch, and the shared release-asset download replaces the old private-LFS checkout. PR #11 preserved the one useful #723 historical observation in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`. CI #736/#737 failed only because their new shadow fixture put every direct seed inside the frustum. PR #11 moved some graph-visible seeds clearly outside and retained separate ordinary off-frustum candidates; #740 passed that oracle. Do not replay the older local commits.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The strategic roadmap remains Phase 7 GPU-terrain/hybrid work under the existing priority override; the current full-pack work is a compatibility/correctness detour requested by the user.
 
@@ -23,7 +24,7 @@ The two user-supplied PureBDcraft ZIPs live only in private `Vorith03/storage` r
 - Public VulkanMod CI contains optional private-pack steps, but repository variable/secret configuration is absent, so those steps are skipped. **The private storage workflow is the authoritative automated real-pack gate.**
 - Storage run #8 passed the real 16384x8192 atlas workload against `5e04d1e...` with both packs retained, Vulkan validation clean, and `Vulkan smoke test passed`. The first large upload completed in about 3.6 s; representative peaks were NativeImage ~797 MiB, VulkanImage estimate ~1430 MiB, and staging high-water ~169 MiB.
 - Scheduled storage run #9 attempt 1 later failed only because the disposable 8 GiB runner crossed VulkanMod's intentional host-memory guard: MemAvailable fell to ~771 MiB while the unchanged adaptive reserve was ~793 MiB. The renderer still reached `Vulkan smoke test passed`; selected-pack retention could not remain valid after safety fallback. Do not classify this as a renderer regression.
-- Storage #9 was rerun against the current public branch **without weakening the memory threshold** and passed. The current executable head is therefore covered by the authoritative real-pack workload as well as public CI.
+- Storage #9 was rerun against the then-current public branch **without weakening the memory threshold** and passed. Its two-pack result predates the later direct-seed selection changes; do not claim that the exact `5984ed3` head has a separate private-pack pass merely because public CI is green.
 - The CI runner's `-Dvulkanmod.systemAvailableReserveMinMiB=768` remains test infrastructure only; the normal 10% adaptive reserve still applies (~794 MiB on that runner). Do not carry this override into the user's Create Chronicles run or reduce production/user safety merely to make a test pass.
 
 ## RX 6900 XT full-pack evidence — 2026-09-25
@@ -109,7 +110,7 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next action
 
-1. **Use CI build #735 / `1c2040686d8da86a72e41fc8a011b70d9ed65037` for the next RX 6900 XT / RADV Create Chronicles run.** #728 and earlier artifacts are superseded.
+1. **Use CI build #741 / `5984ed361b1f13d4d081d59678af527c763bf101` for the next RX 6900 XT / RADV Create Chronicles run.** #735 and earlier artifacts are superseded.
 2. Keep the same four experimental terrain flags. Do **not** add the private-CI memory-reserve override.
 3. Launch normally with the two real PureBDcraft packs. The first new question is whether the target world now renders past the former Distant Horizons framebuffer-query abort; pack retention, RX/RADV Vulkan activation, and initial GPU-terrain execution are already established evidence unless they regress.
 4. If world rendering survives, continue directly with the unresolved gates: visible Create/Flywheel contraption + Create UI, real portal visuals, dirty mixed-section rebuild, in-world `F3+T`, exit/re-entry, brief continued play, then normal exit.

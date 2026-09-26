@@ -4,17 +4,17 @@ This is the current short-form hardware retest sheet. Historical compatibility e
 
 ## Artifact
 
-Use **CI build #735**, executable commit:
+Use **CI build #741**, executable commit:
 
-`1c2040686d8da86a72e41fc8a011b70d9ed65037`
+`5984ed361b1f13d4d081d59678af527c763bf101`
 
-Build #728 and earlier artifacts are superseded.
+Build #735 and earlier artifacts are superseded.
 
 Automated evidence before this RX run:
 
-- public CI #735 is fully green across the complete Forge/Vulkan compatibility matrix, including Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage;
+- public CI #741 is fully green across the complete Forge/Vulkan compatibility matrix, including the direct-seed GPU selection fixture, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage;
 - the DH fixture verifies the exact Forge `afterLevelRenderEvent` target without prematurely initializing DH's dependency-injected proxy, and the normal terrain model table still builds afterward;
-- the private `Vorith03/storage` two-PureBDcraft-pack workload was rerun against the current public branch with its existing host-memory threshold unchanged and passed;
+- the private `Vorith03/storage` two-PureBDcraft-pack workload passed against the then-current public branch with its host-memory threshold unchanged; the later direct-seed selection changes have not had a separate private-pack run;
 - the user's previous #728 RX 6900 XT/RADV run already confirmed both real packs remain active through reload, Vulkan activates on RADV, and the experimental GPU-terrain path executes successfully/fail-closed on representative full-pack terrain.
 
 The private workflow's host-memory override is only for the disposable 8 GiB GitHub runner. **Do not add a memory-safety override to the RX 6900 XT run.**

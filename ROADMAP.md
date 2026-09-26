@@ -417,11 +417,13 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Latest executable checkpoint: `860961c6b6361e16dd7f1a1c0543930c3b161954`, CI #723
-  (run `35529020266`) is fully green. Production runtime behavior remains at `5964641c5428`; the later commits add regression coverage, including selected-resource-pack retention. The current tree includes
-  Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Flywheel, the exact Create 0.5.1.j
-  stencil compatibility fixture, the GLSL comment-parser regression, and both IP alias
-  classes (`rendertype_cutout` terrain plus `rendertype_entity_translucent` model-view).
+- Current executable head is `5984ed361b1f13d4d081d59678af527c763bf101`.
+  PR #11 CI #740 and exact-head push CI #741 passed the complete build and
+  compatibility matrix.
+  The real two-pack workload passed private storage CI before the subsequent
+  direct-seed selection changes; the user's #728 RX run confirmed pack retention
+  and real GPU-terrain execution, then stopped at a Distant Horizons Forge
+  framebuffer query that is now suppressed and CI-covered.
 - Highest demonstrated milestone: 6, playable world.
 - Phase 3 complete; Phase 4 parked 3/8; Phase 5 3/7; Phase 6 7/10; Phase 7 6/11.
 - P7 now includes non-blocking production compute completion, fresh GPU-first REPLACE,
@@ -429,15 +431,11 @@ Do not report a phase gate as complete merely because a patch was pushed; report
   qualification, bounded indirect/output fallback, and the integrated mod-compatibility
   stack including IP framebuffer raw-GL bridging, per-portal-world terrain ownership,
   recursive render-buffer handling, Vulkan terrain clipping, and reload propagation.
-- Runtime compatibility progressed through the earlier Immersive Portals raw-GL framebuffer
-  gap plus the build #711 and #720 full-pack blockers. Build #720 confirmed Create's stencil,
-  the GLSL comment parser, and Twilight Forest's terrain alias no longer blocked startup,
-  then exposed Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`. The
-  model-view alias bridge in `5964641c5428` mirrors IP's runtime clip-space selection;
-  CI #723 additionally covers the observed `particle` alias and proves a selected synthetic
-  resource pack is not discarded by the reproduced rollback path. The next useful evidence is another
-  full-pack correctness run with REPLACE + APPEND enabled, including a real portal and at
-  least one dirty mixed-section rebuild.
+- The next RX full-pack run should test progress beyond the former DH AFTER_LEVEL
+  abort, then visible Create/Flywheel, a real portal, a dirty mixed-section rebuild,
+  in-world reload, and world re-entry with REPLACE + APPEND enabled. Pack retention,
+  RADV activation, and initial GPU-terrain execution were already demonstrated in
+  the #728 run; do not treat them as still-unanswered investigative questions.
   Live GPU visibility correctness, broader lifecycle/Forge-preservation proof, and
   comparable A/B performance evidence remain open.
 - No new RX 6900 XT A/B performance measurement or performance claim exists.
