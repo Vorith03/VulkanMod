@@ -126,7 +126,7 @@ public final class GpuSectionSelectionShadowSmokeTest {
         VFrustum frustum = new VFrustum();
         frustum.setCamOffset(64.0D, 0.0D, 64.0D);
         frustum.calculateFrustum(new Matrix4f().identity(),
-                new Matrix4f().ortho(-48.0F, 48.0F, -48.0F, 48.0F, -96.0F, 96.0F));
+                new Matrix4f().ortho(-32.0F, 32.0F, -48.0F, 48.0F, -96.0F, 96.0F));
 
         GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
                 GENERATION, REGION_X, REGION_Y, REGION_Z);
@@ -143,8 +143,8 @@ public final class GpuSectionSelectionShadowSmokeTest {
             int vertexOffset = -1200 + packed * 5;
             boolean ready = packed % 3 != 0;
             boolean graphVisible = packed % 4 != 0;
-            // X=7 lies beyond this fixture's frustum while remaining graph-visible;
-            // X=1 was inside it and never exercised the direct-seed exception.
+            // X=7 is beyond the narrowed X frustum while graph-visible;
+            // the former X=1 seed was inside it and never exercised this exception.
             boolean directSeed = (packed & 7) == 7;
             int layer = packed % 7 == 0 ? TARGET_LAYER - 1 : TARGET_LAYER;
             int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
