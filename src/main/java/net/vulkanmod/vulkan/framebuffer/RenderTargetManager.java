@@ -3,6 +3,9 @@ package net.vulkanmod.vulkan.framebuffer;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.shader.GraphicsPipeline;
+import net.vulkanmod.vulkan.shader.descriptor.Image;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -104,6 +107,27 @@ public final class RenderTargetManager {
 
     public static void unbindRead() {
         GlTexture.bindTexture(0);
+    }
+
+    /** Ordinary RenderType draws may sample a just-rendered off-screen target. */
+    public static void preparePipelineTextures(GraphicsPipeline pipeline) {
+        // Almost every item/entity draw samples an atlas already in read-only
+        // layout. Avoid allocating a sampler array or interrupting its pass.
+        boolean attachment = false;
+        for(Image image : pipeline.getImages()) {
+            int layout = VTextureSelector.getTexture(image.name).getCurrentLayout();
+            if(layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                    || layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+                attachment = true;
+                break;
+            }
+        }
+        if(attachment) {
+            VulkanImage[] images = pipeline.getImages().stream()
+                    .map(image -> VTextureSelector.getTexture(image.name))
+                    .toArray(VulkanImage[]::new);
+            prepareSampledImages(images);
+        }
     }
 
     /**

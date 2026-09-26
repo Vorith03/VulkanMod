@@ -77,6 +77,10 @@ public abstract class Pipeline {
     protected List<UBO> buffers;
     protected ManualUBO manualUBO;
     protected List<Image> images;
+
+    public List<Image> getImages() {
+        return images;
+    }
     protected PushConstants pushConstants;
 
     public Pipeline(String name) {

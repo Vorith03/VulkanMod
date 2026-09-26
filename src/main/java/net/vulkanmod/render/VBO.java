@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
+import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.memory.*;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
@@ -121,6 +122,7 @@ public class VBO {
             VRenderSystem.applyMVP(MV, P);
 
             Renderer renderer = Renderer.getInstance();
+            RenderTargetManager.preparePipelineTextures(pipeline);
             GraphicsPipeline.requestPrimitiveMode(this.mode);
             renderer.bindGraphicsPipeline(pipeline);
             renderer.uploadAndBindUBOs(pipeline);

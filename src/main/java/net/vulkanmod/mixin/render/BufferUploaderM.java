@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.ShaderRenderState;
@@ -68,6 +69,11 @@ public class BufferUploaderM {
         if(pipeline == null) {
             throw new IllegalStateException("ShaderInstance has no Vulkan pipeline: " + shader.getName());
         }
+        // GUI/item draws can read an off-screen RenderTarget without first
+        // calling bindRead(). Resolve their samplers before binding the pipeline:
+        // transitioning an attachment must end and resume the current pass on
+        // this frame's command buffer, never on the helper upload command buffer.
+        RenderTargetManager.preparePipelineTextures(pipeline);
         GraphicsPipeline.requestPrimitiveMode(parameters.mode());
         renderer.bindGraphicsPipeline(pipeline);
         renderer.uploadAndBindUBOs(pipeline);
