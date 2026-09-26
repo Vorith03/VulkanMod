@@ -24,6 +24,7 @@ public final class EmergencySaveMixinContractTest {
         System.out.println("Emergency save mixin contract passed");
 
         BufferUploaderShaderLifecycleContractTest.main(args);
+        net.vulkanmod.mixin.compatibility.ImmersivePortalsRemoteUploadContractTest.main(args);
     }
 
     private static EmergencySaveVisitor inspectMinecraftMixin() throws IOException {

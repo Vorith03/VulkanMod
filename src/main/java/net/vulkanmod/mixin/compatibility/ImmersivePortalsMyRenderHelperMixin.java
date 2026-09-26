@@ -43,6 +43,20 @@ public abstract class ImmersivePortalsMyRenderHelperMixin {
         ImmersivePortalsShaderCompat.rebuildShaders(minecraft);
     }
 
+    /**
+     * Immersive Portals' early remote-world upload is a vanilla renderer
+     * pre-pass: it walks portal-world LevelRenderers and asks their vanilla
+     * ChunkRenderDispatcher to upload pending chunk meshes. VulkanMod replaces
+     * that terrain renderer, so those LevelRenderers intentionally have no
+     * vanilla dispatcher. Letting the pre-pass run therefore dereferences a
+     * null dispatcher before VulkanMod can render the frame. Vulkan terrain
+     * upload/publication is owned by VulkanMod's chunk renderer instead.
+     */
+    @Inject(method = "earlyRemoteUpload()V", at = @At("HEAD"), cancellable = true)
+    private static void vulkanmod$skipVanillaRemoteChunkUpload(CallbackInfo ci) {
+        ci.cancel();
+    }
+
     @Redirect(method = "applyMirrorFaceCulling()V",
             at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glCullFace(I)V", remap = false))
     private static void vulkanmod$disableCullForMirror(int mode) {
