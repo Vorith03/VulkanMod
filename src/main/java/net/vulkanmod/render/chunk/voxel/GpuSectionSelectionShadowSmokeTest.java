@@ -143,7 +143,9 @@ public final class GpuSectionSelectionShadowSmokeTest {
             int vertexOffset = -1200 + packed * 5;
             boolean ready = packed % 3 != 0;
             boolean graphVisible = packed % 4 != 0;
-            boolean directSeed = (packed & 7) == 1;
+            // X=7 lies beyond this fixture's frustum while remaining graph-visible;
+            // X=1 was inside it and never exercised the direct-seed exception.
+            boolean directSeed = (packed & 7) == 7;
             int layer = packed % 7 == 0 ? TARGET_LAYER - 1 : TARGET_LAYER;
             int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
 
