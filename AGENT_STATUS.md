@@ -11,7 +11,9 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable head is build **#745** / `acb69d632a124b02d54f5ce6f42df84c33dc3d39` (`render: restore core sampler bindings before draw`). Public CI #745 / run `36234407912` passed the complete distributable/Vulkan/compatibility smoke matrix on the first attempt. Artifact `VulkanMod-Forge-build-745` was published for that exact SHA.
+- Current branch HEAD is docs-only `9d9d30a574ed08f4f47cd6e29bf8d2cc208555a1` (`docs: fix Phase 5 benchmark definition gate [skip ci]`). The current executable head remains build **#745** / `acb69d632a124b02d54f5ce6f42df84c33dc3d39` (`render: restore core sampler bindings before draw`). Public CI #745 / run `36234407912` passed the complete distributable/Vulkan/compatibility smoke matrix on the first attempt. Artifact `VulkanMod-Forge-build-745` was published for that exact SHA.
+- Phase 4 is now **5/8**. Two non-hardware gates were closed while #745 awaits RX testing: `docs/CREATE_CHRONICLES_COMPAT_MATRIX.md` is the concise committed compatibility/known-limitations matrix, and `docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md` proves the disabled Embeddium/Oculus/Rubidium Extra/Oculus-Flywheel-Compat set is one OpenGL renderer/dependency stack. Flywheel itself remains enabled. The three open Phase 4 gates are current Create/Flywheel visuals, representative particles/translucency/entities/GUI, and reload/re-entry; the last remains explicitly deferred for this pass.
+- Phase 5 procedure-definition work is now **4/7** even though Phase 4 remains the active priority. `docs/TERRAIN_PERFORMANCE_BASELINE.md` fixes seed `2026092601`, a 2560x1440 graphics profile, stationary camera, and a 1024-block eastbound spectator route. Numeric OpenGL/Vulkan/frame-time baselines remain open and no performance win is claimed.
 - #744 / `0577fafaa7791093cecae54d8005d25248007f10` fixes an ownership error exposed by the user's #743 RX run: VulkanMod had treated every `MainTarget` instance as Minecraft's swapchain target, but Forge mods may construct auxiliary `MainTarget`s for off-screen rendering. Iceberg 1.1.25 does exactly that for its 96x96 item-icon framebuffer. The primary window target remains swapchain-backed; later auxiliary `MainTarget`s now receive normal Vulkan off-screen color/depth backing and normal RenderTarget semantics.
 - #745 fixes a second ordinary item/entity draw-state gap found while following the still-missing #743 Creative/player visuals. Vanilla RenderType setup records authoritative core Sampler0/1/2 ids in `RenderSystem.shaderTextures`, but setup helpers such as `TextureManager.bindForSetup()` can temporarily disturb the emulated active texture binding. OpenGL's `ShaderInstance.apply()` repairs those sampler bindings immediately before drawing; VulkanMod's preconverted core draw path bypassed that GL apply step. `ShaderTextureState.syncFixedSamplers()` now performs the equivalent reconciliation before ordinary `BufferUploader` and VBO descriptor preparation, and `AbstractTexture.bind()` no longer unconditionally overwrites fixed Sampler0 in addition to its active-unit bind.
 - The #745 runtime smoke deliberately poisons the descriptor-facing Sampler0/light selectors while keeping different authoritative `RenderSystem` slot 0/2 ids, then verifies the pre-draw reconciliation restores both images. Both Vulkan startup variants passed that oracle, followed by post-chain, screenshot, FTB, Pick Up Notifier, Immersive Portals, Distant Horizons, Crash Assistant, Chat Heads, Flywheel, and exact Create stencil fixtures.
@@ -69,9 +71,9 @@ Distant Horizons remains **fail-closed** under Vulkan: OpenGL LOD draw/fade, DH 
 
 ## Current Create Chronicles compatibility boundary
 
-The parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, Moonlight/Quark `particle` aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, and the Distant Horizons raw-GL AFTER_LEVEL abort are closed by direct fixes plus current CI/hardware evidence.
+The parser issue, Create stencil startup abort, Twilight Forest `red_thread -> rendertype_cutout`, Alex's Caves `rendertype_sepia -> rendertype_entity_translucent`, Moonlight/Quark `particle` aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, the Distant Horizons raw-GL AFTER_LEVEL abort, compatibility-matrix documentation, and renderer-replacement minimization are closed by direct fixes/current evidence.
 
-Still requiring current-user-machine evidence (the last two items remain deferred by the user's 2026-09-26 Phase 4 priority):
+Still requiring current-user-machine evidence (the last two lifecycle items remain deferred by the user's 2026-09-26 Phase 4 priority):
 
 - **first:** #745 Creative item/block icons, player/entity rendering, and Iceberg/Advancement Plaques off-screen icon rendering;
 - visible Create/Flywheel contraption and Create UI/overlay correctness;
@@ -82,7 +84,7 @@ Still requiring current-user-machine evidence (the last two items remain deferre
 
 A separate historical shutdown/native-lifetime signal remains unresolved: build #720's failed-reload shutdown ended in glibc `double free or corruption (!prev)`, and a 2026-09-13 full-pack session had already ended in the same allocator-abort family. Current evidence does not identify VulkanMod as the allocator owner. Do not make speculative ownership changes without a native backtrace or a current-head reproduction.
 
-Focused compatibility evidence and the current short-form retest sheet live in `docs/CREATE_CHRONICLES_COMPATIBILITY.md` and `docs/CREATE_CHRONICLES_RETEST_2026-09-25.md`.
+Focused compatibility evidence and the current short-form retest sheet live in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`, `docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`, `docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md`, and `docs/CREATE_CHRONICLES_RETEST_2026-09-25.md`.
 
 ## GPU-terrain durable contract
 
@@ -124,3 +126,4 @@ Keep accelerated consumption default-off until representative RX correctness and
 3. Make the test narrow: enter the existing world, open Creative, confirm whether item/block icons are visible, and check third-person/player or another representative entity. If an Advancement Plaques/Iceberg item icon appears, confirm the #743 `Post effect cannot sample its own output attachment` crash does not recur.
 4. If those visuals are still absent, stop there and retain `latest.log` plus one screenshot; the next investigation should target the remaining ordinary `NEW_ENTITY`/entity pipeline state beyond fixed sampler reconciliation.
 5. Only if icons/player are correct, continue with a moving Create contraption, Create GUI/overlay, representative particles/translucency/entities, and a real portal. Reload and world re-entry remain deferred.
+6. While that RX gate is unavailable, the fixed Phase 5 benchmark profile may be used to begin comparable OpenGL/Vulkan measurements later; do not mix those measurements with the diagnostic #745 visual test.
