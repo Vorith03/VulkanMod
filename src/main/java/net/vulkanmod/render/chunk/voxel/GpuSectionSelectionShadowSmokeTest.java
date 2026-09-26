@@ -143,9 +143,10 @@ public final class GpuSectionSelectionShadowSmokeTest {
             int vertexOffset = -1200 + packed * 5;
             boolean ready = packed % 3 != 0;
             boolean graphVisible = packed % 4 != 0;
-            // X=7 is beyond the narrowed X frustum while graph-visible;
-            // the former X=1 seed was inside it and never exercised this exception.
-            boolean directSeed = (packed & 7) == 7;
+            // X=7 lies beyond the narrowed X frustum while graph-visible.
+            // Mark only alternating Y rows as seeds so other eligible X=7
+            // sections also prove ordinary frustum rejection.
+            boolean directSeed = (packed & 15) == 7;
             int layer = packed % 7 == 0 ? TARGET_LAYER - 1 : TARGET_LAYER;
             int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
 
