@@ -114,7 +114,6 @@ public final class EmergencySaveMixinContractTest {
         int samplerSyncCall = -1;
         int drawCall = -1;
         final List<Integer> clearCalls = new ArrayList<>();
-        final List<Integer> returnPositions = new ArrayList<>();
         final List<Integer> throwPositions = new ArrayList<>();
         final Map<Label, Integer> labelPositions = new IdentityHashMap<>();
         final List<TryCatchRange> tryCatchRanges = new ArrayList<>();
@@ -163,23 +162,19 @@ public final class EmergencySaveMixinContractTest {
 
                 @Override
                 public void visitInsn(int opcode) {
-                    if(opcode == Opcodes.RETURN)
-                        returnPositions.add(methodCallOrdinal);
-                    else if(opcode == Opcodes.ATHROW)
+                    if(opcode == Opcodes.ATHROW)
                         throwPositions.add(methodCallOrdinal);
                 }
             };
         }
 
         boolean hasNormalClearAfterDraw() {
-            if(drawCall < 0)
-                return false;
-
-            for(int clearCall : clearCalls) {
-                if(clearCall <= drawCall)
+            for(TryCatchRange range : catchAllRangesCoveringDraw()) {
+                Integer handler = labelPositions.get(range.handler);
+                if(handler == null)
                     continue;
-                for(int returnPosition : returnPositions) {
-                    if(clearCall < returnPosition)
+                for(int clearCall : clearCalls) {
+                    if(clearCall > drawCall && clearCall < handler)
                         return true;
                 }
             }
@@ -187,19 +182,9 @@ public final class EmergencySaveMixinContractTest {
         }
 
         boolean hasExceptionalClearAroundDraw() {
-            if(drawCall < 0)
-                return false;
-
-            for(TryCatchRange range : tryCatchRanges) {
-                if(range.type != null)
-                    continue;
-
-                Integer start = labelPositions.get(range.start);
-                Integer end = labelPositions.get(range.end);
+            for(TryCatchRange range : catchAllRangesCoveringDraw()) {
                 Integer handler = labelPositions.get(range.handler);
-                if(start == null || end == null || handler == null)
-                    continue;
-                if(drawCall < start || drawCall >= end)
+                if(handler == null)
                     continue;
 
                 for(int clearCall : clearCalls) {
@@ -212,6 +197,22 @@ public final class EmergencySaveMixinContractTest {
                 }
             }
             return false;
+        }
+
+        private List<TryCatchRange> catchAllRangesCoveringDraw() {
+            List<TryCatchRange> matches = new ArrayList<>();
+            if(drawCall < 0)
+                return matches;
+
+            for(TryCatchRange range : tryCatchRanges) {
+                if(range.type != null)
+                    continue;
+                Integer start = labelPositions.get(range.start);
+                Integer end = labelPositions.get(range.end);
+                if(start != null && end != null && drawCall >= start && drawCall < end)
+                    matches.add(range);
+            }
+            return matches;
         }
     }
 
