@@ -240,6 +240,17 @@ final class RegionDrawBatch {
         fingerprint = mix(fingerprint, area.position.z);
         fingerprint = mix(fingerprint, layer);
 
+        boolean[] directSeeds = new boolean[MAX_SECTIONS];
+        var visibleIterator = area.sectionQueue.iterator(false);
+        while(visibleIterator.hasNext()) {
+            RenderSection visible = visibleIterator.next();
+            if(visible.hasMainDirection())
+                continue;
+            int packed = packSection(visible.xOffset - area.position.x,
+                    visible.yOffset - area.position.y, visible.zOffset - area.position.z);
+            directSeeds[packed] = true;
+        }
+
         int count = 0;
         for(int slot = 0; slot < MAX_SECTIONS; ++slot) {
             RenderSection section = area.getOwnedSection(slot);
@@ -249,7 +260,7 @@ final class RegionDrawBatch {
             boolean ready = parameters.indexCount != 0
                     && parameters.vertexBufferSegment.isReady();
             boolean graphVisible = area.isGraphVisible(section);
-            boolean directSeed = graphVisible && !section.hasMainDirection();
+            boolean directSeed = directSeeds[slot];
             int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
             builder.add(parameters.indexCount, 1, parameters.firstIndex,
                     parameters.vertexOffset, slot, flags);
@@ -441,6 +452,7 @@ final class RegionDrawBatch {
                         pendingUploads = true;
                         continue;
                     }
+
                     int drawCountBeforeSection = drawCount;
                     int packedSection = packSection(section.xOffset - area.position.x,
                             section.yOffset - area.position.y,
