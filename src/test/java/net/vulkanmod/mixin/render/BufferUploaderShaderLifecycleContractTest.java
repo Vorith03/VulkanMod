@@ -34,6 +34,7 @@ public final class BufferUploaderShaderLifecycleContractTest {
                 "BufferUploaderM.drawWithShader must clear ShaderInstance after a successful Vulkan draw");
         require(visitor.hasExceptionalClearAroundDraw(),
                 "BufferUploaderM.drawWithShader must clear ShaderInstance when the Vulkan draw path throws");
+        ShaderInstanceLegacyApplyContractTest.main(args);
         System.out.println("BufferUploader shader lifecycle contract passed");
     }
 
