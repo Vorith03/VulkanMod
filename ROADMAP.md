@@ -417,9 +417,9 @@ Do not report a phase gate as complete merely because a patch was pushed; report
 
 # Current roadmap snapshot
 
-- Current executable head is `5984ed361b1f13d4d081d59678af527c763bf101`.
-  PR #11 CI #740 and exact-head push CI #741 passed the complete build and
-  compatibility matrix.
+- Current executable head is `185cf90672dea41abf97eab8c2d9dba8fa0f260e`.
+  CI #742 passed the complete build and compatibility matrix. Its default-off
+  candidate-publication retry does not close the live GPU-selection gate.
   The real two-pack workload passed private storage CI before the subsequent
   direct-seed selection changes; the user's #728 RX run confirmed pack retention
   and real GPU-terrain execution, then stopped at a Distant Horizons Forge

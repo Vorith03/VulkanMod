@@ -4,15 +4,15 @@ This is the current short-form hardware retest sheet. Historical compatibility e
 
 ## Artifact
 
-Use **CI build #741**, executable commit:
+Use **CI build #742**, executable commit:
 
-`5984ed361b1f13d4d081d59678af527c763bf101`
+`185cf90672dea41abf97eab8c2d9dba8fa0f260e`
 
-Build #735 and earlier artifacts are superseded.
+Build #741 and earlier artifacts are superseded.
 
 Automated evidence before this RX run:
 
-- public CI #741 is fully green across the complete Forge/Vulkan compatibility matrix, including the direct-seed GPU selection fixture, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage;
+- public CI #742 is fully green across the complete Forge/Vulkan compatibility matrix, including the direct-seed GPU selection fixture, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage; its only executable change since #741 retries rejected uploads in the separate default-off GPU candidate-selection path;
 - the DH fixture verifies the exact Forge `afterLevelRenderEvent` target without prematurely initializing DH's dependency-injected proxy, and the normal terrain model table still builds afterward;
 - the private `Vorith03/storage` two-PureBDcraft-pack workload passed against the then-current public branch with its host-memory threshold unchanged; the later direct-seed selection changes have not had a separate private-pack run;
 - the user's previous #728 RX 6900 XT/RADV run already confirmed both real packs remain active through reload, Vulkan activates on RADV, and the experimental GPU-terrain path executes successfully/fail-closed on representative full-pack terrain.

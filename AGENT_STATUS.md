@@ -11,7 +11,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current `forge-1.20.1` executable head is `5984ed361b1f13d4d081d59678af527c763bf101` (overlap reconciliation and direct-seed fixture correction). PR #11 CI **#740** and exact-head push CI **#741** both passed the complete distributable/Vulkan/compatibility smoke matrix.
+- Current `forge-1.20.1` executable head is `185cf90672dea41abf97eab8c2d9dba8fa0f260e`. CI **#742** passed the complete distributable/Vulkan/compatibility smoke matrix. This default-off GPU candidate-selection follow-up retries rejected uploads when the CPU scene is unchanged; it does not change the four-flag GPU-terrain path or the pending RX full-pack gate.
 - The September 24 local branch's three unpushed resource-pack commits are superseded: their CI scripts and standing instructions are already identical on the shared branch, and the shared release-asset download replaces the old private-LFS checkout. PR #11 preserved the one useful #723 historical observation in `docs/CREATE_CHRONICLES_COMPATIBILITY.md`. CI #736/#737 failed only because their new shadow fixture put every direct seed inside the frustum. PR #11 moved some graph-visible seeds clearly outside and retained separate ordinary off-frustum candidates; #740 passed that oracle. Do not replay the older local commits.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Durable report: `docs/CODEBASE_AUDIT_2026-09-18.md`.
 - Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**. The strategic roadmap remains Phase 7 GPU-terrain/hybrid work under the existing priority override; the current full-pack work is a compatibility/correctness detour requested by the user.
@@ -110,7 +110,7 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next action
 
-1. **Use CI build #741 / `5984ed361b1f13d4d081d59678af527c763bf101` for the next RX 6900 XT / RADV Create Chronicles run.** #735 and earlier artifacts are superseded.
+1. **Use CI build #742 / `185cf90672dea41abf97eab8c2d9dba8fa0f260e` for the next RX 6900 XT / RADV Create Chronicles run.** #741 and earlier artifacts are superseded.
 2. Keep the same four experimental terrain flags. Do **not** add the private-CI memory-reserve override.
 3. Launch normally with the two real PureBDcraft packs. The first new question is whether the target world now renders past the former Distant Horizons framebuffer-query abort; pack retention, RX/RADV Vulkan activation, and initial GPU-terrain execution are already established evidence unless they regress.
 4. If world rendering survives, continue directly with the unresolved gates: visible Create/Flywheel contraption + Create UI, real portal visuals, dirty mixed-section rebuild, in-world `F3+T`, exit/re-entry, brief continued play, then normal exit.
