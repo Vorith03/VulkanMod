@@ -44,13 +44,13 @@ Keep the established renderer-replacement baseline. Do not broadly re-enable Emb
 
 ## Focused Phase 4 retest sequence
 
-The previous RX run already established pack retention, RADV Vulkan activation, and real GPU-terrain execution. A new launch inherently exercises those paths again, but do not spend the run re-investigating them unless they regress.
+The previous RX runs already established pack retention, RADV Vulkan activation, real GPU-terrain execution, and world continuation past Distant Horizons' guarded AFTER_LEVEL callback. Build #742 then exposed invisible inventory icons/player and an Iceberg/Advancement Plaques framebuffer sampling crash. Use the green build #743 `-all.jar` to retest those new blockers. A new launch inherently exercises the earlier paths again, but do not spend the run re-investigating them unless they regress.
 
 The user has deferred resource reload, forced dirty hybrid rebuild, and world re-entry for this pass. Their roadmap gates remain open.
 
 1. Start Create Chronicles normally with both real PureBDcraft packs selected and enter the normal target world.
-2. **Primary gate:** verify world rendering continues past the point where #728 immediately aborted in Distant Horizons' AFTER_LEVEL framebuffer query. If a new first blocker appears, stop there.
-3. If stable, inspect ordinary terrain, entities, particles, liquids/translucency, animated textures, and a normal GUI for obvious regressions while moving through the world.
+2. **Primary visual gate:** open Creative and check whether ordinary block/item icons are visible, then check the character in third-person view. If either is still invisible, preserve a screenshot of that view; the log alone cannot identify the visual failure. World blocks already rendered in #742.
+3. If those visuals are correct, inspect ordinary terrain, other entities, particles, liquids/translucency, animated textures, and a normal GUI while moving through the world. If an advancement plaque appears, check whether the old `Unexpected texture layout before shader read: 2` crash recurs; no need to seek a particular advancement deliberately.
 4. Watch a moving Create contraption (a spinning water wheel or another visible kinetic machine is sufficient), then open a Create GUI/overlay. Record whether the moving parts, textures, and UI are visible and correct. The CI Flywheel smoke only proves that its OpenGL backend stays off; it cannot prove the fallback visuals.
 5. Look through a real Immersive Portals portal and check both the scene beyond it and the portal edge.
 6. Exit normally.
