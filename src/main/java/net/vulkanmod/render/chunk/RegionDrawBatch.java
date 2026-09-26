@@ -297,7 +297,10 @@ final class RegionDrawBatch {
         boolean[] cpuExpected = diagnosticToken == 0L ? null : buildCpuExpected(area, type);
         boolean queued = area.publishGpuCandidates(type, table);
 
-        candidateInitialized[layer] = true;
+        // A rejected upload is transient (for example, the global candidate
+        // budget may be released when another area retires). Leave this
+        // fingerprint uncommitted so an unchanged CPU queue can retry later.
+        candidateInitialized[layer] = queued;
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
         candidateTables[layer] = queued ? table : null;
