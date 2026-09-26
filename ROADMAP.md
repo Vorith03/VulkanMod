@@ -166,10 +166,10 @@ Mandatory gates:
 - [ ] Create/Flywheel contraptions render correctly in ordinary gameplay;
 - [ ] world enter/leave/re-enter and resource reload paths survive in the modpack;
 - [ ] representative particles/translucency/entities/GUI paths are checked for visible regressions;
-- [ ] incompatible renderer replacements (for example Embeddium/Rubidium/Oculus if applicable) are evidence-backed and minimized;
+- [x] incompatible renderer replacements are evidence-backed and minimized for the target scope (`docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md`);
 - [x] a concise compatibility/known-limitations matrix is committed (`docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`).
 
-**Progress: 4/8**
+**Progress: 5/8**
 
 **Current focus:** use #745 for the next narrow RX visual gate: Creative block/item imagery and third-person/player or another representative entity. #744 repairs auxiliary `MainTarget` ownership and #745 restores fixed core sampler reconciliation, but both remain unconfirmed on the RX machine. If that gate passes, continue with Create/Flywheel contraptions, Create UI, representative effects, and a real portal. The user explicitly deferred reload and world re-entry for this pass; its checkbox stays open. Keep production memory safety intact. The earlier terrain priority override is historical context rather than the current sequencing instruction.
 
