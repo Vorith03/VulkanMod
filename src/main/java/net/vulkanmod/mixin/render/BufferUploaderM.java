@@ -80,27 +80,39 @@ public class BufferUploaderM {
         if(pipeline == null) {
             throw new IllegalStateException("ShaderInstance has no Vulkan pipeline: " + shader.getName());
         }
-        // Vanilla ShaderInstance.apply() rebinds the sampler ids recorded by
-        // RenderType setup after helpers such as LightTexture.bindForSetup()
-        // temporarily disturb the active GL texture binding. The preconverted
-        // Vulkan draw bypasses that GL apply step, so restore the authoritative
-        // fixed sampler state before resolving attachment layouts/descriptors.
-        ShaderTextureState.syncFixedSamplers();
 
-        // GUI/item draws can read an off-screen RenderTarget without first
-        // calling bindRead(). Resolve their samplers before binding the pipeline:
-        // transitioning an attachment must end and resume the current pass on
-        // this frame's command buffer, never on the helper upload command buffer.
-        RenderTargetManager.preparePipelineTextures(pipeline);
+        // Preserve vanilla BufferUploader's ShaderInstance lifecycle. Packaged
+        // Vulkan core shaders read VRenderSystem state directly, but converted
+        // Forge/Immersive-Portals shaders bind their live matrices, colors,
+        // clipping plane and named samplers from ShaderInstance.apply(). Skipping
+        // apply() leaves those UBO fields at stale/default values even though the
+        // Vulkan pipeline itself is valid.
+        shader.apply();
+        try {
+            // Vanilla ShaderInstance.apply() rebinds the sampler ids recorded by
+            // RenderType setup after helpers such as LightTexture.bindForSetup()
+            // temporarily disturb the active GL texture binding. The preconverted
+            // Vulkan draw still needs the same authoritative fixed-slot repair;
+            // converted shaders may override those names through ShaderRenderState.
+            ShaderTextureState.syncFixedSamplers();
 
-        if(parameters.format() == DefaultVertexFormat.NEW_ENTITY) {
-            vulkanmod$traceNewEntityDraw(buffer, parameters, shader, pipeline);
+            // GUI/item draws can read an off-screen RenderTarget without first
+            // calling bindRead(). Resolve their samplers before binding the pipeline:
+            // transitioning an attachment must end and resume the current pass on
+            // this frame's command buffer, never on the helper upload command buffer.
+            RenderTargetManager.preparePipelineTextures(pipeline);
+
+            if(parameters.format() == DefaultVertexFormat.NEW_ENTITY) {
+                vulkanmod$traceNewEntityDraw(buffer, parameters, shader, pipeline);
+            }
+
+            GraphicsPipeline.requestPrimitiveMode(parameters.mode());
+            renderer.bindGraphicsPipeline(pipeline);
+            renderer.uploadAndBindUBOs(pipeline);
+            Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
+        } finally {
+            shader.clear();
         }
-
-        GraphicsPipeline.requestPrimitiveMode(parameters.mode());
-        renderer.bindGraphicsPipeline(pipeline);
-        renderer.uploadAndBindUBOs(pipeline);
-        Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
     }
 
     private static void vulkanmod$traceNewEntityDraw(
@@ -135,9 +147,9 @@ public class BufferUploaderM {
                 shaderColor[0], shaderColor[1], shaderColor[2], shaderColor[3],
                 mirroredColor.getFloat(0), mirroredColor.getFloat(4),
                 mirroredColor.getFloat(8), mirroredColor.getFloat(12),
-                vulkanmod$imageSummary(VTextureSelector.getBoundTexture()),
-                vulkanmod$imageSummary(VTextureSelector.getOverlayTexture()),
-                vulkanmod$imageSummary(VTextureSelector.getLightTexture()),
+                vulkanmod$imageSummary(VTextureSelector.getTexture("Sampler0")),
+                vulkanmod$imageSummary(VTextureSelector.getTexture("Sampler1")),
+                vulkanmod$imageSummary(VTextureSelector.getTexture("Sampler2")),
                 vulkanmod$firstNewEntityVertex(vertexBytes));
     }
 
