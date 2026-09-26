@@ -7,7 +7,6 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.interfaces.VAbstractTextureI;
 import net.vulkanmod.vulkan.Vulkan;
-import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -96,12 +95,13 @@ public abstract class MAbstractTexture implements VAbstractTextureI {
 
     @Override
     public void bindTexture() {
+        // Preserve only the emulated legacy active-unit bind here. TextureManager
+        // uses AbstractTexture.bind()/bindForSetup() for setup work such as changing
+        // sampler parameters; that temporary bind must not also overwrite Vulkan's
+        // fixed Sampler0 descriptor state when a different shader slot is being
+        // prepared. Ordinary core draws reconcile Sampler0/1/2 from
+        // RenderSystem.shaderTextures immediately before descriptor binding.
         GlTexture.bindTexture(this.id);
-
-        if (vulkanImage != null)
-            VTextureSelector.bindTexture(vulkanImage);
-        else
-            VTextureSelector.bindTexture(VTextureSelector.getWhiteTexture());
     }
 
     public VulkanImage getVulkanImage() {

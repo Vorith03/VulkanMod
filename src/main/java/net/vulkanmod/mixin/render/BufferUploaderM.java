@@ -13,6 +13,7 @@ import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.ShaderRenderState;
+import net.vulkanmod.vulkan.texture.ShaderTextureState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
@@ -69,6 +70,13 @@ public class BufferUploaderM {
         if(pipeline == null) {
             throw new IllegalStateException("ShaderInstance has no Vulkan pipeline: " + shader.getName());
         }
+        // Vanilla ShaderInstance.apply() rebinds the sampler ids recorded by
+        // RenderType setup after helpers such as LightTexture.bindForSetup()
+        // temporarily disturb the active GL texture binding. The preconverted
+        // Vulkan draw bypasses that GL apply step, so restore the authoritative
+        // fixed sampler state before resolving attachment layouts/descriptors.
+        ShaderTextureState.syncFixedSamplers();
+
         // GUI/item draws can read an off-screen RenderTarget without first
         // calling bindRead(). Resolve their samplers before binding the pipeline:
         // transitioning an attachment must end and resume the current pass on

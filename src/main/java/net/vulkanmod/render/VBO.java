@@ -11,6 +11,7 @@ import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.memory.*;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
+import net.vulkanmod.vulkan.texture.ShaderTextureState;
 import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
@@ -122,6 +123,7 @@ public class VBO {
             VRenderSystem.applyMVP(MV, P);
 
             Renderer renderer = Renderer.getInstance();
+            ShaderTextureState.syncFixedSamplers();
             RenderTargetManager.preparePipelineTextures(pipeline);
             GraphicsPipeline.requestPrimitiveMode(this.mode);
             renderer.bindGraphicsPipeline(pipeline);

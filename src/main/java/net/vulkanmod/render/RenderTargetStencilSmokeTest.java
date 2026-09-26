@@ -9,6 +9,8 @@ import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.MainTargetIdentity;
+import net.vulkanmod.vulkan.texture.ShaderTextureState;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.opengl.GL11;
 
@@ -41,6 +43,7 @@ public final class RenderTargetStencilSmokeTest {
                 "Rejected MainTarget stencil enablement still marked it stencil-enabled");
 
         verifyAuxiliaryMainTarget();
+        verifyCoreShaderSamplerReconciliation();
 
         RenderTarget offscreen = new RenderTarget(true) { };
         try {
@@ -85,6 +88,46 @@ public final class RenderTargetStencilSmokeTest {
                     "Auxiliary MainTarget did not preserve its requested off-screen extent");
         } finally {
             auxiliary.destroyBuffers();
+        }
+    }
+
+    private static void verifyCoreShaderSamplerReconciliation() {
+        MainTarget atlasTarget = new MainTarget(4, 4);
+        MainTarget lightTarget = new MainTarget(2, 2);
+        int previous0 = RenderSystem.getShaderTexture(0);
+        int previous1 = RenderSystem.getShaderTexture(1);
+        int previous2 = RenderSystem.getShaderTexture(2);
+
+        try {
+            VulkanImage atlas = GlTexture.getVulkanImage(atlasTarget.getColorTextureId());
+            VulkanImage light = GlTexture.getVulkanImage(lightTarget.getColorTextureId());
+            require(atlas != null && light != null,
+                    "Shader sampler smoke targets did not allocate Vulkan color attachments");
+
+            RenderSystem.setShaderTexture(0, atlasTarget.getColorTextureId());
+            RenderSystem.setShaderTexture(2, lightTarget.getColorTextureId());
+
+            // Reproduce the state shape caused by TextureManager.bindForSetup():
+            // fixed shader ids remain authoritative while a temporary legacy bind
+            // has disturbed descriptor-facing selector state.
+            VTextureSelector.bindTexture(light);
+            VTextureSelector.setLightTexture(atlas);
+            require(VTextureSelector.getBoundTexture() == light
+                            && VTextureSelector.getLightTexture() == atlas,
+                    "Shader sampler smoke did not establish deliberately stale selector state");
+
+            ShaderTextureState.syncFixedSamplers();
+            require(VTextureSelector.getBoundTexture() == atlas,
+                    "Sampler0 was not restored from RenderSystem shader texture state");
+            require(VTextureSelector.getLightTexture() == light,
+                    "Sampler2 was not restored from RenderSystem shader texture state");
+        } finally {
+            RenderSystem.setShaderTexture(0, previous0);
+            RenderSystem.setShaderTexture(1, previous1);
+            RenderSystem.setShaderTexture(2, previous2);
+            ShaderTextureState.syncFixedSamplers();
+            atlasTarget.destroyBuffers();
+            lightTarget.destroyBuffers();
         }
     }
 
