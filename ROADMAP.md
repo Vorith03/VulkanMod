@@ -187,7 +187,7 @@ Goal: create apples-to-apples measurements so optimization claims have evidence.
 
 Mandatory gates:
 
-- [ ] define a fixed test world/route and graphics settings for repeatable measurements;
+- [x] define a fixed test world/route and graphics settings for repeatable measurements (`docs/TERRAIN_PERFORMANCE_BASELINE.md`, seed `2026092601` and fixed 1024-block route);
 - [ ] record an OpenGL comparison baseline on the same machine/settings/modpack;
 - [ ] record the Vulkan baseline on the same machine/settings/modpack;
 - [ ] record frame-time behavior in addition to average FPS (at minimum low-percentile or hitch-sensitive evidence);
@@ -195,13 +195,13 @@ Mandatory gates:
 - [x] define a Create-heavy/modded rendering stress case;
 - [x] commit the benchmark procedure and acceptance rule: no performance claim without comparable before/after evidence.
 
-**Progress: 3/7**
+**Progress: 4/7**
 
-Evidence: `docs/TERRAIN_PERFORMANCE_BASELINE.md`; fixed coordinates and A/B results remain open.
+Evidence: `docs/TERRAIN_PERFORMANCE_BASELINE.md` now fixes the benchmark seed, 2560x1440 graphics profile, stationary camera, eastbound `X=-512 -> +512` spectator route, result record, and A/B acceptance contract. Numeric OpenGL/Vulkan/frame-time results remain open.
 
 ### Default comparison target
 
-The comparison should answer practical user questions, not win a synthetic benchmark. Use the user's actual 2560×1440 gameplay configuration unless the benchmark procedure explicitly calls for an additional resolution.
+The comparison should answer practical user questions, not win a synthetic benchmark. Use the fixed 2560×1440 benchmark profile for comparable A/B runs; additional gameplay resolutions may be reported separately but must not be mixed into that baseline series.
 
 ---
 
