@@ -4,33 +4,36 @@ This is the current short-form hardware retest sheet. Historical compatibility e
 
 ## Artifact
 
-Use **CI build #745**, executable commit:
+Use **CI build #747**, executable commit:
 
-`acb69d632a124b02d54f5ce6f42df84c33dc3d39`
+`5d164d2773b01fc89bef173facd82dbe6cc3b462`
 
-Build #744 and earlier artifacts are superseded for this retest.
+Build #746 and earlier artifacts are superseded for this retest.
 
 Automated evidence before this RX run:
 
-- public CI #745 is fully green across the complete Forge/Vulkan compatibility matrix, including both Vulkan startup variants, post-chain/depth-post-chain execution, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage;
-- #744 added a runtime oracle proving auxiliary `MainTarget`s receive independent Vulkan color/depth backing instead of aliasing Minecraft's swapchain target;
-- #745 adds a runtime sampler-state oracle that deliberately corrupts the descriptor-facing Sampler0/light selectors, then proves ordinary pre-draw reconciliation restores the authoritative `RenderSystem` Sampler0 and Sampler2 images;
-- the user's previous #728 RX 6900 XT/RADV run already confirmed both real PureBDcraft packs remain active through reload, Vulkan activates on RADV, and the experimental GPU-terrain path executes successfully/fail-closed on representative full-pack terrain.
+- public CI #747 is fully green across the complete Forge/Vulkan compatibility matrix, including both Vulkan startup variants, post-chain/depth-post-chain execution, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and exact Create 0.5.1.j stencil coverage;
+- #744 repairs auxiliary `MainTarget` ownership so Iceberg-style off-screen targets no longer alias Minecraft's swapchain target;
+- #745 restores fixed Sampler0/1/2 reconciliation before ordinary draws, but the user's RX 6900 XT retest proved that change **did not restore** the missing Creative imagery or player/entity models;
+- #746 adds bounded `NEW_ENTITY` draw diagnostics for shader/pipeline identity, vertex bytes, depth/cull/color state, actual descriptor-facing Sampler0/1/2 images, and representative first-vertex data;
+- #747 restores the vanilla `ShaderInstance.apply() -> draw -> clear()` lifecycle around ordinary Vulkan draws. This matters for Immersive Portals-transformed item/entity shaders, which use VulkanMod's converted legacy-shader path and source their live model-view matrix, projection matrix, color, clipping equation, and named sampler state from `ShaderInstance.apply()`;
+- the user's previous RX 6900 XT/RADV runs already confirmed both real PureBDcraft packs remain active, Vulkan activates on RADV, and the experimental GPU-terrain path executes successfully/fail-closed on representative full-pack terrain.
 
 The private workflow's host-memory override is only for the disposable 8 GiB GitHub runner. **Do not add a memory-safety override to the RX 6900 XT run.**
 
-## What changed since the latest RX run
+## Why #747 is the current icon/model candidate
 
-The #743 user run reached the world and Creative menu with terrain visible, but ordinary block/item icons and the rendered player were absent. Later, Advancement Plaques 1.6.9 / Iceberg 1.1.25 reached its custom item renderer and failed with:
+The #745 RX run reached the world and Creative menu, but ordinary block/item imagery and the rendered player/entity models remained absent. That hardware result disproved fixed sampler reconciliation as the broad visual fix.
 
-`UnsupportedOperationException: Post effect cannot sample its own output attachment`
+Static tracing then found a stronger shared contract failure:
 
-Two separate renderer-contract defects have now been repaired:
+1. Immersive Portals transforms vanilla item/entity programs such as `rendertype_entity_*` and `rendertype_item_entity_translucent_cull`.
+2. VulkanMod therefore routes those shaders through its converted legacy `ShaderInstance` path instead of the packaged preconverted core path.
+3. The converted path binds Vulkan UBO fields directly to Minecraft `Uniform` storage. `ShaderInstance.apply()` is responsible for copying the current model-view matrix, projection matrix, shader color, active IP clipping equation, and named sampler state into that storage/state bridge.
+4. VulkanMod's overwritten `BufferUploader.drawWithShader()` was binding and drawing the Vulkan pipeline without calling `ShaderInstance.apply()` or `clear()`.
+5. A valid pipeline could therefore draw with stale/default converted-shader matrices and state. Identity/stale projection/model-view data is sufficient to clip ordinary GUI item models and world entities completely while terrain and non-model GUI chrome continue to render.
 
-1. **Auxiliary MainTarget ownership (#744).** Iceberg creates `new MainTarget(96, 96)` for off-screen item rendering. VulkanMod previously treated every `MainTarget` as Minecraft's primary swapchain target, so Iceberg's off-screen target aliased the live output attachment. Only the actual primary target is swapchain-backed now; auxiliary MainTargets use normal Vulkan RenderTarget backing.
-2. **Core item/entity sampler reconciliation (#745).** Vanilla RenderType setup records authoritative Sampler0/1/2 texture ids in `RenderSystem.shaderTextures`, but setup helpers can temporarily disturb the emulated active texture binding. OpenGL's `ShaderInstance.apply()` normally repairs those sampler bindings immediately before a draw. VulkanMod's preconverted ordinary draw path bypassed that GL apply step, so item/entity descriptors could see stale textures. #745 now reconciles the fixed core samplers before ordinary `BufferUploader` and VBO descriptor preparation and removes the extra unconditional Sampler0 overwrite from `AbstractTexture.bind()`.
-
-#744 directly addresses the demonstrated Iceberg crash. #745 is directly on the ordinary batched item/entity render path and is the current candidate for the broader invisible Creative/player imagery. CI proves the contracts and safety paths; only the RX/full-pack run can close the visible gate.
+#747 restores that lifecycle before descriptor preparation and UBO upload, then clears it after the draw. The existing #746 diagnostics remain present, so a failing RX run should contain enough `NEW_ENTITY draw trace` evidence to distinguish a remaining item/entity state problem without another speculative patch.
 
 ## JVM flags
 
@@ -49,24 +52,23 @@ Keep the established renderer-replacement baseline. Do not broadly re-enable Emb
 
 The previous RX runs already established pack retention, RADV Vulkan activation, real GPU-terrain execution, and world continuation past Distant Horizons' guarded AFTER_LEVEL callback. Do not spend this run re-investigating those paths unless they regress.
 
-The user has deferred resource reload, forced dirty hybrid rebuild, and world re-entry for this pass. Their roadmap gates remain open.
+Resource reload and world re-entry remain explicitly deferred for this pass.
 
 1. Start Create Chronicles normally with both real PureBDcraft packs selected and enter the normal target world.
-2. **Primary visual gate:** open Creative and check whether ordinary block/item icons are visible. Then check the character in third-person view or another representative entity. If either is still invisible, stop here, preserve one screenshot plus `latest.log`, and note whether icons, player/entities, or both failed.
-3. If the primary visual gate passes, allow normal gameplay long enough for an Advancement Plaques/Iceberg item icon to render if one naturally appears. Confirm that the old self-sampling exception does not recur; there is no need to deliberately seek a particular advancement.
-4. Inspect ordinary terrain, other entities, particles, liquids/translucency, animated textures, and a normal GUI while moving through the world.
-5. Watch a moving Create contraption (a spinning water wheel or another visible kinetic machine is sufficient), then open a Create GUI/overlay. Record whether the moving parts, textures, and UI are visible and correct. The CI Flywheel smoke proves that its OpenGL backend stays off; it cannot prove the fallback visuals.
-6. Look through a real Immersive Portals portal and check both the scene beyond it and the portal edge.
-7. Exit normally.
+2. **Primary icon gate:** open Creative and check whether ordinary block/item imagery is visible.
+3. **Primary model gate:** switch to third-person view and check the player model; if convenient, also look at one nearby entity.
+4. If either primary gate still fails, stop there and preserve `latest.log` plus one screenshot. Note whether Creative imagery, player/entities, or both failed. The log should contain bounded `NEW_ENTITY draw trace` lines from #746/#747; do not repeat #745 or #746 separately.
+5. Only if both primary gates pass, continue with the remaining Phase 4 visual checks: a moving Create contraption plus Create GUI/overlay, representative particles/liquids/translucency, and a real Immersive Portals portal view. Advancement Plaques/Iceberg may be observed naturally, but do not seek it out for this focused test.
+6. Exit normally. Reload and world re-entry remain deferred.
 
 ## Stop condition / evidence
 
 On the first new meaningful failure retain:
 
 - `logs/latest.log`;
-- `logs/debug.log` when `latest.log` does not explain the first failure;
-- any crash report;
 - one screenshot for a visible rendering defect;
-- a short note identifying which numbered step failed.
+- `logs/debug.log` only when `latest.log` does not explain the first failure;
+- any crash report if a crash occurs;
+- a short note saying whether Creative imagery, player/entities, or both were affected.
 
-If steps 1–7 complete cleanly, the current Phase 4 visual questions gain representative RX evidence. Reload, world re-entry, forced dirty hybrid replacement, renderer-replacement minimization, and performance measurements remain separate open gates.
+If the Creative imagery and player/entity gates pass on #747, that materially advances Phase 4. The broader Create/Flywheel/particles/translucency/portal checks can then continue; reload and world re-entry remain separate deferred gates.
