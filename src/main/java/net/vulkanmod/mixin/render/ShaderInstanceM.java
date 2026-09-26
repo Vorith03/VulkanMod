@@ -1,11 +1,13 @@
 package net.vulkanmod.mixin.render;
 
 import com.google.gson.JsonObject;
+import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
@@ -55,7 +57,16 @@ public class ShaderInstanceM implements ShaderMixed {
 
     @Shadow @Final @Nullable public Uniform MODEL_VIEW_MATRIX;
     @Shadow @Final @Nullable public Uniform PROJECTION_MATRIX;
+    @Shadow @Final @Nullable public Uniform INVERSE_VIEW_ROTATION_MATRIX;
     @Shadow @Final @Nullable public Uniform COLOR_MODULATOR;
+    @Shadow @Final @Nullable public Uniform GLINT_ALPHA;
+    @Shadow @Final @Nullable public Uniform FOG_START;
+    @Shadow @Final @Nullable public Uniform FOG_END;
+    @Shadow @Final @Nullable public Uniform FOG_COLOR;
+    @Shadow @Final @Nullable public Uniform FOG_SHAPE;
+    @Shadow @Final @Nullable public Uniform TEXTURE_MATRIX;
+    @Shadow @Final @Nullable public Uniform GAME_TIME;
+    @Shadow @Final @Nullable public Uniform SCREEN_SIZE;
     @Shadow @Final @Nullable public Uniform LINE_WIDTH;
     private GraphicsPipeline pipeline;
     private final EffectUniformBindings vulkanmod$uniformBindings = new EffectUniformBindings();
@@ -138,18 +149,50 @@ public class ShaderInstanceM implements ShaderMixed {
                 this.PROJECTION_MATRIX.set(RenderSystem.getProjectionMatrix());
             }
 
+            if (this.INVERSE_VIEW_ROTATION_MATRIX != null) {
+                this.INVERSE_VIEW_ROTATION_MATRIX.set(RenderSystem.getInverseViewRotationMatrix());
+            }
+
             if (this.COLOR_MODULATOR != null) {
                 this.COLOR_MODULATOR.set(RenderSystem.getShaderColor());
             }
 
-//            if (shaderInstance.SCREEN_SIZE != null) {
-//                Window window = Minecraft.getInstance().getWindow();
-//                shaderInstance.SCREEN_SIZE.set((float)window.getWidth(), (float)window.getHeight());
-//            }
+            if (this.GLINT_ALPHA != null) {
+                this.GLINT_ALPHA.set(RenderSystem.getShaderGlintAlpha());
+            }
 
-//            if (this.LINE_WIDTH != null) {
-//                this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
-//            }
+            if (this.FOG_START != null) {
+                this.FOG_START.set(RenderSystem.getShaderFogStart());
+            }
+
+            if (this.FOG_END != null) {
+                this.FOG_END.set(RenderSystem.getShaderFogEnd());
+            }
+
+            if (this.FOG_COLOR != null) {
+                this.FOG_COLOR.set(RenderSystem.getShaderFogColor());
+            }
+
+            if (this.FOG_SHAPE != null) {
+                this.FOG_SHAPE.set(RenderSystem.getShaderFogShape().getIndex());
+            }
+
+            if (this.TEXTURE_MATRIX != null) {
+                this.TEXTURE_MATRIX.set(RenderSystem.getTextureMatrix());
+            }
+
+            if (this.GAME_TIME != null) {
+                this.GAME_TIME.set(RenderSystem.getShaderGameTime());
+            }
+
+            if (this.SCREEN_SIZE != null) {
+                Window window = Minecraft.getInstance().getWindow();
+                this.SCREEN_SIZE.set((float)window.getWidth(), (float)window.getHeight());
+            }
+
+            if (this.LINE_WIDTH != null) {
+                this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
+            }
 
             if(this.vulkanmod$refreshImmersivePortalsTerrainClipPlane) {
                 ImmersivePortalsShaderCompat.refreshTerrainClipPlane();
