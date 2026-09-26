@@ -28,6 +28,10 @@ Verified on 2026-09-20: [CI #723](https://github.com/Vorith03/VulkanMod/actions/
 - The rest of the prior compatibility matrix remains green in #723: FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel, and exact Create 0.5.1.j stencil compatibility.
 - No process/system memory safety limit was weakened.
 
+### Historical build #723 attempt — 2026-09-21
+
+The first user-side #723 Prism log did not test the real-pack retention gate: its initial `Reloading ResourceManager:` line listed neither PureBDcraft ZIP, and it never reached `Vulkan renderer active:` or completed the initial resource reload. The unchanged host-memory guard separately reported `MemAvailable` 3093/3189 MiB against a 3198 MiB reserve. A `ConcurrentModificationException` in `TextureManager.close()` occurred during shutdown after the console was copied; that stack did not identify the mutator or explain the missing selected packs. These observations must not be classified as a shader rollback. Later private two-pack CI and the user's #728 RX run supersede this attempt as pack-retention evidence; see `AGENT_STATUS.md`.
+
 ### Build #308 full-pack reload evidence — 2026-09-12
 
 Build #308 (`29df210a6d73141e069e7aa90cdddc4a4506b146`) was tested in the target instance with PickupNotifier disabled. The machine reported approximately 19.4 GiB available before Minecraft launch, so the result is no longer explained solely by unusually poor launch headroom.
