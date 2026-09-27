@@ -55,31 +55,15 @@ public abstract class VTextureSelector {
     private static int unbatchedTextureSubmissions;
     private static long observedMainFrameSubmissions;
 
-    private static void setCoreSampler(int slot, VulkanImage texture) {
-        switch(slot) {
-            case 0 -> {
-                if(boundTexture == texture) return;
-                boundTexture = texture;
-            }
-            case 1 -> {
-                if(overlayTexture == texture) return;
-                overlayTexture = texture;
-            }
-            case 2 -> {
-                if(lightTexture == texture) return;
-                lightTexture = texture;
-            }
-            default -> throw new IllegalArgumentException("Unsupported core sampler slot " + slot);
-        }
-        coreSamplerMutationVersion++;
-    }
-
     public static long getCoreSamplerMutationVersion() {
         return coreSamplerMutationVersion;
     }
 
     public static void bindTexture(VulkanImage texture) {
-        setCoreSampler(0, texture);
+        if(boundTexture != texture) {
+            boundTexture = texture;
+            coreSamplerMutationVersion++;
+        }
     }
 
     /**
@@ -89,7 +73,24 @@ public abstract class VTextureSelector {
      */
     public static void bindTexture(int i, VulkanImage texture) {
         switch(i) {
-            case 0, 1, 2 -> setCoreSampler(i, texture);
+            case 0 -> {
+                if(boundTexture != texture) {
+                    boundTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
+            case 1 -> {
+                if(overlayTexture != texture) {
+                    overlayTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
+            case 2 -> {
+                if(lightTexture != texture) {
+                    lightTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
             default -> {
                 // Higher fixed shader slots use their dedicated selectors below.
             }
@@ -103,9 +104,24 @@ public abstract class VTextureSelector {
     public static void bindLegacyTextureUnit(int unit, VulkanImage texture) {
         validateLegacyTextureUnit(unit);
         switch(unit) {
-            case 0 -> setCoreSampler(0, texture);
-            case 1 -> setCoreSampler(2, texture);
-            case 2 -> setCoreSampler(1, texture);
+            case 0 -> {
+                if(boundTexture != texture) {
+                    boundTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
+            case 1 -> {
+                if(lightTexture != texture) {
+                    lightTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
+            case 2 -> {
+                if(overlayTexture != texture) {
+                    overlayTexture = texture;
+                    coreSamplerMutationVersion++;
+                }
+            }
             default -> additionalLegacyTextures[unit] = texture;
         }
     }
@@ -304,11 +320,17 @@ public abstract class VTextureSelector {
     }
 
     public static void setLightTexture(VulkanImage texture) {
-        setCoreSampler(2, texture);
+        if(lightTexture != texture) {
+            lightTexture = texture;
+            coreSamplerMutationVersion++;
+        }
     }
 
     public static void setOverlayTexture(VulkanImage texture) {
-        setCoreSampler(1, texture);
+        if(overlayTexture != texture) {
+            overlayTexture = texture;
+            coreSamplerMutationVersion++;
+        }
     }
 
     public static void setActiveTexture(int texture) {
