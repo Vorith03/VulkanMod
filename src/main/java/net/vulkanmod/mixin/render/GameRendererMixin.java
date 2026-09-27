@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.fml.ModLoader;
+import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.render.ForgeShaderContractSmokeTest;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.jetbrains.annotations.Nullable;
@@ -297,6 +298,10 @@ public abstract class GameRendererMixin {
             }));
 
             ModLoader.get().postEvent(new RegisterShadersEvent(provider, list1));
+            ImmersivePortalsShaderCompat.appendPortalShadersIfReady(
+                    provider,
+                    shader -> list1.add(Pair.of(shader, ignored -> {}))
+            );
         } catch (IOException ioexception) {
             list1.forEach((pair) -> {
                 pair.getFirst().close();
