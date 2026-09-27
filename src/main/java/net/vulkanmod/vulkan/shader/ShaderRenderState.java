@@ -4,7 +4,6 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
-import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 
 import java.util.Collections;
@@ -41,10 +40,11 @@ public final class ShaderRenderState {
     }
 
     public static void prepareTextures() {
-        VulkanImage[] textures = activePipeline.images.stream()
-                .map(image -> VTextureSelector.getTexture(image.name))
-                .toArray(VulkanImage[]::new);
-        RenderTargetManager.prepareSampledImages(textures);
+        // Let RenderTargetManager scan the pipeline first and allocate a sampled
+        // image array only when an attachment transition is actually required.
+        // The previous stream/toArray path allocated on every converted draw even
+        // when every image was already shader-readable.
+        RenderTargetManager.preparePipelineTextures(activePipeline);
     }
 
     public static VulkanImage resolveTexture(String samplerName) {
