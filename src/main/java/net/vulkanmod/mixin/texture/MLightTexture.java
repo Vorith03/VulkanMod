@@ -16,15 +16,16 @@ public class MLightTexture {
     @Shadow @Final private DynamicTexture lightTexture;
 
     /**
+     * Preserve vanilla's authoritative shader sampler slot while also mirroring
+     * the resolved Vulkan image. ShaderTextureState reconciles fixed samplers
+     * from RenderSystem immediately before ordinary draws, so leaving slot 2 at
+     * zero would erase the valid Vulkan lightmap binding we install here.
+     *
      * @author
      */
     @Overwrite
     public void turnOnLightLayer() {
-//        RenderSystem.setShaderTexture(2, this.textureIdentifier);
-//        this.client.getTextureManager().bindTexture(this.textureIdentifier);
-//        RenderSystem.texParameter(3553, 10241, 9729);
-//        RenderSystem.texParameter(3553, 10240, 9729);
+        RenderSystem.setShaderTexture(2, this.lightTexture.getId());
         VTextureSelector.setLightTexture(((VAbstractTextureI)this.lightTexture).getVulkanImage());
-//        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
     }
 }
