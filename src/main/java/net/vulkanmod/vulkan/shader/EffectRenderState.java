@@ -2,7 +2,6 @@ package net.vulkanmod.vulkan.shader;
 
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
-import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 
 import java.util.Collections;
@@ -47,10 +46,9 @@ public final class EffectRenderState {
 
     /** Prepare every declared descriptor, including aux depth, before binding the draw. */
     public static void prepareTextures() {
-        VulkanImage[] textures = activePipeline.images.stream()
-                .map(image -> VTextureSelector.getTexture(image.name))
-                .toArray(VulkanImage[]::new);
-        RenderTargetManager.prepareSampledImages(textures);
+        // RenderTargetManager can reject the common already-readable case without
+        // materializing a temporary VulkanImage[] for every post-processing draw.
+        RenderTargetManager.preparePipelineTextures(activePipeline);
     }
 
     public static VulkanImage resolveTexture(String samplerName) {
