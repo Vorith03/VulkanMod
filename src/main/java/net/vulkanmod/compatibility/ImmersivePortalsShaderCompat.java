@@ -131,6 +131,23 @@ public final class ImmersivePortalsShaderCompat {
     }
 
     /**
+     * Append Immersive Portals' custom ShaderInstances to every Vulkan-managed
+     * GameRenderer shader reload once IP has registered its load signal. Vanilla
+     * closes all shaders from the previous map during reload. If these custom
+     * shaders are only emitted during startup, IP's static portalAreaShader and
+     * framebuffer shader fields keep pointing at instances whose Vulkan pipelines
+     * have subsequently been closed and nulled.
+     */
+    public static void appendPortalShadersIfReady(
+            ResourceProvider resourceProvider,
+            Consumer<ShaderInstance> resultConsumer) {
+        if(!renderHelperReady) {
+            return;
+        }
+        emitPortalShaders(resourceProvider, resultConsumer);
+    }
+
+    /**
      * VulkanMod's custom terrain pipelines bypass Minecraft ShaderInstance, so
      * Immersive Portals cannot update them through IEShader. Mirror IP's active
      * camera-relative clip equation into a Vulkan UBO field. A positive constant
@@ -249,9 +266,10 @@ public final class ImmersivePortalsShaderCompat {
     }
 
     /**
-     * Rebuild VulkanMod's core shaders, then invoke Immersive Portals' shader
-     * listener signal explicitly. VulkanMod cancels GameRenderer.reloadShaders
-     * at HEAD, so IP's normal RETURN injection cannot reliably run by itself.
+     * Rebuild VulkanMod's full shader set after Immersive Portals registers its
+     * load signal. GameRendererMixin now appends IP's custom shaders as part of
+     * every reload, so invoking the reload bridge is sufficient and avoids
+     * creating a second untracked set of custom ShaderInstances.
      */
     public static void rebuildShaders(Minecraft minecraft) {
         if(minecraft == null || minecraft.gameRenderer == null) {
@@ -263,13 +281,6 @@ public final class ImmersivePortalsShaderCompat {
                 (ImmersivePortalsGameRendererInvoker)(Object)minecraft.gameRenderer;
 
         bridge.vulkanmod$reloadShaders(resourceProvider);
-
-        if(!renderHelperReady) {
-            return;
-        }
-
-        emitPortalShaders(resourceProvider,
-                shader -> bridge.vulkanmod$getShaders().put(shader.getName(), shader));
     }
 
     private static void emitPortalShaders(
