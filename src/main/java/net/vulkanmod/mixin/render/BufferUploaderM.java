@@ -84,13 +84,15 @@ public class BufferUploaderM {
             throw new IllegalStateException("ShaderInstance has no Vulkan pipeline: " + shader.getName());
         }
 
-        // Preserve vanilla BufferUploader's ShaderInstance lifecycle. Packaged
-        // Vulkan core shaders read VRenderSystem state directly, but converted
-        // Forge/Immersive-Portals shaders bind their live matrices, colors,
-        // clipping plane and named samplers from ShaderInstance.apply(). Skipping
-        // apply() leaves those UBO fields at stale/default values even though the
-        // Vulkan pipeline itself is valid.
-        shader.apply();
+        // Converted Forge/Immersive-Portals shaders are constructed without a
+        // packaged Vulkan shader path. They need ShaderInstance.apply()/clear()
+        // to publish live matrices, colors, clipping state and named samplers.
+        // Packaged Vulkan core shaders have a non-null path and read VRenderSystem
+        // state directly; BufferUploader already obtained the active ShaderInstance,
+        // so re-applying and clearing that shader on every core draw is redundant.
+        boolean convertedLegacyShader = pipeline.name == null;
+        if(convertedLegacyShader)
+            shader.apply();
         try {
             // Vanilla ShaderInstance.apply() rebinds the sampler ids recorded by
             // RenderType setup after helpers such as LightTexture.bindForSetup()
@@ -115,7 +117,8 @@ public class BufferUploaderM {
             renderer.uploadAndBindUBOs(pipeline);
             Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
         } finally {
-            shader.clear();
+            if(convertedLegacyShader)
+                shader.clear();
         }
     }
 
