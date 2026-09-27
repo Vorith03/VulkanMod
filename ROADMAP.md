@@ -171,7 +171,7 @@ Mandatory gates:
 
 **Progress: 5/8**
 
-**Current focus:** use #745 for the next narrow RX visual gate: Creative block/item imagery and third-person/player or another representative entity. #744 repairs auxiliary `MainTarget` ownership and #745 restores fixed core sampler reconciliation, but both remain unconfirmed on the RX machine. If that gate passes, continue with Create/Flywheel contraptions, Create UI, representative effects, and a real portal. The user explicitly deferred reload and world re-entry for this pass; its checkbox stays open. Keep production memory safety intact. The earlier terrain priority override is historical context rather than the current sequencing instruction.
+**Current focus:** use #772 for the next narrow RX visual gate. Check the main-menu player lighting first, then enter the existing world and confirm the prior Immersive Portals `earlyRemoteUpload()` crash is gone, then inspect Creative block/item imagery and the third-person player/one representative entity. #772 includes the complete legacy shader state/light-direction repair, fixed Sampler1/2 lightmap/overlay bookkeeping, and the CI-validated Immersive Portals custom-shader reload ownership repair. If that gate passes, continue with Create/Flywheel contraptions, Create UI, representative effects, and a real portal. The user explicitly deferred reload and world re-entry for this pass; its checkbox stays open. Keep production memory safety intact and use retained diagnostics rather than speculative patches if #772 still fails. The earlier terrain priority override is historical context rather than the current sequencing instruction.
 
 ### Shaderpack scope
 
