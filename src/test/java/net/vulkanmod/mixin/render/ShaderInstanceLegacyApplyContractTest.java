@@ -46,6 +46,8 @@ public final class ShaderInstanceLegacyApplyContractTest {
         missing.removeAll(visitor.renderSystemGetters);
         require(missing.isEmpty(),
                 "ShaderInstanceM.apply() is missing legacy render-state getters: " + missing);
+        require(visitor.setupShaderLights,
+                "ShaderInstanceM.apply() must refresh Light0/Light1 directions through RenderSystem.setupShaderLights");
         require(visitor.minecraftGetInstance,
                 "ShaderInstanceM.apply() must obtain Minecraft for ScreenSize");
         require(visitor.minecraftGetWindow,
@@ -77,6 +79,7 @@ public final class ShaderInstanceLegacyApplyContractTest {
     private static final class ApplyVisitor extends ClassVisitor {
         boolean foundApply;
         final Set<String> renderSystemGetters = new HashSet<>();
+        boolean setupShaderLights;
         boolean minecraftGetInstance;
         boolean minecraftGetWindow;
         boolean windowWidth;
@@ -101,6 +104,10 @@ public final class ShaderInstanceLegacyApplyContractTest {
                     if(owner.equals("com/mojang/blaze3d/systems/RenderSystem")
                             && REQUIRED_RENDER_SYSTEM_GETTERS.contains(methodName)) {
                         renderSystemGetters.add(methodName);
+                    } else if(owner.equals("com/mojang/blaze3d/systems/RenderSystem")
+                            && methodName.equals("setupShaderLights")
+                            && methodDescriptor.equals("(Lnet/minecraft/client/renderer/ShaderInstance;)V")) {
+                        setupShaderLights = true;
                     } else if(owner.equals("net/minecraft/client/Minecraft")
                             && methodName.equals("getInstance")) {
                         minecraftGetInstance = true;
