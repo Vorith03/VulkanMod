@@ -11,8 +11,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable code/test HEAD is `d8a3f390314f9e90b98e56c25e8fd3e3b77d2f4e` (`perf: avoid effect sampler array allocation`). The branch may have documentation-only descendants; executable state is anchored to this commit.
-- Public CI **#784** / run `36342469362` is fully green at `d8a3f390`. Build/distributable, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Current executable code/test HEAD is `b749a297c820e2734eda1229635e338ef858efbb` (`compat: skip Immersive Portals vanilla terrain camera update`). The branch may have documentation-only descendants; executable state is anchored to this commit.
+- Public CI **#785** / run `36344612320` is fully green at `b749a297`. Build/distributable, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
 - Phase 4 remains **5/8** and is the active priority. Open gates are current Create/Flywheel visuals, representative particles/translucency/entities/GUI, and reload/re-entry. Reload and world re-entry remain explicitly deferred for this pass.
 - Phase 7 GPU-terrain/hybrid work remains paused at **6/11** while representative full-pack visual correctness is repaired.
 - Phase 5 procedure-definition work remains **4/7**. `docs/TERRAIN_PERFORMANCE_BASELINE.md` fixes seed `2026092601`, a 2560x1440 profile, stationary camera, and a 1024-block eastbound spectator route. Numeric OpenGL/Vulkan/frame-time baselines remain open and no performance win is claimed.
@@ -23,7 +23,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 A hostile/static review compared public CI #284 (`ef0c0fc...`) with current code and removed objectively unnecessary default-path work without rolling back compatibility repairs. Durable detail: `docs/PERFORMANCE_REGRESSION_CLEANUP_2026-09-27.md`.
 
-Validated in public CI #784:
+Validated in public CI #784 and retained through #785:
 
 - disabled GPU-terrain draw handoff now takes the direct CPU `RegionDrawBatch` path instead of querying synchronized GPU state and constructing handoff-plan records;
 - terrain per-copy `System.nanoTime()` profiling is opt-in via `-Dvulkanmod.profileTerrainUploadCopies=true`, and disabled GPU-mesher completion polling is skipped;
@@ -37,7 +37,7 @@ Do **not** turn this static cleanup into a numerical performance claim. Comparab
 
 ## Current RX 6900 XT visual blocker — 2026-09-27
 
-The user has prioritized missing Creative block/item imagery and player/entity rendering. The latest user-machine evidence is still build **#752** (`b081ad64...`) with both real PureBDcraft packs and all four GPU-terrain flags; later fixes are CI-covered but not yet RX-confirmed.
+The user has prioritized missing Creative block/item imagery and player/entity rendering. The latest user-machine evidence is build **#784** (`d8a3f390...`) with both real PureBDcraft packs and all four GPU-terrain flags.
 
 Hardware progression and current diagnosis:
 
@@ -52,18 +52,21 @@ Hardware progression and current diagnosis:
 - `0fc73d436219b08525b8bdf88feae19be5dee1c1` restored the complete legacy `ShaderInstance.apply()` state family retained by upstream 1.20.x VulkanMod, including inverse view rotation, glint alpha, fog values, texture matrix, game time, screen size, and line width.
 - `b586d06689952f43b4f47f4ff0904679ca6c808b` restored `RenderSystem.setupShaderLights(shader)`. Minecraft's item/entity shaders initialize `LIGHT0_DIRECTION`/`LIGHT1_DIRECTION` to zero and consume them for diffuse lighting, providing a concrete mechanism for a present-but-black model. The compiled lifecycle/state contract guards this path.
 - `b9f00692ce4c46da83ce8f93b11c2ffaf0a660f2` and `8a4f915a61fc61a69acef32993ba96840e1877f1` repaired fixed sampler bookkeeping for the lightmap and overlay layers: their Vulkan images were already installed, but the overwritten paths had left Minecraft's authoritative RenderSystem Sampler2/Sampler1 slots unset. Because `ShaderTextureState.syncFixedSamplers()` reconciles from those slots immediately before ordinary draws, it could overwrite valid Vulkan lightmap/overlay descriptors with fallback images. `FixedSamplerBookkeepingContractTest` guards both calls.
+- #784 is the first RX confirmation after those retained state/light fixes: the user reports that the main-menu player is visible. This confirms the model is no longer wholly absent, but the user did **not** explicitly state whether lighting/colors are now normal, so the previous pitch-black symptom is not yet considered closed.
+- #784 also reached materially farther into world startup. Vulkan activated on the RX 6900 XT/RADV stack, the integrated server had an overworld player, and the old `earlyRemoteUpload()` NPE did not recur in the supplied log. Instead, Immersive Portals reached a later nested Nether render and crashed in its merged `onSetupTerrainBegin` callback while calling `ChunkRenderDispatcher.setCamera(Vec3)` on VulkanMod's intentionally absent vanilla dispatcher.
+- `b749a297` repairs that newly exposed boundary by suppressing only the exact vanilla dispatcher camera update after Immersive Portals has merged its LevelRenderer handler. The existing Vulkan terrain-setup override remains in force; other IP render hooks are untouched. `ImmersivePortalsRemoteUploadContractTest` now guards both the old early-upload cancellation and the new dispatcher-camera redirect. Public CI #785, including the actual Immersive Portals 3.0.7 smoke, is green.
 - An exploratory Immersive Portals change that skipped the query callback geometry was reverted. Current `ImmersivePortalsQueryManagerMixin` still bypasses the unsupported OpenGL query result itself but **runs the supplied rendering callback** before returning the conservative visible/sample result. Do not resurrect the skipped-callback variant without new evidence.
-- No Vulkan validation `VUID`/`VK_ERROR` signal was found in the supplied #752 debug log.
+- No `VUID-` or `VK_ERROR` signal was found in the supplied #784 debug log.
 
-Do **not** claim the Creative/entity visual blocker closed until the RX machine confirms the current build. The strongest current mechanisms are the restored shader light/state path plus preserved lightmap/overlay sampler bookkeeping; #745 already showed that plain fixed-sampler reconciliation alone was insufficient.
+Do **not** claim the Creative/entity visual blocker closed until the RX machine reaches the world on the current build and confirms Creative/player/entity rendering. The strongest current mechanisms remain the restored shader light/state path plus preserved lightmap/overlay sampler bookkeeping; #745 already showed that plain fixed-sampler reconciliation alone was insufficient.
 
 ## Immersive Portals blockers — current state
 
-### Remote upload crash
+### Vanilla terrain dispatcher paths
 
-The #752 crash was `MyRenderHelper.earlyRemoteUpload()` dereferencing a null vanilla `ChunkRenderDispatcher` from a portal-world `LevelRenderer`. VulkanMod intentionally owns terrain upload/publication and does not provide that vanilla dispatcher.
+The #752 crash was `MyRenderHelper.earlyRemoteUpload()` dereferencing a null vanilla `ChunkRenderDispatcher` from a portal-world `LevelRenderer`. `c299a49d` cancels that obsolete vanilla upload prepass at method HEAD. The #784 RX run progressed past that failure, so this specific early-upload crash path is hardware-confirmed cleared.
 
-`c299a49d` cancels Immersive Portals' vanilla `earlyRemoteUpload()` prepass at method HEAD under the existing IP compatibility mixin. `ImmersivePortalsRemoteUploadContractTest` guards the compiled injection/cancellation. The actual Immersive Portals 3.0.7 smoke remains green. Treat this crash path as repaired pending RX confirmation.
+The #784 run then exposed a second vanilla-dispatcher dependency: IP's nested remote-world `onSetupTerrainBegin` handler calls `ChunkRenderDispatcher.setCamera(Vec3)` before asking whether it may override terrain setup. VulkanMod already forces IP's terrain-setup override helper false and owns terrain camera/setup through `WorldRenderer`, so the vanilla camera update is both unnecessary and unsafe. `b749a297` redirects only that exact merged call to a no-op. Public CI #785 and the actual IP 3.0.7 smoke are green; RX confirmation is the next gate.
 
 ### Custom shader reload ownership
 
@@ -72,24 +75,24 @@ A later static review found a separate concrete lifecycle defect: VulkanMod repl
 - `078d4c4c348bbee7d3e7db73092f82c51f4cd2d2` adds `appendPortalShadersIfReady(...)` and changes the IP startup rebuild to use the single Vulkan-managed reload path instead of emitting a second untracked shader set.
 - `19493e9b039af4b3c09c74d19b6888463341d0b7` appends IP's registered custom shaders to **every** Vulkan `GameRenderer.reloadShaders()` replacement set once IP is ready.
 - `bcdfd5e8b0e3fc2dc19e314237817c3e7b333db7` adds a compiled-bytecode ownership contract; `af70db75` wires it into the existing compatibility contract run.
-- Public CI #784 is fully green, including the actual Immersive Portals 3.0.7 smoke and the newly wired converted-shader lifecycle/fixed-sampler contracts.
+- Public CI #785 is fully green, including the actual Immersive Portals 3.0.7 smoke and the converted-shader lifecycle/fixed-sampler contracts.
 
 Treat this lifecycle repair as CI-validated but not yet RX-confirmed. It is the current implementation boundary; do not add another speculative IP shader path before hardware evidence.
 
 ## Next RX gate
 
-Use build **#784** / `d8a3f390314f9e90b98e56c25e8fd3e3b77d2f4e` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override. Do not enable `vulkanmod.traceNewEntityDraws` or `vulkanmod.profileTerrainUploadCopies` for the normal first pass.
+Use build **#785** / `b749a297c820e2734eda1229635e338ef858efbb` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override. Do not enable `vulkanmod.traceNewEntityDraws` or `vulkanmod.profileTerrainUploadCopies` for the normal first pass.
 
 Keep the first pass narrow:
 
-1. On the main menu, inspect the player model first. It should no longer be pitch black if the restored light/state and fixed Sampler1/2 contracts are effective.
-2. Enter the existing world and confirm the prior Immersive Portals `earlyRemoteUpload()` crash no longer occurs.
-3. Open Creative and check ordinary block/item imagery.
+1. On the main menu, note whether the now-visible player model is normally lit/colored or still black/dark.
+2. Enter the existing world and confirm it gets past the new Immersive Portals nested-Nether terrain-setup crash.
+3. If the world loads, open Creative and check ordinary block/item imagery.
 4. Switch to third person and check the player model; one nearby entity is useful if convenient.
-5. If any of those still fail, retain one screenshot plus `latest.log` and stop. Only if the failure needs the old draw probe, rerun narrowly with `-Dvulkanmod.traceNewEntityDraws=true`; otherwise keep diagnostics disabled.
+5. If any of those fail, retain one screenshot plus `latest.log`/crash report and stop. Only if the failure needs the old draw probe, rerun narrowly with `-Dvulkanmod.traceNewEntityDraws=true`; otherwise keep diagnostics disabled.
 6. Only if those visuals pass, continue with a moving Create contraption, Create GUI/overlay, representative particles/liquids/translucency/entities, and an actual portal view. Reload and world re-entry remain deferred.
 
-Do not request separate #746/#747/#752/#753/#758/#768/#772 retests; #784 contains their relevant retained fixes plus the performance cleanup, sampler bookkeeping, and Immersive Portals shader-reload repair.
+Do not request separate #746/#747/#752/#753/#758/#768/#772/#784 retests; #785 contains their relevant retained fixes plus the performance cleanup, sampler bookkeeping, Immersive Portals shader-reload repair, and the newly exposed nested terrain-camera repair.
 
 ## Real resource-pack gate — automated and RX-confirmed
 
@@ -111,11 +114,11 @@ The prior staging-buffer replacement/atlas upload issues are closed by public CI
 
 ## Current Create Chronicles compatibility boundary
 
-Closed by direct fixes/current evidence: shader parser issues, Create stencil startup, Twilight Forest/Alex's Caves/Moonlight/Quark shader aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, Distant Horizons AFTER_LEVEL, auxiliary MainTarget ownership, converted-shader lifecycle/state/light uploads, fixed lightmap/overlay sampler bookkeeping, the IP vanilla remote-upload crash path, and CI-level IP custom-shader reload ownership.
+Closed by direct fixes/current evidence: shader parser issues, Create stencil startup, Twilight Forest/Alex's Caves/Moonlight/Quark shader aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, Distant Horizons AFTER_LEVEL, auxiliary MainTarget ownership, converted-shader lifecycle/state/light uploads, fixed lightmap/overlay sampler bookkeeping, the IP vanilla early-upload crash path, and CI-level IP custom-shader reload ownership.
 
 Still requiring current-user-machine evidence:
 
-- **first:** #784 main-menu player lighting, Creative block/item imagery, player/entity rendering, absence of the prior IP early-upload crash, and a usable portal render after the custom-shader reload repair;
+- **first:** #785 world entry past the newly exposed IP nested terrain-camera path, main-menu player lighting quality, Creative block/item imagery, player/entity rendering, and a usable portal render after the custom-shader reload repair;
 - Iceberg/Advancement Plaques auxiliary item rendering after #744 when naturally encountered;
 - visible Create/Flywheel contraption and Create UI/overlay correctness;
 - representative particles/translucency/entities;
