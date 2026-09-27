@@ -138,7 +138,8 @@ public class ShaderInstanceM implements ShaderMixed {
      */
     @Overwrite
     public void apply() {
-        RenderSystem.setShader(() -> (ShaderInstance)(Object)this);
+        ShaderInstance shader = (ShaderInstance)(Object)this;
+        RenderSystem.setShader(() -> shader);
 
         if(this.isLegacy) {
             if (this.MODEL_VIEW_MATRIX != null) {
@@ -193,6 +194,12 @@ public class ShaderInstanceM implements ShaderMixed {
             if (this.LINE_WIDTH != null) {
                 this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
             }
+
+            // Entity/item core shaders consume Light0_Direction and
+            // Light1_Direction for diffuse lighting. Their JSON defaults are zero,
+            // so converted shaders must receive Minecraft's current global light
+            // directions just as the vanilla ShaderInstance path does.
+            RenderSystem.setupShaderLights(shader);
 
             if(this.vulkanmod$refreshImmersivePortalsTerrainClipPlane) {
                 ImmersivePortalsShaderCompat.refreshTerrainClipPlane();
