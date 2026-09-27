@@ -62,6 +62,22 @@ public final class LegacyTextureUnitContractTest {
         require("lightTexture".equals(selector.legacyUnit1Field)
                         && "overlayTexture".equals(selector.legacyUnit2Field),
                 "Legacy GL units must retain unit1=lightmap and unit2=overlay");
+        require(selector.hasCoreSamplerMutationVersion
+                        && selector.hasCoreSamplerMutationVersionGetter,
+                "Fixed sampler reconciliation cache must expose a selector mutation version");
+        require(selector.shaderBindingMarksMutation
+                        && selector.legacyBindingMarksMutation
+                        && selector.lightSetterMarksMutation
+                        && selector.overlaySetterMarksMutation,
+                "Every Sampler0/1/2 selector mutation path must invalidate fixed sampler reconciliation");
+
+        ShaderTextureStateVisitor shaderTextureState = inspect(
+                "net/vulkanmod/vulkan/texture/ShaderTextureState.class",
+                new ShaderTextureStateVisitor());
+        require(shaderTextureState.readsCoreSamplerMutationVersion,
+                "Fixed sampler reconciliation must consult selector mutation state before using its cache");
+        require(shaderTextureState.resolvesTextureImages,
+                "Fixed sampler reconciliation miss path must still resolve GL ids to Vulkan images");
 
         System.out.println("Legacy active texture-unit binding/upload contract passed");
     }
@@ -228,6 +244,12 @@ public final class LegacyTextureUnitContractTest {
         boolean uploadReadsActiveUnitBinding;
         boolean hasBindActiveTexture;
         boolean hasLegacyUnitLookup;
+        boolean hasCoreSamplerMutationVersion;
+        boolean hasCoreSamplerMutationVersionGetter;
+        boolean shaderBindingMarksMutation;
+        boolean legacyBindingMarksMutation;
+        boolean lightSetterMarksMutation;
+        boolean overlaySetterMarksMutation;
         String shaderSlot1Field;
         String shaderSlot2Field;
         String legacyUnit1Field;
@@ -238,12 +260,23 @@ public final class LegacyTextureUnitContractTest {
         }
 
         @Override
+        public FieldVisitor visitField(int access, String name, String descriptor,
+                                       String signature, Object value) {
+            if("coreSamplerMutationVersion".equals(name) && "J".equals(descriptor))
+                hasCoreSamplerMutationVersion = true;
+            return null;
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
             if("bindActiveTexture".equals(name))
                 hasBindActiveTexture = true;
             if("getLegacyTextureUnit".equals(name))
                 hasLegacyUnitLookup = true;
+            if("getCoreSamplerMutationVersion".equals(name)
+                    && "()J".equals(descriptor))
+                hasCoreSamplerMutationVersionGetter = true;
 
             boolean shaderBinding = "bindTexture".equals(name)
                     && "(ILnet/vulkanmod/vulkan/texture/VulkanImage;)V".equals(descriptor);
@@ -251,6 +284,11 @@ public final class LegacyTextureUnitContractTest {
                     && "(ILnet/vulkanmod/vulkan/texture/VulkanImage;)V".equals(descriptor);
             if(shaderBinding || legacyBinding)
                 return switchBindingVisitor(shaderBinding);
+
+            if("setLightTexture".equals(name))
+                return mutationCallVisitor(() -> lightSetterMarksMutation = true);
+            if("setOverlayTexture".equals(name))
+                return mutationCallVisitor(() -> overlaySetterMarksMutation = true);
 
             if(!"uploadSubTexture".equals(name))
                 return null;
@@ -262,6 +300,18 @@ public final class LegacyTextureUnitContractTest {
                     if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
                             && methodName.equals("getLegacyTextureUnit"))
                         uploadReadsActiveUnitBinding = true;
+                }
+            };
+        }
+
+        private MethodVisitor mutationCallVisitor(Runnable found) {
+            return new MethodVisitor(Opcodes.ASM9) {
+                @Override
+                public void visitMethodInsn(int opcode, String owner, String methodName,
+                                            String methodDescriptor, boolean isInterface) {
+                    if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                            && methodName.equals("markCoreSamplerMutation"))
+                        found.run();
                 }
             };
         }
@@ -307,8 +357,48 @@ public final class LegacyTextureUnitContractTest {
                             legacyUnit2Field = fieldName;
                     }
                 }
+
+                @Override
+                public void visitMethodInsn(int opcode, String owner, String methodName,
+                                            String methodDescriptor, boolean isInterface) {
+                    if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                            && methodName.equals("markCoreSamplerMutation")) {
+                        if(shaderBinding)
+                            shaderBindingMarksMutation = true;
+                        else
+                            legacyBindingMarksMutation = true;
+                    }
+                }
             };
         }
     }
 
+    private static final class ShaderTextureStateVisitor extends ClassVisitor {
+        boolean readsCoreSamplerMutationVersion;
+        boolean resolvesTextureImages;
+
+        ShaderTextureStateVisitor() {
+            super(Opcodes.ASM9);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                         String signature, String[] exceptions) {
+            if(!"syncFixedSamplers".equals(name) && !"reconcile".equals(name))
+                return null;
+
+            return new MethodVisitor(Opcodes.ASM9) {
+                @Override
+                public void visitMethodInsn(int opcode, String owner, String methodName,
+                                            String methodDescriptor, boolean isInterface) {
+                    if(owner.equals("net/vulkanmod/vulkan/texture/VTextureSelector")
+                            && methodName.equals("getCoreSamplerMutationVersion"))
+                        readsCoreSamplerMutationVersion = true;
+                    if(owner.equals("net/vulkanmod/gl/GlTexture")
+                            && methodName.equals("getVulkanImage"))
+                        resolvesTextureImages = true;
+                }
+            };
+        }
+    }
 }
