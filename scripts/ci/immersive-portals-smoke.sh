@@ -126,9 +126,10 @@ timeout "$smoke_timeout" xvfb-run -a ./gradlew --init-script "$init_script" runC
 
 # The old compatibility test proved that VulkanMod and IP mixins loaded, but it
 # did not prove that a redirect could see an invocation added by IP's injected
-# callback. Inspect Mixin's final exported LevelRenderer instead. The IP helper
-# must be merged, while no direct ChunkRenderDispatcher(Vec3)->void call may
-# survive in executable bytecode.
+# callback. Inspect Mixin's final exported LevelRenderer instead. IP 3.0.7 has
+# two direct ChunkRenderDispatcher(Vec3) calls after composition: only the one
+# in a method invoking ip_allowOverrideTerrainSetup() belongs to the portal
+# terrain callback VulkanMod must neutralize. The unrelated call must survive.
 exported_level_renderer="$(find run/.mixin.out .mixin.out \
   -type f -path '*/net/minecraft/client/renderer/LevelRenderer.class' \
   -print -quit 2>/dev/null || true)"
@@ -138,11 +139,57 @@ if [[ -z "$exported_level_renderer" ]]; then
 fi
 javap -c -p "$exported_level_renderer" > vulkan-smoke-immersive-portals-levelrenderer.javap
 grep -F "ip_allowOverrideTerrainSetup" vulkan-smoke-immersive-portals-levelrenderer.javap
-if grep -E 'ChunkRenderDispatcher\.[^:]+:\(Lnet/minecraft/world/phys/Vec3;\)V' \
-    vulkan-smoke-immersive-portals-levelrenderer.javap; then
-  echo "Final LevelRenderer still invokes the removed vanilla ChunkRenderDispatcher camera path" >&2
-  exit 1
-fi
+python3 - vulkan-smoke-immersive-portals-levelrenderer.javap <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+method_blocks = []
+current = None
+for line in lines:
+    stripped = line.strip()
+    is_method_header = (
+        line.startswith("  ")
+        and not line.startswith("    ")
+        and "(" in stripped
+        and stripped.endswith(";")
+    )
+    if is_method_header:
+        if current is not None:
+            method_blocks.append("\n".join(current))
+        current = [line]
+    elif current is not None:
+        current.append(line)
+if current is not None:
+    method_blocks.append("\n".join(current))
+
+helper_call = "ip_allowOverrideTerrainSetup:()Z"
+dispatcher = re.compile(
+    r"ChunkRenderDispatcher\.[^:\s]+:\(Lnet/minecraft/world/phys/Vec3;\)V"
+)
+helper_contexts = [block for block in method_blocks if helper_call in block]
+if not helper_contexts:
+    raise SystemExit(
+        "Final LevelRenderer has no method invoking Immersive Portals' terrain override helper"
+    )
+
+contextual_survivors = sum(len(dispatcher.findall(block)) for block in helper_contexts)
+if contextual_survivors != 0:
+    raise SystemExit(
+        "Final LevelRenderer still invokes ChunkRenderDispatcher(Vec3) inside an Immersive Portals terrain-override context"
+    )
+
+global_survivors = len(dispatcher.findall("\n".join(lines)))
+if global_survivors != 1:
+    raise SystemExit(
+        "Expected the one unrelated Immersive Portals 3.0.7 ChunkRenderDispatcher(Vec3) call to survive; "
+        f"found {global_survivors}"
+    )
+
+print("Immersive Portals dispatcher rewrite selected only the terrain-override context")
+PY
 
 grep -F "Immersive Portals 3.0.7 compatibility mixin smoke passed" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline" vulkan-smoke-immersive-portals.log

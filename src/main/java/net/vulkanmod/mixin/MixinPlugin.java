@@ -102,30 +102,59 @@ public class MixinPlugin implements IMixinConfigPlugin {
             return;
         }
 
-        MethodNode matchedMethod = null;
-        MethodInsnNode matchedInvocation = null;
-        int matches = 0;
+        MethodNode globalMatchedMethod = null;
+        MethodInsnNode globalMatchedInvocation = null;
+        MethodNode contextualMatchedMethod = null;
+        MethodInsnNode contextualMatchedInvocation = null;
+        int globalMatches = 0;
+        int contextualMatches = 0;
+
         for(MethodNode method : targetClass.methods) {
+            boolean invokesIpTerrainOverride = invokesIpTerrainOverride(method);
+
             for(AbstractInsnNode instruction = method.instructions.getFirst();
                 instruction != null;
                 instruction = instruction.getNext()) {
-                if(!(instruction instanceof MethodInsnNode invocation)
-                        || invocation.getOpcode() != Opcodes.INVOKEVIRTUAL
-                        || !CHUNK_RENDER_DISPATCHER_OWNER.equals(invocation.owner)
-                        || !CHUNK_RENDER_DISPATCHER_VEC3_VOID_DESC.equals(invocation.desc)) {
+                if(!isChunkDispatcherCameraInvocation(instruction)) {
                     continue;
                 }
 
-                matches++;
-                matchedMethod = method;
-                matchedInvocation = invocation;
+                globalMatches++;
+                globalMatchedMethod = method;
+                globalMatchedInvocation = (MethodInsnNode) instruction;
+
+                if(invokesIpTerrainOverride) {
+                    contextualMatches++;
+                    contextualMatchedMethod = method;
+                    contextualMatchedInvocation = (MethodInsnNode) instruction;
+                }
             }
         }
 
-        if(matches != 1 || matchedMethod == null || matchedInvocation == null) {
+        MethodNode matchedMethod;
+        MethodInsnNode matchedInvocation;
+        if(globalMatches == 1) {
+            // Keep the original exact-one contract for older IP shapes where no
+            // additional LevelRenderer dispatcher call makes the target ambiguous.
+            matchedMethod = globalMatchedMethod;
+            matchedInvocation = globalMatchedInvocation;
+        } else if(globalMatches > 1 && contextualMatches == 1) {
+            // IP 3.0.7 composes a second, unrelated dispatcher camera call into
+            // LevelRenderer. Its portal terrain callback is distinguishable by
+            // the call to IP's merged terrain-override helper; select only the
+            // dispatcher invocation in that structural context.
+            matchedMethod = contextualMatchedMethod;
+            matchedInvocation = contextualMatchedInvocation;
+        } else {
             throw new IllegalStateException(
-                    "Expected exactly one Immersive Portals ChunkRenderDispatcher(Vec3) call in LevelRenderer, found "
-                            + matches);
+                    "Expected exactly one selectable Immersive Portals ChunkRenderDispatcher(Vec3) call in LevelRenderer; found "
+                            + globalMatches + " total and " + contextualMatches
+                            + " in methods invoking " + IP_TERRAIN_OVERRIDE_METHOD + "()Z");
+        }
+
+        if(matchedMethod == null || matchedInvocation == null) {
+            throw new IllegalStateException(
+                    "Immersive Portals dispatcher camera selector produced no rewrite target");
         }
 
         // Immersive Portals updates the vanilla chunk dispatcher before asking
@@ -136,5 +165,25 @@ public class MixinPlugin implements IMixinConfigPlugin {
         // normal redirect cannot reliably select another mixin's injected handler.
         matchedMethod.instructions.set(matchedInvocation, new InsnNode(Opcodes.POP2));
         System.setProperty(IP_DISPATCHER_CAMERA_PATCH_PROPERTY, "true");
+    }
+
+    private static boolean invokesIpTerrainOverride(MethodNode method) {
+        for(AbstractInsnNode instruction = method.instructions.getFirst();
+            instruction != null;
+            instruction = instruction.getNext()) {
+            if(instruction instanceof MethodInsnNode invocation
+                    && IP_TERRAIN_OVERRIDE_METHOD.equals(invocation.name)
+                    && "()Z".equals(invocation.desc)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isChunkDispatcherCameraInvocation(AbstractInsnNode instruction) {
+        return instruction instanceof MethodInsnNode invocation
+                && invocation.getOpcode() == Opcodes.INVOKEVIRTUAL
+                && CHUNK_RENDER_DISPATCHER_OWNER.equals(invocation.owner)
+                && CHUNK_RENDER_DISPATCHER_VEC3_VOID_DESC.equals(invocation.desc);
     }
 }
