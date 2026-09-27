@@ -11,7 +11,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable HEAD is `c299a49d64d486ae6f0c8a42357b3318c35b6f8d` (`compat: skip Immersive Portals vanilla remote upload`). Public CI **#753** / run `36276670342` is fully green. Build/distributable, startup with and without early splash, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Current executable code/test HEAD is `896221b08c62f22be40a7a72c43af0549a28e58f` (`test: guard converted shader light directions`). Production behavior added since #753 is in `0fc73d436219b08525b8bdf88feae19be5dee1c1` (`render: restore complete legacy shader state`) and `b586d06689952f43b4f47f4ff0904679ca6c808b` (`render: restore legacy shader light directions`).
+- Public CI **#758** / run `36281304200` is fully green at `896221b0`. Build/distributable, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
 - Phase 4 remains **5/8** and is the active priority. Open gates are current Create/Flywheel visuals, representative particles/translucency/entities/GUI, and reload/re-entry. Reload and world re-entry remain explicitly deferred for this pass.
 - Phase 7 GPU-terrain/hybrid work remains paused at **6/11** while representative full-pack visual correctness is repaired.
 - Phase 5 procedure-definition work remains **4/7**. `docs/TERRAIN_PERFORMANCE_BASELINE.md` fixes seed `2026092601`, a 2560x1440 profile, stationary camera, and a 1024-block eastbound spectator route. Numeric OpenGL/Vulkan/frame-time baselines remain open and no performance win is claimed.
@@ -20,48 +21,46 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current RX 6900 XT icon/model blocker — 2026-09-26
 
-The user has prioritized missing Creative block/item imagery and player/entity models. The latest RX run was build **#752** (`b081ad64...`) with both real PureBDcraft packs and all four GPU-terrain flags.
+The user has prioritized missing Creative block/item imagery and player/entity rendering. The latest RX run was build **#752** (`b081ad64...`) with both real PureBDcraft packs and all four GPU-terrain flags.
 
-Hardware progression:
+Hardware progression and current diagnosis:
 
-- #742 reached the world and Creative menu: world terrain and GUI chrome/text/tooltips rendered, but Creative block/item imagery and rendered player/entity models were absent.
+- #742 reached the world and Creative menu: world terrain and GUI chrome/text/tooltips rendered, but Creative block/item imagery and rendered player/entity models appeared absent.
 - #743 prepared framebuffer-attachment samplers before ordinary draws; the broad defect remained. Iceberg/Advancement Plaques also exposed an off-screen `MainTarget` ownership bug.
 - #744 fixed auxiliary `MainTarget` ownership: only the primary window target is swapchain-backed; later targets receive normal Vulkan off-screen backing.
 - #745 restored vanilla-style fixed Sampler0/1/2 reconciliation immediately before ordinary draws. The user's RX test showed **no visual change**, so sampler reconciliation is a valid contract repair but hardware-disproven as the broad root cause.
 - #746 / `7cb7119aa6f4a7ea5c602a52a598453a43157923` added bounded `NEW_ENTITY` diagnostics for shader/pipeline, projection hash, depth/cull/color state, descriptor-facing Sampler0/1/2 images, buffer size, and a representative vertex.
-- #747 / `5d164d2773b01fc89bef173facd82dbe6cc3b462` restored the vanilla `ShaderInstance.apply() -> draw -> clear()` lifecycle around ordinary Vulkan draws. Test-only follow-ups through `b081ad64` added a compiled-bytecode ordering/cleanup guard; #752 was fully green.
-- The user actually ran **#752**. The run became visually inconclusive because Immersive Portals created a remote Nether client world and then crashed in `MyRenderHelper.earlyRemoteUpload()` before a useful Creative/player inspection could be completed.
-- The #752 diagnostics materially narrow the remaining visual defect: ordinary `NEW_ENTITY` draws reached Vulkan with complete vertex buffers, sensible entity/item shaders, and real Sampler0 images. GUI-like item draws referenced the real **16384x16384** atlas. Therefore “no model draw was submitted,” “empty geometry,” and “Sampler0 was absent” are not plausible primary explanations for the broad missing imagery.
+- #747 / `5d164d2773b01fc89bef173facd82dbe6cc3b462` restored the `ShaderInstance.apply() -> draw -> clear()` lifecycle around ordinary Vulkan draws. Test-only follow-ups through `b081ad64` added a compiled-bytecode ordering/cleanup guard.
+- The user ran #752. It became visually inconclusive in-world because Immersive Portals created a remote Nether client world and then crashed in `MyRenderHelper.earlyRemoteUpload()` before a useful Creative/player inspection could be completed.
+- The #752 diagnostics showed ordinary `NEW_ENTITY` draws reaching Vulkan with complete vertex buffers and real Sampler0 images. GUI-like draws referenced the real **16384x16384** atlas. “No model draw,” “empty geometry,” and “Sampler0 absent” are therefore not plausible primary explanations.
+- **New hardware detail supplied after that run:** the user *could see the player model in the main menu, but it was pitch black*. This proves at least that menu player geometry/projection/base-texture submission can survive far enough to produce a visible model; the prior description of player rendering as simply “absent” was incomplete.
+- That observation exposed a concrete converted-shader state regression. The Forge branch's overwritten legacy `ShaderInstance.apply()` had retained only ModelView, Projection, and ColorModulator updates. Upstream 1.20.x VulkanMod also updates inverse-view rotation, glint alpha, fog start/end/color/shape, texture matrix, game time, screen size, and line width. `0fc73d43` restores that complete state family while preserving Immersive Portals clipping and named-sampler activation.
+- More importantly, Minecraft 1.20.1 `ShaderInstance` owns `LIGHT0_DIRECTION` and `LIGHT1_DIRECTION`, and the item/entity shader JSON initializes both to zero. Entity/item vertex shaders consume those directions for diffuse lighting. The converted legacy path had not called `RenderSystem.setupShaderLights(shader)`, leaving those live directions at defaults. `b586d066` restores that upload. This is a concrete mechanism capable of producing a present-but-black menu player and extremely dark item/entity imagery.
+- `ShaderInstanceLegacyApplyContractTest` now guards the complete standard live-state getter family, ScreenSize update, named-sampler activation, and `RenderSystem.setupShaderLights(ShaderInstance)`. It is invoked by the existing shader lifecycle contract. CI #758 proves the compiled contract and full compatibility matrix accept the repaired path.
 - No Vulkan validation `VUID`/`VK_ERROR` signal was found in the supplied #752 debug log.
 
-Do not claim #747 fixed or failed the visual blocker: the #752 hardware run did not remain alive long enough for a meaningful visual verdict.
+Do **not** claim the visual blocker closed until the RX machine confirms #758. The lighting/state diagnosis is materially stronger than the prior sampler hypothesis because it directly matches the user's black-player observation and the logged successful model/texture submission.
 
-## Immersive Portals remote-upload blocker — repaired in #753
+## Immersive Portals remote-upload blocker — repaired in #753 and retained
 
-The #752 crash was:
+The #752 crash was `MyRenderHelper.earlyRemoteUpload()` dereferencing a null vanilla `ChunkRenderDispatcher` from a portal-world `LevelRenderer`. VulkanMod intentionally owns terrain upload/publication and does not provide that vanilla dispatcher.
 
-`MyRenderHelper.earlyRemoteUpload()` -> portal-world `LevelRenderer.getChunkRenderDispatcher()` -> null -> vanilla dispatcher upload dereference.
-
-This is expected at VulkanMod's renderer boundary: portal-world `LevelRenderer`s do not own the vanilla `ChunkRenderDispatcher`, because VulkanMod owns terrain upload/publication.
-
-`c299a49d` now cancels Immersive Portals' vanilla `earlyRemoteUpload()` prepass at method HEAD under the existing IP compatibility mixin. It does **not** alter Vulkan terrain ownership or ordinary render state. `ImmersivePortalsRemoteUploadContractTest` guards the compiled mixin target, HEAD injection, cancellability, and actual `CallbackInfo.cancel()` call.
-
-CI #753 proves both the bytecode contract and the actual Immersive Portals 3.0.7 compatibility smoke accept this boundary. Treat the prior null-dispatcher crash as repaired pending RX confirmation, not as a deferred blocker.
+`c299a49d` cancels Immersive Portals' vanilla `earlyRemoteUpload()` prepass at method HEAD under the existing IP compatibility mixin. `ImmersivePortalsRemoteUploadContractTest` guards the compiled injection/cancellation. CI #753 and #758 both pass the actual Immersive Portals 3.0.7 smoke. Treat the crash path as repaired pending RX confirmation.
 
 ## Next RX gate
 
-Use build **#753** / `c299a49d64d486ae6f0c8a42357b3318c35b6f8d` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override.
+Use build **#758** / `896221b08c62f22be40a7a72c43af0549a28e58f` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override.
 
-Keep the first pass narrow:
+Keep the first pass narrow and use the newly discovered black-model signal:
 
-1. Enter the existing world.
-2. Confirm the prior Immersive Portals `earlyRemoteUpload()` crash no longer occurs.
+1. On the main menu, inspect the player model first. It should no longer be pitch black if the restored light/state contract is effective.
+2. Enter the existing world and confirm the prior Immersive Portals `earlyRemoteUpload()` crash no longer occurs.
 3. Open Creative and check ordinary block/item imagery.
 4. Switch to third person and check the player model; one nearby entity is useful if convenient.
-5. If imagery/models are still absent, stop and retain one screenshot plus `latest.log`. The existing `NEW_ENTITY draw trace` data should guide the next change rather than another blind state patch.
+5. If any of those still fail, stop and retain one screenshot plus `latest.log`. Do not broaden the test; use the retained diagnostics to choose the next change.
 6. Only if those visuals pass, continue with a moving Create contraption, Create GUI/overlay, representative particles/liquids/translucency/entities, and an actual portal view. Reload and world re-entry remain deferred.
 
-Do not request separate #746/#747/#752 retests; #753 contains their production fixes/diagnostics plus the IP crash repair.
+Do not request separate #746/#747/#752/#753 retests; #758 contains their relevant production fixes/diagnostics plus the complete converted-shader state and light-direction repair.
 
 ## Real resource-pack gate — automated and RX-confirmed
 
@@ -87,7 +86,7 @@ Closed by direct fixes/current evidence: shader parser issues, Create stencil st
 
 Still requiring current-user-machine evidence:
 
-- **first:** #753 Creative block/item imagery and player/entity rendering, plus absence of the prior IP early-upload crash;
+- **first:** #758 main-menu player lighting, Creative block/item imagery, player/entity rendering, and absence of the prior IP early-upload crash;
 - Iceberg/Advancement Plaques auxiliary item rendering after #744 when naturally encountered;
 - visible Create/Flywheel contraption and Create UI/overlay correctness;
 - representative particles/translucency/entities and a real Immersive Portals portal view;
