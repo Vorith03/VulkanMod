@@ -31,8 +31,11 @@ import java.util.Set;
 @Mixin(BufferUploader.class)
 public class BufferUploaderM {
     private static final int VULKANMOD_NEW_ENTITY_TRACE_LIMIT = 48;
+    private static final boolean VULKANMOD_NEW_ENTITY_TRACE_ENABLED =
+            Boolean.getBoolean("vulkanmod.traceNewEntityDraws");
     private static boolean vulkanmod$warnedMissingNewEntityShader;
-    private static final Set<String> vulkanmod$tracedNewEntityStates = new HashSet<>();
+    private static final Set<String> vulkanmod$tracedNewEntityStates =
+            VULKANMOD_NEW_ENTITY_TRACE_ENABLED ? new HashSet<>() : null;
 
     /**
      * @author
@@ -102,7 +105,8 @@ public class BufferUploaderM {
             // this frame's command buffer, never on the helper upload command buffer.
             RenderTargetManager.preparePipelineTextures(pipeline);
 
-            if(parameters.format() == DefaultVertexFormat.NEW_ENTITY) {
+            if(VULKANMOD_NEW_ENTITY_TRACE_ENABLED
+                    && parameters.format() == DefaultVertexFormat.NEW_ENTITY) {
                 vulkanmod$traceNewEntityDraw(buffer, parameters, shader, pipeline);
             }
 
