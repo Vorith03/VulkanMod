@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class AreaUploadManager {
     public static AreaUploadManager INSTANCE;
+    private static final boolean PROFILE_STAGING_COPY_TIME =
+            Boolean.getBoolean("vulkanmod.profileTerrainUploadCopies");
 
     public static void createInstance() {
         INSTANCE = new AreaUploadManager();
@@ -166,9 +168,10 @@ public class AreaUploadManager {
             this.commandBuffers[currentFrame] = Device.getGraphicsQueue().beginCommands();
 
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(this.currentFrame);
-        long copyStart = System.nanoTime();
+        long copyStart = PROFILE_STAGING_COPY_TIME ? System.nanoTime() : 0L;
         stagingBuffer.copyBuffer((int) bufferSize, src);
-        this.stagingCopyNanos += Math.max(0L, System.nanoTime() - copyStart);
+        if(PROFILE_STAGING_COPY_TIME)
+            this.stagingCopyNanos += Math.max(0L, System.nanoTime() - copyStart);
         this.stagingCopyBytes += bufferSize;
         this.stagingCopyCount++;
 
@@ -243,8 +246,10 @@ public class AreaUploadManager {
         executeFrameOps(frame);
         // Existing frame operations may invalidate section generations or request
         // recovery. Let those decisions land before opportunistically publishing any
-        // newly signaled GPU terrain result for this render frame.
-        GpuTerrainSectionMesherBridge.pollCompletions();
+        // newly signaled GPU terrain result for this render frame. Avoid entering the
+        // bridge's synchronized poll at all in the default disabled configuration.
+        if(GpuTerrainSectionMesherBridge.enabled())
+            GpuTerrainSectionMesherBridge.pollCompletions();
     }
 
     private void executeFrameOps(int frame) {
