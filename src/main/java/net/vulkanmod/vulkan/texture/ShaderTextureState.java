@@ -17,6 +17,11 @@ import net.vulkanmod.gl.GlTexture;
  */
 public final class ShaderTextureState {
     private static final int CORE_FIXED_SAMPLER_COUNT = 3;
+    private static final int UNSET_TEXTURE_ID = Integer.MIN_VALUE;
+    private static final int[] lastTextureIds = {
+            UNSET_TEXTURE_ID, UNSET_TEXTURE_ID, UNSET_TEXTURE_ID
+    };
+    private static long lastSelectorMutationVersion = Long.MIN_VALUE;
 
     private ShaderTextureState() {
     }
@@ -24,10 +29,32 @@ public final class ShaderTextureState {
     public static void syncFixedSamplers() {
         RenderSystem.assertOnRenderThread();
 
-        for(int slot = 0; slot < CORE_FIXED_SAMPLER_COUNT; ++slot) {
-            int textureId = RenderSystem.getShaderTexture(slot);
-            VTextureSelector.bindTexture(slot,
-                    textureId == 0 ? null : GlTexture.getVulkanImage(textureId));
+        int texture0 = RenderSystem.getShaderTexture(0);
+        int texture1 = RenderSystem.getShaderTexture(1);
+        int texture2 = RenderSystem.getShaderTexture(2);
+        long selectorMutationVersion = VTextureSelector.getCoreSamplerMutationVersion();
+
+        if(texture0 == lastTextureIds[0]
+                && texture1 == lastTextureIds[1]
+                && texture2 == lastTextureIds[2]
+                && selectorMutationVersion == lastSelectorMutationVersion) {
+            return;
         }
+
+        reconcile(0, texture0);
+        reconcile(1, texture1);
+        reconcile(2, texture2);
+
+        lastTextureIds[0] = texture0;
+        lastTextureIds[1] = texture1;
+        lastTextureIds[2] = texture2;
+        // Reconciliation itself mutates selector state when repair is needed, so
+        // cache the post-repair version rather than the version observed above.
+        lastSelectorMutationVersion = VTextureSelector.getCoreSamplerMutationVersion();
+    }
+
+    private static void reconcile(int slot, int textureId) {
+        VTextureSelector.bindTexture(slot,
+                textureId == 0 ? null : GlTexture.getVulkanImage(textureId));
     }
 }
