@@ -55,6 +55,10 @@ public abstract class VTextureSelector {
     private static int unbatchedTextureSubmissions;
     private static long observedMainFrameSubmissions;
 
+    private static void markCoreSamplerMutation() {
+        coreSamplerMutationVersion++;
+    }
+
     public static long getCoreSamplerMutationVersion() {
         return coreSamplerMutationVersion;
     }
@@ -62,7 +66,7 @@ public abstract class VTextureSelector {
     public static void bindTexture(VulkanImage texture) {
         if(boundTexture != texture) {
             boundTexture = texture;
-            coreSamplerMutationVersion++;
+            markCoreSamplerMutation();
         }
     }
 
@@ -76,19 +80,19 @@ public abstract class VTextureSelector {
             case 0 -> {
                 if(boundTexture != texture) {
                     boundTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             case 1 -> {
                 if(overlayTexture != texture) {
                     overlayTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             case 2 -> {
                 if(lightTexture != texture) {
                     lightTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             default -> {
@@ -107,19 +111,19 @@ public abstract class VTextureSelector {
             case 0 -> {
                 if(boundTexture != texture) {
                     boundTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             case 1 -> {
                 if(lightTexture != texture) {
                     lightTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             case 2 -> {
                 if(overlayTexture != texture) {
                     overlayTexture = texture;
-                    coreSamplerMutationVersion++;
+                    markCoreSamplerMutation();
                 }
             }
             default -> additionalLegacyTextures[unit] = texture;
@@ -322,14 +326,14 @@ public abstract class VTextureSelector {
     public static void setLightTexture(VulkanImage texture) {
         if(lightTexture != texture) {
             lightTexture = texture;
-            coreSamplerMutationVersion++;
+            markCoreSamplerMutation();
         }
     }
 
     public static void setOverlayTexture(VulkanImage texture) {
         if(overlayTexture != texture) {
             overlayTexture = texture;
-            coreSamplerMutationVersion++;
+            markCoreSamplerMutation();
         }
     }
 
