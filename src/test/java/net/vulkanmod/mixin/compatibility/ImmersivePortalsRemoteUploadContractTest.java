@@ -41,6 +41,7 @@ public final class ImmersivePortalsRemoteUploadContractTest {
                 "Remote-upload guard injection must remain cancellable");
         require(visitor.cancelCalls == 1,
                 "Remote-upload guard must cancel exactly once");
+        ImmersivePortalsQueryBypassContractTest.main(args);
         System.out.println("Immersive Portals remote upload contract passed");
     }
 
