@@ -119,9 +119,30 @@ fi
 
 export VK_ICD_FILENAMES="$lvp_icd"
 export LIBGL_ALWAYS_SOFTWARE=1
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.validation=true"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true -Dmixin.debug.export.filter=net.minecraft.client.renderer.LevelRenderer -Dmixin.debug.export.decompile=false"
 
+rm -rf run/.mixin.out .mixin.out
 timeout "$smoke_timeout" xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-immersive-portals.log
+
+# The old compatibility test proved that VulkanMod and IP mixins loaded, but it
+# did not prove that a redirect could see an invocation added by IP's injected
+# callback. Inspect Mixin's final exported LevelRenderer instead. The IP helper
+# must be merged, while no direct ChunkRenderDispatcher(Vec3)->void call may
+# survive in executable bytecode.
+exported_level_renderer="$(find run/.mixin.out .mixin.out \
+  -type f -path '*/net/minecraft/client/renderer/LevelRenderer.class' \
+  -print -quit 2>/dev/null || true)"
+if [[ -z "$exported_level_renderer" ]]; then
+  echo "Mixin did not export the final LevelRenderer for Immersive Portals verification" >&2
+  exit 1
+fi
+javap -c -p "$exported_level_renderer" > vulkan-smoke-immersive-portals-levelrenderer.javap
+grep -F "ip_allowOverrideTerrainSetup" vulkan-smoke-immersive-portals-levelrenderer.javap
+if grep -E 'ChunkRenderDispatcher\.[^:]+:\(Lnet/minecraft/world/phys/Vec3;\)V' \
+    vulkan-smoke-immersive-portals-levelrenderer.javap; then
+  echo "Final LevelRenderer still invokes the removed vanilla ChunkRenderDispatcher camera path" >&2
+  exit 1
+fi
 
 grep -F "Immersive Portals 3.0.7 compatibility mixin smoke passed" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline" vulkan-smoke-immersive-portals.log
