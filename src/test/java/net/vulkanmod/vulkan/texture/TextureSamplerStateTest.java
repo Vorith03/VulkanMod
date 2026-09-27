@@ -48,6 +48,8 @@ public final class TextureSamplerStateTest {
         require(mixin.filterUpdatesSampler,
                 "AbstractTexture.setFilter() must still update the Vulkan sampler");
 
+        net.vulkanmod.mixin.render.BufferUploaderShaderLifecycleContractTest.main(args);
+
         System.out.println("Texture sampler clamp/filter identity contract passed");
     }
 
