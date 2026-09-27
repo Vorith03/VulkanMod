@@ -416,16 +416,38 @@ final class RegionDrawBatch {
                 var iterator = area.sectionQueue.iterator(false);
                 while (iterator.hasNext()) {
                     RenderSection section = iterator.next();
+                    DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+
+                    // Default configuration is CPU-only. Keep that path allocation-free
+                    // and lock-free instead of constructing GPU handoff state/plan records
+                    // simply to rediscover the ordinary CPU command.
+                    if(!gpuTerrainHandoff) {
+                        if(parameters.indexCount == 0)
+                            continue;
+                        if(!parameters.vertexBufferSegment.isReady()) {
+                            pendingUploads = true;
+                            continue;
+                        }
+                        if(drawCount >= MAX_DRAW_COMMANDS)
+                            throw new IllegalStateException("Region contains more than 1024 terrain draw commands");
+                        int packedSection = packSection(section.xOffset - area.position.x,
+                                section.yOffset - area.position.y,
+                                section.zOffset - area.position.z);
+                        putCommand(data, parameters.indexCount, parameters.firstIndex,
+                                parameters.vertexOffset, packedSection);
+                        drawCount++;
+                        sectionCount++;
+                        continue;
+                    }
+
                     RenderSection.GpuTerrainDrawState drawState = section.gpuTerrainDrawState();
                     long generation = drawState.generation();
-                    DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
-                    GpuTerrainOutputStore.Residency residency = gpuTerrainHandoff
-                            ? area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
-                                    section.zOffset, type)
-                            : null;
+                    GpuTerrainOutputStore.Residency residency =
+                            area.getGpuTerrainOutputResidency(section.xOffset, section.yOffset,
+                                    section.zOffset, type);
                     GpuTerrainDrawHandoff.Ownership ownership = drawState.ownership();
                     GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(
-                            gpuTerrainHandoff, type, generation, residency,
+                            true, type, generation, residency,
                             parameters.indexCount, parameters.firstIndex, parameters.vertexOffset,
                             ownership);
 
