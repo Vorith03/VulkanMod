@@ -6,7 +6,9 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
+import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.DepthClampState;
+import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -72,6 +74,27 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                 throw new IllegalStateException("Immersive Portals Vulkan query fallback did not render conservatively");
             }
 
+            // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own
+            // RETURN injector cannot be trusted to populate these helper shaders.
+            GraphicsPipeline portalAreaPipeline = null;
+            for(String fieldName : new String[]{"drawFbInAreaShader", "portalAreaShader", "blitScreenNoBlendShader"}) {
+                Object shader = myRenderHelper.getField(fieldName).get(null);
+                if(shader == null) {
+                    throw new IllegalStateException(
+                            "Immersive Portals helper shader was not installed: " + fieldName);
+                }
+                if(!(shader instanceof ShaderMixed shaderMixed) || shaderMixed.getPipeline() == null) {
+                    throw new IllegalStateException(
+                            "Immersive Portals helper shader has no Vulkan pipeline: " + fieldName);
+                }
+                if("portalAreaShader".equals(fieldName)) {
+                    portalAreaPipeline = shaderMixed.getPipeline();
+                }
+            }
+            if(portalAreaPipeline == null) {
+                throw new IllegalStateException("Immersive Portals portal-area Vulkan pipeline was not installed");
+            }
+
             // These methods normally enter LWJGL OpenGL directly. The calls must
             // be harmless with VulkanMod's no-OpenGL-context window. Force IP's
             // clipping mechanism on so this also proves GL_DEPTH_CLAMP is translated
@@ -88,12 +111,11 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                             "Immersive Portals depth clamp did not reach supported Vulkan rasterization state");
                 }
                 if(DepthClampState.isSupported()) {
-                    // Force GraphicsPipeline.getHandle() to select/create the
-                    // depth-clamped variant while validation is active. Alpha 0
-                    // keeps the probe visually inert.
-                    myRenderHelper.getMethod(
-                            "testOneTriangle", int.class, int.class, int.class, int.class)
-                            .invoke(null, 0, 0, 0, 0);
+                    // Bind an already-created IP compatibility pipeline while clamp
+                    // is enabled. This forces GraphicsPipeline.getHandle() to create
+                    // the depth-clamped VkPipeline variant without depending on
+                    // BufferBuilder/Tesselator lifecycle details unrelated to clamp.
+                    Renderer.getInstance().bindGraphicsPipeline(portalAreaPipeline);
                 }
                 cHelper.getMethod("disableDepthClamp").invoke(null);
                 if(DepthClampState.isEnabled()) {
@@ -139,20 +161,6 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                     || terrainClipPlane.getFloat(3 * Float.BYTES) != 1.0f) {
                 throw new IllegalStateException(
                         "Disabled Immersive Portals clipping did not restore no-clip terrain state");
-            }
-
-            // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own
-            // RETURN injector cannot be trusted to populate these helper shaders.
-            for(String fieldName : new String[]{"drawFbInAreaShader", "portalAreaShader", "blitScreenNoBlendShader"}) {
-                Object shader = myRenderHelper.getField(fieldName).get(null);
-                if(shader == null) {
-                    throw new IllegalStateException(
-                            "Immersive Portals helper shader was not installed: " + fieldName);
-                }
-                if(!(shader instanceof ShaderMixed shaderMixed) || shaderMixed.getPipeline() == null) {
-                    throw new IllegalStateException(
-                            "Immersive Portals helper shader has no Vulkan pipeline: " + fieldName);
-                }
             }
 
             // Verify the default stencil mode is converted to IP's own framebuffer
