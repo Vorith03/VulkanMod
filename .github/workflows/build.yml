@@ -43,6 +43,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
+      - name: Validate packaged Immersive Portals mixin anchors
+        run: python3 scripts/ci/immersive-portals-package-contract.py
       - name: Install software Vulkan smoke-test dependencies
         run: |
           sudo apt-get update
