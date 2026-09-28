@@ -6,6 +6,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
+import net.vulkanmod.vulkan.shader.DepthClampState;
 import net.vulkanmod.vulkan.util.MappedBuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -53,6 +54,7 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
 
             Class<?> queryManager = Class.forName("qouteall.imm_ptl.core.render.QueryManager", true, loader);
             Class<?> cHelper = Class.forName("qouteall.imm_ptl.core.CHelper", true, loader);
+            Class<?> globalClass = Class.forName("qouteall.imm_ptl.core.IPGlobal", true, loader);
             Class<?> portalRenderer = Class.forName("qouteall.imm_ptl.core.render.PortalRenderer", true, loader);
 
             // Force-load every class with a VulkanMod IP redirect so Mixin verifies
@@ -71,10 +73,29 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             }
 
             // These methods normally enter LWJGL OpenGL directly. The calls must
-            // be harmless with VulkanMod's no-OpenGL-context window.
-            cHelper.getMethod("doCheckGlError").invoke(null);
-            cHelper.getMethod("enableDepthClamp").invoke(null);
-            cHelper.getMethod("disableDepthClamp").invoke(null);
+            // be harmless with VulkanMod's no-OpenGL-context window. Force IP's
+            // clipping mechanism on so this also proves GL_DEPTH_CLAMP is translated
+            // into the equivalent Vulkan rasterization state rather than discarded.
+            Field clippingMechanism = globalClass.getDeclaredField("enableClippingMechanism");
+            clippingMechanism.setAccessible(true);
+            boolean oldClippingMechanism = clippingMechanism.getBoolean(null);
+            try {
+                clippingMechanism.setBoolean(null, true);
+                cHelper.getMethod("doCheckGlError").invoke(null);
+                cHelper.getMethod("enableDepthClamp").invoke(null);
+                if(DepthClampState.isSupported() != DepthClampState.isEnabled()) {
+                    throw new IllegalStateException(
+                            "Immersive Portals depth clamp did not reach supported Vulkan rasterization state");
+                }
+                cHelper.getMethod("disableDepthClamp").invoke(null);
+                if(DepthClampState.isEnabled()) {
+                    throw new IllegalStateException(
+                            "Immersive Portals depth clamp disable did not restore Vulkan rasterization state");
+                }
+            } finally {
+                DepthClampState.disable();
+                clippingMechanism.setBoolean(null, oldClippingMechanism);
+            }
 
             Field clippingEnabled = frontClipping.getField("isClippingEnabled");
             Field activeClipPlane = frontClipping.getDeclaredField(
@@ -128,7 +149,6 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
 
             // Verify the default stencil mode is converted to IP's own framebuffer
             // compatibility renderer before the original selector chooses a renderer.
-            Class<?> globalClass = Class.forName("qouteall.imm_ptl.core.IPGlobal", true, loader);
             Field renderMode = globalClass.getField("renderMode");
             Object current = renderMode.get(null);
             @SuppressWarnings({"unchecked", "rawtypes"})

@@ -25,7 +25,7 @@ import static org.lwjgl.vulkan.VK10.vkDestroyPipelineLayout;
 
 public class GraphicsPipeline extends Pipeline {
 
-    private record PipelineKey(PipelineState state, int topology) {}
+    private record PipelineKey(PipelineState state, int topology, boolean depthClamp) {}
 
     private static final ThreadLocal<Integer> REQUESTED_TOPOLOGY =
             ThreadLocal.withInitial(() -> VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
@@ -60,7 +60,9 @@ public class GraphicsPipeline extends Pipeline {
             PipelineState defaultState = new PipelineState(
                     DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE,
                     DEFAULT_COLORMASK, builder.renderPass, DEFAULT_STENCIL_STATE);
-            graphicsPipelines.computeIfAbsent(new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST), this::createGraphicsPipeline);
+            graphicsPipelines.computeIfAbsent(
+                    new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, DepthClampState.isEnabled()),
+                    this::createGraphicsPipeline);
         }
 
         createDescriptorSets(Vulkan.getSwapChainImages().size());
@@ -83,7 +85,9 @@ public class GraphicsPipeline extends Pipeline {
     public long getHandle(PipelineState state) {
         int topology = REQUESTED_TOPOLOGY.get();
         REQUESTED_TOPOLOGY.set(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        return graphicsPipelines.computeIfAbsent(new PipelineKey(state, topology), this::createGraphicsPipeline);
+        return graphicsPipelines.computeIfAbsent(
+                new PipelineKey(state, topology, DepthClampState.isEnabled()),
+                this::createGraphicsPipeline);
     }
 
     private long createGraphicsPipeline(PipelineKey key) {
@@ -135,7 +139,7 @@ public class GraphicsPipeline extends Pipeline {
 
             VkPipelineRasterizationStateCreateInfo rasterizer = VkPipelineRasterizationStateCreateInfo.calloc(stack);
             rasterizer.sType(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
-            rasterizer.depthClampEnable(false);
+            rasterizer.depthClampEnable(key.depthClamp());
             rasterizer.rasterizerDiscardEnable(false);
             rasterizer.polygonMode(VK_POLYGON_MODE_FILL);
             rasterizer.lineWidth(1.0f);

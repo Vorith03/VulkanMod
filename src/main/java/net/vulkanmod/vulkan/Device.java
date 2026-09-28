@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan;
 
 import net.vulkanmod.Initializer;
 import net.vulkanmod.vulkan.queue.*;
+import net.vulkanmod.vulkan.shader.DepthClampState;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -130,6 +131,15 @@ public class Device {
             if(deviceInfo.availableFeatures.features().shaderClipDistance())
                 deviceFeatures.features().shaderClipDistance(true);
 
+            // Immersive Portals' framebuffer compatibility renderer uses
+            // GL_DEPTH_CLAMP while compositing its remote-world image. Vulkan has
+            // the same rasterization feature, but it is optional and must be
+            // enabled when the logical device is created before any pipeline can
+            // request it.
+            boolean depthClampSupported = deviceInfo.availableFeatures.features().depthClamp();
+            if(depthClampSupported)
+                deviceFeatures.features().depthClamp(true);
+
             VkPhysicalDeviceVulkan11Features deviceVulkan11Features = VkPhysicalDeviceVulkan11Features.calloc(stack);
             deviceVulkan11Features.sType$Default();
 
@@ -183,6 +193,7 @@ public class Device {
             }
 
             device = new VkDevice(pDevice.get(0), physicalDevice, createInfo, VK_API_VERSION_1_2);
+            DepthClampState.initialize(depthClampSupported);
 
 //            PointerBuffer pQueue = stack.pointers(VK_NULL_HANDLE);
 //
@@ -332,6 +343,7 @@ public class Device {
             memoryProperties = null;
         }
 
+        DepthClampState.initialize(false);
         vkDestroyDevice(device, null);
     }
 
