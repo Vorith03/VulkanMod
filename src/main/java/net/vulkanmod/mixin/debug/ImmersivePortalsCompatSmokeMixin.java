@@ -87,6 +87,14 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                     throw new IllegalStateException(
                             "Immersive Portals depth clamp did not reach supported Vulkan rasterization state");
                 }
+                if(DepthClampState.isSupported()) {
+                    // Force GraphicsPipeline.getHandle() to select/create the
+                    // depth-clamped variant while validation is active. Alpha 0
+                    // keeps the probe visually inert.
+                    myRenderHelper.getMethod(
+                            "testOneTriangle", int.class, int.class, int.class, int.class)
+                            .invoke(null, 0, 0, 0, 0);
+                }
                 cHelper.getMethod("disableDepthClamp").invoke(null);
                 if(DepthClampState.isEnabled()) {
                     throw new IllegalStateException(
