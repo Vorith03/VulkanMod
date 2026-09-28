@@ -65,16 +65,16 @@ public abstract class ImmersivePortalsMyRenderHelperMixin {
      * RendererUsingFrameBuffer sets portal-specific matrices on its custom
      * framebuffer shader and then calls ShaderInstance.apply(). VulkanMod's
      * converted-legacy apply path mirrors global RenderSystem matrices, so put
-     * IP's explicit matrices back after apply and before the portal triangles
-     * are submitted. The viewport call is the stable 3.0.7 boundary between
-     * shader application and geometry construction.
+     * IP's explicit matrices back after apply and immediately before the portal
+     * triangles are submitted. Anchor on IP's own buffer-build call so this is
+     * stable in the packaged Forge runtime as well as the development runtime.
      */
     @Inject(
             method = "drawPortalAreaWithFramebuffer",
             at = @At(
                     value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/platform/GlStateManager;_viewport(IIII)V",
-                    shift = At.Shift.AFTER,
+                    target = "Lqouteall/imm_ptl/core/render/ViewAreaRenderer;buildPortalViewAreaTrianglesBuffer(Lnet/minecraft/world/phys/Vec3;Lqouteall/imm_ptl/core/render/PortalRenderable;Lnet/minecraft/world/phys/Vec3;F)V",
+                    shift = At.Shift.BEFORE,
                     remap = false
             )
     )
