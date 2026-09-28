@@ -32,17 +32,22 @@ public abstract class ImmersivePortalsViewAreaRendererMixin {
     }
 
     /**
-     * The visibility/depth portal-area pass also supplies its own model-view and
-     * projection matrices before ShaderInstance.apply(). Restore those values
-     * immediately after apply so Vulkan's UBO upload uses IP's camera-relative
-     * portal transform instead of the outer global RenderSystem matrices.
+     * The visibility/depth portal-area pass supplies its own model-view and
+     * projection matrices before ShaderInstance.apply(). VulkanMod's converted
+     * legacy apply path mirrors global RenderSystem matrices, so put IP's values
+     * back after apply and before the portal triangles are submitted.
+     *
+     * Keep the injection anchor entirely inside Immersive Portals. This mixin
+     * targets an optional third-party class with remap=false; anchoring on the
+     * Mojmap-named ShaderInstance.apply() invocation works in runClient but not
+     * in a reobfuscated production Forge runtime. IP's own buffer-builder call
+     * is the stable 3.0.7 boundary immediately after apply().
      */
     @Inject(
             method = "renderPortalArea",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/ShaderInstance;apply()V",
-                    shift = At.Shift.AFTER,
+                    target = "Lqouteall/imm_ptl/core/render/ViewAreaRenderer;buildPortalViewAreaTrianglesBuffer(Lnet/minecraft/world/phys/Vec3;Lqouteall/imm_ptl/core/render/PortalRenderable;Lnet/minecraft/world/phys/Vec3;F)V",
                     remap = false
             )
     )
