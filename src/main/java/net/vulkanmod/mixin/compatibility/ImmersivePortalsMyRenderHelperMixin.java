@@ -1,12 +1,16 @@
 package net.vulkanmod.mixin.compatibility;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
+import net.vulkanmod.compatibility.ImmersivePortalsPortalMatrixCompat;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -55,6 +59,33 @@ public abstract class ImmersivePortalsMyRenderHelperMixin {
     @Inject(method = "earlyRemoteUpload()V", at = @At("HEAD"), cancellable = true)
     private static void vulkanmod$skipVanillaRemoteChunkUpload(CallbackInfo ci) {
         ci.cancel();
+    }
+
+    /**
+     * RendererUsingFrameBuffer sets portal-specific matrices on its custom
+     * framebuffer shader and then calls ShaderInstance.apply(). VulkanMod's
+     * converted-legacy apply path mirrors global RenderSystem matrices, so put
+     * IP's explicit matrices back after apply and before the portal triangles
+     * are submitted. The viewport call is the stable 3.0.7 boundary between
+     * shader application and geometry construction.
+     */
+    @Inject(
+            method = "drawPortalAreaWithFramebuffer",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/platform/GlStateManager;_viewport(IIII)V",
+                    shift = At.Shift.AFTER,
+                    remap = false
+            )
+    )
+    private static void vulkanmod$restoreFramebufferPortalMatrices(
+            @Coerce Object portal,
+            RenderTarget textureProvider,
+            Matrix4f modelViewMatrix,
+            Matrix4f projectionMatrix,
+            CallbackInfo ci) {
+        ImmersivePortalsPortalMatrixCompat.restoreExplicitPortalMatrices(
+                modelViewMatrix, projectionMatrix);
     }
 
     @Redirect(method = "applyMirrorFaceCulling()V",
