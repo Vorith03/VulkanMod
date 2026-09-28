@@ -192,6 +192,7 @@ print("Immersive Portals dispatcher rewrite selected only the terrain-override c
 PY
 
 grep -F "Immersive Portals 3.0.7 compatibility mixin smoke passed" vulkan-smoke-immersive-portals.log
+grep -F "VULKANMOD_IP_PORTAL_MATRIX_RESTORE_OK: explicit portal matrices survive converted ShaderInstance.apply" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_CLIPPING_SHADER_OK: rendertype_solid transformed source, live clipping uniform, Vulkan pipeline" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_ALIASED_TERRAIN_CLIP_OK: vulkanmod:shaders/core/ci_ip_alias.json -> rendertype_cutout" vulkan-smoke-immersive-portals.log
 grep -F "VULKANMOD_IP_ALIASED_MODEL_VIEW_CLIP_OK: vulkanmod:shaders/core/ci_ip_model_view_alias.json -> rendertype_entity_translucent" vulkan-smoke-immersive-portals.log
