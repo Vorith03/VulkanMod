@@ -1,8 +1,11 @@
 package net.vulkanmod.mixin.debug;
 
+import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.ImmersivePortalsPortalMatrixCompat;
 import net.vulkanmod.compatibility.ImmersivePortalsShaderCompat;
 import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.interfaces.ShaderMixed;
@@ -10,6 +13,7 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.DepthClampState;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.util.MappedBuffer;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.FloatBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** CI-only runtime target/signature smoke against the published Forge IP mod. */
@@ -59,9 +64,9 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             Class<?> globalClass = Class.forName("qouteall.imm_ptl.core.IPGlobal", true, loader);
             Class<?> portalRenderer = Class.forName("qouteall.imm_ptl.core.render.PortalRenderer", true, loader);
 
-            // Force-load every class with a VulkanMod IP redirect so Mixin verifies
-            // the published 3.0.7 bytecode targets even though this smoke does not
-            // need to create a real portal.
+            // Force-load every class with a VulkanMod IP redirect/injection so
+            // Mixin verifies the published 3.0.7 bytecode targets even though
+            // this smoke does not need to create a real portal.
             Class.forName("qouteall.imm_ptl.core.render.RendererUsingFrameBuffer", true, loader);
             Class<?> frontClipping = Class.forName("qouteall.imm_ptl.core.render.FrontClipping", true, loader);
             Class.forName("qouteall.imm_ptl.core.render.ViewAreaRenderer", true, loader);
@@ -77,6 +82,8 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
             // VulkanMod cancels GameRenderer.reloadShaders at HEAD, so IP's own
             // RETURN injector cannot be trusted to populate these helper shaders.
             GraphicsPipeline portalAreaPipeline = null;
+            ShaderInstance portalAreaShader = null;
+            ShaderInstance framebufferAreaShader = null;
             for(String fieldName : new String[]{"drawFbInAreaShader", "portalAreaShader", "blitScreenNoBlendShader"}) {
                 Object shader = myRenderHelper.getField(fieldName).get(null);
                 if(shader == null) {
@@ -89,11 +96,24 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
                 }
                 if("portalAreaShader".equals(fieldName)) {
                     portalAreaPipeline = shaderMixed.getPipeline();
+                    portalAreaShader = (ShaderInstance)shader;
+                }
+                else if("drawFbInAreaShader".equals(fieldName)) {
+                    framebufferAreaShader = (ShaderInstance)shader;
                 }
             }
-            if(portalAreaPipeline == null) {
-                throw new IllegalStateException("Immersive Portals portal-area Vulkan pipeline was not installed");
+            if(portalAreaPipeline == null || portalAreaShader == null || framebufferAreaShader == null) {
+                throw new IllegalStateException("Immersive Portals portal-area Vulkan shaders were not installed");
             }
+
+            // IP deliberately writes camera-relative matrices before apply(). The
+            // converted legacy ShaderInstance path mirrors global RenderSystem
+            // matrices during apply(), so verify our compatibility bridge restores
+            // IP's explicit values before BufferUploader performs the UBO upload.
+            verifyPortalMatrixRestore(portalAreaShader, "portalAreaShader");
+            verifyPortalMatrixRestore(framebufferAreaShader, "drawFbInAreaShader");
+            Initializer.LOGGER.info(
+                    "VULKANMOD_IP_PORTAL_MATRIX_RESTORE_OK: explicit portal matrices survive converted ShaderInstance.apply");
 
             // These methods normally enter LWJGL OpenGL directly. The calls must
             // be harmless with VulkanMod's no-OpenGL-context window. Force IP's
@@ -207,5 +227,57 @@ public abstract class ImmersivePortalsCompatSmokeMixin {
         }
 
         Initializer.LOGGER.info("Immersive Portals 3.0.7 compatibility mixin smoke passed");
+    }
+
+    private static void verifyPortalMatrixRestore(ShaderInstance shader, String shaderName) {
+        Matrix4f expectedModelView = new Matrix4f()
+                .translation(37.25f, -19.5f, 11.75f)
+                .rotateXYZ(0.31f, -0.47f, 0.23f);
+        Matrix4f expectedProjection = new Matrix4f()
+                .scaling(0.625f, 1.375f, 0.875f)
+                .translate(-4.5f, 8.25f, 2.0f);
+
+        shader.MODEL_VIEW_MATRIX.set(expectedModelView);
+        shader.PROJECTION_MATRIX.set(expectedProjection);
+        shader.apply();
+        try {
+            if(matrixUniformMatches(shader.MODEL_VIEW_MATRIX, expectedModelView)
+                    && matrixUniformMatches(shader.PROJECTION_MATRIX, expectedProjection)) {
+                throw new IllegalStateException(
+                        "Immersive Portals matrix smoke did not exercise the converted legacy apply overwrite for "
+                                + shaderName);
+            }
+
+            ImmersivePortalsPortalMatrixCompat.restoreExplicitPortalMatrices(
+                    expectedModelView, expectedProjection);
+
+            if(!matrixUniformMatches(shader.MODEL_VIEW_MATRIX, expectedModelView)
+                    || !matrixUniformMatches(shader.PROJECTION_MATRIX, expectedProjection)) {
+                throw new IllegalStateException(
+                        "Immersive Portals explicit portal matrices were not restored for " + shaderName);
+            }
+        } finally {
+            shader.clear();
+        }
+    }
+
+    private static boolean matrixUniformMatches(Uniform uniform, Matrix4f expected) {
+        if(uniform == null) {
+            return false;
+        }
+
+        float[] expectedValues = new float[16];
+        expected.get(expectedValues);
+        FloatBuffer actual = uniform.getFloatBuffer();
+        if(actual == null || actual.capacity() < expectedValues.length) {
+            return false;
+        }
+
+        for(int i = 0; i < expectedValues.length; ++i) {
+            if(Float.floatToIntBits(actual.get(i)) != Float.floatToIntBits(expectedValues[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 }
