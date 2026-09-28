@@ -4,25 +4,26 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable code/test candidate is `8c4fc1a9c054516d1b59530f1291a63de9268c72` (`test: require Immersive Portals matrix restore smoke`). Any later descendant may be documentation-only; executable evidence is anchored here.
-- Public CI **#796** / run `36394198325` is fully green at `8c4fc1a9`. Build/distributable, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7 including explicit portal-matrix restore, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
-- Testable artifact is `VulkanMod-Forge-build-796` (artifact `10957517965`, SHA-256 `9b09485424cc6a1ba5b406e500e0524f743ae92c15d908d56ce1a3883c5d21c4`). This is the next RX 6900 XT/Create Chronicles portal-visual candidate.
+- Current executable code/test candidate is `fd3eeb435c751bee2dd6fb12d252343e333e1103` (`ci: verify packaged IP mixin anchors`). Any later descendant may be documentation-only; executable evidence is anchored here.
+- Public CI **#799** / run `36406045562` is fully green at `fd3eeb43`. Build/distributable, the new packaged Immersive Portals injection-anchor contract, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7 including explicit portal-matrix restore, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Testable artifact is `VulkanMod-Forge-build-799` (artifact `10962113220`, SHA-256 `0968adf25df29bba0410b961a04ba28edff577d1f439a1e6827b6c48f0a26f0a`). This is the next RX 6900 XT/Create Chronicles portal-visual candidate.
 - Phase 4 remains **5/8** and is the active priority. Open mandatory gates are current Create/Flywheel visuals, representative particles/translucency/entities/GUI, and world enter/leave/re-enter + resource reload. Reload and re-entry remain explicitly deferred for the current pass.
 - Phase 7 GPU-terrain/hybrid work remains paused at **6/11** while representative full-pack visual correctness is repaired. Phase 5 measurement work remains **4/7**; no performance win is claimed without comparable RX A/B evidence.
 - The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence. Highest demonstrated `AGENTS.md` milestone remains **6 — playable world**.
-- `ROADMAP.md` Phase 4 gate count/order remains authoritative, but its prose-only “Current focus” still names an older build; this checkpoint supersedes that stale build reference without changing roadmap sequencing.
+- `ROADMAP.md` Phase 4 gate count/order remains authoritative, but its prose-only “Current focus” may name an older build; this checkpoint supersedes stale build references without changing roadmap sequencing.
 
 ## Current RX 6900 XT evidence — 2026-09-28
 
-The latest user-machine evidence is build **#791** (`795a4815...`) with both real PureBDcraft packs and all four experimental terrain flags.
+The latest user-machine run is build **#796** (`8c4fc1a9...`) with both real PureBDcraft packs and all four experimental terrain flags. It did **not** reach the point where the portal-matrix visual repair could be judged.
 
-- The previous nested-Nether `ChunkRenderDispatcher.setCamera(Vec3)` crash is hardware-confirmed closed. The run entered the world, Immersive Portals selected `RendererUsingFrameBuffer`, initialized its secondary framebuffer, created the Nether client world, and the user could traverse the portal in both directions without that crash recurring.
-- The game shut down normally after the test. No `VUID-` or `VK_ERROR` signal was found in the supplied launcher log.
-- Real portal content now renders, but the portal image is visibly **spatially detached from the portal opening**. Screenshots show the remote framebuffer composite displaced from the obsidian portal surface rather than remaining rigidly clipped/anchored to it as the camera moves around the structure.
-- This is a visual transform/composition failure, not a remote-world creation or secondary-framebuffer failure. Do not regress to null-suppression or reopen the already-closed vanilla dispatcher path.
-- Creative inventory imagery, current third-person player/entity rendering, main-menu lighting quality, and Create/Flywheel visual correctness were not conclusively re-checked in this #791 evidence and remain open.
+- The previous nested-Nether `ChunkRenderDispatcher.setCamera(Vec3)` crash remains hardware-confirmed closed. #796 entered the overworld, Immersive Portals selected `RendererUsingFrameBuffer`, initialized its secondary framebuffer, and created the Nether client world.
+- #796 then crashed on the render thread while lazily loading/applying `ImmersivePortalsViewAreaRendererMixin`. The new matrix-restore injector scanned `ViewAreaRenderer.renderPortalArea(...)` but matched **0/1** injection points.
+- Root cause: the injector was anchored on Mojmap `ShaderInstance.apply()` while the optional IP mixin is declared `remap=false`. That works in ForgeGradle's development `runClient`, but the packaged production IP bytecode calls the reobfuscated Minecraft method name, so the annotation target in the distributed VulkanMod JAR could never match.
+- This is a production-remapping/injection-anchor bug in the #796 repair, not evidence against the portal-matrix diagnosis and not a regression of remote-world creation, framebuffer ownership, or Vulkan terrain-dispatcher compatibility.
+- Build #791 remains the latest successful **visual** portal evidence: real remote-world content rendered and traversal worked in both directions, but the remote image was spatially detached from the portal opening.
+- Creative inventory imagery, current third-person player/entity rendering, main-menu lighting quality, and Create/Flywheel visual correctness remain open.
 
-The first RX question for #796 is therefore narrowly whether the remote view is now attached to the actual portal polygon from multiple viewing angles.
+The first RX question for #799 is therefore still narrowly whether the remote view is attached to the actual portal polygon from multiple viewing angles, now that the packaged injection can apply.
 
 ## Immersive Portals 3.0.7 compatibility boundary
 
@@ -30,7 +31,7 @@ The first RX question for #796 is therefore narrowly whether the remote view is 
 
 - `c299a49d` cancels IP's obsolete `MyRenderHelper.earlyRemoteUpload()` vanilla chunk-upload prepass; earlier RX evidence confirms that crash is gone.
 - `97b50739` fixes the later merged `LevelRenderer` terrain-camera path structurally. The post-apply rewrite selects the dispatcher call in the method containing IP's merged `ip_allowOverrideTerrainSetup()Z` helper, removes only that obsolete call, and leaves the unrelated direct dispatcher call intact.
-- Exact published IP 3.0.7 CI composition has been green since #788, and #791 RX evidence now confirms nested secondary-world rendering gets beyond the former dispatcher failure.
+- Exact published IP 3.0.7 CI composition has been green since #788, and #791/#796 RX evidence confirms nested secondary-world setup gets beyond the former dispatcher failures.
 - The exploratory query-callback skip remains reverted. `ImmersivePortalsQueryManagerMixin` bypasses unsupported OpenGL query results but still executes supplied geometry callbacks before conservatively reporting visible.
 
 ### Framebuffer renderer and depth clamp
@@ -48,7 +49,7 @@ Retained repair:
 - unsupported devices never request an unavailable Vulkan feature and leave clamp disabled;
 - #790's first strengthened probe failed earlier in unrelated composed BufferBuilder lifecycle (`BufferBuilder was empty`); that was a test-probe failure rather than production depth-clamp evidence;
 - `795a4815` replaced that probe with a direct bind of IP's already-built `portal_area` `GraphicsPipeline` while depth clamp is enabled;
-- CI #791 and #796 are fully green for the depth-clamped Vulkan pipeline path.
+- CI #791, #796, and #799 are green for the depth-clamped Vulkan pipeline path.
 
 ### Portal-area matrix ownership
 
@@ -60,25 +61,27 @@ Exact IP 3.0.7 behavior explains the failure:
 - `MyRenderHelper.drawPortalAreaWithFramebuffer(...)` does the same for `drawFbInAreaShader` before compositing the secondary framebuffer over the portal polygon;
 - VulkanMod's converted-legacy `ShaderInstance.apply()` mirrors global `RenderSystem` model-view/projection matrices for ordinary legacy draws. That overwrote IP's explicit portal matrices immediately before these two portal-area draws. The projection is normally already global; the model-view replacement is the important spatial mismatch for IP's camera-relative portal vertices.
 
-Retained repair for #796:
+Retained repair and production-anchor correction:
 
 - `d41ce91d` adds a narrow compatibility bridge that restores IP's explicit portal `ModelViewMat`/`ProjMat` values after converted legacy `apply()` and before draw-time UBO upload;
 - `2a7c2eef` applies that boundary to the final framebuffer portal composite after IP's viewport setup and before portal geometry submission;
-- `b5d9565e` applies the same boundary to `ViewAreaRenderer.renderPortalArea(...)` immediately after `ShaderInstance.apply()`;
-- the generic legacy shader behavior is intentionally unchanged, preserving the existing item/entity/light-state repairs rather than globally weakening normal ShaderInstance state publication;
-- `b28ee69c` extends the exact-IP smoke to exercise both real IP shaders with deliberately non-global matrices. It first proves converted `apply()` overwrites them, then proves the compatibility bridge restores the exact values in the live `Uniform` storage used by Vulkan UBO fields;
-- `8c4fc1a9` makes that matrix-restore marker mandatory in `scripts/ci/immersive-portals-smoke.sh`;
-- **CI #796 is fully green**, so both new mixin injection points apply to published Forge IP 3.0.7 and the matrix repair passes under the same full compatibility matrix.
+- `b5d9565e` initially applied the same boundary to `ViewAreaRenderer.renderPortalArea(...)` by injecting after Mojmap `ShaderInstance.apply()`;
+- `b28ee69c` extends the exact-IP development smoke to exercise both real IP shaders with deliberately non-global matrices. It first proves converted `apply()` overwrites them, then proves the compatibility bridge restores the exact values in the live `Uniform` storage used by Vulkan UBO fields;
+- `8c4fc1a9` makes that matrix-restore marker mandatory in the exact IP smoke. CI #796 was green in the development/remapped runtime, but the #796 RX run exposed that the `ViewAreaRenderer` injector itself was not production-safe;
+- `934d4e57` moves the visibility-pass injection anchor from Minecraft's remapped `ShaderInstance.apply()` invocation to IP's own `ViewAreaRenderer.buildPortalViewAreaTrianglesBuffer(...)` call. This is still immediately after `apply()` and before geometry submission, but it is stable in both development and packaged Forge runtimes because it does not depend on a Minecraft method name;
+- `2b012e9f` adds `scripts/ci/immersive-portals-package-contract.py`, which inspects the actual distributable JAR and fails if the view-area mixin contains the old dev-only `ShaderInstance.apply()` anchor or lacks the stable IP-owned call. The contract was also checked against the exact #796 artifact and correctly rejects it;
+- `fd3eeb43` wires that production-package contract into normal CI immediately after `./gradlew build`;
+- **CI #799 is fully green**: the reobfuscated distributable passes the new package contract, exact IP 3.0.7 still applies the matrix mixins and passes the explicit matrix-restore smoke, and the full downstream compatibility matrix remains green.
 
 RX confirmation is still required before declaring real portal visual placement correct.
 
 ### Custom shader reload ownership
 
-VulkanMod replaces `GameRenderer.reloadShaders()`, while IP stores custom `ShaderInstance`s in static fields. The retained repair appends IP's registered custom shaders to every Vulkan-managed reload set once IP is ready, preventing static references from pointing at closed shader instances. CI #796 retains and exercises the repair; resource reload itself remains deferred for the current RX pass.
+VulkanMod replaces `GameRenderer.reloadShaders()`, while IP stores custom `ShaderInstance`s in static fields. The retained repair appends IP's registered custom shaders to every Vulkan-managed reload set once IP is ready, preventing static references from pointing at closed shader instances. CI #799 retains and exercises the repair; resource reload itself remains deferred for the current RX pass.
 
 ## Next RX gate
 
-Use build **#796** / `8c4fc1a9c054516d1b59530f1291a63de9268c72` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override. Do not enable `vulkanmod.traceNewEntityDraws` or `vulkanmod.profileTerrainUploadCopies` for the normal first pass.
+Use build **#799** / `fd3eeb435c751bee2dd6fb12d252343e333e1103` with both real PureBDcraft packs and the established four experimental terrain flags. Do not add the private-CI memory-reserve override. Do not enable `vulkanmod.traceNewEntityDraws` or `vulkanmod.profileTerrainUploadCopies` for the normal first pass.
 
 Keep this pass narrow and reuse the same real portal if practical:
 
@@ -87,17 +90,17 @@ Keep this pass narrow and reuse the same real portal if practical:
 3. Cross the portal once and inspect the reverse side as well. Ordinary portal traversal already worked on #791; this is about spatial composition from both sides, not a reload/re-entry stress test.
 4. If the portal is now correct, open Creative and check ordinary block/item imagery, then check the player in third person and one nearby entity.
 5. Only after those pass, continue with a moving Create/Flywheel contraption, Create GUI/overlay, and representative particles/liquids/translucency/entities.
-6. If the portal remains detached, retain screenshots from two different viewing angles plus the launcher/latest log. Do not repeat #791/#790 or older crash tests.
+6. If the portal remains detached or another portal-specific failure appears, retain screenshots from two different viewing angles plus the launcher/latest log. Do not repeat #791/#790 or older crash tests.
 
 Reload and world leave/re-enter remain explicitly deferred.
 
 ## Create Chronicles compatibility boundary
 
-Closed by direct fixes/current evidence: shader parser issues, Create stencil startup, Twilight Forest/Alex's Caves/Moonlight/Quark shader aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, Distant Horizons AFTER_LEVEL suppression, auxiliary `MainTarget` ownership, converted-shader lifecycle/state/light uploads, fixed lightmap/overlay sampler bookkeeping, IP vanilla early-upload ownership, IP merged terrain-dispatcher ownership, real secondary-world/framebuffer execution, and CI-level IP framebuffer/depth-clamp/matrix semantics.
+Closed by direct fixes/current evidence: shader parser issues, Create stencil startup, Twilight Forest/Alex's Caves/Moonlight/Quark shader aliases, real two-pack retention, RX Vulkan activation, real GPU-terrain execution, Distant Horizons AFTER_LEVEL suppression, auxiliary `MainTarget` ownership, converted-shader lifecycle/state/light uploads, fixed lightmap/overlay sampler bookkeeping, IP vanilla early-upload ownership, IP merged terrain-dispatcher ownership, real secondary-world/framebuffer execution, and CI-level IP framebuffer/depth-clamp/matrix semantics plus production-safe matrix injection packaging.
 
 Still requiring current user-machine evidence:
 
-- **first:** #796 portal polygon anchoring/clipping from multiple viewing angles;
+- **first:** #799 portal polygon anchoring/clipping from multiple viewing angles;
 - Creative block/item imagery and player/entity rendering on the current post-portal-fix candidate;
 - main-menu player lighting quality if convenient on a fresh launch;
 - Iceberg/Advancement Plaques auxiliary item rendering after #744 when naturally encountered;
