@@ -4,21 +4,21 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable/test candidate is `90a9c6498853e3f6cae0b64a554b996455a16199` (`docs: document dedicated performance capture output`). The executable profiler-output change immediately underneath is `2d91a085d3d54cc60cda4c68165c157d0b781ff7` (`feat: write performance profiling to dedicated capture file`). The initial critical-path implementation is `3d28f5076a69ec52ea208d4bfb11f6ff3f93cda6` with the terrain statistics API correction in `5c06b5f9a6b08c77fd8856d3d84834d61e0e86d6`.
-- Public CI **#805** / run `36529808812` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
-- Testable artifact is `VulkanMod-Forge-build-805` (artifact `11015748642`, SHA-256 `e4826efea983ea5876d07b1c61690d902aea05700c5f7c947ada7953cb67c8db`).
+- Current executable/test candidate is `0b5e596623591e9e2180c9b67cb572bfc3afcca2` (`perf: split broad runTick profiling phases`).
+- Public CI **#806** / run `36552111888` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Testable artifact is `VulkanMod-Forge-build-806` (artifact `11025174241`, SHA-256 `348bba3a1ebb0c1f5caaaff5a52aa1aea6379563a30e480638e8820fd90296a5`).
 - The adversarial audit remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
 
 ## Active sequencing
 
-- Live Phase 4 evidence is **7/8**. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload. The user explicitly does **not** want that work prioritized now; treat the lifecycle gate as deferred rather than as a reason to keep retesting already-working visual paths.
+- Live Phase 4 evidence is **7/8**. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload. The user explicitly does **not** want that work prioritized now; treat the lifecycle gate as deferred.
 - Phase 5 measurement work is **4/7** and is the current useful priority. Open numeric gates are the RX 6900 XT OpenGL baseline, Vulkan baseline, and hitch/frame-time evidence under the fixed benchmark contract.
-- Phase 7 GPU-terrain/hybrid work remains **6/11**. The first substantial open implementation gate there is correct GPU visibility/section selection, but performance claims must still use comparable Phase 5 evidence.
-- `ROADMAP.md` still contains stale Phase 4 5/8 prose/checkmarks from before the #801 RX confirmation. Until reconciled, use the gate definitions/order there but use this checkpoint plus current runtime evidence for the live 7/8 count and user priority override.
+- Phase 7 GPU-terrain/hybrid work remains **6/11**. The first substantial open implementation gate there is correct GPU visibility/section selection, but performance claims still require comparable Phase 5 evidence.
+- `ROADMAP.md` still contains stale Phase 4 5/8 prose/checkmarks from before the #801 RX confirmation. Use its gate definitions/order, but use this checkpoint plus current runtime evidence for the live 7/8 count and the user's priority override.
 
-## Current RX 6900 XT evidence — build #801
+## Current RX 6900 XT compatibility evidence
 
-The user's 2026-09-28 Create Chronicles run established the current visual compatibility baseline:
+Build #801 established the current visual compatibility baseline:
 
 - Immersive Portals portal rendering and traversal work correctly, including remote-world framebuffer composition attached/clipped to the portal.
 - Creative inventory block/item imagery renders correctly.
@@ -31,48 +31,41 @@ The same #801 session independently reproduced a shutdown/native-lifetime abort 
 
 ## Performance / critical-path instrumentation
 
-The reusable opt-in profiling layer is documented in `docs/PERFORMANCE_PROFILING.md`. `2d91a085` moves profiler summaries out of the normal Forge/Minecraft logger and into a dedicated capture file while preserving the low-overhead timing contract.
+The reusable opt-in profiling layer is documented in `docs/PERFORMANCE_PROFILING.md`.
 
-Enable it for a Vulkan diagnostic run with:
+Enable it with:
 
 ```text
 -Dvulkanmod.performanceProfiler=true
 ```
 
-Default output, relative to the Minecraft game directory:
+Default output:
 
 ```text
 logs/vulkanmod-performance.log
 ```
 
-The ordinary console/log receives only a one-time notice that profiling is enabled and the resolved output path. Periodic `[VulkanModPerf]` summaries are written to the dedicated file instead of cluttering `latest.log`. Output failures disable profiling and report the failure through the normal logger rather than risking gameplay stability.
-
-Optional controls:
+Useful bounded capture controls include:
 
 ```text
 -Dvulkanmod.performanceProfiler.summarySeconds=5
--Dvulkanmod.performanceProfiler.durationSeconds=60
--Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-run-a.log
+-Dvulkanmod.performanceProfiler.durationSeconds=30
+-Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-stationary.log
 -Dvulkanmod.performanceProfiler.slowFrameMs=25
--Dvulkanmod.performanceProfiler.maxSamples=4096
 ```
 
-`summarySeconds` controls the summary-window period; default is 5 seconds. `durationSeconds=0` means unlimited; a positive value emits a final partial summary, writes `capture_complete`, closes the capture file, and makes the profiler inactive when the requested duration elapses. `output` can be a game-directory-relative or absolute path, allowing benchmark automation to preserve separate captures.
+The initial RX 6900 XT diagnostic capture supplied on 2026-09-29 was useful but is **not a fixed-contract Phase 5 baseline**:
 
-Current instrumentation contract:
+- VulkanMod reported effective render distance `D: 32`; the fixed baseline contract is render distance 16.
+- The active-world portion remained under substantial terrain population/build churn instead of representing the required settled 60-second stationary state.
+- Across the sustained active-world windows, frame wall time was roughly 30.3 ms weighted average while roughly 28.0 ms (~92%) remained in the old `unaccounted` bucket.
+- Known ordinary costs were much smaller: terrain setup ~2.0 ms average, terrain uploads ~0.14 ms, submit/present ~0.09 ms, and frame waits near zero. This does **not** support optimizing submit/fence/upload code first.
+- Some isolated multi-hundred/multi-thousand-ms hitches were GC-heavy (including a ~1.67 s frame paired with ~1.49 s GC), but ordinary sustained 30–45 ms frames were not explained by GC.
+- Exact ~16.7 ms periods elsewhere in the capture make an FPS limiter worth distinguishing explicitly, but do not assume their cause until the new limiter stage is observed.
 
-- whole-`Minecraft.runTick()` CPU wall-time distribution: average, p50, p95, p99, max, and slow-frame count;
-- render-thread stage timing for frame-slot recycling wait, frame-fence/recreation work, frame bookkeeping, terrain setup/culling, camera-region reposition, terrain publication/uploads, and final submit/present;
-- nested reposition time is reported but not double-counted in top-level accounted time;
-- an explicit `unaccounted` bucket exposes missing stage coverage instead of falsely attributing it;
-- worst-frame stage attribution is retained per summary window;
-- JVM GC count/time deltas and heap use are sampled only at summary boundaries;
-- existing terrain region-batch and task-dispatch queue/build/handoff/publication statistics are emitted beside the timing window;
-- the old `Profiler2` allocation-heavy timing tree now runs only while its Alt+F8 overlay is visible instead of allocating every normal frame.
+`0b5e5966` therefore adds broad non-overlapping top-level `runTick()` timing around `Minecraft.tick()`, `GameRenderer.render(...)`, `Window.updateDisplay()`, and `RenderSystem.limitDisplayFPS(...)`. Terrain setup/reposition/uploads remain as nested renderer detail and are no longer double-counted against `unaccounted`. Existing frame-slot/fence/bookkeeping and submit/present timing remain intact.
 
-The profiler is disabled by default. Its hot enabled path uses fixed primitive sample buffers and `System.nanoTime()`; percentile sorting, string formatting, JVM telemetry, and file I/O occur only at summary boundaries.
-
-This is intentionally a **CPU wall-clock critical-path layer**, not a claim of GPU execution timing. Vulkan GPU timestamps are feasible: device `timestampPeriod` is available and frame fences provide a non-blocking completed-slot readback boundary. Add a query-ring layer only when a capture shows GPU/pass timing is the next missing discriminator rather than blanket-instrumenting every pass preemptively.
+The profiler is still deliberately CPU wall-clock only. Do not add blanket Vulkan GPU timestamp instrumentation until the broad split shows that GPU/pass timing is actually the next missing discriminator.
 
 ## Immersive Portals retained compatibility boundary
 
@@ -108,4 +101,6 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next useful action
 
-Use the dedicated performance capture file to establish a Vulkan critical-path capture under the fixed Phase 5 stationary/traversal/Create-heavy workloads, alongside the comparable OpenGL/Vulkan baseline process in `docs/TERRAIN_PERFORMANCE_BASELINE.md`. Use the resulting p95/p99/worst-frame and queue/build/upload evidence to choose the next optimization target. If the capture points at GPU execution rather than CPU submission/terrain work, add the bounded Vulkan timestamp-query ring next; otherwise instrument only the dominant `unaccounted` CPU boundary or resume the relevant Phase 6/7 gate.
+Use build #806 for one new Vulkan profiler capture. For a formal stationary Phase 5 baseline, use the exact fixed profile in `docs/TERRAIN_PERFORMANCE_BASELINE.md`: 2560x1440 windowed, VSync off, Unlimited FPS, Fancy, render distance 16, simulation distance 12, fixed benchmark world/position, then wait 60 seconds before a 30-second capture. The resulting `client_tick`, `game_render`, `display_update`, `frame_limit`, narrow terrain, submit, and remaining `unaccounted` numbers should determine the next profiling/optimization slice.
+
+A second render-distance-32 capture is also useful later as a labeled real-gameplay stress workload, but do not mix it numerically with the fixed render-distance-16 baseline series.
