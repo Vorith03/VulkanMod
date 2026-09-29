@@ -199,7 +199,15 @@ public class ChunkTask {
                         RenderSection.GpuTerrainPreflight fullPreflight =
                                 RenderSection.qualifyGpuTerrain(original);
 
-                        if(this.gpuTerrainCpuBypassCandidate
+                        // CPU omission cannot be safe if the bounded input store already
+                        // cannot accept this section. Otherwise publication rejects it
+                        // and immediately schedules a second, CPU recovery build.
+                        ChunkArea area = this.renderSection.getChunkArea();
+                        boolean stagingAvailable = area != null && area.canStageVoxels(
+                                blockPos.getX(), blockPos.getY(), blockPos.getZ(),
+                                original.byteSize());
+
+                        if(stagingAvailable && this.gpuTerrainCpuBypassCandidate
                                 && RenderSection.gpuTerrainCpuBypassEligible(fullPreflight)) {
                             compileResults.voxels = original;
                             compileResults.gpuTerrainPreflight = fullPreflight;
@@ -208,7 +216,7 @@ public class ChunkTask {
                                     compileResults.sparseLighting != null;
                         }
 
-                        if(!compileResults.gpuTerrainCpuBypassed
+                        if(stagingAvailable && !compileResults.gpuTerrainCpuBypassed
                                 && (this.gpuTerrainHybridFreshCandidate
                                 || this.gpuTerrainHybridRebuildCandidate)) {
                             GpuTerrainHybridMask.Plan hybridPlan = GpuTerrainHybridMask.plan(
@@ -254,6 +262,9 @@ public class ChunkTask {
                                 GpuTerrainDiagnostics.recordSuccess(reason,
                                         this.renderSection, this.voxelGeneration,
                                         compileResults.gpuTerrainPreflight.faceCount(), true);
+                            } else if(!stagingAvailable) {
+                                GpuTerrainDiagnostics.record("worker_preflight", "voxel_staging_budget_full",
+                                        this.renderSection, this.voxelGeneration, null);
                             } else if(this.gpuTerrainCpuRecoveryRequired) {
                                 GpuTerrainDiagnostics.record("worker_preflight", "cpu_recovery_required",
                                         this.renderSection, this.voxelGeneration, null);

@@ -91,6 +91,8 @@ public class WorldRenderer {
 //    UniformBuffers uniformBuffers;
 
     int nonEmptyChunks;
+    private long performanceScheduledBuilds;
+    private long performanceDirtyNotices;
 
     private final List<Runnable> onAllChangedCallbacks = new ObjectArrayList<>();
 
@@ -439,6 +441,8 @@ public class WorldRenderer {
             return false;
 
         section.rebuildChunkAsync(this.taskDispatcher, renderRegionCache);
+        if (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled())
+            performanceScheduledBuilds++;
         section.setNotDirty();
         return true;
     }
@@ -727,6 +731,8 @@ public class WorldRenderer {
     }
 
     public void setSectionDirty(int x, int y, int z, boolean flag) {
+        if (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled())
+            performanceDirtyNotices++;
         this.sectionGrid.setDirty(x, y, z, flag);
     }
 
@@ -756,7 +762,10 @@ public class WorldRenderer {
         int j = this.chunkQueue.size();
         String tasksInfo = this.taskDispatcher == null ? "null" : this.taskDispatcher.getStats();
         return String.format("Chunks: %d(%d)/%d D: %d, %s", this.nonEmptyChunks, j, i, this.lastViewDistance, tasksInfo)
-                + (TerrainShaderManager.useRegionBatching(RenderType.cutoutMipped()) ? RegionBatchStats.describe() : "");
+                + (TerrainShaderManager.useRegionBatching(RenderType.cutoutMipped()) ? RegionBatchStats.describe() : "")
+                + (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled()
+                ? " | Terrain scheduling: dirtyNotices=" + performanceDirtyNotices
+                + " scheduled=" + performanceScheduledBuilds : "");
     }
 
     public void cleanUp() {

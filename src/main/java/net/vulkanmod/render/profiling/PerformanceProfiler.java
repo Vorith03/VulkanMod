@@ -57,6 +57,7 @@ public final class PerformanceProfiler {
 
     private static boolean active = ENABLED;
     private static boolean frameActive;
+    private static boolean clientTickActive;
     private static boolean announced;
     private static long frameStartNanos;
     private static long captureStartNanos;
@@ -106,6 +107,8 @@ public final class PerformanceProfiler {
         if (!active || !frameActive || stage == null) {
             return 0L;
         }
+        if (stage.tickDetail && !clientTickActive) return 0L;
+        if (stage == Stage.CLIENT_TICK) clientTickActive = true;
         return System.nanoTime();
     }
 
@@ -115,6 +118,7 @@ public final class PerformanceProfiler {
         }
         long elapsed = Math.max(0L, System.nanoTime() - startNanos);
         currentStageNanos[stage.ordinal()] += elapsed;
+        if (stage == Stage.CLIENT_TICK) clientTickActive = false;
     }
 
     /** Finish one runTick sample and emit a bounded periodic summary when due. */
@@ -126,6 +130,7 @@ public final class PerformanceProfiler {
         long now = System.nanoTime();
         long frameNanos = Math.max(0L, now - frameStartNanos);
         frameActive = false;
+        clientTickActive = false;
         frameSequence++;
 
         if (sampleCount >= MAX_SAMPLES) {
@@ -258,6 +263,17 @@ public final class PerformanceProfiler {
             appendMetric(max, stage.label, stageMax[ordinal]);
         }
         appendMetric(avg, "unaccounted", Math.max(0L, frameAvg - accountedAvg));
+        long tickDetail = 0L;
+        for (Stage stage : STAGES) if (stage.tickDetail) tickDetail += stageSums[stage.ordinal()];
+        appendMetric(avg, "client_tick_other", Math.max(0L,
+                (stageSums[Stage.CLIENT_TICK.ordinal()] - tickDetail) / count));
+        appendMetric(avg, "game_render_other", Math.max(0L,
+                (stageSums[Stage.GAME_RENDER.ordinal()]
+                        - stageSums[Stage.WORLD_RENDER.ordinal()]) / count));
+        appendMetric(avg, "world_render_other", Math.max(0L,
+                (stageSums[Stage.WORLD_RENDER.ordinal()]
+                        - stageSums[Stage.TERRAIN_SETUP.ordinal()]
+                        - stageSums[Stage.TERRAIN_UPLOADS.ordinal()]) / count));
         writeLine(avg.toString());
         writeLine(p95.toString());
         writeLine(max.toString());
@@ -431,6 +447,9 @@ public final class PerformanceProfiler {
                 || !Stage.TERRAIN_SETUP.nested
                 || !Stage.TERRAIN_REPOSITION.nested
                 || !Stage.TERRAIN_UPLOADS.nested
+                || !Stage.CLIENT_LEVEL_TICK.nested
+                || !Stage.CLIENT_LEVEL_TICK.tickDetail
+                || Stage.CLIENT_TICK.tickDetail
                 || Stage.GAME_RENDER.nested
                 || Stage.FRAME_FENCE_WAIT.nested) {
             throw new IllegalStateException("Performance profiler stage contract is invalid");
@@ -442,7 +461,12 @@ public final class PerformanceProfiler {
         FRAME_FENCE_WAIT("frame_fence_wait", false),
         FRAME_OPS("frame_ops", false),
         CLIENT_TICK("client_tick", false),
+        CLIENT_LEVEL_TICK("client_level_tick", true, true),
+        CLIENT_ENTITIES_TICK("client_entities_tick", true, true),
+        CLIENT_RENDERER_TICK("client_renderer_tick", true, true),
+        CLIENT_CONNECTION_TICK("client_connection_tick", true, true),
         GAME_RENDER("game_render", false),
+        WORLD_RENDER("world_render", true),
         TERRAIN_SETUP("terrain_setup", true),
         TERRAIN_REPOSITION("terrain_reposition", true),
         TERRAIN_UPLOADS("terrain_uploads", true),
@@ -452,10 +476,16 @@ public final class PerformanceProfiler {
 
         private final String label;
         private final boolean nested;
+        private final boolean tickDetail;
 
         Stage(String label, boolean nested) {
+            this(label, nested, false);
+        }
+
+        Stage(String label, boolean nested, boolean tickDetail) {
             this.label = label;
             this.nested = nested;
+            this.tickDetail = tickDetail;
         }
 
         public static Stage fromLegacyName(String name) {

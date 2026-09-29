@@ -47,6 +47,14 @@ public final class RegionVoxelStore {
         return true;
     }
 
+    /** Advisory worker preflight; publication still checks the budget atomically. */
+    public boolean canPut(int slot, int size) {
+        SectionVoxelSnapshot previous = sections.get(slot);
+        return budget.canAcquire(size, previous == null ? 0 : previous.byteSize());
+    }
+
+    public static boolean canAcquireNew(int size) { return GLOBAL_BUDGET.canAcquire(size, 0); }
+
     public SectionVoxelSnapshot get(int slot) { return sections.get(slot); }
     public long revision() { return revision; }
 
@@ -89,10 +97,28 @@ public final class RegionVoxelStore {
             return true;
         }
 
+        synchronized boolean canAcquire(int size, int replacingBytes) {
+            return size <= maxBytes - bytes + replacingBytes
+                    && (replacingBytes > 0 || entries < maxEntries);
+        }
+
         synchronized void release(int size) { bytes -= size; entries--; }
         synchronized String describe() {
             return "Terrain voxel staging: " + entries + "/" + maxEntries + " sections, "
                     + bytes / 1024 + "/" + maxBytes / 1024 + " KiB, rejected " + rejected;
         }
+    }
+
+    /** A full store may replace its own slot but must reject a new CPU-bypassed section. */
+    public static void verifyCapacityPreflightForCi() {
+        Budget budget = new Budget(20, 1);
+        if (!budget.canAcquire(10, 0) || !budget.acquire(10)
+                || budget.canAcquire(1, 0) || !budget.canAcquire(10, 10)
+                || budget.canAcquire(21, 10)) {
+            throw new IllegalStateException("Voxel staging preflight must honor entry/byte caps and replacement");
+        }
+        budget.release(10);
+        if (!budget.canAcquire(20, 0))
+            throw new IllegalStateException("Released voxel staging capacity must become available");
     }
 }

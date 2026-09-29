@@ -18,6 +18,7 @@ public final class SectionVoxelSmokeTest {
     private SectionVoxelSmokeTest() {}
 
     public static void verify() {
+        RegionVoxelStore.verifyCapacityPreflightForCi();
         var area = new ChunkArea(0, new Vector3i(-128, -128, 128));
         var section = new RenderSection(0, -16, -96, 176);
         section.setChunkArea(area);

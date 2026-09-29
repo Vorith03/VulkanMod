@@ -58,6 +58,9 @@
     "profiling.GuiMixin",
     "profiling.KeyboardHandlerM",
     "profiling.MinecraftPerformancePhasesMixin",
+    "profiling.ClientLevelPerformanceMixin",
+    "profiling.ClientRendererPerformanceMixin",
+    "profiling.ClientConnectionPerformanceMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RendererPerformanceMixin",
 

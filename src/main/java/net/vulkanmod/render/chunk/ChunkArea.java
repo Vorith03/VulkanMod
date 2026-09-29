@@ -235,6 +235,13 @@ public class ChunkArea {
     }
 
     /** Compatibility entry point while callers transition to explicit generations. */
+    public synchronized boolean canStageVoxels(int x, int y, int z, int size) {
+        int slot = voxelSlot(x, y, z);
+        if (slot < 0) return false;
+        return voxels == null ? RegionVoxelStore.canAcquireNew(size) : voxels.canPut(slot, size);
+    }
+
+    /** Compatibility entry point while callers transition to explicit generations. */
     public synchronized void publishVoxels(int x, int y, int z, SectionVoxelSnapshot snapshot) {
         this.publishVoxels(x, y, z, snapshot, 0L);
     }
