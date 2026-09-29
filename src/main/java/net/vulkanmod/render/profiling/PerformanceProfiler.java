@@ -1,6 +1,7 @@
 package net.vulkanmod.render.profiling;
 
 import net.minecraft.client.Minecraft;
+import com.mojang.blaze3d.platform.Window;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.WorldRenderer;
 
@@ -60,6 +61,18 @@ public final class PerformanceProfiler {
     private static boolean clientTickActive;
     private static boolean announced;
     private static long frameStartNanos;
+    private static int frameStartWidth;
+    private static int frameStartHeight;
+    private static int framebufferFirstWidth;
+    private static int framebufferFirstHeight;
+    private static int framebufferLastWidth;
+    private static int framebufferLastHeight;
+    private static int framebufferMinWidth;
+    private static int framebufferMaxWidth;
+    private static int framebufferMinHeight;
+    private static int framebufferMaxHeight;
+    private static int framebufferChanges;
+    private static boolean framebufferSampled;
     private static long captureStartNanos;
     private static long lastSummaryNanos;
     private static long frameSequence;
@@ -100,6 +113,10 @@ public final class PerformanceProfiler {
 
         Arrays.fill(currentStageNanos, 0L);
         frameStartNanos = now;
+        Minecraft minecraft = Minecraft.getInstance();
+        Window window = minecraft == null ? null : minecraft.getWindow();
+        frameStartWidth = window == null ? -1 : window.getWidth();
+        frameStartHeight = window == null ? -1 : window.getHeight();
         frameActive = true;
     }
 
@@ -136,6 +153,14 @@ public final class PerformanceProfiler {
         if (sampleCount >= MAX_SAMPLES) {
             emitSummary(now);
         }
+
+        // Sample both boundaries: the launcher size may change before world entry,
+        // and a resize can also occur during the measured frame itself.
+        recordFramebufferSample(frameStartWidth, frameStartHeight);
+        Minecraft minecraft = Minecraft.getInstance();
+        Window window = minecraft == null ? null : minecraft.getWindow();
+        recordFramebufferSample(window == null ? -1 : window.getWidth(),
+                window == null ? -1 : window.getHeight());
 
         int index = sampleCount++;
         frameSamples[index] = frameNanos;
@@ -212,7 +237,7 @@ public final class PerformanceProfiler {
                 : -1;
         Initializer.LOGGER.info("VulkanMod performance profiling enabled; output: {}", outputPath.toAbsolutePath());
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
+                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d initial_framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
                 SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight));
         flushOutput();
         return active;
@@ -244,9 +269,13 @@ public final class PerformanceProfiler {
         long frameP99 = percentile(frameSamples, count, 0.99D);
 
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] window frames=%d frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow_threshold_ms=%.3f slow_frames=%d",
+                "[VulkanModPerf] window frames=%d frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow_threshold_ms=%.3f slow_frames=%d framebuffer_first_px=%dx%d framebuffer_last_px=%dx%d framebuffer_width_range=%d-%d framebuffer_height_range=%d-%d framebuffer_changes=%d",
                 count, millis(frameAvg), millis(frameP50), millis(frameP95), millis(frameP99),
-                millis(frameMaxNanos), SLOW_FRAME_MS, slowFrames));
+                millis(frameMaxNanos), SLOW_FRAME_MS, slowFrames,
+                framebufferFirstWidth, framebufferFirstHeight,
+                framebufferLastWidth, framebufferLastHeight,
+                framebufferMinWidth, framebufferMaxWidth,
+                framebufferMinHeight, framebufferMaxHeight, framebufferChanges));
 
         long accountedAvg = 0L;
         StringBuilder avg = new StringBuilder("[VulkanModPerf] stage_avg_ms");
@@ -327,7 +356,26 @@ public final class PerformanceProfiler {
         Arrays.fill(stageSums, 0L);
         Arrays.fill(stageMax, 0L);
         Arrays.fill(worstStageNanos, 0L);
+        framebufferSampled = false;
+        framebufferChanges = 0;
         lastSummaryNanos = now;
+    }
+
+    private static void recordFramebufferSample(int width, int height) {
+        if (!framebufferSampled) {
+            framebufferFirstWidth = framebufferLastWidth = framebufferMinWidth = framebufferMaxWidth = width;
+            framebufferFirstHeight = framebufferLastHeight = framebufferMinHeight = framebufferMaxHeight = height;
+            framebufferSampled = true;
+            return;
+        }
+        if (width != framebufferLastWidth || height != framebufferLastHeight)
+            framebufferChanges++;
+        framebufferLastWidth = width;
+        framebufferLastHeight = height;
+        framebufferMinWidth = Math.min(framebufferMinWidth, width);
+        framebufferMaxWidth = Math.max(framebufferMaxWidth, width);
+        framebufferMinHeight = Math.min(framebufferMinHeight, height);
+        framebufferMaxHeight = Math.max(framebufferMaxHeight, height);
     }
 
     private static void writeLine(String line) {
