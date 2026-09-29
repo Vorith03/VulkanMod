@@ -47,7 +47,8 @@ public final class AutomatedBenchmark {
     public static void onFrameStart(Minecraft minecraft) {
         if (!ENABLED || minecraft == null || state == State.FINISHED || state == State.ABORTED) return;
         if (state == State.STOPPING) {
-            if (minecraft.level == null && minecraft.getSingleplayerServer() == null) {
+            IntegratedServer server = minecraft.getSingleplayerServer();
+            if (minecraft.level == null && (server == null || server.isStopped())) {
                 state = State.FINISHED;
                 minecraft.stop();
             }
@@ -88,7 +89,7 @@ public final class AutomatedBenchmark {
                 state = State.SETTLING;
                 Initializer.LOGGER.info("VulkanMod benchmark terrain visible; settling for {} seconds",
                         SETTLE_NANOS / 1_000_000_000.0D);
-            } else if (now - teleportRequestedAt > TELEPORT_TIMEOUT_NANOS + 120_000_000_000L) {
+            } else if (now - teleportRequestedAt > 120_000_000_000L) {
                 abort("no terrain appeared at the target view within 120 seconds of teleport");
             }
             return;
@@ -105,6 +106,10 @@ public final class AutomatedBenchmark {
     /** Runs after the sampled frame has ended, so save/quit cannot enter its timing. */
     public static void onFrameEnd(Minecraft minecraft) {
         if (!ENABLED || state != State.CAPTURING || minecraft == null) return;
+        if (!readyInTargetWorld(minecraft, minecraft.getSingleplayerServer()) || !atTargetPose(minecraft)) {
+            abort("target view changed during the measured frame");
+            return;
+        }
         long now = System.nanoTime();
         if (now < captureEndAt(captureStartedAt, capReachedAt, CAPTURE_NANOS, AFTER_CAP_NANOS)) return;
 
@@ -115,8 +120,9 @@ public final class AutomatedBenchmark {
                 capReachedAt != 0L, capReachedAt == 0L ? -1.0D : (now - capReachedAt) / 1_000_000_000.0D));
         PerformanceProfiler.finishAutomatedCapture("benchmark_complete");
         try {
-            // Vanilla's disconnect path saves and stops the integrated server.
-            minecraft.disconnect();
+            // Match the single-player pause menu's normal world teardown path.
+            minecraft.level.disconnect();
+            minecraft.clearLevel();
             minecraft.setScreen(new TitleScreen());
             state = State.STOPPING;
         } catch (RuntimeException failure) {
