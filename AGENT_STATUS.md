@@ -1,76 +1,82 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
-This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail remains in Git and focused evidence documents; keep this file centered on facts that affect the next session.
+This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical implementation detail belongs in Git and focused evidence documents; keep this file centered on facts that affect the next session.
 
 ## Repository state
 
-- Current executable/test candidate remains `f86146bf12b21ad3612f67a601747e18db981ca3` (`test: guard IP framebuffer composite anchor`). The production portal-composite fix immediately underneath is `9833410f549f59910a9fdcd5f795bb94e3576902` (`fix: restore IP framebuffer matrices at draw boundary`).
-- Public CI **#801** / run `36407726305` is fully green. Build/distributable, packaged Immersive Portals injection-anchor validation, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
-- Testable artifact is `VulkanMod-Forge-build-801` (artifact `10962799916`, SHA-256 `b806bf26218fb09d0ccf93d6b6aff009d9a3a8c30f9082d407b62da01dc7806f`).
-- **Live Phase 4 evidence is now 7/8.** The Create/Flywheel ordinary-gameplay visual gate and the representative particles/translucency/entities/GUI gate are RX-confirmed on #801. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload, which the user explicitly deferred.
-- `ROADMAP.md` still contains the older 5/8 Phase 4 checkbox text. Treat that count as stale factual prose until reconciled; its gate order/definitions remain authoritative.
-- Phase 7 GPU-terrain/hybrid work remains paused at **6/11** while Phase 4 is active. Phase 5 measurement work remains **4/7**; no performance win is claimed without comparable RX A/B evidence.
-- The adversarial audit repair effort remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
+- Current executable/test candidate is `5c06b5f9a6b08c77fd8856d3d84834d61e0e86d6` (`fix: use terrain statistics API in performance logger`). The main instrumentation implementation immediately underneath is `3d28f5076a69ec52ea208d4bfb11f6ff3f93cda6` (`feat: add opt-in performance critical-path logger`).
+- Public CI **#803** / run `36525767449` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Testable artifact is `VulkanMod-Forge-build-803` (artifact `11015105357`, SHA-256 `892840ad48e4d6393609a01fd42e31c86f49f1cf0fb3a5ea09d6513db0baf50b`).
+- The adversarial audit remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
 
-## Current RX 6900 XT evidence — 2026-09-28, build #801
+## Active sequencing
 
-The user reports the current #801 candidate is visually correct for the compatibility paths that were previously open:
+- Live Phase 4 evidence is **7/8**. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload. The user explicitly does **not** want that work prioritized now; treat the lifecycle gate as deferred rather than as a reason to keep retesting already-working visual paths.
+- Phase 5 measurement work is **4/7** and is the current useful priority. Open numeric gates are the RX 6900 XT OpenGL baseline, Vulkan baseline, and hitch/frame-time evidence under the fixed benchmark contract.
+- Phase 7 GPU-terrain/hybrid work remains **6/11**. The first substantial open implementation gate there is correct GPU visibility/section selection, but performance claims must still use comparable Phase 5 evidence.
+- `ROADMAP.md` still contains stale Phase 4 5/8 prose/checkmarks from before the #801 RX confirmation. Until reconciled, use the gate definitions/order there but use this checkpoint plus current runtime evidence for the live 7/8 count and user priority override.
 
-- Immersive Portals portal rendering works correctly. The remote world is visible through the portal, the composite remains attached/clipped to the portal, and portal traversal works in both directions. This closes the #799 black-portal/final-composite failure.
+## Current RX 6900 XT evidence — build #801
+
+The user's 2026-09-28 Create Chronicles run established the current visual compatibility baseline:
+
+- Immersive Portals portal rendering and traversal work correctly, including remote-world framebuffer composition attached/clipped to the portal.
 - Creative inventory block/item imagery renders correctly.
-- Third-person player rendering and ordinary entity rendering work correctly.
-- Create/Flywheel content, including ordinary contraption rendering, works correctly.
-- Representative visual/UI paths that were still open are working, closing the particles/translucency/entities/GUI Phase 4 gate.
-- Do not ask the user to repeat these checks unless a later executable change directly threatens them.
+- Third-person player and ordinary entity rendering work correctly.
+- Create/Flywheel ordinary gameplay and moving contraption rendering work correctly.
+- Representative particles/translucency/entities/GUI paths work correctly.
+- Do not ask the user to repeat those checks unless a later executable change directly threatens them.
 
-The same #801 session still exposed the separate shutdown/native-lifetime problem after normal Minecraft shutdown (`double free or corruption` / abort 134). Treat that as independent from the now-working portal/visual compatibility paths. Do not make speculative native-ownership changes without a focused reproduction/backtrace or other ownership evidence.
+The same #801 session independently reproduced a shutdown/native-lifetime abort after normal Minecraft shutdown (`double free or corruption` / exit 134). Keep that separate from the now-working rendering paths. Do not make speculative native-ownership changes without focused ownership evidence or a native backtrace.
 
-## Immersive Portals 3.0.7 compatibility boundary
+## Performance / critical-path instrumentation
 
-### Vanilla terrain dispatcher ownership
+`3d28f507` + `5c06b5f9` add the reusable opt-in logger documented in `docs/PERFORMANCE_PROFILING.md`.
 
-- `c299a49d` cancels IP's obsolete `MyRenderHelper.earlyRemoteUpload()` vanilla chunk-upload prepass; RX evidence confirms that failure is gone.
-- `97b50739` structurally removes only the stale merged IP terrain-camera `ChunkRenderDispatcher.setCamera(Vec3)` call while leaving the unrelated direct dispatcher call intact.
-- The exploratory query-callback skip remains reverted. `ImmersivePortalsQueryManagerMixin` bypasses unsupported OpenGL query-result handling but still executes the supplied geometry callback before conservatively reporting visible.
+Enable it for a Vulkan diagnostic run with:
 
-### Framebuffer renderer, depth clamp, and portal matrices
+```text
+-Dvulkanmod.performanceProfiler=true
+```
 
-Exact Forge IP 3.0.7 compatibility mode renders a remote world into a depth-enabled secondary `TextureTarget`, restores the original target, enables depth clamp, and composites the sampled secondary color image over the portal polygon.
+Optional controls:
 
-VulkanMod's generic `RenderTarget` path supplies sampled Vulkan color/depth images, synthetic texture IDs, render-target switching, shader-read transitions, and named sampler resolution. #801 RX evidence now confirms that this generic path is sufficient for real portal rendering; do not duplicate it with a portal-specific framebuffer implementation absent new contrary evidence.
+```text
+-Dvulkanmod.performanceProfiler.summarySeconds=5
+-Dvulkanmod.performanceProfiler.slowFrameMs=25
+-Dvulkanmod.performanceProfiler.maxSamples=4096
+```
 
-Retained repair boundaries:
+Search `latest.log` for `[VulkanModPerf]`.
 
-- `632136e6` enables Vulkan's optional `depthClamp` feature when supported, tracks the IP compatibility request, includes depth clamp in the graphics-pipeline cache key, and sets `VkPipelineRasterizationStateCreateInfo.depthClampEnable(...)` accordingly.
-- `d41ce91d` adds the narrow compatibility bridge that restores explicit IP `ModelViewMat`/`ProjMat` values without weakening generic legacy shader behavior.
-- `934d4e57` restores matrices at the stable post-`apply()`, pre-draw boundary for the visibility/depth pass.
-- `9833410f` restores matrices at the same semantic boundary for the final sampled framebuffer composite.
-- `f86146bf` guards the packaged distributable so both matrix mixins retain the stable IP-owned portal-buffer anchor and the unsafe/too-early anchors cannot regress silently.
-- **#801 RX confirmation closes the portal visual-composition issue.**
+Current instrumentation contract:
 
-### Custom shader reload ownership
+- whole-`Minecraft.runTick()` CPU wall-time distribution: average, p50, p95, p99, max, and slow-frame count;
+- render-thread stage timing for frame-slot recycling wait, frame-fence/recreation work, frame bookkeeping, terrain setup/culling, camera-region reposition, terrain publication/uploads, and final submit/present;
+- nested reposition time is reported but not double-counted in top-level accounted time;
+- an explicit `unaccounted` bucket exposes missing stage coverage instead of falsely attributing it;
+- worst-frame stage attribution is retained per summary window;
+- JVM GC count/time deltas and heap use are sampled only at summary boundaries;
+- existing terrain region-batch and task-dispatch queue/build/handoff/publication statistics are emitted beside the timing window;
+- the old `Profiler2` allocation-heavy timing tree now runs only while its Alt+F8 overlay is visible instead of allocating every normal frame.
 
-VulkanMod replaces `GameRenderer.reloadShaders()`, while IP stores custom `ShaderInstance`s in static fields. The retained repair appends IP's registered custom shaders to Vulkan-managed reload sets once IP is ready, preventing static references from pointing at closed shader instances. Actual resource reload remains part of the one deferred Phase 4 lifecycle gate.
+The profiler is disabled by default. Its hot enabled path uses fixed primitive sample buffers and `System.nanoTime()`; sorting/string formatting/JVM telemetry occur only at summary boundaries.
 
-## Phase 4 remaining gate
+This is intentionally a **CPU wall-clock critical-path layer**, not a claim of GPU execution timing. Vulkan GPU timestamps are feasible: device `timestampPeriod` is available and frame fences provide a non-blocking completed-slot readback boundary. Add a query-ring layer only when a capture shows GPU/pass timing is the next missing discriminator rather than blanket-instrumenting every pass preemptively.
 
-Only this mandatory Phase 4 gate remains open:
+## Immersive Portals retained compatibility boundary
 
-- world enter/leave/re-enter and resource reload paths survive in the full Create Chronicles modpack.
+The IP 3.0.7 investigation is closed on current hardware evidence. Retain these semantic boundaries unless new evidence contradicts them:
 
-The user explicitly deferred reload and re-entry for the current pass. Do not reinterpret the completed visual gates as needing another retest before moving on. When Phase 4 lifecycle testing resumes, keep it narrow: exercise a controlled resource reload and world leave/re-entry sequence and distinguish any renderer failure from the independent shutdown/native-lifetime abort.
+- cancel IP's obsolete vanilla `earlyRemoteUpload()` terrain prepass;
+- remove only the stale merged vanilla terrain-camera dispatcher dependency;
+- keep the geometry callback while bypassing unsupported OpenGL query-result handling;
+- use VulkanMod's generic sampled `RenderTarget` path for IP's secondary framebuffer;
+- support depth clamp through the Vulkan pipeline feature gate;
+- restore IP's explicit portal matrices after legacy `ShaderInstance.apply()` and immediately before the IP-owned portal mesh submission boundary;
+- keep the IP custom-shader reload ownership bridge even though actual F3+T testing remains deferred.
 
-Focused evidence: `docs/CREATE_CHRONICLES_COMPATIBILITY.md`, `docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`, `docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md`, and `docs/CREATE_CHRONICLES_RETEST_2026-09-25.md`.
-
-## Real resource-pack gate
-
-The two user-supplied PureBDcraft ZIPs live only in private `Vorith03/storage` release assets. Do not copy their bytes or private-payload logs into this public repository.
-
-Storage CI verifies immutable hashes and the real two-pack atlas workload. Public VulkanMod CI private-pack steps are normally skipped because the variable/secret pair is absent. The CI-only `-Dvulkanmod.systemAvailableReserveMinMiB=768` override is test infrastructure and must not be carried onto the user's heavy-pack machine.
-
-## Distant Horizons boundary
-
-Distant Horizons 3.2.0-b OpenGL LOD draw/fade, DH lightmap upload, and the Forge AFTER_LEVEL framebuffer probe remain deliberately suppressed under Vulkan. DH data/maintenance is retained. Do not describe native DH LOD rendering itself as supported.
+Focused details remain in `docs/CREATE_CHRONICLES_COMPATIBILITY.md` and `docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`.
 
 ## GPU-terrain flags / safety
 
@@ -88,4 +94,8 @@ Mixed-section APPEND additionally requires:
 -Dvulkanmod.experimentalGpuTerrainHybrid=true
 ```
 
-Keep accelerated consumption default-off until representative RX correctness and comparable frame-time evidence are complete. Do not weaken production memory safety or ownership rules merely to make tests pass.
+Keep accelerated consumption default-off until representative RX correctness and comparable frame-time evidence are complete. Preserve CPU/fail-closed handling for unsupported Forge terrain callbacks/content. Do not weaken production memory safety or ownership rules merely to make a test pass.
+
+## Next useful action
+
+Use the new performance logger to establish a Vulkan critical-path capture under the fixed Phase 5 stationary/traversal/Create-heavy workloads, alongside the comparable OpenGL/Vulkan baseline process in `docs/TERRAIN_PERFORMANCE_BASELINE.md`. Use the resulting p95/p99/worst-frame and queue/build/upload evidence to choose the next optimization target. If the capture points at GPU execution rather than CPU submission/terrain work, add the bounded Vulkan timestamp-query ring next; otherwise instrument only the dominant `unaccounted` CPU boundary or resume the relevant Phase 6/7 gate.
