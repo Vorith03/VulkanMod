@@ -5,8 +5,8 @@ This is the minimum repeatable benchmark contract for the Forge 1.20.1 terrain-p
 ## Benchmark policy
 
 - Primary target: the user's actual Create Chronicles instance on the RX 6900 XT.
-- Primary resolution: 2560x1440 windowed.
-- Use the same Minecraft/Forge version, mod set, resource packs, render distance, simulation distance, graphics options, FOV, window size and frame-cap/vsync state for every A/B comparison.
+- Primary resolution: the user's stable near-2560x1440 windowed size on the ultrawide display. Exact framebuffer dimensions are recorded by the Vulkan profiler and must remain the same between comparison runs.
+- Use the same Minecraft/Forge version, mod set, resource packs, render distance, simulation distance, graphics options, FOV, window/framebuffer size and frame-cap/vsync state for every A/B comparison.
 - Keep Embeddium, Oculus and other renderer replacements in the same enabled/disabled state between comparison runs.
 - Record exact settings with each result rather than silently changing them to improve a score.
 - Do not call a performance change an improvement without a comparable before/after run. Correctness fixes and architectural groundwork may land before a full comparison baseline exists.
@@ -34,7 +34,7 @@ Use this profile for the fixed terrain cases:
 | Option | Fixed value |
 | --- | --- |
 | Window mode | Windowed |
-| Client area | 2560x1440 |
+| Client area | Stable user window size, nominally near 2560x1440; exact profiler-recorded framebuffer must match between comparison runs |
 | VSync | Off |
 | Max framerate | Unlimited |
 | FOV | 70 |
@@ -127,6 +127,7 @@ Every measured result should include:
 - Create Chronicles/modpack version;
 - Java version and JVM memory arguments;
 - selected resource-pack filenames/versions;
+- exact framebuffer dimensions for the measured run (read from the Vulkan profiler when available; record manually for OpenGL control runs);
 - whether experimental GPU-terrain flags were enabled and their exact values;
 - A, B or C case identifier;
 - average FPS;
