@@ -6,7 +6,7 @@ This document describes the opt-in performance/critical-path logger used for Pha
 
 The logger answers a narrower and more useful question than an FPS counter: **where did render-thread wall time go, and what renderer/terrain queues were doing during the same measurement window?**
 
-It is deliberately disabled by default. The enabled hot path uses fixed primitive buffers and `System.nanoTime()`; percentile sorting, string formatting, JVM telemetry, and terrain debug snapshots happen only at periodic summary boundaries.
+It is deliberately disabled by default. The enabled hot path uses fixed primitive buffers and `System.nanoTime()`; percentile sorting, string formatting, JVM telemetry, terrain debug snapshots, and file I/O happen only at summary boundaries.
 
 This first version is a **CPU wall-clock profiler**. It does not yet use Vulkan timestamp queries and therefore does not claim to measure GPU execution time. The results should be used to identify which CPU/Vulkan boundary deserves deeper instrumentation next.
 
@@ -18,19 +18,29 @@ Add this JVM argument to the Vulkan run:
 -Dvulkanmod.performanceProfiler=true
 ```
 
+By default profiling writes to a dedicated file under the Minecraft game directory:
+
+```text
+logs/vulkanmod-performance.log
+```
+
+The normal Forge/Minecraft console receives only a one-time notice that profiling is enabled and where the file is being written. Summary data does not go through the ordinary game logger. If the profiling file cannot be opened or later fails to write, profiling disables itself and reports that failure through the normal logger rather than risking gameplay stability.
+
 Optional controls:
 
 ```text
 -Dvulkanmod.performanceProfiler.summarySeconds=5
+-Dvulkanmod.performanceProfiler.durationSeconds=60
+-Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-run-a.log
 -Dvulkanmod.performanceProfiler.slowFrameMs=25
 -Dvulkanmod.performanceProfiler.maxSamples=4096
 ```
 
-Search `latest.log` for:
+`summarySeconds` controls how often percentile/critical-path windows are flushed. The default is 5 seconds and may be set from 0.25 to 300 seconds.
 
-```text
-[VulkanModPerf]
-```
+`durationSeconds` controls total capture duration. `0` (the default) means unlimited and profiling continues until the process ends. A positive value causes the profiler to emit a final partial window when needed, write `capture_complete`, close its file, and become inactive after that many seconds.
+
+`output` may be relative to the Minecraft game directory or an absolute path. The default file is truncated when a new profiling capture begins, so benchmark automation should use distinct output names when multiple captures need to be preserved.
 
 No profiling flag is required for normal gameplay and benchmark control runs where instrumentation itself should be absent.
 
@@ -45,7 +55,7 @@ Each summary window reports:
 - GC count/time deltas and current Java heap use;
 - the existing VulkanMod terrain/task-dispatch debug line, including build queue/build/handoff/publication and region batching/allocation counters.
 
-The default summary period is five seconds. This keeps log volume low enough for normal diagnostic runs while still exposing transient changes during traversal or Create-heavy scenes.
+The default summary period is five seconds. This keeps capture volume low enough for normal diagnostic runs while still exposing transient changes during traversal or Create-heavy scenes.
 
 ## Known stages
 
@@ -64,7 +74,7 @@ The default summary period is five seconds. This keeps log volume low enough for
 
 ## Worker-side interpretation
 
-`WorldRenderer.getStats()` is emitted alongside each timing window. Its task dispatcher already tracks separate concepts that must not be conflated:
+`WorldRenderer.getChunkStatistics()` is emitted alongside each timing window. Its task dispatcher already tracks separate concepts that must not be conflated:
 
 - queued-before-build time;
 - worker build time;
@@ -80,7 +90,7 @@ These existing worker statistics are currently cumulative/aggregate diagnostics 
 
 ## Using it for optimization
 
-For a diagnostic Vulkan run, use the same fixed Phase 5 world/settings/route and enable this logger. Preserve the resulting `[VulkanModPerf]` lines with the build/commit being tested.
+For a diagnostic Vulkan run, use the same fixed Phase 5 world/settings/route and enable this logger. Preserve the dedicated profiler file with the build/commit being tested.
 
 When comparing an optimization:
 
