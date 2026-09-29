@@ -148,13 +148,13 @@ Phase 3 is complete. Automated Lavapipe pixel/validation coverage and the RX 690
 
 ### Phase 3 exit rule
 
-Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule. The earlier bounded GPU-terrain priority produced Phase 7 groundwork; the user has now returned the active priority to Phase 4. Phase 5 measurements are still required for performance claims.
+Do not begin a major terrain renderer rewrite while a known command-buffer/layout/readback correctness defect remains uncharacterized. Phase 3 has satisfied this rule. The earlier bounded GPU-terrain priority produced Phase 7 groundwork. Phase 4 now has 7/8 gates verified; its remaining reload/re-entry lifecycle gate is deferred by user direction. Phase 5 measurement work is the current useful priority and remains required for performance claims.
 
 ---
 
 # Phase 4 — Create Chronicles compatibility baseline
 
-**Status: ACTIVE BY USER DIRECTION (2026-09-26); RELOAD AND RE-ENTRY DEFERRED**
+**Status: 7/8 VERIFIED; RELOAD AND RE-ENTRY DEFERRED BY USER DIRECTION**
 
 Goal: prove the renderer works in the user's actual target environment and identify the minimum incompatible renderer-replacement set.
 
@@ -163,15 +163,15 @@ Mandatory gates:
 - [x] Flywheel 0.6 has a positive CI startup gate;
 - [x] Crash Assistant 1.9.7 has a positive CI startup gate;
 - [x] current distributable launches the target Create Chronicles instance with Vulkan active; build 289 reached the full ~300-mod instance/world with `Vulkan renderer active: AMD Radeon RX 6900 XT (RADV NAVI21)` on 2026-09-09;
-- [ ] Create/Flywheel contraptions render correctly in ordinary gameplay;
+- [x] Create/Flywheel contraptions render correctly in ordinary gameplay; build #801 RX 6900 XT verification covered moving contraptions and ordinary Create/Flywheel rendering;
 - [ ] world enter/leave/re-enter and resource reload paths survive in the modpack;
-- [ ] representative particles/translucency/entities/GUI paths are checked for visible regressions;
+- [x] representative particles/translucency/entities/GUI paths are checked for visible regressions; build #801 RX 6900 XT verification covered these paths along with Creative imagery, third-person player/entities, and Immersive Portals portal rendering/traversal;
 - [x] incompatible renderer replacements are evidence-backed and minimized for the target scope (`docs/CREATE_CHRONICLES_RENDERER_REPLACEMENTS_2026-09-26.md`);
 - [x] a concise compatibility/known-limitations matrix is committed (`docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`).
 
-**Progress: 5/8**
+**Progress: 7/8**
 
-**Current focus:** use #772 for the next narrow RX visual gate. Check the main-menu player lighting first, then enter the existing world and confirm the prior Immersive Portals `earlyRemoteUpload()` crash is gone, then inspect Creative block/item imagery and the third-person player/one representative entity. #772 includes the complete legacy shader state/light-direction repair, fixed Sampler1/2 lightmap/overlay bookkeeping, and the CI-validated Immersive Portals custom-shader reload ownership repair. If that gate passes, continue with Create/Flywheel contraptions, Create UI, representative effects, and a real portal. The user explicitly deferred reload and world re-entry for this pass; its checkbox stays open. Keep production memory safety intact and use retained diagnostics rather than speculative patches if #772 still fails. The earlier terrain priority override is historical context rather than the current sequencing instruction.
+**Current state:** build #801 established the current RX 6900 XT visual compatibility baseline. Immersive Portals portal rendering/traversal, Creative inventory imagery, third-person player and ordinary entities, Create/Flywheel contraptions, and representative particle/translucency/GUI paths are verified. Do not ask the user to repeat those checks unless a later executable change directly threatens them. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload, and the user has explicitly deferred that lifecycle work. Keep its checkbox open until directly tested. Phase 5 measurement work is the current useful priority.
 
 ### Shaderpack scope
 
@@ -181,7 +181,7 @@ Vanilla Minecraft post effects are core correctness and belong in Phase 3. Full 
 
 # Phase 5 — Performance baseline and measurement discipline
 
-**Status: MEASUREMENT CONTRACT PRESENT; COMPARABLE RUNS OPEN**
+**Status: ACTIVE MEASUREMENT PRIORITY; CONTRACT PRESENT; COMPARABLE RUNS OPEN**
 
 Goal: create apples-to-apples measurements so optimization claims have evidence.
 
@@ -236,7 +236,7 @@ This phase should make terrain data **persistent, compact, and batch-friendly**.
 
 # Phase 7 — GPU-driven terrain and hybrid meshing
 
-**Status: BOUNDED GROUNDWORK VERIFIED; PAUSED FOR CURRENT PHASE 4 PRIORITY**
+**Status: BOUNDED GROUNDWORK VERIFIED; PAUSED FOR CURRENT PHASE 5 MEASUREMENT PRIORITY**
 
 Target sequence: persistent regions -> GPU visibility/section selection -> GPU
 indirect commands -> GPU terrain representation -> hybrid meshing -> optional mesh
@@ -343,12 +343,11 @@ same IP name/program mismatch in Alex's Caves: `rendertype_sepia` aliases transf
 bridge using IP's own entity/projection/weather clipping semantics. `a12fb862873c` adds the
 observed `particle` alias shape to the IP smoke and `860961c6b636` adds a selected-resource-
 pack retention oracle; CI #723 is green for all of them plus the existing Create stencil
-fixture. The next evidence boundary
-is a repeat functional run with REPLACE + APPEND enabled, including looking through a real
-portal and performing a dirty mixed-section rebuild.
-This remains a correctness test, not a performance claim. Live GPU visibility/section-
-selection correctness and broader lifecycle/Forge preservation gates remain open until
-representative runtime evidence supports them.
+fixture. When Phase 7 resumes, its next RX evidence boundary is a repeat functional run
+with REPLACE + APPEND enabled, including looking through a real portal and performing a
+dirty mixed-section rebuild. This remains a correctness test, not a performance claim.
+Live GPU visibility/section-selection correctness and broader lifecycle/Forge preservation
+gates remain open until representative runtime evidence supports them.
 
 Mesh-shader capability detection, optional meshlet formats and a mesh-shader draw
 backend remain later work. They must not become a prerequisite for classic compute
@@ -372,3 +371,5 @@ Mandatory gates:
 - [ ] final compatibility matrix and required mod/configuration changes are documented;
 - [ ] final OpenGL vs Vulkan benchmark report is recorded, including cases where Vulkan is not faster;
 - [ ] installable release-candidate JAR is produced from green CI with concise test/install notes.
+
+**Progress: 0/8**
