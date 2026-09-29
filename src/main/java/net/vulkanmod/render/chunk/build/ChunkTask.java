@@ -32,6 +32,7 @@ import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.VisibilitySetExtended;
 import net.vulkanmod.render.chunk.GpuTerrainDiagnostics;
+import net.vulkanmod.render.chunk.ChunkArea;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
