@@ -59,6 +59,8 @@ The default summary period is five seconds. This keeps capture volume low enough
 
 `capture_start initial_framebuffer_px` reports only the size at profiler startup; Prism's launcher window may resize later. Each `window` line therefore reports the measured frames' first/last framebuffer dimensions, width/height ranges, and number of observed dimension changes. The profiler samples both boundaries of every frame. Use a window with matching first/last dimensions, constant ranges, and zero changes for resolution-sensitive comparisons. An older capture that records only the initial size does not establish its in-world resolution.
 
+With profiling enabled and GPU terrain staging active, the ordinary in-world HUD shows `VulkanMod staging: N/2048` at the top right, refreshed once per second. The count is the number of section snapshots resident in the bounded CPU voxel store; the log has the full byte, rejection, and build counters. No F3 screen or profiler keyboard shortcut is needed for a stationary capture. If the counter reaches 2048, remain stationary for at least another 60 seconds. If it never reaches 2048, keep the run for analysis rather than waiting indefinitely.
+
 ## Known stages
 
 The profiler has broad, non-overlapping `runTick()` phases plus narrower nested terrain detail. Nested stages are reported but are **not** subtracted again when computing `unaccounted`.
