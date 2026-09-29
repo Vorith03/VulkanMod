@@ -4,7 +4,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable/test candidate is `0b5e596623591e9e2180c9b67cb572bfc3afcca2` (`perf: split broad runTick profiling phases`).
+- Performance diagnostic code at `ac9aa125` and its missing-import correction `477bb9d5` are on `forge-1.20.1`. CI #808 / run `36558345092` failed Java compilation on the missing `ChunkArea` import; the correction needs a green CI result before an RX retest. Read `docs/PERFORMANCE_CAPTURE_2026-09-29.md` for the exact #806 capture analysis. The older #806 artifact below is the *input* to that analysis, not the newly instrumented candidate.
+- Last fully green executable before the new performance patch was `0b5e596623591e9e2180c9b67cb572bfc3afcca2` (`perf: split broad runTick profiling phases`).
 - Public CI **#806** / run `36552111888` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
 - Testable artifact is `VulkanMod-Forge-build-806` (artifact `11025174241`, SHA-256 `348bba3a1ebb0c1f5caaaff5a52aa1aea6379563a30e480638e8820fd90296a5`).
 - The adversarial audit remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
@@ -101,6 +102,6 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next useful action
 
-Use build #806 for one new Vulkan profiler capture. For a formal stationary Phase 5 baseline, use the exact fixed profile in `docs/TERRAIN_PERFORMANCE_BASELINE.md`: 2560x1440 windowed, VSync off, Unlimited FPS, Fancy, render distance 16, simulation distance 12, fixed benchmark world/position, then wait 60 seconds before a 30-second capture. The resulting `client_tick`, `game_render`, `display_update`, `frame_limit`, narrow terrain, submit, and remaining `unaccounted` numbers should determine the next profiling/optimization slice.
+Check the CI run for `477bb9d5`. If green, the next necessary RX run is a short, same-world diagnostic capture with the new artifact, render distance 16, GPU terrain flags unchanged, and a stationary camera for ~45 seconds after world entry. Preserve its profiler file and `latest.log`; compare its framebuffer dimensions against #806's capture-start 854×480 before claiming numeric improvement. The tick subphases, dirty/scheduled counts, and recovery diagnostics should distinguish client simulation/packet/mod tick work from the confirmed staging-cap recovery cycle. For a formal Phase 5 baseline, use the exact fixed profile in `docs/TERRAIN_PERFORMANCE_BASELINE.md`, including a stable near-2560×1440 framebuffer and the 60-second settle period. The #806 run is not that baseline.
 
 A second render-distance-32 capture is also useful later as a labeled real-gameplay stress workload, but do not mix it numerically with the fixed render-distance-16 baseline series.

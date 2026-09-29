@@ -67,7 +67,9 @@ The profiler has broad, non-overlapping `runTick()` phases plus narrower nested 
 | `frame_fence_wait` | top-level | Existing `Renderer.beginFrame()` fence/recreation section. Swapchain recreation, when triggered, is included here. |
 | `frame_ops` | top-level | Per-frame descriptor/command-buffer/upload-manager bookkeeping after image acquisition. |
 | `client_tick` | top-level | The vanilla `Minecraft.tick()` call and synchronous client/game logic performed there. |
+| `client_level_tick`, `client_entities_tick`, `client_renderer_tick`, `client_connection_tick` | nested in `client_tick` | Client world, entities, renderer tick (not render), and packet-listener tick calls. `client_tick_other` is the remaining average, including GUI/mod callbacks/tasks; these four nested stages do not exhaust the tick automatically. |
 | `game_render` | top-level | The complete `GameRenderer.render(...)` call. This is the broad CPU rendering bucket for world, entities, GUI, terrain orchestration, and mod render callbacks. |
+| `world_render` | nested in `game_render` | Outermost `GameRenderer.renderLevel(...)`, including any recursive portal worlds; `game_render_other` is the remainder. |
 | `terrain_setup` | nested in `game_render` | VulkanMod terrain camera setup, frustum/visibility traversal, and rebuild scheduling. Multiple nested-world calls accumulate into the same frame. |
 | `terrain_reposition` | nested in `terrain_setup` | Camera-region reposition work. |
 | `terrain_uploads` | nested in `game_render` | Render-thread publication of completed terrain builds and the normal terrain upload flush. |
@@ -75,6 +77,8 @@ The profiler has broad, non-overlapping `runTick()` phases plus narrower nested 
 | `display_update` | top-level | Vanilla `Window.updateDisplay()` processing after Vulkan submission. |
 | `frame_limit` | top-level | Time inside `RenderSystem.limitDisplayFPS(...)` when vanilla deliberately rate-limits the client. |
 | `unaccounted` | remainder | The part of `Minecraft.runTick()` outside the top-level stages above. |
+
+`world_render_other` is `world_render` minus terrain setup and uploads; it still includes entities, block entities, particles, weather, mod callbacks, and other world passes. These derived *averages* are residuals, not independently sampled p95s. The terrain scheduling debug line includes cumulative `dirtyNotices` (direct `setSectionDirty` calls) and `scheduled` build requests during profiling. Recovery builds can mark a section dirty through a different path, so these counters must be read alongside GPU terrain recovery diagnostics.
 
 The broad-phase split was added after the first RX 6900 XT diagnostic capture showed that ordinary slow frames were dominated by the old `unaccounted` bucket while terrain setup/uploads, frame waits, and submit/present were individually cheap. The new split is intended to determine whether the remaining CPU time is principally `game_render`, `client_tick`, window/display work, or deliberate FPS limiting before adding still finer instrumentation.
 
