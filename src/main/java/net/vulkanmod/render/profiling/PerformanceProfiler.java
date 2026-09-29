@@ -61,6 +61,7 @@ public final class PerformanceProfiler {
     private static final long[] frameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] tickFrameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] renderOnlyFrameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] loopGapSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final int[] tickCallsPerFrame = ENABLED ? new int[MAX_SAMPLES] : null;
     private static final long[] tickDetailUnionSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
@@ -77,6 +78,8 @@ public final class PerformanceProfiler {
     private static int windowContext = -1;
     private static long windowStartNanos;
     private static long lastRecordedFrameEndNanos;
+    private static long frameGapOriginNanos;
+    private static long currentFrameGapNanos;
     private static long captureStartEpochMillis;
     private static long windowSequence;
     private static int currentTickCalls;
@@ -92,6 +95,9 @@ public final class PerformanceProfiler {
     private static long renderOnlyFrameSumNanos;
     private static long tickFrameMaxNanos;
     private static long renderOnlyFrameMaxNanos;
+    private static long loopGapSumNanos;
+    private static long loopGapMaxNanos;
+    private static int loopGapSamplesCount;
     private static int tickDetailOverlapFrames;
     private static int tickDetailUnbalancedFrames;
     private static int worldDetailOverlapFrames;
@@ -164,6 +170,8 @@ public final class PerformanceProfiler {
         currentTickCalls = 0;
         tickDetailDepth = 0;
         currentTickDetailUnionNanos = 0L;
+        currentFrameGapNanos = frameGapOriginNanos == 0L ? -1L
+                : Math.max(0L, now - frameGapOriginNanos);
         frameStartNanos = now;
         Minecraft minecraft = Minecraft.getInstance();
         frameStartLevel = minecraft == null ? null : minecraft.level;
@@ -222,6 +230,8 @@ public final class PerformanceProfiler {
         int context = frameStartLevel != endLevel ? 2 : endLevel == null ? 0 : 1;
         if (sampleCount > 0 && (context != windowContext || context == 1 && endLevel != windowLevel)) {
             emitSummary(lastRecordedFrameEndNanos);
+            // Do not charge a cross-context gap to either steady-state window.
+            currentFrameGapNanos = -1L;
         }
 
         if (sampleCount >= MAX_SAMPLES) {
@@ -245,6 +255,11 @@ public final class PerformanceProfiler {
         if (unbalancedTickDetail) tickDetailUnbalancedFrames++;
         lastRecordedFrameEndNanos = now;
         frameSamples[index] = frameNanos;
+        if (currentFrameGapNanos >= 0L) {
+            loopGapSamples[loopGapSamplesCount++] = currentFrameGapNanos;
+            loopGapSumNanos += currentFrameGapNanos;
+            loopGapMaxNanos = Math.max(loopGapMaxNanos, currentFrameGapNanos);
+        }
         tickCallsPerFrame[index] = currentTickCalls;
         tickDetailUnionSamples[index] = currentTickDetailUnionNanos;
         if (currentTickCalls > 0) {
@@ -325,6 +340,8 @@ public final class PerformanceProfiler {
             closeOutput();
             active = false;
         }
+        // Exclude both per-frame bookkeeping and periodic I/O from the next gap.
+        frameGapOriginNanos = System.nanoTime();
     }
 
     private static boolean startCapture(long now) {
@@ -444,6 +461,13 @@ public final class PerformanceProfiler {
                 millis(percentile(renderOnlyFrameSamples, renderOnlyFrames, 0.95D)),
                 millis(percentile(renderOnlyFrameSamples, renderOnlyFrames, 0.99D)),
                 millis(renderOnlyFrameMaxNanos), renderOnlySlowFrames));
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] loop_gap samples=%d gap_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f summary_io_excluded=true",
+                loopGapSamplesCount, millis(loopGapSamplesCount == 0 ? 0L : loopGapSumNanos / loopGapSamplesCount),
+                millis(percentile(loopGapSamples, loopGapSamplesCount, 0.50D)),
+                millis(percentile(loopGapSamples, loopGapSamplesCount, 0.95D)),
+                millis(percentile(loopGapSamples, loopGapSamplesCount, 0.99D)),
+                millis(loopGapMaxNanos)));
         if (positionSamples > 0) {
             writeLine(String.format(Locale.ROOT,
                     "[VulkanModPerf] player_pose first_xyz=%.3f,%.3f,%.3f last_xyz=%.3f,%.3f,%.3f last_yaw_pitch=%.2f,%.2f changed_frames=%d samples=%d",
@@ -574,6 +598,8 @@ public final class PerformanceProfiler {
         tickFrames = renderOnlyFrames = tickCalls = tickSlowFrames = renderOnlySlowFrames = 0;
         tickFrameSumNanos = renderOnlyFrameSumNanos = 0L;
         tickFrameMaxNanos = renderOnlyFrameMaxNanos = 0L;
+        loopGapSumNanos = loopGapMaxNanos = 0L;
+        loopGapSamplesCount = 0;
         tickDetailOverlapFrames = tickDetailUnbalancedFrames = worldDetailOverlapFrames = topLevelOverlapFrames = 0;
         positionSamples = poseChangedFrames = 0;
         frameSumNanos = 0L;

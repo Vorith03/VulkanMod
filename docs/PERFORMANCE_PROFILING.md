@@ -51,6 +51,7 @@ Each summary window reports:
 - a monotonic window ID, epoch timestamps, elapsed time, world/menu/transition context, dimension, framebuffer ranges, graphics settings, and first/last player pose with changed-frame count;
 - frame wall time: average, p50, p95, p99, maximum, and slow-frame count;
 - separate tick-bearing and render-only frame distributions, tick-call count (including catch-up ticks), and tick-stage p95 computed **only over frames that ticked**;
+- inter-frame loop-gap percentiles, which expose main-loop work or scheduling time between `runTick()` calls; the profiler excludes its own periodic output flush from this gap;
 - average, p95, and maximum time for known render-thread stages;
 - the worst frame in the window and its largest known stage;
 - an explicit `unaccounted` bucket rather than pretending stage coverage is complete;
@@ -65,6 +66,8 @@ The one-time `environment` line records JVM, OS, logical CPU count, Vulkan devic
 Windows split when the client level changes. A frame that enters or leaves a world is labeled `transition` and kept separate from stable `menu` and `world` frames. Use `context=world`, stable framebuffer ranges, and the player-pose line to select a stationary slice. The player pose is a movement check, not a full camera trace for recursive portal views. Epoch timestamps allow correlation with `latest.log`; elapsed time remains monotonic if the system clock changes. A terrain delta of `-1` means no comparable prior window or a counter reset, as indicated by `delta_valid`/`counters_reset`. `terrain_window` samples asynchronously changing worker counters at the window boundary, so it is a rate indicator rather than an exact per-frame attribution.
 
 The ordinary `stage_p95_ms` line still includes zero values from frames that did not execute a given stage. Use `tick_stage_p95_ms` to interpret client-tick cost at high FPS. `tick_stage_avg_ms` likewise divides by tick-bearing frames, while `stage_avg_ms` divides by all frames. Tick-detail stages may nest; `client_tick_other` subtracts the **union** of their measured intervals to avoid double-counting. The `accounting_overlap_frames` line flags nested tick detail, impossible top-level/world sums, or an unbalanced tick probe. Never add nested stage timings to the top-level stage totals.
+
+`loop_gap` measures time from the end of profiler bookkeeping for one `runTick()` call to the start of the next. It can include main-loop tasks or OS scheduling and is separate from `frame_ms`; it is not a GPU timestamp. The first captured frame has no preceding gap. Per-frame profiling work and summary output are excluded so the profiler does not create a periodic false gap.
 
 `capture_start initial_framebuffer_px` reports only the size at profiler startup; Prism's launcher window may resize later. Each `window` line therefore reports the measured frames' first/last framebuffer dimensions, width/height ranges, and number of observed dimension changes. The profiler samples both boundaries of every frame. Use a window with matching first/last dimensions, constant ranges, and zero changes for resolution-sensitive comparisons. An older capture that records only the initial size does not establish its in-world resolution.
 
