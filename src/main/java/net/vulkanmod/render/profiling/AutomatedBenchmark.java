@@ -213,14 +213,15 @@ public final class AutomatedBenchmark {
     }
 
     private static long captureEndAt(long start, long cap, long duration, long afterCap) {
-        return Math.max(start + duration, cap == 0L ? 0L : cap + afterCap);
+        return Math.max(start + duration, cap == 0L ? 0L : Math.max(start, cap) + afterCap);
     }
 
     /** Smoke oracle for the optional staging-cap extension, without a world fixture. */
     public static void verifyForCi() {
         if (captureEndAt(100L, 0L, 200L, 60L) != 300L
                 || captureEndAt(100L, 260L, 200L, 60L) != 320L
-                || captureEndAt(100L, 150L, 200L, 60L) != 300L) {
+                || captureEndAt(100L, 150L, 200L, 60L) != 300L
+                || captureEndAt(100L, 50L, 10L, 60L) != 160L) {
             throw new IllegalStateException("Automated benchmark capture deadline is invalid");
         }
     }
