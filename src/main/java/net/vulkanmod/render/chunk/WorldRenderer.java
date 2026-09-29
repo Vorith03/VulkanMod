@@ -30,6 +30,7 @@ import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.profiling.Profiler;
 import net.vulkanmod.render.profiling.Profiler2;
+import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.render.chunk.util.AreaSetQueue;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
 import net.vulkanmod.render.chunk.util.Util;
@@ -694,33 +695,38 @@ public class WorldRenderer {
     public void renderBlockEntities(RenderBuffers renderBuffers, PoseStack poseStack,
                                     double camX, double camY, double camZ,
                                     Long2ObjectMap<SortedSet<BlockDestructionProgress>> destructionProgress, float gameTime) {
-        MultiBufferSource bufferSource = renderBuffers.bufferSource();
+        long renderStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.BLOCK_ENTITY_RENDER);
+        try {
+            MultiBufferSource bufferSource = renderBuffers.bufferSource();
 
-        for(RenderSection renderSection : this.chunkQueue) {
-            List<BlockEntity> list = renderSection.getCompiledSection().getRenderableBlockEntities();
-            if (!list.isEmpty()) {
-                for(BlockEntity blockentity1 : list) {
-                    BlockPos blockpos4 = blockentity1.getBlockPos();
-                    MultiBufferSource multibuffersource1 = bufferSource;
-                    poseStack.pushPose();
-                    poseStack.translate((double)blockpos4.getX() - camX, (double)blockpos4.getY() - camY, (double)blockpos4.getZ() - camZ);
-                    SortedSet<BlockDestructionProgress> sortedset = destructionProgress.get(blockpos4.asLong());
-                    if (sortedset != null && !sortedset.isEmpty()) {
-                        int j1 = sortedset.last().getProgress();
-                        if (j1 >= 0) {
-                            PoseStack.Pose posestack$pose1 = poseStack.last();
-                            VertexConsumer vertexconsumer = new SheetedDecalTextureGenerator(renderBuffers.crumblingBufferSource().getBuffer(ModelBakery.DESTROY_TYPES.get(j1)), posestack$pose1.pose(), posestack$pose1.normal(), 1.0f);
-                            multibuffersource1 = (p_194349_) -> {
-                                VertexConsumer vertexconsumer3 = bufferSource.getBuffer(p_194349_);
-                                return p_194349_.affectsCrumbling() ? VertexMultiConsumer.create(vertexconsumer, vertexconsumer3) : vertexconsumer3;
-                            };
+            for(RenderSection renderSection : this.chunkQueue) {
+                List<BlockEntity> list = renderSection.getCompiledSection().getRenderableBlockEntities();
+                if (!list.isEmpty()) {
+                    for(BlockEntity blockentity1 : list) {
+                        BlockPos blockpos4 = blockentity1.getBlockPos();
+                        MultiBufferSource multibuffersource1 = bufferSource;
+                        poseStack.pushPose();
+                        poseStack.translate((double)blockpos4.getX() - camX, (double)blockpos4.getY() - camY, (double)blockpos4.getZ() - camZ);
+                        SortedSet<BlockDestructionProgress> sortedset = destructionProgress.get(blockpos4.asLong());
+                        if (sortedset != null && !sortedset.isEmpty()) {
+                            int j1 = sortedset.last().getProgress();
+                            if (j1 >= 0) {
+                                PoseStack.Pose posestack$pose1 = poseStack.last();
+                                VertexConsumer vertexconsumer = new SheetedDecalTextureGenerator(renderBuffers.crumblingBufferSource().getBuffer(ModelBakery.DESTROY_TYPES.get(j1)), posestack$pose1.pose(), posestack$pose1.normal(), 1.0f);
+                                multibuffersource1 = (p_194349_) -> {
+                                    VertexConsumer vertexconsumer3 = bufferSource.getBuffer(p_194349_);
+                                    return p_194349_.affectsCrumbling() ? VertexMultiConsumer.create(vertexconsumer, vertexconsumer3) : vertexconsumer3;
+                                };
+                            }
                         }
-                    }
 
-                    this.minecraft.getBlockEntityRenderDispatcher().render(blockentity1, gameTime, poseStack, multibuffersource1);
-                    poseStack.popPose();
+                        this.minecraft.getBlockEntityRenderDispatcher().render(blockentity1, gameTime, poseStack, multibuffersource1);
+                        poseStack.popPose();
+                    }
                 }
             }
+        } finally {
+            PerformanceProfiler.end(PerformanceProfiler.Stage.BLOCK_ENTITY_RENDER, renderStart);
         }
     }
 
@@ -767,6 +773,15 @@ public class WorldRenderer {
                 ? " | Terrain scheduling: dirtyNotices=" + performanceDirtyNotices
                 + " scheduled=" + performanceScheduledBuilds : "");
     }
+
+    /** Snapshot of section scheduling and async work for a single profiler window. */
+    public PerformanceCounters performanceCounters() {
+        return new PerformanceCounters(performanceDirtyNotices, performanceScheduledBuilds,
+                nonEmptyChunks, taskDispatcher.performanceCounters());
+    }
+
+    public record PerformanceCounters(long dirtyNotices, long scheduled, int nonEmptySections,
+                                      TaskDispatcher.PerformanceCounters workers) {}
 
     public void cleanUp() {
         if(this.closed)

@@ -23,10 +23,22 @@ public class GuiMixin {
 
     @Unique private long vulkanmod$nextStagingRefresh;
     @Unique private String vulkanmod$stagingLine;
+    @Unique private long vulkanmod$hudStart;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void createProfilerOverlay(Minecraft minecraft, ItemRenderer itemRenderer, CallbackInfo ci) {
         ProfilerOverlay.createInstance(minecraft);
+    }
+
+    @Inject(method = "render", at = @At("HEAD"))
+    private void vulkanmod$beginHudRender(GuiGraphics guiGraphics, float f, CallbackInfo ci) {
+        vulkanmod$hudStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.HUD_RENDER);
+    }
+
+    @Inject(method = "render", at = @At("RETURN"))
+    private void vulkanmod$endHudRender(GuiGraphics guiGraphics, float f, CallbackInfo ci) {
+        PerformanceProfiler.end(PerformanceProfiler.Stage.HUD_RENDER, vulkanmod$hudStart);
+        vulkanmod$hudStart = 0L;
     }
 
     @Inject(method = "render", at = @At(value = "INVOKE",

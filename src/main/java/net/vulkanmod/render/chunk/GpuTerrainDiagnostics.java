@@ -46,6 +46,12 @@ public final class GpuTerrainDiagnostics {
         return ENABLED;
     }
 
+    /** Read selected cumulative reasons at profiler summary time; no hot-path work. */
+    public static long count(String stage, String reason) {
+        AtomicLong counter = ENABLED ? COUNTS.get(stage + "/" + reason) : null;
+        return counter == null ? 0L : counter.get();
+    }
+
     public static void record(String stage, String reason, RenderSection section,
                               long generation, String detail) {
         if(!ENABLED)

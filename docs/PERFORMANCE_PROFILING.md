@@ -48,14 +48,23 @@ No profiling flag is required for normal gameplay or benchmark control runs wher
 
 Each summary window reports:
 
+- a monotonic window ID, epoch timestamps, elapsed time, world/menu/transition context, dimension, framebuffer ranges, graphics settings, and first/last player pose with changed-frame count;
 - frame wall time: average, p50, p95, p99, maximum, and slow-frame count;
+- separate tick-bearing and render-only frame distributions, tick-call count (including catch-up ticks), and tick-stage p95 computed **only over frames that ticked**;
 - average, p95, and maximum time for known render-thread stages;
 - the worst frame in the window and its largest known stage;
 - an explicit `unaccounted` bucket rather than pretending stage coverage is complete;
-- GC count/time deltas and current Java heap use;
+- GC count/time deltas, current Java heap use, and render-thread CPU/allocated-byte deltas when the JVM exposes them (`-1` means unavailable);
+- aligned per-window terrain build/publication/scheduling deltas, queue depths, staging occupancy/rejections, and selected GPU fallback/recovery reasons;
 - the existing VulkanMod terrain/task-dispatch debug line, including build queue/build/handoff/publication and region batching/allocation counters.
 
 The default summary period is five seconds. This keeps capture volume low enough for diagnostic runs while still exposing transient changes during traversal or Create-heavy scenes.
+
+The one-time `environment` line records JVM, OS, logical CPU count, Vulkan device name, and the relevant GPU-terrain JVM flags. Keep the build/artifact number alongside the file; the mod JAR does not currently embed the Git commit ID.
+
+Windows split when the client level changes. A frame that enters or leaves a world is labeled `transition` and kept separate from stable `menu` and `world` frames. Use `context=world`, stable framebuffer ranges, and the player-pose line to select a stationary slice. The player pose is a movement check, not a full camera trace for recursive portal views. Epoch timestamps allow correlation with `latest.log`; elapsed time remains monotonic if the system clock changes. A terrain delta of `-1` means no comparable prior window or a counter reset, as indicated by `delta_valid`/`counters_reset`. `terrain_window` samples asynchronously changing worker counters at the window boundary, so it is a rate indicator rather than an exact per-frame attribution.
+
+The ordinary `stage_p95_ms` line still includes zero values from frames that did not execute a given stage. Use `tick_stage_p95_ms` to interpret client-tick cost at high FPS. `tick_stage_avg_ms` likewise divides by tick-bearing frames, while `stage_avg_ms` divides by all frames. Tick-detail stages may nest; `client_tick_other` subtracts the **union** of their measured intervals to avoid double-counting. The `accounting_overlap_frames` line flags nested tick detail, impossible top-level/world sums, or an unbalanced tick probe. Never add nested stage timings to the top-level stage totals.
 
 `capture_start initial_framebuffer_px` reports only the size at profiler startup; Prism's launcher window may resize later. Each `window` line therefore reports the measured frames' first/last framebuffer dimensions, width/height ranges, and number of observed dimension changes. The profiler samples both boundaries of every frame. Use a window with matching first/last dimensions, constant ranges, and zero changes for resolution-sensitive comparisons. An older capture that records only the initial size does not establish its in-world resolution.
 
@@ -69,20 +78,25 @@ The profiler has broad, non-overlapping `runTick()` phases plus narrower nested 
 | --- | --- | --- |
 | `frame_slot_wait` | top-level | `Renderer.resetBuffers()`, principally waiting before frame-slot resources can be recycled. |
 | `frame_fence_wait` | top-level | Existing `Renderer.beginFrame()` fence/recreation section. Swapchain recreation, when triggered, is included here. |
+| `image_acquire` | top-level | CPU wait inside `vkAcquireNextImageKHR`; this previously fell into `unaccounted`. |
 | `frame_ops` | top-level | Per-frame descriptor/command-buffer/upload-manager bookkeeping after image acquisition. |
 | `client_tick` | top-level | The vanilla `Minecraft.tick()` call and synchronous client/game logic performed there. |
 | `client_level_tick`, `client_entities_tick`, `client_renderer_tick`, `client_connection_tick` | nested in `client_tick` | Client world, entities, renderer tick (not render), and packet-listener tick calls. `client_tick_other` is the remaining average, including GUI/mod callbacks/tasks; these four nested stages do not exhaust the tick automatically. |
 | `game_render` | top-level | The complete `GameRenderer.render(...)` call. This is the broad CPU rendering bucket for world, entities, GUI, terrain orchestration, and mod render callbacks. |
 | `world_render` | nested in `game_render` | Outermost `GameRenderer.renderLevel(...)`, including any recursive portal worlds; `game_render_other` is the remainder. |
+| `hud_render` | nested in `game_render` | Vanilla `Gui.render(...)`, including the opt-in staging readout. It is excluded from `game_render_other`, which still contains screens, post-processing, and other callbacks. |
 | `terrain_setup` | nested in `game_render` | VulkanMod terrain camera setup, frustum/visibility traversal, and rebuild scheduling. Multiple nested-world calls accumulate into the same frame. |
 | `terrain_reposition` | nested in `terrain_setup` | Camera-region reposition work. |
 | `terrain_uploads` | nested in `game_render` | Render-thread publication of completed terrain builds and the normal terrain upload flush. |
+| `terrain_draw` | nested in `world_render` | VulkanMod's terrain-layer render calls across all layers, excluding Forge's render-stage callback after each call. CPU time recording draws, not GPU execution. |
+| `block_entity_render` | nested in `world_render` | VulkanMod's section block-entity rendering loop. Other entity and mod render work remains in `world_render_other`. |
 | `submit_render` | top-level | Final pending area uploads plus VulkanMod `endFrame()`, queue submission, and presentation path reached by the existing submit hook. |
+| `queue_submit`, `present` | nested in `submit_render` | CPU time inside the Vulkan queue-submit and present API calls. These are not GPU-duration measurements. |
 | `display_update` | top-level | Vanilla `Window.updateDisplay()` processing after Vulkan submission. |
 | `frame_limit` | top-level | Time inside `RenderSystem.limitDisplayFPS(...)` when vanilla deliberately rate-limits the client. |
 | `unaccounted` | remainder | The part of `Minecraft.runTick()` outside the top-level stages above. |
 
-`world_render_other` is `world_render` minus terrain setup and uploads; it still includes entities, block entities, particles, weather, mod callbacks, and other world passes. These derived *averages* are residuals, not independently sampled p95s. The terrain scheduling debug line includes cumulative `dirtyNotices` (direct `setSectionDirty` calls) and `scheduled` build requests during profiling. Recovery builds can mark a section dirty through a different path, so these counters must be read alongside GPU terrain recovery diagnostics.
+`world_render_other` is `world_render` minus terrain setup, uploads, draw, and VulkanMod's block-entity loop; it still includes vanilla entities, particles, weather, Forge callbacks, and other world passes. These derived *averages* are residuals, not independently sampled p95s. `terrain_window` includes cumulative `dirty` notices (direct `setSectionDirty` calls), `scheduled` build requests, and their window deltas. Recovery builds can mark a section dirty through a different path, so compare these with the explicit preflight/full, publication-rejection, and CPU-recovery counters. The worker queue/build/handoff averages in the old terrain debug line remain cumulative.
 
 The broad-phase split was added after the first RX 6900 XT diagnostic capture showed that ordinary slow frames were dominated by the old `unaccounted` bucket while terrain setup/uploads, frame waits, and submit/present were individually cheap. The new split is intended to determine whether the remaining CPU time is principally `game_render`, `client_tick`, window/display work, or deliberate FPS limiting before adding still finer instrumentation.
 
@@ -120,4 +134,4 @@ For formal Phase 5 baseline numbers, follow `docs/TERRAIN_PERFORMANCE_BASELINE.m
 
 ## Future expansion rule
 
-Add instrumentation where captured evidence points. Likely later layers include Vulkan timestamp-query rings for GPU passes, finer image-acquire/submit/present separation, or windowed worker-build percentiles. Do not blanket-instrument every draw or allocation unless a coarser capture demonstrates that the extra detail is necessary.
+Add instrumentation where captured evidence points. This profiler still cannot say how long Vulkan commands take **on the GPU** or distinguish individual mod callbacks within the residual tick/world stages. If CPU render cost and wait stages remain small while frame time or GPU use is high, the next layer is a validated, asynchronous Vulkan timestamp-query ring for a few broad passes, with query lifetime tied to the existing frame fences. Worker-window build percentiles or targeted mod callbacks should be added only when the conditional and terrain-delta evidence points there. Do not blanket-instrument every draw or allocation.

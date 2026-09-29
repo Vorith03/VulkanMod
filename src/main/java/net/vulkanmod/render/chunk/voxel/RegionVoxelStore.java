@@ -78,6 +78,11 @@ public final class RegionVoxelStore {
     /** Compact, synchronized snapshot for the opt-in in-world profiler HUD. */
     public static String overlayCount() { return GLOBAL_BUDGET.overlayCount(); }
 
+    /** Residency and rejection totals, sampled at the profiler summary boundary. */
+    public static StagingCounters stagingCounters() { return GLOBAL_BUDGET.stagingCounters(); }
+
+    public record StagingCounters(int entries, int maxEntries, int bytes, int maxBytes, long rejected) {}
+
     // A payload AND entry cap bounds residency even for huge render distances.
     // In-flight builders/results remain bounded by TaskDispatcher's existing limits.
     static final class Budget {
@@ -113,6 +118,10 @@ public final class RegionVoxelStore {
 
         synchronized String overlayCount() {
             return "VulkanMod staging: " + entries + "/" + maxEntries;
+        }
+
+        synchronized StagingCounters stagingCounters() {
+            return new StagingCounters(entries, maxEntries, bytes, maxBytes, rejected);
         }
     }
 

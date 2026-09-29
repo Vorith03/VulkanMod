@@ -22,6 +22,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.profiling.Profiler2;
+import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.vulkan.util.Pair;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -118,7 +119,12 @@ public abstract class LevelRendererMixin {
      */
     @Overwrite
     private void renderChunkLayer(RenderType renderType, PoseStack poseStack, double camX, double camY, double camZ, Matrix4f projectionMatrix) {
-        this.worldRenderer.renderSectionLayer(renderType, poseStack, camX, camY, camZ, projectionMatrix);
+        long drawStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.TERRAIN_DRAW);
+        try {
+            this.worldRenderer.renderSectionLayer(renderType, poseStack, camX, camY, camZ, projectionMatrix);
+        } finally {
+            PerformanceProfiler.end(PerformanceProfiler.Stage.TERRAIN_DRAW, drawStart);
+        }
 
         LevelRenderer levelRenderer = (LevelRenderer)(Object)this;
         ForgeHooksClient.dispatchRenderStage(

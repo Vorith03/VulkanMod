@@ -6,6 +6,7 @@ import net.minecraft.client.Minecraft;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.render.chunk.TerrainShaderManager;
 import net.vulkanmod.render.profiling.Profiler2;
+import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.memory.MemoryManager;
@@ -182,8 +183,11 @@ public class Renderer {
         }
 
 
-        if(skipRendering)
+        // The early minimized-window path still has to close the profiling span.
+        if(skipRendering) {
+            p.pop();
             return;
+        }
 
         vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
 
@@ -191,8 +195,14 @@ public class Renderer {
 
         try(MemoryStack stack = stackPush()) {
             IntBuffer pImageIndex = stack.mallocInt(1);
-            int vkResult = vkAcquireNextImageKHR(device, Vulkan.getSwapChain().getId(), VUtil.UINT64_MAX,
-                    imageAvailableSemaphores.get(currentFrame), VK_NULL_HANDLE, pImageIndex);
+            long acquireStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.IMAGE_ACQUIRE);
+            int vkResult;
+            try {
+                vkResult = vkAcquireNextImageKHR(device, Vulkan.getSwapChain().getId(), VUtil.UINT64_MAX,
+                        imageAvailableSemaphores.get(currentFrame), VK_NULL_HANDLE, pImageIndex);
+            } finally {
+                PerformanceProfiler.end(PerformanceProfiler.Stage.IMAGE_ACQUIRE, acquireStart);
+            }
 
             if(vkResult == VK_ERROR_OUT_OF_DATE_KHR) {
                 swapCahinUpdate = true;
@@ -375,7 +385,13 @@ public class Renderer {
             // Converted helper uploads take the semaphore path above and return immediately here.
             Synchronization.INSTANCE.waitFences();
 
-            if((vkResult = vkQueueSubmit(Device.getGraphicsQueue().queue(), submitInfo, inFlightFences.get(currentFrame))) != VK_SUCCESS) {
+            long submitStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.QUEUE_SUBMIT);
+            try {
+                vkResult = vkQueueSubmit(Device.getGraphicsQueue().queue(), submitInfo, inFlightFences.get(currentFrame));
+            } finally {
+                PerformanceProfiler.end(PerformanceProfiler.Stage.QUEUE_SUBMIT, submitStart);
+            }
+            if(vkResult != VK_SUCCESS) {
                 vkResetFences(device, stackGet().longs(inFlightFences.get(currentFrame)));
                 throw new RuntimeException("Failed to submit draw command buffer: " + vkResult);
             }
@@ -397,7 +413,12 @@ public class Renderer {
 
             presentInfo.pImageIndices(stack.ints(imageIndex));
 
-            vkResult = vkQueuePresentKHR(Device.getPresentQueue().queue(), presentInfo);
+            long presentStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.PRESENT);
+            try {
+                vkResult = vkQueuePresentKHR(Device.getPresentQueue().queue(), presentInfo);
+            } finally {
+                PerformanceProfiler.end(PerformanceProfiler.Stage.PRESENT, presentStart);
+            }
 
             if(vkResult == VK_ERROR_OUT_OF_DATE_KHR || vkResult == VK_SUBOPTIMAL_KHR || swapCahinUpdate) {
                 swapCahinUpdate = true;

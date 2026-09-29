@@ -498,6 +498,18 @@ public class TaskDispatcher {
         return samples == 0 ? 0.0D : (nanos / 1_000_000.0D) / samples;
     }
 
+    /** Atomic/queue snapshot read only at the profiler summary boundary. */
+    public PerformanceCounters performanceCounters() {
+        return new PerformanceCounters(this.completedBuilds.get(), this.publishedBuilds.get(),
+                this.acceptedResults.get(), this.droppedResults.get(),
+                this.activeTasks.get(), this.publicationWaiters,
+                this.highPriorityTasks.size(), this.lowPriorityTasks.size(), this.toUpload.size());
+    }
+
+    public record PerformanceCounters(int builds, int published, int accepted, int dropped,
+                                      int active, int publicationWaiters, int queuedHigh,
+                                      int queuedLow, int publicationQueue) {}
+
     public List<String> getDebugLines() {
         int highQueued = this.highPriorityTasks.size();
         int lowQueued = this.lowPriorityTasks.size();
