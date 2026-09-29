@@ -21,11 +21,17 @@ for start, stop in zip(windows, windows[1:] + [len(lines)]):
     window = fields(block[0])
     frame_class = next(fields(line) for line in block if "[VulkanModPerf] frame_classes " in line)
     gap = next(fields(line) for line in block if "[VulkanModPerf] loop_gap " in line)
+    accounting = next(fields(line) for line in block if "[VulkanModPerf] accounting_overlap_frames " in line)
     frames = int(window["frames"])
     assert window["context"] in {"menu", "world", "transition"}
     assert frames > 0
     assert int(frame_class["tick_frames"]) + int(frame_class["render_only_frames"]) == frames
     assert int(gap["samples"]) <= frames
+    # A full window of overlapping stages indicates a broken timing boundary.
+    # Permit isolated startup/OS scheduling anomalies without hiding a systemic error.
+    if frames >= 5:
+        assert int(accounting["top_level"]) < frames // 2, accounting
+        assert float(accounting["top_level_excess_ms"]) < float(window["duration_s"]) * 1000 * .05, accounting
     for label in ("stage_avg_ms", "stage_p95_ms", "tick_stage_p95_ms", "accounting_overlap_frames", "jvm"):
         assert any(f"[VulkanModPerf] {label} " in line for line in block), label
 

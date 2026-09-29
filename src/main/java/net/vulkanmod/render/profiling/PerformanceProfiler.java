@@ -102,6 +102,8 @@ public final class PerformanceProfiler {
     private static int tickDetailUnbalancedFrames;
     private static int worldDetailOverlapFrames;
     private static int topLevelOverlapFrames;
+    private static long topLevelExcessNanos;
+    private static long topLevelMaxExcessNanos;
     private static double positionFirstX, positionFirstY, positionFirstZ;
     private static double positionLastX, positionLastY, positionLastZ;
     private static float rotationLastYaw, rotationLastPitch;
@@ -319,7 +321,12 @@ public final class PerformanceProfiler {
         if (worldDetailNanos > currentStageNanos[Stage.WORLD_RENDER.ordinal()]) worldDetailOverlapFrames++;
         long topLevelNanos = 0L;
         for (Stage stage : STAGES) if (!stage.nested) topLevelNanos += currentStageNanos[stage.ordinal()];
-        if (topLevelNanos > frameNanos) topLevelOverlapFrames++;
+        if (topLevelNanos > frameNanos) {
+            topLevelOverlapFrames++;
+            long excess = topLevelNanos - frameNanos;
+            topLevelExcessNanos += excess;
+            topLevelMaxExcessNanos = Math.max(topLevelMaxExcessNanos, excess);
+        }
 
         if (frameNanos > worstFrameNanos) {
             worstFrameNanos = frameNanos;
@@ -535,8 +542,9 @@ public final class PerformanceProfiler {
         writeLine(tickAvg.toString());
         writeLine(tickP95.toString());
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] accounting_overlap_frames top_level=%d tick_detail=%d world_detail=%d tick_detail_unbalanced=%d",
-                topLevelOverlapFrames, tickDetailOverlapFrames, worldDetailOverlapFrames,
+                "[VulkanModPerf] accounting_overlap_frames top_level=%d top_level_excess_ms=%.3f top_level_max_excess_ms=%.3f tick_detail=%d world_detail=%d tick_detail_unbalanced=%d",
+                topLevelOverlapFrames, millis(topLevelExcessNanos), millis(topLevelMaxExcessNanos),
+                tickDetailOverlapFrames, worldDetailOverlapFrames,
                 tickDetailUnbalancedFrames));
 
         long worstAccounted = 0L;
@@ -601,6 +609,7 @@ public final class PerformanceProfiler {
         loopGapSumNanos = loopGapMaxNanos = 0L;
         loopGapSamplesCount = 0;
         tickDetailOverlapFrames = tickDetailUnbalancedFrames = worldDetailOverlapFrames = topLevelOverlapFrames = 0;
+        topLevelExcessNanos = topLevelMaxExcessNanos = 0L;
         positionSamples = poseChangedFrames = 0;
         frameSumNanos = 0L;
         frameMaxNanos = 0L;

@@ -8,6 +8,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.config.Config;
 import net.vulkanmod.config.Options;
 import net.vulkanmod.config.VideoResolution;
+import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
@@ -192,11 +193,13 @@ public abstract class WindowMixin {
 
     @Overwrite
     public void updateDisplay() {
+        long start = PerformanceProfiler.begin(PerformanceProfiler.Stage.DISPLAY_UPDATE);
         RenderSystem.flipFrame(this.window);
         if (Options.fullscreenDirty) {
             Options.fullscreenDirty = false;
             this.updateFullscreen(this.vsync);
         }
+        PerformanceProfiler.end(PerformanceProfiler.Stage.DISPLAY_UPDATE, start);
     }
 
     @Overwrite

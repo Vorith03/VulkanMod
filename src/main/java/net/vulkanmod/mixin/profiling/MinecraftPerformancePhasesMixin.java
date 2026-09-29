@@ -11,16 +11,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Splits the broad Minecraft.runTick() CPU path around stable vanilla call boundaries.
  *
- * <p>This mixin intentionally runs after VulkanMod's normal MinecraftMixin so the
- * display-update timer starts after the submitRender callback injected immediately
- * before Window.updateDisplay(). Narrow renderer/terrain stages remain available as
- * nested detail inside these broad phases.</p>
+ * <p>Display-update timing lives in VulkanMod's Window.updateDisplay() overwrite:
+ * injections at the same runTick call site cannot reliably enclose only the call
+ * when another mixin injects Vulkan submission immediately before it.</p>
  */
 @Mixin(value = Minecraft.class, priority = 500)
 public class MinecraftPerformancePhasesMixin {
     @Unique private long vulkanmod$clientTickStart;
     @Unique private long vulkanmod$gameRenderStart;
-    @Unique private long vulkanmod$displayUpdateStart;
     @Unique private long vulkanmod$frameLimitStart;
 
     @Inject(
@@ -71,31 +69,6 @@ public class MinecraftPerformancePhasesMixin {
     private void vulkanmod$endGameRender(boolean tick, CallbackInfo ci) {
         PerformanceProfiler.end(PerformanceProfiler.Stage.GAME_RENDER, vulkanmod$gameRenderStart);
         vulkanmod$gameRenderStart = 0L;
-    }
-
-    @Inject(
-            method = "runTick",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V",
-                    shift = At.Shift.BEFORE
-            )
-    )
-    private void vulkanmod$beginDisplayUpdate(boolean tick, CallbackInfo ci) {
-        vulkanmod$displayUpdateStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.DISPLAY_UPDATE);
-    }
-
-    @Inject(
-            method = "runTick",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V",
-                    shift = At.Shift.AFTER
-            )
-    )
-    private void vulkanmod$endDisplayUpdate(boolean tick, CallbackInfo ci) {
-        PerformanceProfiler.end(PerformanceProfiler.Stage.DISPLAY_UPDATE, vulkanmod$displayUpdateStart);
-        vulkanmod$displayUpdateStart = 0L;
     }
 
     @Inject(
