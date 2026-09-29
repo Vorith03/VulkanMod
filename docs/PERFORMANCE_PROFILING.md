@@ -40,7 +40,7 @@ Optional controls:
 
 `durationSeconds` controls total capture duration. `0` (the default) means unlimited. A positive value emits a final partial window when needed, writes `capture_complete`, closes the file, and makes the profiler inactive after that many seconds.
 
-`output` may be relative to the Minecraft game directory or an absolute path. The default file is truncated when a new profiling capture begins, so automation should use distinct names when multiple captures need to be preserved.
+`output` may be relative to the Minecraft game directory or an absolute path. Normal profiling and explicitly configured output paths truncate the file when a capture begins. Automated benchmark runs without an explicit output path create a unique `logs/vulkanmod-performance-benchmark-<run UUID>.log` and never overwrite an earlier run. The ordinary log announces the full path.
 
 No profiling flag is required for normal gameplay or benchmark control runs where instrumentation itself should be absent.
 
@@ -71,6 +71,8 @@ Optional JVM arguments:
 
 Use one JVM argument per line in Prism; quote/escape a custom world name with spaces according to Prism's argument editor. The target name must match the world's display name exactly; other worlds and multiplayer sessions are untouched. Coordinates and duration can be configured for a separate, clearly labeled workload. Automation is **off by default** even when normal profiling is enabled, because it changes the target world's player position and game mode and eventually exits Minecraft. If the teleport fails, terrain does not appear, the player/camera moves, a screen opens, or the target world changes, the automatic run stops without closing the game and records the reason in `latest.log`. An interrupted measured run is flushed with `reason=interrupted`; discard it as a benchmark.
 
+Keep Minecraft focused with a first-person camera on the local player. Loss of focus, a paused client, another camera, or framebuffer resizing during measurement aborts the run and leaves the game open. Resize during settling is permitted; the measured size is locked when capture starts. File-open/write/flush/close failure also leaves the game open instead of claiming a successful capture or automatically exiting. An abort reason is written into the capture when output remains healthy, as well as `latest.log`.
+
 The file begins at the end of the settle period, so `capture_start initial_framebuffer_px` belongs to the measured world rather than launcher startup. Its `benchmark_config` and `benchmark complete` lines preserve the requested pose and actual duration. Automated `durationSeconds` is measured from capture start; in normal profiler mode, `durationSeconds=0` still means unlimited. Use a copied/pristine world for formal A/B runs, because saving persists the player teleport and Spectator mode. This is the stationary Vulkan case; it does not automate the OpenGL control or traversal route.
 
 ## Window output
@@ -93,7 +95,7 @@ Each summary window reports:
 
 The default summary period is five seconds. This keeps capture volume low enough for diagnostic runs while still exposing transient changes during traversal or Create-heavy scenes.
 
-The one-time `environment` line records JVM, OS, logical CPU count, Vulkan device name, and the relevant GPU-terrain JVM flags. Keep the build/artifact number alongside the file; the mod JAR does not currently embed the Git commit ID.
+The one-time `environment` line records JVM, OS, logical CPU count, Vulkan device name, and the relevant GPU-terrain JVM flags. `capture_identity` records a schema version, unique run UUID, automated/manual mode, and VulkanMod's loaded version. CI versions already include the build number and short Git SHA; very early startup can report `unknown` before mod construction, so retain the artifact identity separately for those captures. Automated world captures start after construction and record the loaded build. The UUID also identifies the default automated output file.
 
 CI's normal software-Vulkan startup smoke enables the profiler at a short summary interval and checks the output schema and frame-class counts. This validates menu/startup logging and mixin application; only the user's RX run exercises the real world, terrain, and modpack workload.
 

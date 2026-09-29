@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Low-overhead, opt-in render critical-path sampler.
@@ -34,8 +35,12 @@ public final class PerformanceProfiler {
     private static final boolean AUTOMATED_BENCHMARK = ENABLED
             && Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark");
     private static final String DEFAULT_OUTPUT = "logs/vulkanmod-performance.log";
+    private static final String RUN_ID = ENABLED ? UUID.randomUUID().toString() : "disabled";
+    private static final boolean UNIQUE_OUTPUT = AUTOMATED_BENCHMARK
+            && System.getProperty("vulkanmod.performanceProfiler.output", "").isBlank();
     private static final String OUTPUT_FILE = ENABLED
-            ? stringProperty("vulkanmod.performanceProfiler.output", DEFAULT_OUTPUT)
+            ? stringProperty("vulkanmod.performanceProfiler.output", UNIQUE_OUTPUT
+                    ? "logs/vulkanmod-performance-benchmark-" + RUN_ID + ".log" : DEFAULT_OUTPUT)
             : DEFAULT_OUTPUT;
     private static final int MAX_SAMPLES = ENABLED
             ? intProperty("vulkanmod.performanceProfiler.maxSamples", 4096, 128, 8192)
@@ -194,16 +199,18 @@ public final class PerformanceProfiler {
     }
 
     /** Close a measured world capture before the controller saves and quits. */
-    public static void finishAutomatedCapture(String reason) {
-        if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return;
+    public static boolean finishAutomatedCapture(String reason) {
+        if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return false;
         long now = System.nanoTime();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] capture_complete reason=%s duration_seconds=%.3f frames=%d",
                 reason, (now - captureStartNanos) / 1_000_000_000.0D, frameSequence));
         flushOutput();
-        closeOutput();
+        boolean written = active;
+        boolean closed = closeOutput();
         active = false;
+        return written && closed;
     }
 
     public static void abortAutomatedCapture() {
@@ -458,12 +465,11 @@ public final class PerformanceProfiler {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            outputWriter = Files.newBufferedWriter(
-                    outputPath,
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE);
+            StandardOpenOption[] options = UNIQUE_OUTPUT
+                    ? new StandardOpenOption[] { StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE }
+                    : new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+                            StandardOpenOption.WRITE };
+            outputWriter = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8, options);
         } catch (IOException | RuntimeException failure) {
             active = false;
             Initializer.LOGGER.error("VulkanMod performance profiling could not open output file '{}'; profiling disabled",
@@ -494,6 +500,9 @@ public final class PerformanceProfiler {
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d initial_framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
                 SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight));
+        writeLine("[VulkanModPerf] capture_identity schema=1 run_id=" + RUN_ID
+                + " vulkanmod_version=" + Initializer.getVersion().replace(' ', '_')
+                + " automated=" + AUTOMATED_BENCHMARK);
         if (AUTOMATED_BENCHMARK) writeLine(AutomatedBenchmark.captureMetadata());
         String deviceName = Vulkan.getDeviceInfo() == null ? "unknown"
                 : Vulkan.getDeviceInfo().deviceName.replace(' ', '_');
@@ -924,15 +933,19 @@ public final class PerformanceProfiler {
         closeOutput();
     }
 
-    private static void closeOutput() {
+    private static boolean closeOutput() {
         BufferedWriter writer = outputWriter;
         outputWriter = null;
         if (writer == null) {
-            return;
+            return false;
         }
         try {
             writer.close();
-        } catch (IOException ignored) {
+            return true;
+        } catch (IOException failure) {
+            active = false;
+            Initializer.LOGGER.error("VulkanMod performance profiling could not close output cleanly", failure);
+            return false;
         }
     }
 

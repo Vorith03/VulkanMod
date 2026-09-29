@@ -38,6 +38,7 @@ public final class AutomatedBenchmark {
     private static long captureStartedAt;
     private static long capReachedAt;
     private static long nextStagingSampleAt;
+    private static int captureWidth, captureHeight;
 
     private AutomatedBenchmark() {}
 
@@ -80,6 +81,11 @@ public final class AutomatedBenchmark {
             abort("player moved or changed camera after benchmark teleport");
             return;
         }
+        String invalid = invalidView(minecraft);
+        if (invalid != null) {
+            abort(invalid);
+            return;
+        }
         sampleStaging(now);
         if (state == State.WAIT_TERRAIN) {
             WorldRenderer renderer = WorldRenderer.getInstance();
@@ -95,6 +101,8 @@ public final class AutomatedBenchmark {
             return;
         }
         if (state == State.SETTLING && now - terrainAppearedAt >= SETTLE_NANOS) {
+            captureWidth = minecraft.getWindow().getWidth();
+            captureHeight = minecraft.getWindow().getHeight();
             captureStartedAt = now;
             state = State.CAPTURING;
             PerformanceProfiler.armAutomatedCapture();
@@ -106,8 +114,17 @@ public final class AutomatedBenchmark {
     /** Runs after the sampled frame has ended, so save/quit cannot enter its timing. */
     public static void onFrameEnd(Minecraft minecraft) {
         if (!ENABLED || state != State.CAPTURING || minecraft == null) return;
+        if (!PerformanceProfiler.isEnabled()) {
+            abort("profiler output failed; no successful capture was saved");
+            return;
+        }
         if (!readyInTargetWorld(minecraft, minecraft.getSingleplayerServer()) || !atTargetPose(minecraft)) {
             abort("target view changed during the measured frame");
+            return;
+        }
+        String invalid = invalidView(minecraft);
+        if (invalid != null) {
+            abort(invalid);
             return;
         }
         long now = System.nanoTime();
@@ -118,7 +135,10 @@ public final class AutomatedBenchmark {
                 "complete world=%s measured_s=%.3f staging_cap_seen=%s after_cap_s=%.3f",
                 WORLD_NAME.replace(' ', '_'), (now - captureStartedAt) / 1_000_000_000.0D,
                 capReachedAt != 0L, capReachedAt == 0L ? -1.0D : (now - capReachedAt) / 1_000_000_000.0D));
-        PerformanceProfiler.finishAutomatedCapture("benchmark_complete");
+        if (!PerformanceProfiler.finishAutomatedCapture("benchmark_complete")) {
+            abort("profiler output did not finish cleanly; game left open");
+            return;
+        }
         try {
             // Match the single-player pause menu's normal world teardown path.
             minecraft.level.disconnect();
@@ -151,7 +171,7 @@ public final class AutomatedBenchmark {
 
     public static String captureMetadata() {
         return String.format(Locale.ROOT,
-                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true",
+                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true camera=first_person_local_player focus_required=true framebuffer_locked=true",
                 WORLD_NAME.replace(' ', '_'), X, Y, Z, YAW, PITCH,
                 SETTLE_NANOS / 1_000_000_000.0D, CAPTURE_NANOS / 1_000_000_000.0D,
                 AFTER_CAP_NANOS / 1_000_000_000.0D);
@@ -196,6 +216,17 @@ public final class AutomatedBenchmark {
                 && Math.abs(minecraft.player.getXRot() - PITCH) < 0.1D;
     }
 
+    private static String invalidView(Minecraft minecraft) {
+        if (!minecraft.isWindowActive()) return "window lost focus; keep Minecraft focused during the run";
+        if (minecraft.isPaused()) return "client paused during benchmark";
+        if (minecraft.getCameraEntity() != minecraft.player || !minecraft.options.getCameraType().isFirstPerson())
+            return "benchmark requires first-person camera on the local player";
+        if (state == State.CAPTURING && (minecraft.getWindow().getWidth() != captureWidth
+                || minecraft.getWindow().getHeight() != captureHeight))
+            return "framebuffer dimensions changed during capture";
+        return null;
+    }
+
     private static void sampleStaging(long now) {
         if (capReachedAt != 0L || now < nextStagingSampleAt || !RegionVoxelStore.ENABLED) return;
         nextStagingSampleAt = now + 1_000_000_000L;
@@ -208,6 +239,7 @@ public final class AutomatedBenchmark {
 
     private static void abort(String reason) {
         state = State.ABORTED;
+        PerformanceProfiler.benchmarkEvent("aborted reason=" + reason.replace(' ', '_'));
         PerformanceProfiler.abortAutomatedCapture();
         Initializer.LOGGER.warn("VulkanMod automated benchmark stopped without exiting: {}", reason);
     }

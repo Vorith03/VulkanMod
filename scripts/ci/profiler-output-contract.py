@@ -3,6 +3,7 @@
 
 import pathlib
 import sys
+import uuid
 
 
 def fields(line):
@@ -13,6 +14,11 @@ path = pathlib.Path(sys.argv[1])
 lines = path.read_text(encoding="utf-8").splitlines()
 assert any("[VulkanModPerf] capture_start " in line for line in lines), "missing profiler start"
 assert any("[VulkanModPerf] environment " in line for line in lines), "missing environment"
+identity = next(fields(line) for line in lines if "[VulkanModPerf] capture_identity " in line)
+assert identity["schema"] == "1"
+uuid.UUID(identity["run_id"])
+assert identity["vulkanmod_version"]
+assert identity["automated"] == "false", "startup smoke must not manipulate a world"
 
 windows = [index for index, line in enumerate(lines) if "[VulkanModPerf] window " in line]
 assert windows, "no completed profiler windows in startup smoke"
