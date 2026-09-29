@@ -1,10 +1,17 @@
 package net.vulkanmod.render.profiling;
 
+import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.WorldRenderer;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -12,21 +19,29 @@ import java.util.Locale;
  * Low-overhead, opt-in render critical-path sampler.
  *
  * <p>The hot path uses only primitive fixed-size arrays and System.nanoTime().
- * Logging, percentile sorting, JVM telemetry, and terrain/debug string creation
+ * File output, percentile sorting, JVM telemetry, and terrain/debug string creation
  * happen only at the configured summary boundary.</p>
  */
 public final class PerformanceProfiler {
     private static final boolean ENABLED = Boolean.getBoolean("vulkanmod.performanceProfiler");
+    private static final String DEFAULT_OUTPUT = "logs/vulkanmod-performance.log";
+    private static final String OUTPUT_FILE = ENABLED
+            ? stringProperty("vulkanmod.performanceProfiler.output", DEFAULT_OUTPUT)
+            : DEFAULT_OUTPUT;
     private static final int MAX_SAMPLES = ENABLED
             ? intProperty("vulkanmod.performanceProfiler.maxSamples", 4096, 128, 8192)
             : 0;
     private static final double SUMMARY_SECONDS = ENABLED
-            ? doubleProperty("vulkanmod.performanceProfiler.summarySeconds", 5.0D, 1.0D, 60.0D)
+            ? doubleProperty("vulkanmod.performanceProfiler.summarySeconds", 5.0D, 0.25D, 300.0D)
             : 5.0D;
+    private static final double DURATION_SECONDS = ENABLED
+            ? doubleProperty("vulkanmod.performanceProfiler.durationSeconds", 0.0D, 0.0D, 86400.0D)
+            : 0.0D;
     private static final double SLOW_FRAME_MS = ENABLED
             ? doubleProperty("vulkanmod.performanceProfiler.slowFrameMs", 25.0D, 1.0D, 1000.0D)
             : 25.0D;
     private static final long SUMMARY_NANOS = (long) (SUMMARY_SECONDS * 1_000_000_000.0D);
+    private static final long DURATION_NANOS = (long) (DURATION_SECONDS * 1_000_000_000.0D);
     private static final long SLOW_FRAME_NANOS = (long) (SLOW_FRAME_MS * 1_000_000.0D);
 
     private static final Stage[] STAGES = Stage.values();
@@ -40,9 +55,11 @@ public final class PerformanceProfiler {
     private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] worstStageNanos = ENABLED ? new long[STAGE_COUNT] : null;
 
+    private static boolean active = ENABLED;
     private static boolean frameActive;
     private static boolean announced;
     private static long frameStartNanos;
+    private static long captureStartNanos;
     private static long lastSummaryNanos;
     private static long frameSequence;
     private static int sampleCount;
@@ -53,6 +70,8 @@ public final class PerformanceProfiler {
     private static long worstFrameNanos;
     private static long lastGcCount;
     private static long lastGcMillis;
+    private static BufferedWriter outputWriter;
+    private static Path outputPath;
 
     static {
         if (Boolean.getBoolean("vulkanmod.smokeTest")) {
@@ -64,40 +83,34 @@ public final class PerformanceProfiler {
     }
 
     public static boolean isEnabled() {
-        return ENABLED;
+        return active;
     }
 
     /** Start one Minecraft runTick sample. Safe to call more than once before endFrame(). */
     public static void beginFrame() {
-        if (!ENABLED || frameActive) {
+        if (!active || frameActive) {
             return;
         }
 
         long now = System.nanoTime();
+        if (!announced && !startCapture(now)) {
+            return;
+        }
+
         Arrays.fill(currentStageNanos, 0L);
         frameStartNanos = now;
         frameActive = true;
-
-        if (!announced) {
-            announced = true;
-            lastSummaryNanos = now;
-            lastGcCount = totalGcCount();
-            lastGcMillis = totalGcMillis();
-            Initializer.LOGGER.info(
-                    "[VulkanModPerf] enabled summary_seconds={} slow_frame_ms={} max_samples={} (CPU wall-clock critical path; no GPU timestamps yet)",
-                    SUMMARY_SECONDS, SLOW_FRAME_MS, MAX_SAMPLES);
-        }
     }
 
     public static long begin(Stage stage) {
-        if (!ENABLED || !frameActive || stage == null) {
+        if (!active || !frameActive || stage == null) {
             return 0L;
         }
         return System.nanoTime();
     }
 
     public static void end(Stage stage, long startNanos) {
-        if (!ENABLED || !frameActive || stage == null || startNanos == 0L) {
+        if (!active || !frameActive || stage == null || startNanos == 0L) {
             return;
         }
         long elapsed = Math.max(0L, System.nanoTime() - startNanos);
@@ -106,7 +119,7 @@ public final class PerformanceProfiler {
 
     /** Finish one runTick sample and emit a bounded periodic summary when due. */
     public static void endFrame() {
-        if (!ENABLED || !frameActive) {
+        if (!active || !frameActive) {
             return;
         }
 
@@ -141,9 +154,69 @@ public final class PerformanceProfiler {
             System.arraycopy(currentStageNanos, 0, worstStageNanos, 0, STAGE_COUNT);
         }
 
-        if (sampleCount >= MAX_SAMPLES || now - lastSummaryNanos >= SUMMARY_NANOS) {
+        boolean durationReached = DURATION_NANOS > 0L && now - captureStartNanos >= DURATION_NANOS;
+        if (sampleCount >= MAX_SAMPLES || now - lastSummaryNanos >= SUMMARY_NANOS || durationReached) {
             emitSummary(now);
         }
+
+        if (durationReached && active) {
+            writeLine(String.format(Locale.ROOT,
+                    "[VulkanModPerf] capture_complete duration_seconds=%.3f frames=%d",
+                    (now - captureStartNanos) / 1_000_000_000.0D, frameSequence));
+            flushOutput();
+            closeOutput();
+            active = false;
+        }
+    }
+
+    private static boolean startCapture(long now) {
+        try {
+            outputPath = resolveOutputPath();
+            Path parent = outputPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            outputWriter = Files.newBufferedWriter(
+                    outputPath,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE);
+        } catch (IOException | RuntimeException failure) {
+            active = false;
+            Initializer.LOGGER.error("VulkanMod performance profiling could not open output file '{}'; profiling disabled",
+                    OUTPUT_FILE, failure);
+            return false;
+        }
+
+        announced = true;
+        captureStartNanos = now;
+        lastSummaryNanos = now;
+        lastGcCount = totalGcCount();
+        lastGcMillis = totalGcMillis();
+
+        String duration = DURATION_SECONDS > 0.0D
+                ? String.format(Locale.ROOT, "%.3f", DURATION_SECONDS)
+                : "unlimited";
+        Initializer.LOGGER.info("VulkanMod performance profiling enabled; output: {}", outputPath.toAbsolutePath());
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d cpu_wall_clock=true gpu_timestamps=false",
+                SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES));
+        flushOutput();
+        return active;
+    }
+
+    private static Path resolveOutputPath() {
+        Path configured = Path.of(OUTPUT_FILE);
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        Path gameDirectory = minecraft != null && minecraft.gameDirectory != null
+                ? minecraft.gameDirectory.toPath()
+                : Path.of("").toAbsolutePath();
+        return gameDirectory.resolve(configured).normalize();
     }
 
     private static void emitSummary(long now) {
@@ -158,7 +231,7 @@ public final class PerformanceProfiler {
         long frameP95 = percentile(frameSamples, count, 0.95D);
         long frameP99 = percentile(frameSamples, count, 0.99D);
 
-        Initializer.LOGGER.info(String.format(Locale.ROOT,
+        writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] window frames=%d frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow_threshold_ms=%.3f slow_frames=%d",
                 count, millis(frameAvg), millis(frameP50), millis(frameP95), millis(frameP99),
                 millis(frameMaxNanos), SLOW_FRAME_MS, slowFrames));
@@ -178,9 +251,9 @@ public final class PerformanceProfiler {
             appendMetric(max, stage.label, stageMax[ordinal]);
         }
         appendMetric(avg, "unaccounted", Math.max(0L, frameAvg - accountedAvg));
-        Initializer.LOGGER.info(avg.toString());
-        Initializer.LOGGER.info(p95.toString());
-        Initializer.LOGGER.info(max.toString());
+        writeLine(avg.toString());
+        writeLine(p95.toString());
+        writeLine(max.toString());
 
         long worstAccounted = 0L;
         Stage worstKnownStage = null;
@@ -195,7 +268,7 @@ public final class PerformanceProfiler {
                 worstKnownStage = stage;
             }
         }
-        Initializer.LOGGER.info(String.format(Locale.ROOT,
+        writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] worst frame_id=%d total_ms=%.3f top_known=%s top_known_ms=%.3f unaccounted_ms=%.3f",
                 worstFrameId, millis(worstFrameNanos),
                 worstKnownStage == null ? "none" : worstKnownStage.label,
@@ -204,7 +277,7 @@ public final class PerformanceProfiler {
         long gcCount = totalGcCount();
         long gcMillis = totalGcMillis();
         long heapUsed = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
-        Initializer.LOGGER.info(String.format(Locale.ROOT,
+        writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] jvm gc_count_delta=%d gc_ms_delta=%d heap_used_mib=%.1f",
                 Math.max(0L, gcCount - lastGcCount), Math.max(0L, gcMillis - lastGcMillis),
                 heapUsed / (1024.0D * 1024.0D)));
@@ -214,11 +287,13 @@ public final class PerformanceProfiler {
         try {
             WorldRenderer renderer = WorldRenderer.getInstance();
             if (renderer != null && renderer.getLevel() != null) {
-                Initializer.LOGGER.info("[VulkanModPerf] terrain {}", renderer.getChunkStatistics());
+                writeLine("[VulkanModPerf] terrain " + renderer.getChunkStatistics());
             }
         } catch (RuntimeException diagnosticFailure) {
-            Initializer.LOGGER.debug("[VulkanModPerf] terrain snapshot unavailable", diagnosticFailure);
+            writeLine("[VulkanModPerf] terrain_unavailable exception=" + diagnosticFailure.getClass().getSimpleName());
         }
+
+        flushOutput();
 
         sampleCount = 0;
         slowFrames = 0;
@@ -230,6 +305,48 @@ public final class PerformanceProfiler {
         Arrays.fill(stageMax, 0L);
         Arrays.fill(worstStageNanos, 0L);
         lastSummaryNanos = now;
+    }
+
+    private static void writeLine(String line) {
+        if (!active || outputWriter == null) {
+            return;
+        }
+        try {
+            outputWriter.write(line);
+            outputWriter.newLine();
+        } catch (IOException failure) {
+            disableAfterOutputFailure(failure);
+        }
+    }
+
+    private static void flushOutput() {
+        if (!active || outputWriter == null) {
+            return;
+        }
+        try {
+            outputWriter.flush();
+        } catch (IOException failure) {
+            disableAfterOutputFailure(failure);
+        }
+    }
+
+    private static void disableAfterOutputFailure(IOException failure) {
+        active = false;
+        frameActive = false;
+        Initializer.LOGGER.error("VulkanMod performance profiling output failed; profiling disabled", failure);
+        closeOutput();
+    }
+
+    private static void closeOutput() {
+        BufferedWriter writer = outputWriter;
+        outputWriter = null;
+        if (writer == null) {
+            return;
+        }
+        try {
+            writer.close();
+        } catch (IOException ignored) {
+        }
     }
 
     private static void appendMetric(StringBuilder builder, String label, long nanos) {
@@ -289,6 +406,11 @@ public final class PerformanceProfiler {
         } catch (NumberFormatException ignored) {
             return fallback;
         }
+    }
+
+    private static String stringProperty(String key, String fallback) {
+        String value = System.getProperty(key, fallback);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     /** Lightweight startup contract exercised automatically by smoke-test launches. */
