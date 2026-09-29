@@ -22,11 +22,26 @@ for start, stop in zip(windows, windows[1:] + [len(lines)]):
     frame_class = next(fields(line) for line in block if "[VulkanModPerf] frame_classes " in line)
     gap = next(fields(line) for line in block if "[VulkanModPerf] loop_gap " in line)
     accounting = next(fields(line) for line in block if "[VulkanModPerf] accounting_overlap_frames " in line)
+    resources = next(fields(line) for line in block if "[VulkanModPerf] tick_resources " in line)
+    overhead = next(fields(line) for line in block if "[VulkanModPerf] profiler_overhead " in line)
+    examples = [fields(line) for line in block if "[VulkanModPerf] frame_example " in line]
     frames = int(window["frames"])
     assert window["context"] in {"menu", "world", "transition"}
     assert frames > 0
+    assert 0 <= int(window["player_frames"]) <= frames
+    assert 0 <= int(window["screen_frames"]) <= frames
     assert int(frame_class["tick_frames"]) + int(frame_class["render_only_frames"]) == frames
     assert int(gap["samples"]) <= frames
+    assert int(resources["tick_frames"]) == int(frame_class["tick_frames"])
+    assert 0 <= int(resources["cpu_samples"]) <= int(resources["tick_frames"])
+    assert 0 <= int(resources["allocation_samples"]) <= int(resources["tick_frames"])
+    assert float(overhead["summary_ms"]) >= 0
+    for key in ("top_level", "tick_parent", "game_children", "world_detail", "tick_unbalanced"):
+        assert 0 <= int(accounting[key]) <= frames, (key, accounting)
+    assert sum(example["class"] == "tick" for example in examples) <= 6
+    assert sum(example["class"] == "slow_render" for example in examples) <= 6
+    assert len({example["frame_id"] for example in examples}) == len(examples)
+    assert all(float(example["total_ms"]) >= 0 for example in examples)
     # A full window of overlapping stages indicates a broken timing boundary.
     # Permit isolated startup/OS scheduling anomalies without hiding a systemic error.
     if frames >= 5:

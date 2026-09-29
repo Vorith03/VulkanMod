@@ -50,20 +50,30 @@ public final class PerformanceProfiler {
     private static final long SUMMARY_NANOS = (long) (SUMMARY_SECONDS * 1_000_000_000.0D);
     private static final long DURATION_NANOS = (long) (DURATION_SECONDS * 1_000_000_000.0D);
     private static final long SLOW_FRAME_NANOS = (long) (SLOW_FRAME_MS * 1_000_000.0D);
+    private static final int EXAMPLES_PER_CLASS = 6;
 
     private static final Stage[] STAGES = Stage.values();
     private static final int STAGE_COUNT = STAGES.length;
+    private static final ThreadMXBean THREAD_BEAN = ENABLED ? ManagementFactory.getThreadMXBean() : null;
+    private static final com.sun.management.ThreadMXBean ALLOCATION_BEAN =
+            THREAD_BEAN instanceof com.sun.management.ThreadMXBean bean ? bean : null;
 
     private static final long[] currentStageNanos = ENABLED ? new long[STAGE_COUNT] : null;
     private static final long[] stageSums = ENABLED ? new long[STAGE_COUNT] : null;
     private static final long[] stageMax = ENABLED ? new long[STAGE_COUNT] : null;
     private static final long[][] stageSamples = ENABLED ? new long[STAGE_COUNT][MAX_SAMPLES] : null;
     private static final long[] frameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] unaccountedSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] tickFrameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] renderOnlyFrameSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] loopGapSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] gapPerFrame = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] frameEndOffsets = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] frameIds = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final int[] tickCallsPerFrame = ENABLED ? new int[MAX_SAMPLES] : null;
     private static final long[] tickDetailUnionSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] tickCpuSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] tickAllocationSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] worstStageNanos = ENABLED ? new long[STAGE_COUNT] : null;
 
@@ -83,6 +93,12 @@ public final class PerformanceProfiler {
     private static long captureStartEpochMillis;
     private static long windowSequence;
     private static int currentTickCalls;
+    private static long tickCpuStart = -1L;
+    private static long tickAllocationStart = -1L;
+    private static long currentTickCpuNanos;
+    private static long currentTickAllocationBytes;
+    private static boolean currentTickCpuValid;
+    private static boolean currentTickAllocationValid;
     private static int tickDetailDepth;
     private static long tickDetailUnionStartNanos;
     private static long currentTickDetailUnionNanos;
@@ -100,6 +116,9 @@ public final class PerformanceProfiler {
     private static int loopGapSamplesCount;
     private static int tickDetailOverlapFrames;
     private static int tickDetailUnbalancedFrames;
+    private static int clientTickUnbalancedFrames;
+    private static int tickParentExceededFrames;
+    private static int gameChildrenExceededFrames;
     private static int worldDetailOverlapFrames;
     private static int topLevelOverlapFrames;
     private static long topLevelExcessNanos;
@@ -108,6 +127,8 @@ public final class PerformanceProfiler {
     private static double positionLastX, positionLastY, positionLastZ;
     private static float rotationLastYaw, rotationLastPitch;
     private static int positionSamples, poseChangedFrames;
+    private static int playerPresentFrames, screenPresentFrames, screenChanges;
+    private static Class<?> firstScreenType, lastScreenType;
     private static int frameStartWidth;
     private static int frameStartHeight;
     private static int framebufferFirstWidth;
@@ -127,6 +148,8 @@ public final class PerformanceProfiler {
     private static int slowFrames;
     private static long frameSumNanos;
     private static long frameMaxNanos;
+    private static long unaccountedSumNanos;
+    private static long unaccountedMaxNanos;
     private static long worstFrameId;
     private static long worstFrameNanos;
     private static long lastGcCount;
@@ -170,6 +193,8 @@ public final class PerformanceProfiler {
 
         Arrays.fill(currentStageNanos, 0L);
         currentTickCalls = 0;
+        currentTickCpuNanos = currentTickAllocationBytes = 0L;
+        currentTickCpuValid = currentTickAllocationValid = true;
         tickDetailDepth = 0;
         currentTickDetailUnionNanos = 0L;
         currentFrameGapNanos = frameGapOriginNanos == 0L ? -1L
@@ -190,6 +215,8 @@ public final class PerformanceProfiler {
         if (stage.tickDetail && !clientTickActive) return 0L;
         long startNanos = System.nanoTime();
         if (stage == Stage.CLIENT_TICK) {
+            tickCpuStart = renderThreadCpuNanos();
+            tickAllocationStart = renderThreadAllocatedBytes();
             clientTickActive = true;
             currentTickCalls++;
         }
@@ -202,12 +229,22 @@ public final class PerformanceProfiler {
         if (!active || !frameActive || stage == null || startNanos == 0L) {
             return;
         }
+        if (stage == Stage.CLIENT_TICK) {
+            long cpuEnd = renderThreadCpuNanos();
+            long allocationEnd = renderThreadAllocatedBytes();
+            if (tickCpuStart >= 0L && cpuEnd >= tickCpuStart)
+                currentTickCpuNanos += cpuEnd - tickCpuStart;
+            else currentTickCpuValid = false;
+            if (tickAllocationStart >= 0L && allocationEnd >= tickAllocationStart)
+                currentTickAllocationBytes += allocationEnd - tickAllocationStart;
+            else currentTickAllocationValid = false;
+            clientTickActive = false;
+        }
         long now = System.nanoTime();
         long elapsed = Math.max(0L, now - startNanos);
         currentStageNanos[stage.ordinal()] += elapsed;
         if (stage.tickDetail && tickDetailDepth > 0 && --tickDetailDepth == 0)
             currentTickDetailUnionNanos += Math.max(0L, now - tickDetailUnionStartNanos);
-        if (stage == Stage.CLIENT_TICK) clientTickActive = false;
     }
 
     /** Finish one runTick sample and emit a bounded periodic summary when due. */
@@ -218,6 +255,10 @@ public final class PerformanceProfiler {
 
         long now = System.nanoTime();
         long frameNanos = Math.max(0L, now - frameStartNanos);
+        boolean unbalancedTick = clientTickActive;
+        if (unbalancedTick) {
+            currentTickCpuValid = currentTickAllocationValid = false;
+        }
         boolean unbalancedTickDetail = tickDetailDepth > 0;
         if (unbalancedTickDetail) {
             currentTickDetailUnionNanos += Math.max(0L, now - tickDetailUnionStartNanos);
@@ -244,6 +285,9 @@ public final class PerformanceProfiler {
             windowContext = context;
             windowLevel = context == 1 ? endLevel : null;
             windowStartNanos = frameStartNanos;
+            firstScreenType = minecraft == null || minecraft.screen == null
+                    ? null : minecraft.screen.getClass();
+            lastScreenType = firstScreenType;
         }
 
         // Sample both boundaries: the launcher size may change before world entry,
@@ -254,9 +298,13 @@ public final class PerformanceProfiler {
                 window == null ? -1 : window.getHeight());
 
         int index = sampleCount++;
+        if (unbalancedTick) clientTickUnbalancedFrames++;
         if (unbalancedTickDetail) tickDetailUnbalancedFrames++;
         lastRecordedFrameEndNanos = now;
         frameSamples[index] = frameNanos;
+        frameIds[index] = frameSequence;
+        frameEndOffsets[index] = now - captureStartNanos;
+        gapPerFrame[index] = currentFrameGapNanos;
         if (currentFrameGapNanos >= 0L) {
             loopGapSamples[loopGapSamplesCount++] = currentFrameGapNanos;
             loopGapSumNanos += currentFrameGapNanos;
@@ -264,6 +312,15 @@ public final class PerformanceProfiler {
         }
         tickCallsPerFrame[index] = currentTickCalls;
         tickDetailUnionSamples[index] = currentTickDetailUnionNanos;
+        tickCpuSamples[index] = currentTickCalls > 0 && currentTickCpuValid ? currentTickCpuNanos : -1L;
+        tickAllocationSamples[index] = currentTickCalls > 0 && currentTickAllocationValid
+                ? currentTickAllocationBytes : -1L;
+        Class<?> screenType = minecraft == null || minecraft.screen == null
+                ? null : minecraft.screen.getClass();
+        if (screenType != lastScreenType) screenChanges++;
+        lastScreenType = screenType;
+        if (screenType != null) screenPresentFrames++;
+        if (minecraft != null && minecraft.player != null) playerPresentFrames++;
         if (currentTickCalls > 0) {
             tickFrameSamples[tickFrames++] = frameNanos;
             tickCalls += currentTickCalls;
@@ -314,6 +371,11 @@ public final class PerformanceProfiler {
                 + currentStageNanos[Stage.CLIENT_RENDERER_TICK.ordinal()]
                 + currentStageNanos[Stage.CLIENT_CONNECTION_TICK.ordinal()];
         if (tickDetailNanos > currentTickDetailUnionNanos) tickDetailOverlapFrames++;
+        if (currentTickDetailUnionNanos > currentStageNanos[Stage.CLIENT_TICK.ordinal()])
+            tickParentExceededFrames++;
+        if (currentStageNanos[Stage.WORLD_RENDER.ordinal()]
+                + currentStageNanos[Stage.HUD_RENDER.ordinal()]
+                > currentStageNanos[Stage.GAME_RENDER.ordinal()]) gameChildrenExceededFrames++;
         long worldDetailNanos = currentStageNanos[Stage.TERRAIN_SETUP.ordinal()]
                 + currentStageNanos[Stage.TERRAIN_UPLOADS.ordinal()]
                 + currentStageNanos[Stage.TERRAIN_DRAW.ordinal()]
@@ -321,6 +383,10 @@ public final class PerformanceProfiler {
         if (worldDetailNanos > currentStageNanos[Stage.WORLD_RENDER.ordinal()]) worldDetailOverlapFrames++;
         long topLevelNanos = 0L;
         for (Stage stage : STAGES) if (!stage.nested) topLevelNanos += currentStageNanos[stage.ordinal()];
+        long unaccounted = Math.max(0L, frameNanos - topLevelNanos);
+        unaccountedSamples[index] = unaccounted;
+        unaccountedSumNanos += unaccounted;
+        unaccountedMaxNanos = Math.max(unaccountedMaxNanos, unaccounted);
         if (topLevelNanos > frameNanos) {
             topLevelOverlapFrames++;
             long excess = topLevelNanos - frameNanos;
@@ -429,6 +495,7 @@ public final class PerformanceProfiler {
             lastSummaryNanos = now;
             return;
         }
+        long summaryStartNanos = System.nanoTime();
 
         long frameAvg = frameSumNanos / count;
         long frameP50 = percentile(frameSamples, count, 0.50D);
@@ -439,7 +506,7 @@ public final class PerformanceProfiler {
         String dimension = windowLevel == null ? "none" : windowLevel.dimension().location().toString();
         Minecraft minecraft = Minecraft.getInstance();
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] window id=%d context=%s dimension=%s start_epoch_ms=%d end_epoch_ms=%d since_capture_s=%.3f duration_s=%.3f frames=%d frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow_threshold_ms=%.3f slow_frames=%d framebuffer_first_px=%dx%d framebuffer_last_px=%dx%d framebuffer_width_range=%d-%d framebuffer_height_range=%d-%d framebuffer_changes=%d render_distance=%d simulation_distance=%d vsync=%s fps_cap=%d",
+                "[VulkanModPerf] window id=%d context=%s dimension=%s start_epoch_ms=%d end_epoch_ms=%d since_capture_s=%.3f duration_s=%.3f frames=%d frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow_threshold_ms=%.3f slow_frames=%d framebuffer_first_px=%dx%d framebuffer_last_px=%dx%d framebuffer_width_range=%d-%d framebuffer_height_range=%d-%d framebuffer_changes=%d render_distance=%d simulation_distance=%d vsync=%s fps_cap=%d player_frames=%d screen_frames=%d screen_first=%s screen_last=%s screen_changes=%d",
                 ++windowSequence, contextName, dimension,
                 captureStartEpochMillis + (windowStartNanos - captureStartNanos) / 1_000_000L,
                 captureStartEpochMillis + (now - captureStartNanos) / 1_000_000L,
@@ -454,7 +521,11 @@ public final class PerformanceProfiler {
                 minecraft == null ? -1 : minecraft.options.getEffectiveRenderDistance(),
                 minecraft == null ? -1 : minecraft.options.simulationDistance().get(),
                 minecraft != null && minecraft.options.enableVsync().get(),
-                minecraft == null ? -1 : minecraft.options.framerateLimit().get()));
+                minecraft == null ? -1 : minecraft.options.framerateLimit().get(),
+                playerPresentFrames, screenPresentFrames,
+                firstScreenType == null ? "none" : firstScreenType.getSimpleName(),
+                lastScreenType == null ? "none" : lastScreenType.getSimpleName(),
+                screenChanges));
 
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] frame_classes tick_frames=%d tick_calls=%d tick_frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow=%d render_only_frames=%d render_only_frame_ms avg=%.3f p50=%.3f p95=%.3f p99=%.3f max=%.3f slow=%d",
@@ -483,21 +554,19 @@ public final class PerformanceProfiler {
                     rotationLastYaw, rotationLastPitch, poseChangedFrames, positionSamples));
         }
 
-        long accountedAvg = 0L;
         StringBuilder avg = new StringBuilder("[VulkanModPerf] stage_avg_ms");
         StringBuilder p95 = new StringBuilder("[VulkanModPerf] stage_p95_ms");
         StringBuilder max = new StringBuilder("[VulkanModPerf] stage_max_ms");
         for (Stage stage : STAGES) {
             int ordinal = stage.ordinal();
             long average = stageSums[ordinal] / count;
-            if (!stage.nested) {
-                accountedAvg += average;
-            }
             appendMetric(avg, stage.label, average);
             appendMetric(p95, stage.label, percentile(stageSamples[ordinal], count, 0.95D));
             appendMetric(max, stage.label, stageMax[ordinal]);
         }
-        appendMetric(avg, "unaccounted", Math.max(0L, frameAvg - accountedAvg));
+        appendMetric(avg, "unaccounted", unaccountedSumNanos / count);
+        appendMetric(p95, "unaccounted", percentile(unaccountedSamples, count, 0.95D));
+        appendMetric(max, "unaccounted", unaccountedMaxNanos);
         long tickDetail = 0L;
         for (int i = 0; i < count; i++) tickDetail += tickDetailUnionSamples[i];
         appendMetric(avg, "client_tick_other", Math.max(0L,
@@ -541,11 +610,13 @@ public final class PerformanceProfiler {
         appendMetric(tickP95, "client_tick_other", sortedPercentile(sortScratch, otherCount, 0.95D));
         writeLine(tickAvg.toString());
         writeLine(tickP95.toString());
+        emitTickResourceMetrics(count);
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] accounting_overlap_frames top_level=%d top_level_excess_ms=%.3f top_level_max_excess_ms=%.3f tick_detail=%d world_detail=%d tick_detail_unbalanced=%d",
+                "[VulkanModPerf] accounting_overlap_frames top_level=%d top_level_excess_ms=%.3f top_level_max_excess_ms=%.3f tick_detail=%d tick_parent=%d game_children=%d world_detail=%d tick_unbalanced=%d tick_detail_unbalanced=%d",
                 topLevelOverlapFrames, millis(topLevelExcessNanos), millis(topLevelMaxExcessNanos),
-                tickDetailOverlapFrames, worldDetailOverlapFrames,
-                tickDetailUnbalancedFrames));
+                tickDetailOverlapFrames, tickParentExceededFrames, gameChildrenExceededFrames,
+                worldDetailOverlapFrames, clientTickUnbalancedFrames, tickDetailUnbalancedFrames));
+        emitFrameExamples(count);
 
         long worstAccounted = 0L;
         Stage worstKnownStage = null;
@@ -600,6 +671,12 @@ public final class PerformanceProfiler {
         }
 
         flushOutput();
+        // Summary work runs after the recorded frame, but can still interrupt the
+        // user's actual cadence. Expose its cost rather than hiding that pause.
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] profiler_overhead summary_ms=%.3f excludes_own_line=true",
+                millis(System.nanoTime() - summaryStartNanos)));
+        flushOutput();
 
         sampleCount = 0;
         slowFrames = 0;
@@ -608,11 +685,15 @@ public final class PerformanceProfiler {
         tickFrameMaxNanos = renderOnlyFrameMaxNanos = 0L;
         loopGapSumNanos = loopGapMaxNanos = 0L;
         loopGapSamplesCount = 0;
-        tickDetailOverlapFrames = tickDetailUnbalancedFrames = worldDetailOverlapFrames = topLevelOverlapFrames = 0;
+        tickDetailOverlapFrames = tickDetailUnbalancedFrames = clientTickUnbalancedFrames = 0;
+        tickParentExceededFrames = gameChildrenExceededFrames = worldDetailOverlapFrames = topLevelOverlapFrames = 0;
         topLevelExcessNanos = topLevelMaxExcessNanos = 0L;
         positionSamples = poseChangedFrames = 0;
+        playerPresentFrames = screenPresentFrames = screenChanges = 0;
+        firstScreenType = lastScreenType = null;
         frameSumNanos = 0L;
         frameMaxNanos = 0L;
+        unaccountedSumNanos = unaccountedMaxNanos = 0L;
         worstFrameId = 0L;
         worstFrameNanos = 0L;
         Arrays.fill(stageSums, 0L);
@@ -621,6 +702,99 @@ public final class PerformanceProfiler {
         framebufferSampled = false;
         framebufferChanges = 0;
         lastSummaryNanos = now;
+    }
+
+    private static void emitTickResourceMetrics(int count) {
+        int cpuCount = 0;
+        long cpuSum = 0L;
+        for (int i = 0; i < count; i++) {
+            long value = tickCpuSamples[i];
+            if (value < 0L) continue;
+            sortScratch[cpuCount++] = value;
+            cpuSum += value;
+        }
+        Arrays.sort(sortScratch, 0, cpuCount);
+        long cpuP95 = sortedPercentile(sortScratch, cpuCount, 0.95D);
+        long cpuMax = cpuCount == 0 ? 0L : sortScratch[cpuCount - 1];
+
+        int allocationCount = 0;
+        long allocationSum = 0L;
+        for (int i = 0; i < count; i++) {
+            long value = tickAllocationSamples[i];
+            if (value < 0L) continue;
+            sortScratch[allocationCount++] = value;
+            allocationSum += value;
+        }
+        Arrays.sort(sortScratch, 0, allocationCount);
+        long allocationP95 = sortedPercentile(sortScratch, allocationCount, 0.95D);
+        long allocationMax = allocationCount == 0 ? 0L : sortScratch[allocationCount - 1];
+
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] tick_resources tick_frames=%d cpu_samples=%d cpu_ms_avg=%.3f cpu_ms_p95=%.3f cpu_ms_max=%.3f allocation_samples=%d allocation_kib_avg=%.3f allocation_kib_p95=%.3f allocation_kib_max=%.3f",
+                tickFrames, cpuCount, cpuCount == 0 ? -1.0D : millis(cpuSum / cpuCount),
+                cpuCount == 0 ? -1.0D : millis(cpuP95), cpuCount == 0 ? -1.0D : millis(cpuMax),
+                allocationCount,
+                allocationCount == 0 ? -1.0D : allocationSum / (1024.0D * allocationCount),
+                allocationCount == 0 ? -1.0D : allocationP95 / 1024.0D,
+                allocationCount == 0 ? -1.0D : allocationMax / 1024.0D));
+    }
+
+    /** Evenly spaced examples retain ordinary tick frames, not merely GC-heavy maxima. */
+    private static void emitFrameExamples(int count) {
+        emitFrameExampleClass(count, true, tickFrames);
+        emitFrameExampleClass(count, false, renderOnlySlowFrames);
+    }
+
+    private static void emitFrameExampleClass(int count, boolean tick, int population) {
+        int examples = Math.min(EXAMPLES_PER_CLASS, population);
+        if (examples == 0) return;
+        int ordinal = 0;
+        int next = 0;
+        int target = (int) ((2L * next + 1L) * population / (2L * examples));
+        for (int i = 0; i < count && next < examples; i++) {
+            boolean matches = tick ? tickCallsPerFrame[i] > 0
+                    : tickCallsPerFrame[i] == 0 && frameSamples[i] >= SLOW_FRAME_NANOS;
+            if (!matches) continue;
+            if (ordinal++ != target) continue;
+            emitFrameExample(i, tick);
+            next++;
+            target = (int) ((2L * next + 1L) * population / (2L * examples));
+        }
+    }
+
+    private static void emitFrameExample(int index, boolean tick) {
+        long cpu = tickCpuSamples[index];
+        long allocation = tickAllocationSamples[index];
+        long gap = gapPerFrame[index];
+        long tickOther = Math.max(0L, stageSamples[Stage.CLIENT_TICK.ordinal()][index]
+                - tickDetailUnionSamples[index]);
+        long worldOther = Math.max(0L, stageSamples[Stage.WORLD_RENDER.ordinal()][index]
+                - stageSamples[Stage.TERRAIN_SETUP.ordinal()][index]
+                - stageSamples[Stage.TERRAIN_UPLOADS.ordinal()][index]
+                - stageSamples[Stage.TERRAIN_DRAW.ordinal()][index]
+                - stageSamples[Stage.BLOCK_ENTITY_RENDER.ordinal()][index]);
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] frame_example class=%s frame_id=%d end_epoch_ms=%d total_ms=%.3f tick_calls=%d client_tick_ms=%.3f client_tick_other_ms=%.3f tick_cpu_ms=%.3f tick_allocation_kib=%.3f game_render_ms=%.3f world_render_ms=%.3f world_render_other_ms=%.3f terrain_setup_ms=%.3f terrain_uploads_ms=%.3f terrain_draw_ms=%.3f frame_fence_wait_ms=%.3f image_acquire_ms=%.3f submit_render_ms=%.3f display_update_ms=%.3f frame_limit_ms=%.3f unaccounted_ms=%.3f preceding_loop_gap_ms=%.3f",
+                tick ? "tick" : "slow_render", frameIds[index],
+                captureStartEpochMillis + frameEndOffsets[index] / 1_000_000L,
+                millis(frameSamples[index]), tickCallsPerFrame[index],
+                millis(stageSamples[Stage.CLIENT_TICK.ordinal()][index]),
+                millis(tickOther),
+                cpu < 0L ? -1.0D : millis(cpu),
+                allocation < 0L ? -1.0D : allocation / 1024.0D,
+                millis(stageSamples[Stage.GAME_RENDER.ordinal()][index]),
+                millis(stageSamples[Stage.WORLD_RENDER.ordinal()][index]),
+                millis(worldOther),
+                millis(stageSamples[Stage.TERRAIN_SETUP.ordinal()][index]),
+                millis(stageSamples[Stage.TERRAIN_UPLOADS.ordinal()][index]),
+                millis(stageSamples[Stage.TERRAIN_DRAW.ordinal()][index]),
+                millis(stageSamples[Stage.FRAME_FENCE_WAIT.ordinal()][index]),
+                millis(stageSamples[Stage.IMAGE_ACQUIRE.ordinal()][index]),
+                millis(stageSamples[Stage.SUBMIT_RENDER.ordinal()][index]),
+                millis(stageSamples[Stage.DISPLAY_UPDATE.ordinal()][index]),
+                millis(stageSamples[Stage.FRAME_LIMIT.ordinal()][index]),
+                millis(unaccountedSamples[index]),
+                gap < 0L ? -1.0D : millis(gap)));
     }
 
     private static void emitTerrainCounters(WorldRenderer renderer) {
@@ -781,17 +955,15 @@ public final class PerformanceProfiler {
     }
 
     private static long renderThreadCpuNanos() {
-        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
-        return bean.isCurrentThreadCpuTimeSupported() && bean.isThreadCpuTimeEnabled()
-                ? bean.getCurrentThreadCpuTime() : -1L;
+        return THREAD_BEAN != null && THREAD_BEAN.isCurrentThreadCpuTimeSupported()
+                && THREAD_BEAN.isThreadCpuTimeEnabled()
+                ? THREAD_BEAN.getCurrentThreadCpuTime() : -1L;
     }
 
     private static long renderThreadAllocatedBytes() {
-        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
-        if (bean instanceof com.sun.management.ThreadMXBean allocationBean
-                && allocationBean.isThreadAllocatedMemorySupported()
-                && allocationBean.isThreadAllocatedMemoryEnabled()) {
-            return allocationBean.getThreadAllocatedBytes(Thread.currentThread().getId());
+        if (ALLOCATION_BEAN != null && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
+                && ALLOCATION_BEAN.isThreadAllocatedMemoryEnabled()) {
+            return ALLOCATION_BEAN.getThreadAllocatedBytes(Thread.currentThread().getId());
         }
         return -1L;
     }
