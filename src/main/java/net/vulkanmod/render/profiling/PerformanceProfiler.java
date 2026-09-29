@@ -421,7 +421,10 @@ public final class PerformanceProfiler {
                 || Stage.fromLegacyName("reposition") != Stage.TERRAIN_REPOSITION
                 || Stage.fromLegacyName("Uploads") != Stage.TERRAIN_UPLOADS
                 || Stage.fromLegacyName("submitRender") != Stage.SUBMIT_RENDER
+                || !Stage.TERRAIN_SETUP.nested
                 || !Stage.TERRAIN_REPOSITION.nested
+                || !Stage.TERRAIN_UPLOADS.nested
+                || Stage.GAME_RENDER.nested
                 || Stage.FRAME_FENCE_WAIT.nested) {
             throw new IllegalStateException("Performance profiler stage contract is invalid");
         }
@@ -431,10 +434,14 @@ public final class PerformanceProfiler {
         FRAME_SLOT_WAIT("frame_slot_wait", false),
         FRAME_FENCE_WAIT("frame_fence_wait", false),
         FRAME_OPS("frame_ops", false),
-        TERRAIN_SETUP("terrain_setup", false),
+        CLIENT_TICK("client_tick", false),
+        GAME_RENDER("game_render", false),
+        TERRAIN_SETUP("terrain_setup", true),
         TERRAIN_REPOSITION("terrain_reposition", true),
-        TERRAIN_UPLOADS("terrain_uploads", false),
-        SUBMIT_RENDER("submit_render", false);
+        TERRAIN_UPLOADS("terrain_uploads", true),
+        SUBMIT_RENDER("submit_render", false),
+        DISPLAY_UPDATE("display_update", false),
+        FRAME_LIMIT("frame_limit", false);
 
         private final String label;
         private final boolean nested;

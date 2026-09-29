@@ -57,6 +57,7 @@
 
     "profiling.GuiMixin",
     "profiling.KeyboardHandlerM",
+    "profiling.MinecraftPerformancePhasesMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RendererPerformanceMixin",
 
