@@ -44,6 +44,35 @@ Optional controls:
 
 No profiling flag is required for normal gameplay or benchmark control runs where instrumentation itself should be absent.
 
+## Optional unattended stationary run
+
+The ordinary profiler still starts at client startup and never moves the player. For the **named single-player benchmark world only**, the following additional JVM argument enables an automated stationary run:
+
+```text
+-Dvulkanmod.performanceProfiler=true
+-Dvulkanmod.performanceProfiler.autoBenchmark=true
+```
+
+The target display name defaults to `VulkanMod Benchmark` in the Overworld. After that world and its player are available, VulkanMod asks the integrated server to switch the player to Spectator and execute the fixed benchmark teleport (`0 192 0`, yaw `-90`, pitch `30`). It waits for the client to receive that pose and for terrain to become visible, settles for 60 seconds, then starts a **new profiler capture**. The default measured duration is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, it also keeps measuring for at least 60 seconds after the first cap observation. When the deadline is reached, VulkanMod flushes and closes the capture, calls Minecraft's normal single-player disconnect/save path, then closes the client after the integrated server is gone. The on-screen HUD shows the phase and remaining time; no F3 or manual `/tp` is needed.
+
+Optional JVM arguments:
+
+```text
+-Dvulkanmod.performanceProfiler.benchmarkWorld=VulkanMod Benchmark
+-Dvulkanmod.performanceProfiler.benchmarkX=0
+-Dvulkanmod.performanceProfiler.benchmarkY=192
+-Dvulkanmod.performanceProfiler.benchmarkZ=0
+-Dvulkanmod.performanceProfiler.benchmarkYaw=-90
+-Dvulkanmod.performanceProfiler.benchmarkPitch=30
+-Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
+-Dvulkanmod.performanceProfiler.durationSeconds=180
+-Dvulkanmod.performanceProfiler.benchmarkAfterStagingCapSeconds=60
+```
+
+Use one JVM argument per line in Prism; quote/escape a custom world name with spaces according to Prism's argument editor. The target name must match the world's display name exactly; other worlds and multiplayer sessions are untouched. Coordinates and duration can be configured for a separate, clearly labeled workload. Automation is **off by default** even when normal profiling is enabled, because it changes the target world's player position and game mode and eventually exits Minecraft. If the teleport fails, terrain does not appear, the player/camera moves, a screen opens, or the target world changes, the automatic run stops without closing the game and records the reason in `latest.log`. An interrupted measured run is flushed with `reason=interrupted`; discard it as a benchmark.
+
+The file begins at the end of the settle period, so `capture_start initial_framebuffer_px` belongs to the measured world rather than launcher startup. Its `benchmark_config` and `benchmark complete` lines preserve the requested pose and actual duration. Automated `durationSeconds` is measured from capture start; in normal profiler mode, `durationSeconds=0` still means unlimited. Use a copied/pristine world for formal A/B runs, because saving persists the player teleport and Spectator mode. This is the stationary Vulkan case; it does not automate the OpenGL control or traversal route.
+
 ## Window output
 
 Each summary window reports:

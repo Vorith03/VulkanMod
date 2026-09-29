@@ -2,6 +2,7 @@ package net.vulkanmod.mixin.profiling;
 
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
+import net.vulkanmod.render.profiling.AutomatedBenchmark;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -12,11 +13,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class PerformanceProfilerMixin {
     @Inject(method = "runTick", at = @At("HEAD"))
     private void vulkanmod$beginPerformanceFrame(boolean tick, CallbackInfo ci) {
+        AutomatedBenchmark.onFrameStart(Minecraft.getInstance());
         PerformanceProfiler.beginFrame();
     }
 
     @Inject(method = "runTick", at = @At("RETURN"))
     private void vulkanmod$endPerformanceFrame(boolean tick, CallbackInfo ci) {
         PerformanceProfiler.endFrame();
+        AutomatedBenchmark.onFrameEnd(Minecraft.getInstance());
     }
 }

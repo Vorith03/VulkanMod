@@ -31,6 +31,8 @@ import java.util.Locale;
  */
 public final class PerformanceProfiler {
     private static final boolean ENABLED = Boolean.getBoolean("vulkanmod.performanceProfiler");
+    private static final boolean AUTOMATED_BENCHMARK = ENABLED
+            && Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark");
     private static final String DEFAULT_OUTPUT = "logs/vulkanmod-performance.log";
     private static final String OUTPUT_FILE = ENABLED
             ? stringProperty("vulkanmod.performanceProfiler.output", DEFAULT_OUTPUT)
@@ -42,7 +44,8 @@ public final class PerformanceProfiler {
             ? doubleProperty("vulkanmod.performanceProfiler.summarySeconds", 5.0D, 0.25D, 300.0D)
             : 5.0D;
     private static final double DURATION_SECONDS = ENABLED
-            ? doubleProperty("vulkanmod.performanceProfiler.durationSeconds", 0.0D, 0.0D, 86400.0D)
+            ? (AUTOMATED_BENCHMARK ? 0.0D
+                    : doubleProperty("vulkanmod.performanceProfiler.durationSeconds", 0.0D, 0.0D, 86400.0D))
             : 0.0D;
     private static final double SLOW_FRAME_MS = ENABLED
             ? doubleProperty("vulkanmod.performanceProfiler.slowFrameMs", 25.0D, 1.0D, 1000.0D)
@@ -78,6 +81,7 @@ public final class PerformanceProfiler {
     private static final long[] worstStageNanos = ENABLED ? new long[STAGE_COUNT] : null;
 
     private static boolean active = ENABLED;
+    private static boolean captureArmed = !AUTOMATED_BENCHMARK;
     private static boolean frameActive;
     private static boolean clientTickActive;
     private static boolean announced;
@@ -178,9 +182,39 @@ public final class PerformanceProfiler {
         return active;
     }
 
+    public static void armAutomatedCapture() {
+        if (AUTOMATED_BENCHMARK && active) captureArmed = true;
+    }
+
+    public static void benchmarkEvent(String event) {
+        if (active && announced) {
+            writeLine("[VulkanModPerf] benchmark " + event);
+            flushOutput();
+        }
+    }
+
+    /** Close a measured world capture before the controller saves and quits. */
+    public static void finishAutomatedCapture(String reason) {
+        if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return;
+        long now = System.nanoTime();
+        if (sampleCount > 0) emitSummary(now);
+        writeLine(String.format(Locale.ROOT,
+                "[VulkanModPerf] capture_complete reason=%s duration_seconds=%.3f frames=%d",
+                reason, (now - captureStartNanos) / 1_000_000_000.0D, frameSequence));
+        flushOutput();
+        closeOutput();
+        active = false;
+    }
+
+    public static void abortAutomatedCapture() {
+        if (!AUTOMATED_BENCHMARK) return;
+        if (announced) finishAutomatedCapture("interrupted");
+        active = false;
+    }
+
     /** Start one Minecraft runTick sample. Safe to call more than once before endFrame(). */
     public static void beginFrame() {
-        if (!active || frameActive) {
+        if (!active || !captureArmed || frameActive) {
             return;
         }
 
@@ -460,6 +494,7 @@ public final class PerformanceProfiler {
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d initial_framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
                 SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight));
+        if (AUTOMATED_BENCHMARK) writeLine(AutomatedBenchmark.captureMetadata());
         String deviceName = Vulkan.getDeviceInfo() == null ? "unknown"
                 : Vulkan.getDeviceInfo().deviceName.replace(' ', '_');
         writeLine(String.format(Locale.ROOT,
@@ -995,6 +1030,7 @@ public final class PerformanceProfiler {
 
     /** Lightweight startup contract exercised automatically by smoke-test launches. */
     public static void verifyForCi() {
+        AutomatedBenchmark.verifyForCi();
         if (Stage.fromLegacyName("Frame_fence") != Stage.FRAME_FENCE_WAIT
                 || Stage.fromLegacyName("Frame_ops") != Stage.FRAME_OPS
                 || Stage.fromLegacyName("Setup_Renderer") != Stage.TERRAIN_SETUP

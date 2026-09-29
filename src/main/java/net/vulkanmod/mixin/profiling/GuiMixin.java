@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
+import net.vulkanmod.render.profiling.AutomatedBenchmark;
 import net.vulkanmod.render.profiling.ProfilerOverlay;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,6 +24,7 @@ public class GuiMixin {
 
     @Unique private long vulkanmod$nextStagingRefresh;
     @Unique private String vulkanmod$stagingLine;
+    @Unique private String vulkanmod$benchmarkLine;
     @Unique private long vulkanmod$hudStart;
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -47,14 +49,21 @@ public class GuiMixin {
         if(ProfilerOverlay.shouldRender && !this.minecraft.options.renderDebug)
             ProfilerOverlay.INSTANCE.render(guiGraphics.pose());
 
-        if(PerformanceProfiler.isEnabled() && this.minecraft.level != null && RegionVoxelStore.ENABLED) {
+        if((PerformanceProfiler.isEnabled() || AutomatedBenchmark.enabled()) && this.minecraft.level != null) {
             long now = System.nanoTime();
-            if(this.vulkanmod$stagingLine == null || now >= this.vulkanmod$nextStagingRefresh) {
-                this.vulkanmod$stagingLine = RegionVoxelStore.overlayCount();
+            if(now >= this.vulkanmod$nextStagingRefresh) {
+                this.vulkanmod$stagingLine = RegionVoxelStore.ENABLED ? RegionVoxelStore.overlayCount() : null;
+                this.vulkanmod$benchmarkLine = AutomatedBenchmark.statusLine();
                 this.vulkanmod$nextStagingRefresh = now + 1_000_000_000L;
             }
-            int x = this.minecraft.getWindow().getGuiScaledWidth() - this.minecraft.font.width(this.vulkanmod$stagingLine) - 6;
-            guiGraphics.drawString(this.minecraft.font, this.vulkanmod$stagingLine, x, 6, 0xFFFFFF);
+            if (this.vulkanmod$stagingLine != null) {
+                int x = this.minecraft.getWindow().getGuiScaledWidth() - this.minecraft.font.width(this.vulkanmod$stagingLine) - 6;
+                guiGraphics.drawString(this.minecraft.font, this.vulkanmod$stagingLine, x, 6, 0xFFFFFF);
+            }
+            if (this.vulkanmod$benchmarkLine != null) {
+                int x = this.minecraft.getWindow().getGuiScaledWidth() - this.minecraft.font.width(this.vulkanmod$benchmarkLine) - 6;
+                guiGraphics.drawString(this.minecraft.font, this.vulkanmod$benchmarkLine, x, 18, 0xFFFFFF);
+            }
         }
     }
 }

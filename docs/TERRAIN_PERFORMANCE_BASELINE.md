@@ -66,6 +66,8 @@ After entering the pristine benchmark world:
 
 Do not adjust spectator flight speed. Wait 60 seconds without moving the camera before starting the stationary capture. The fixed elevated/downward view is intentional: it avoids collision/terrain-height dependence while keeping a broad opaque/cutout/distant-chunk workload in view.
 
+For a Vulkan-only unattended stationary diagnostic, `docs/PERFORMANCE_PROFILING.md` documents an opt-in named-world mode that performs this teleport, waits for visible terrain and the same 60-second settle period, measures a configurable duration, then saves and exits. It is not an OpenGL comparison capture and does not replace the matched A/B settings or the pristine-world-copy requirement.
+
 ### Fixed traversal route
 
 Start from:
