@@ -198,10 +198,17 @@ public final class PerformanceProfiler {
         String duration = DURATION_SECONDS > 0.0D
                 ? String.format(Locale.ROOT, "%.3f", DURATION_SECONDS)
                 : "unlimited";
+        Minecraft minecraft = Minecraft.getInstance();
+        int framebufferWidth = minecraft != null && minecraft.getWindow() != null
+                ? minecraft.getWindow().getWidth()
+                : -1;
+        int framebufferHeight = minecraft != null && minecraft.getWindow() != null
+                ? minecraft.getWindow().getHeight()
+                : -1;
         Initializer.LOGGER.info("VulkanMod performance profiling enabled; output: {}", outputPath.toAbsolutePath());
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d cpu_wall_clock=true gpu_timestamps=false",
-                SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES));
+                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
+                SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight));
         flushOutput();
         return active;
     }
