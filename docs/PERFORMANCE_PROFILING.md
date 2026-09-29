@@ -57,6 +57,8 @@ Each summary window reports:
 
 The default summary period is five seconds. This keeps capture volume low enough for diagnostic runs while still exposing transient changes during traversal or Create-heavy scenes.
 
+`capture_start initial_framebuffer_px` reports only the size at profiler startup; Prism's launcher window may resize later. Each `window` line therefore reports the measured frames' first/last framebuffer dimensions, width/height ranges, and number of observed dimension changes. The profiler samples both boundaries of every frame. Use a window with matching first/last dimensions, constant ranges, and zero changes for resolution-sensitive comparisons. An older capture that records only the initial size does not establish its in-world resolution.
+
 ## Known stages
 
 The profiler has broad, non-overlapping `runTick()` phases plus narrower nested terrain detail. Nested stages are reported but are **not** subtracted again when computing `unaccounted`.
