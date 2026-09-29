@@ -214,7 +214,7 @@ public final class PerformanceProfiler {
         try {
             WorldRenderer renderer = WorldRenderer.getInstance();
             if (renderer != null && renderer.getLevel() != null) {
-                Initializer.LOGGER.info("[VulkanModPerf] terrain {}", renderer.getStats());
+                Initializer.LOGGER.info("[VulkanModPerf] terrain {}", renderer.getChunkStatistics());
             }
         } catch (RuntimeException diagnosticFailure) {
             Initializer.LOGGER.debug("[VulkanModPerf] terrain snapshot unavailable", diagnosticFailure);
