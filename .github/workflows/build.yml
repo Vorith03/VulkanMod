@@ -104,6 +104,7 @@ jobs:
           name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
           path: |
             vulkan-smoke.log
+            run/logs/vulkanmod-performance-ci.log
             vulkan-smoke-no-splash.log
             vulkan-gpu-indirect-shadow-smoke.log
             vulkan-post-chain-smoke.log
