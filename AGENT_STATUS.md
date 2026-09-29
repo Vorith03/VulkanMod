@@ -4,9 +4,9 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Repository state
 
-- Current executable/test candidate is `5c06b5f9a6b08c77fd8856d3d84834d61e0e86d6` (`fix: use terrain statistics API in performance logger`). The main instrumentation implementation immediately underneath is `3d28f5076a69ec52ea208d4bfb11f6ff3f93cda6` (`feat: add opt-in performance critical-path logger`).
-- Public CI **#803** / run `36525767449` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
-- Testable artifact is `VulkanMod-Forge-build-803` (artifact `11015105357`, SHA-256 `892840ad48e4d6393609a01fd42e31c86f49f1cf0fb3a5ea09d6513db0baf50b`).
+- Current executable/test candidate is `90a9c6498853e3f6cae0b64a554b996455a16199` (`docs: document dedicated performance capture output`). The executable profiler-output change immediately underneath is `2d91a085d3d54cc60cda4c68165c157d0b781ff7` (`feat: write performance profiling to dedicated capture file`). The initial critical-path implementation is `3d28f5076a69ec52ea208d4bfb11f6ff3f93cda6` with the terrain statistics API correction in `5c06b5f9a6b08c77fd8856d3d84834d61e0e86d6`.
+- Public CI **#805** / run `36529808812` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
+- Testable artifact is `VulkanMod-Forge-build-805` (artifact `11015748642`, SHA-256 `e4826efea983ea5876d07b1c61690d902aea05700c5f7c947ada7953cb67c8db`).
 - The adversarial audit remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
 
 ## Active sequencing
@@ -31,7 +31,7 @@ The same #801 session independently reproduced a shutdown/native-lifetime abort 
 
 ## Performance / critical-path instrumentation
 
-`3d28f507` + `5c06b5f9` add the reusable opt-in logger documented in `docs/PERFORMANCE_PROFILING.md`.
+The reusable opt-in profiling layer is documented in `docs/PERFORMANCE_PROFILING.md`. `2d91a085` moves profiler summaries out of the normal Forge/Minecraft logger and into a dedicated capture file while preserving the low-overhead timing contract.
 
 Enable it for a Vulkan diagnostic run with:
 
@@ -39,15 +39,25 @@ Enable it for a Vulkan diagnostic run with:
 -Dvulkanmod.performanceProfiler=true
 ```
 
+Default output, relative to the Minecraft game directory:
+
+```text
+logs/vulkanmod-performance.log
+```
+
+The ordinary console/log receives only a one-time notice that profiling is enabled and the resolved output path. Periodic `[VulkanModPerf]` summaries are written to the dedicated file instead of cluttering `latest.log`. Output failures disable profiling and report the failure through the normal logger rather than risking gameplay stability.
+
 Optional controls:
 
 ```text
 -Dvulkanmod.performanceProfiler.summarySeconds=5
+-Dvulkanmod.performanceProfiler.durationSeconds=60
+-Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-run-a.log
 -Dvulkanmod.performanceProfiler.slowFrameMs=25
 -Dvulkanmod.performanceProfiler.maxSamples=4096
 ```
 
-Search `latest.log` for `[VulkanModPerf]`.
+`summarySeconds` controls the summary-window period; default is 5 seconds. `durationSeconds=0` means unlimited; a positive value emits a final partial summary, writes `capture_complete`, closes the capture file, and makes the profiler inactive when the requested duration elapses. `output` can be a game-directory-relative or absolute path, allowing benchmark automation to preserve separate captures.
 
 Current instrumentation contract:
 
@@ -60,7 +70,7 @@ Current instrumentation contract:
 - existing terrain region-batch and task-dispatch queue/build/handoff/publication statistics are emitted beside the timing window;
 - the old `Profiler2` allocation-heavy timing tree now runs only while its Alt+F8 overlay is visible instead of allocating every normal frame.
 
-The profiler is disabled by default. Its hot enabled path uses fixed primitive sample buffers and `System.nanoTime()`; sorting/string formatting/JVM telemetry occur only at summary boundaries.
+The profiler is disabled by default. Its hot enabled path uses fixed primitive sample buffers and `System.nanoTime()`; percentile sorting, string formatting, JVM telemetry, and file I/O occur only at summary boundaries.
 
 This is intentionally a **CPU wall-clock critical-path layer**, not a claim of GPU execution timing. Vulkan GPU timestamps are feasible: device `timestampPeriod` is available and frame fences provide a non-blocking completed-slot readback boundary. Add a query-ring layer only when a capture shows GPU/pass timing is the next missing discriminator rather than blanket-instrumenting every pass preemptively.
 
@@ -98,4 +108,4 @@ Keep accelerated consumption default-off until representative RX correctness and
 
 ## Next useful action
 
-Use the new performance logger to establish a Vulkan critical-path capture under the fixed Phase 5 stationary/traversal/Create-heavy workloads, alongside the comparable OpenGL/Vulkan baseline process in `docs/TERRAIN_PERFORMANCE_BASELINE.md`. Use the resulting p95/p99/worst-frame and queue/build/upload evidence to choose the next optimization target. If the capture points at GPU execution rather than CPU submission/terrain work, add the bounded Vulkan timestamp-query ring next; otherwise instrument only the dominant `unaccounted` CPU boundary or resume the relevant Phase 6/7 gate.
+Use the dedicated performance capture file to establish a Vulkan critical-path capture under the fixed Phase 5 stationary/traversal/Create-heavy workloads, alongside the comparable OpenGL/Vulkan baseline process in `docs/TERRAIN_PERFORMANCE_BASELINE.md`. Use the resulting p95/p99/worst-frame and queue/build/upload evidence to choose the next optimization target. If the capture points at GPU execution rather than CPU submission/terrain work, add the bounded Vulkan timestamp-query ring next; otherwise instrument only the dominant `unaccounted` CPU boundary or resume the relevant Phase 6/7 gate.
