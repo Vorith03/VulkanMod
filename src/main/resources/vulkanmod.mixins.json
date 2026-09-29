@@ -57,6 +57,8 @@
 
     "profiling.GuiMixin",
     "profiling.KeyboardHandlerM",
+    "profiling.PerformanceProfilerMixin",
+    "profiling.RendererPerformanceMixin",
 
     "render.entity.EntityRendererM",
     "render.model.ModelPartCubeM",
