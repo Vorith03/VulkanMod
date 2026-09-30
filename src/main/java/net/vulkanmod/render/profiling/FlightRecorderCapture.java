@@ -52,7 +52,6 @@ public final class FlightRecorderCapture {
     private static FrameEvent frameEvent;
     private static long frameSequence;
     private static long frameCpuStart = -1L;
-    private static boolean shutdownHookInstalled;
     private static boolean failed;
 
     private FlightRecorderCapture() {
@@ -90,11 +89,17 @@ public final class FlightRecorderCapture {
             Path parent = nextOutput.getParent();
             if (parent != null) Files.createDirectories(parent);
 
+            // Let JFR own persistence. Calling Recording.dump() from our own JVM
+            // shutdown hook races JFR's shutdown cleanup and can observe its temporary
+            // chunk after it has already been removed. A destination is written when
+            // an explicit stop completes, while dump-on-exit covers interrupted/manual
+            // runs without competing with JFR's internal shutdown hooks.
+            next.setDestination(nextOutput);
+            next.setDumpOnExit(true);
             next.start();
             outputPath = nextOutput;
             recording = next;
             capturing = true;
-            installShutdownHook();
             Initializer.LOGGER.info(
                     "VulkanMod raw performance flight recorder enabled; output: {}; Java sample={} ms; native sample={} ms",
                     nextOutput.toAbsolutePath(), JAVA_SAMPLE_MS, NATIVE_SAMPLE_MS);
@@ -223,8 +228,8 @@ public final class FlightRecorderCapture {
     }
 
     /**
-     * Stop and persist the raw recording. The benchmark may call this before JVM
-     * shutdown; the shutdown hook is only a safety net for interrupted/manual runs.
+     * Stop and persist the raw recording. When a destination is configured JFR
+     * writes the recording as part of stop(); dump-on-exit handles JVM shutdown.
      */
     public static synchronized boolean stop(String reason) {
         if (!ENABLED) return true;
@@ -232,15 +237,14 @@ public final class FlightRecorderCapture {
         capturing = false;
         Recording current = recording;
         recording = null;
-        if (current == null) return failed;
+        if (current == null) return !failed;
 
         try {
             current.stop();
-            current.dump(outputPath);
             Initializer.LOGGER.info("VulkanMod raw performance flight recorder saved: {} ({})",
                     outputPath.toAbsolutePath(), reason);
             return true;
-        } catch (IOException | RuntimeException failure) {
+        } catch (RuntimeException failure) {
             failed = true;
             Initializer.LOGGER.error("VulkanMod could not save the raw JFR performance capture", failure);
             return false;
@@ -271,13 +275,6 @@ public final class FlightRecorderCapture {
         if (!configured.isEmpty()) return Path.of(configured).toAbsolutePath().normalize();
         return Path.of("logs", "vulkanmod-performance-flight-" + UUID.randomUUID() + ".jfr")
                 .toAbsolutePath().normalize();
-    }
-
-    private static synchronized void installShutdownHook() {
-        if (shutdownHookInstalled) return;
-        shutdownHookInstalled = true;
-        Runtime.getRuntime().addShutdownHook(new Thread(
-                () -> stop("jvm_shutdown"), "VulkanMod performance flight recorder shutdown"));
     }
 
     private static long longProperty(String suffix, long fallback, long min, long max) {
