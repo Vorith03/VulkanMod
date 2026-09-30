@@ -7,7 +7,7 @@ cd "$repo_root"
 mode="${1:-}"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel|create}" >&2
+  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|renderer-regression|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel|create}" >&2
   exit 2
 }
 
@@ -176,6 +176,25 @@ case "$mode" in
     grep -F "Vulkan smoke test passed" vulkan-gpu-indirect-shadow-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-gpu-indirect-shadow-smoke.log; then
       echo "GPU indirect shadow smoke produced invalid Vulkan" >&2
+      exit 1
+    fi
+    rm -f run/vk_layer_settings.txt
+    ;;
+
+  renderer-regression)
+    clear_ci_mods
+    snapshot_vk_layer_settings
+    mkdir -p run
+    export VK_LAYER_SETTINGS_PATH="$repo_root/run"
+    echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
+    run_client "-Dvulkanmod.ciRendererRegressionSmoke=true -Dvulkanmod.validation=true" vulkan-renderer-regression-smoke.log
+    grep -F "Vulkan vanilla post-chain execution smoke passed" vulkan-renderer-regression-smoke.log
+    grep -F "Depth inputs initialized and copied; four PostChain processes submitted in two frames" vulkan-renderer-regression-smoke.log
+    grep -F "Vulkan vanilla depth post-chain execution smoke passed" vulkan-renderer-regression-smoke.log
+    grep -F "Vulkan screenshot readback smoke passed" vulkan-renderer-regression-smoke.log
+    grep -F "Packed texture upload Vulkan smoke passed" vulkan-renderer-regression-smoke.log
+    if grep -E 'Validation Error|SYNC-HAZARD|Effect sampler .*white fallback' vulkan-renderer-regression-smoke.log; then
+      echo "Combined renderer regression smoke produced invalid Vulkan or an unbound sampler" >&2
       exit 1
     fi
     rm -f run/vk_layer_settings.txt
