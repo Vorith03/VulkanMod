@@ -23,8 +23,8 @@ import java.util.UUID;
  * <p>This deliberately does not know about terrain, entities, textures, ticks, or
  * any other subsystem whose importance would have to be predicted in advance.
  * JFR continuously samples the JVM and records runtime events across all threads.
- * VulkanMod adds only a generic runTick frame envelope so arbitrary samples can
- * later be correlated to individual frames.</p>
+ * VulkanMod adds only universal correlation boundaries: Minecraft frames and the
+ * Vulkan queue/fence operations through which GPU work must pass.</p>
  *
  * <p>The existing hand-instrumented {@link PerformanceProfiler} summaries remain
  * useful as cheap derived views, but this recording is the source artifact for
@@ -42,6 +42,7 @@ public final class FlightRecorderCapture {
     private static Path outputPath;
     private static FrameEvent frameEvent;
     private static long frameSequence;
+    private static long vulkanSubmissionSequence;
     private static boolean shutdownHookInstalled;
     private static boolean failed;
 
@@ -60,8 +61,8 @@ public final class FlightRecorderCapture {
             next.setToDisk(true);
 
             // The stock profile configuration already captures JVM/GC/allocation/JIT
-            // telemetry. Tighten only the generic evidence needed to explain short
-            // frame stalls; these are not application-specific subsystem metrics.
+            // telemetry. Tighten only generic evidence needed to explain short frame
+            // stalls; these are not application-specific subsystem metrics.
             next.enable("jdk.ExecutionSample").withPeriod(Duration.ofMillis(JAVA_SAMPLE_MS));
             next.enable("jdk.NativeMethodSample").withPeriod(Duration.ofMillis(NATIVE_SAMPLE_MS));
             next.enable("jdk.ThreadPark").withThreshold(Duration.ZERO).withStackTrace();
@@ -69,6 +70,9 @@ public final class FlightRecorderCapture {
             next.enable("jdk.JavaMonitorEnter").withThreshold(Duration.ZERO).withStackTrace();
             next.enable("jdk.JavaMonitorWait").withThreshold(Duration.ZERO).withStackTrace();
             next.enable(FrameEvent.class).withoutStackTrace();
+            next.enable(VulkanSubmissionEvent.class).withStackTrace().withoutThreshold();
+            next.enable(VulkanFenceWaitEvent.class).withStackTrace().withoutThreshold();
+            next.enable(VulkanQueueIdleEvent.class).withStackTrace().withoutThreshold();
 
             outputPath = resolveOutputPath();
             Path parent = outputPath.getParent();
@@ -104,6 +108,56 @@ public final class FlightRecorderCapture {
         FrameEvent event = frameEvent;
         frameEvent = null;
         if (event != null) event.commit();
+    }
+
+    /** Begin a universal Vulkan command-buffer submission event. */
+    public static synchronized VulkanSubmissionEvent beginVulkanSubmission(
+            long commandBuffer, long queue, long fence, boolean signalsSemaphore) {
+        if (recording == null) return null;
+        VulkanSubmissionEvent event = new VulkanSubmissionEvent();
+        event.sequence = ++vulkanSubmissionSequence;
+        event.commandBuffer = commandBuffer;
+        event.queue = queue;
+        event.fence = fence;
+        event.signalsSemaphore = signalsSemaphore;
+        event.begin();
+        return event;
+    }
+
+    public static void endVulkanSubmission(VulkanSubmissionEvent event, int result) {
+        if (event == null) return;
+        event.result = result;
+        event.commit();
+    }
+
+    /** Begin a fence wait. A zero fence denotes a batched wait. */
+    public static synchronized VulkanFenceWaitEvent beginVulkanFenceWait(long fence, int fenceCount) {
+        if (recording == null) return null;
+        VulkanFenceWaitEvent event = new VulkanFenceWaitEvent();
+        event.fence = fence;
+        event.fenceCount = fenceCount;
+        event.begin();
+        return event;
+    }
+
+    public static void endVulkanFenceWait(VulkanFenceWaitEvent event, int result) {
+        if (event == null) return;
+        event.result = result;
+        event.commit();
+    }
+
+    public static synchronized VulkanQueueIdleEvent beginVulkanQueueIdle(long queue) {
+        if (recording == null) return null;
+        VulkanQueueIdleEvent event = new VulkanQueueIdleEvent();
+        event.queue = queue;
+        event.begin();
+        return event;
+    }
+
+    public static void endVulkanQueueIdle(VulkanQueueIdleEvent event, int result) {
+        if (event == null) return;
+        event.result = result;
+        event.commit();
     }
 
     /**
@@ -174,5 +228,51 @@ public final class FlightRecorderCapture {
 
         @Label("Tick requested")
         boolean tickRequested;
+    }
+
+    @Name("net.vulkanmod.VulkanSubmission")
+    @Label("Vulkan command submission")
+    @Category({"VulkanMod", "Vulkan"})
+    @Description("CPU-side command-buffer finalization and queue submission at the universal Vulkan submission boundary")
+    @StackTrace(true)
+    public static final class VulkanSubmissionEvent extends Event {
+        @Label("Submission sequence")
+        long sequence;
+        @Label("Command buffer")
+        long commandBuffer;
+        @Label("Queue")
+        long queue;
+        @Label("Fence")
+        long fence;
+        @Label("Signals semaphore")
+        boolean signalsSemaphore;
+        @Label("VkResult")
+        int result;
+    }
+
+    @Name("net.vulkanmod.VulkanFenceWait")
+    @Label("Vulkan fence wait")
+    @Category({"VulkanMod", "Vulkan"})
+    @Description("CPU wall time blocked at vkWaitForFences")
+    @StackTrace(true)
+    public static final class VulkanFenceWaitEvent extends Event {
+        @Label("Fence")
+        long fence;
+        @Label("Fence count")
+        int fenceCount;
+        @Label("VkResult")
+        int result;
+    }
+
+    @Name("net.vulkanmod.VulkanQueueIdle")
+    @Label("Vulkan queue idle wait")
+    @Category({"VulkanMod", "Vulkan"})
+    @Description("CPU wall time blocked at vkQueueWaitIdle")
+    @StackTrace(true)
+    public static final class VulkanQueueIdleEvent extends Event {
+        @Label("Queue")
+        long queue;
+        @Label("VkResult")
+        int result;
     }
 }
