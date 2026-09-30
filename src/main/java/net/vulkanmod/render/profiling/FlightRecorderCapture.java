@@ -11,11 +11,14 @@ import jdk.jfr.StackTrace;
 import net.vulkanmod.Initializer;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Raw, query-later performance capture for VulkanMod profiling runs.
@@ -24,7 +27,7 @@ import java.util.UUID;
  * any other subsystem whose importance would have to be predicted in advance.
  * JFR continuously samples the JVM and records runtime events across all threads.
  * VulkanMod adds only universal correlation boundaries: Minecraft frames and the
- * Vulkan queue/fence operations through which GPU work must pass.</p>
+ * Vulkan API operations through which CPU/GPU synchronization and submissions pass.</p>
  *
  * <p>The existing hand-instrumented {@link PerformanceProfiler} summaries remain
  * useful as cheap derived views, but this recording is the source artifact for
@@ -37,12 +40,16 @@ public final class FlightRecorderCapture {
     private static final String OUTPUT_PROPERTY = "vulkanmod.performanceProfiler.flightRecorderOutput";
     private static final long JAVA_SAMPLE_MS = longProperty("flightRecorderJavaSampleMillis", 2L, 1L, 100L);
     private static final long NATIVE_SAMPLE_MS = longProperty("flightRecorderNativeSampleMillis", 5L, 1L, 100L);
+    private static final ThreadMXBean THREAD_BEAN = ENABLED ? ManagementFactory.getThreadMXBean() : null;
+    private static final boolean THREAD_CPU_SUPPORTED = ENABLED && THREAD_BEAN.isCurrentThreadCpuTimeSupported();
+    private static final AtomicLong SUBMISSION_SEQUENCE = new AtomicLong();
 
-    private static Recording recording;
-    private static Path outputPath;
+    private static volatile Recording recording;
+    private static volatile boolean capturing;
+    private static volatile Path outputPath;
     private static FrameEvent frameEvent;
     private static long frameSequence;
-    private static long vulkanSubmissionSequence;
+    private static long frameCpuStart = -1L;
     private static boolean shutdownHookInstalled;
     private static boolean failed;
 
@@ -52,7 +59,7 @@ public final class FlightRecorderCapture {
     /** Start the raw recording on first use. Repeated calls are intentionally cheap. */
     public static synchronized boolean startIfNeeded() {
         if (!ENABLED || failed) return false;
-        if (recording != null) return true;
+        if (capturing) return true;
 
         try {
             Configuration configuration = Configuration.getConfiguration("profile");
@@ -65,57 +72,70 @@ public final class FlightRecorderCapture {
             // stalls; these are not application-specific subsystem metrics.
             next.enable("jdk.ExecutionSample").withPeriod(Duration.ofMillis(JAVA_SAMPLE_MS));
             next.enable("jdk.NativeMethodSample").withPeriod(Duration.ofMillis(NATIVE_SAMPLE_MS));
-            next.enable("jdk.ThreadPark").withThreshold(Duration.ZERO).withStackTrace();
-            next.enable("jdk.ThreadSleep").withThreshold(Duration.ZERO).withStackTrace();
-            next.enable("jdk.JavaMonitorEnter").withThreshold(Duration.ZERO).withStackTrace();
-            next.enable("jdk.JavaMonitorWait").withThreshold(Duration.ZERO).withStackTrace();
+            next.enable("jdk.ThreadPark").withThreshold(Duration.ofMillis(1L)).withStackTrace();
+            next.enable("jdk.ThreadSleep").withThreshold(Duration.ofMillis(1L)).withStackTrace();
+            next.enable("jdk.JavaMonitorEnter").withThreshold(Duration.ofMillis(1L)).withStackTrace();
+            next.enable("jdk.JavaMonitorWait").withThreshold(Duration.ofMillis(1L)).withStackTrace();
+            next.enable("jdk.ThreadCPULoad").withPeriod(Duration.ofMillis(10L));
             next.enable(FrameEvent.class).withoutStackTrace();
             next.enable(VulkanSubmissionEvent.class).withStackTrace().withoutThreshold();
             next.enable(VulkanFenceWaitEvent.class).withStackTrace().withoutThreshold();
             next.enable(VulkanQueueIdleEvent.class).withStackTrace().withoutThreshold();
+            next.enable(VulkanApiEvent.class).withStackTrace().withoutThreshold();
 
-            outputPath = resolveOutputPath();
-            Path parent = outputPath.getParent();
+            Path nextOutput = resolveOutputPath();
+            Path parent = nextOutput.getParent();
             if (parent != null) Files.createDirectories(parent);
 
             next.start();
+            outputPath = nextOutput;
             recording = next;
+            capturing = true;
             installShutdownHook();
             Initializer.LOGGER.info(
                     "VulkanMod raw performance flight recorder enabled; output: {}; Java sample={} ms; native sample={} ms",
-                    outputPath.toAbsolutePath(), JAVA_SAMPLE_MS, NATIVE_SAMPLE_MS);
+                    nextOutput.toAbsolutePath(), JAVA_SAMPLE_MS, NATIVE_SAMPLE_MS);
             return true;
         } catch (IOException | ParseException | RuntimeException failure) {
             failed = true;
+            capturing = false;
             Initializer.LOGGER.error("VulkanMod could not start the raw JFR performance capture", failure);
             return false;
         }
     }
 
-    /** Begin one generic Minecraft runTick envelope. */
-    public static synchronized void beginFrame(boolean tickRequested) {
-        if (!startIfNeeded() || frameEvent != null) return;
+    /** Begin one generic Minecraft runTick envelope. Called only by the render thread. */
+    public static void beginFrame(boolean tickRequested) {
+        if (!ENABLED) return;
+        if (!capturing && !startIfNeeded()) return;
+        if (frameEvent != null) return;
 
         FrameEvent event = new FrameEvent();
         event.sequence = ++frameSequence;
         event.tickRequested = tickRequested;
+        frameCpuStart = currentThreadCpuNanos();
         event.begin();
         frameEvent = event;
     }
 
-    /** End the current generic frame envelope. */
-    public static synchronized void endFrame() {
+    /** End the current generic frame envelope. Called only by the render thread. */
+    public static void endFrame() {
+        if (!ENABLED) return;
         FrameEvent event = frameEvent;
         frameEvent = null;
-        if (event != null) event.commit();
+        if (event == null) return;
+        long cpuEnd = currentThreadCpuNanos();
+        event.cpuNanos = frameCpuStart >= 0L && cpuEnd >= frameCpuStart ? cpuEnd - frameCpuStart : -1L;
+        frameCpuStart = -1L;
+        event.commit();
     }
 
     /** Begin a universal Vulkan command-buffer submission event. */
-    public static synchronized VulkanSubmissionEvent beginVulkanSubmission(
+    public static VulkanSubmissionEvent beginVulkanSubmission(
             long commandBuffer, long queue, long fence, boolean signalsSemaphore) {
-        if (recording == null) return null;
+        if (!capturing) return null;
         VulkanSubmissionEvent event = new VulkanSubmissionEvent();
-        event.sequence = ++vulkanSubmissionSequence;
+        event.sequence = SUBMISSION_SEQUENCE.incrementAndGet();
         event.commandBuffer = commandBuffer;
         event.queue = queue;
         event.fence = fence;
@@ -131,8 +151,8 @@ public final class FlightRecorderCapture {
     }
 
     /** Begin a fence wait. A zero fence denotes a batched wait. */
-    public static synchronized VulkanFenceWaitEvent beginVulkanFenceWait(long fence, int fenceCount) {
-        if (recording == null) return null;
+    public static VulkanFenceWaitEvent beginVulkanFenceWait(long fence, int fenceCount) {
+        if (!capturing) return null;
         VulkanFenceWaitEvent event = new VulkanFenceWaitEvent();
         event.fence = fence;
         event.fenceCount = fenceCount;
@@ -146,8 +166,8 @@ public final class FlightRecorderCapture {
         event.commit();
     }
 
-    public static synchronized VulkanQueueIdleEvent beginVulkanQueueIdle(long queue) {
-        if (recording == null) return null;
+    public static VulkanQueueIdleEvent beginVulkanQueueIdle(long queue) {
+        if (!capturing) return null;
         VulkanQueueIdleEvent event = new VulkanQueueIdleEvent();
         event.queue = queue;
         event.begin();
@@ -160,15 +180,33 @@ public final class FlightRecorderCapture {
         event.commit();
     }
 
+    /** Generic duration event for other universal Vulkan API boundaries. */
+    public static VulkanApiEvent beginVulkanApi(String operation, long object) {
+        if (!capturing) return null;
+        VulkanApiEvent event = new VulkanApiEvent();
+        event.operation = operation;
+        event.object = object;
+        event.begin();
+        return event;
+    }
+
+    public static void endVulkanApi(VulkanApiEvent event, int result) {
+        if (event == null) return;
+        event.result = result;
+        event.commit();
+    }
+
     /**
      * Stop and persist the raw recording. The benchmark may call this before JVM
      * shutdown; the shutdown hook is only a safety net for interrupted/manual runs.
      */
     public static synchronized boolean stop(String reason) {
+        if (!ENABLED) return true;
         endFrame();
+        capturing = false;
         Recording current = recording;
         recording = null;
-        if (current == null) return !ENABLED || failed;
+        if (current == null) return failed;
 
         try {
             current.stop();
@@ -185,12 +223,17 @@ public final class FlightRecorderCapture {
         }
     }
 
-    public static synchronized Path outputPath() {
+    public static Path outputPath() {
         return outputPath;
     }
 
     public static boolean enabled() {
         return ENABLED;
+    }
+
+    private static long currentThreadCpuNanos() {
+        if (!THREAD_CPU_SUPPORTED) return -1L;
+        return THREAD_BEAN.getCurrentThreadCpuTime();
     }
 
     private static Path resolveOutputPath() {
@@ -200,7 +243,7 @@ public final class FlightRecorderCapture {
                 .toAbsolutePath().normalize();
     }
 
-    private static void installShutdownHook() {
+    private static synchronized void installShutdownHook() {
         if (shutdownHookInstalled) return;
         shutdownHookInstalled = true;
         Runtime.getRuntime().addShutdownHook(new Thread(
@@ -225,9 +268,10 @@ public final class FlightRecorderCapture {
     private static final class FrameEvent extends Event {
         @Label("Frame sequence")
         long sequence;
-
         @Label("Tick requested")
         boolean tickRequested;
+        @Label("Render-thread CPU time (ns)")
+        long cpuNanos;
     }
 
     @Name("net.vulkanmod.VulkanSubmission")
@@ -272,6 +316,20 @@ public final class FlightRecorderCapture {
     public static final class VulkanQueueIdleEvent extends Event {
         @Label("Queue")
         long queue;
+        @Label("VkResult")
+        int result;
+    }
+
+    @Name("net.vulkanmod.VulkanApi")
+    @Label("Vulkan API duration")
+    @Category({"VulkanMod", "Vulkan"})
+    @Description("Generic duration and caller for Vulkan API operations that may block or delimit presentation")
+    @StackTrace(true)
+    public static final class VulkanApiEvent extends Event {
+        @Label("Operation")
+        String operation;
+        @Label("Vulkan object")
+        long object;
         @Label("VkResult")
         int result;
     }
