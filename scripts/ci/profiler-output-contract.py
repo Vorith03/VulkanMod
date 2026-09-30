@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Check an actual Vulkan startup capture for parseable, consistent profiler windows."""
+"""Check actual Vulkan startup captures for legacy summaries and raw flight-recorder evidence."""
 
 import pathlib
+import subprocess
 import sys
 import uuid
 
@@ -56,4 +57,48 @@ for start, stop in zip(windows, windows[1:] + [len(lines)]):
     for label in ("stage_avg_ms", "stage_p95_ms", "tick_stage_p95_ms", "accounting_overlap_frames", "jvm"):
         assert any(f"[VulkanModPerf] {label} " in line for line in block), label
 
-print(f"Profiler output contract passed: {len(windows)} completed startup windows")
+# The raw JFR is now the query-later source of truth. The legacy summary above is
+# retained for compatibility, but CI must prove that a real flight recording was
+# persisted and contains generic frame evidence that can be analyzed after the run.
+flight_recordings = sorted(
+    path.parent.glob("vulkanmod-performance-flight-*.jfr"),
+    key=lambda candidate: candidate.stat().st_mtime_ns,
+)
+assert flight_recordings, "missing raw JFR flight recording"
+jfr = flight_recordings[-1]
+assert jfr.stat().st_size > 0, "empty raw JFR flight recording"
+
+summary = subprocess.run(
+    ["jfr", "summary", str(jfr)],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout
+assert "net.vulkanmod.RunTickFrame" in summary, "JFR missing VulkanMod frame event type"
+
+frames_json = subprocess.run(
+    ["jfr", "print", "--json", "--events", "net.vulkanmod.RunTickFrame", str(jfr)],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout
+assert '"net.vulkanmod.RunTickFrame"' in frames_json, "JFR contains no recorded frame events"
+
+metadata = subprocess.run(
+    ["jfr", "metadata", str(jfr)],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout
+for event_type in (
+    "net.vulkanmod.VulkanSubmission",
+    "net.vulkanmod.VulkanFenceWait",
+    "net.vulkanmod.VulkanApi",
+    "net.vulkanmod.GpuCommandBuffer",
+):
+    assert event_type in metadata, f"JFR metadata missing {event_type}"
+
+print(
+    f"Profiler output contract passed: {len(windows)} completed startup windows; "
+    f"raw JFR={jfr.name} ({jfr.stat().st_size} bytes)"
+)
