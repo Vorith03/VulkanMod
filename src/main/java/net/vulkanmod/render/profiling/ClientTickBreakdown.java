@@ -107,7 +107,7 @@ public final class ClientTickBreakdown {
     }
 
     public static void verifyForCi() {
-        if (MAX_SAMPLES < 4096 || STAGE_COUNT < 10) {
+        if (MAX_SAMPLES < 4096 || STAGE_COUNT < 14) {
             throw new IllegalStateException("Client tick breakdown capacity/stage contract is invalid");
         }
         for (int i = 0; i < STAGES.length; i++) {
@@ -151,18 +151,22 @@ public final class ClientTickBreakdown {
     }
 
     public enum Stage {
+        FORGE_CLIENT_PRE("forge_client_pre"),
         GUI("gui"),
         PICK("pick"),
         GAME_MODE("game_mode"),
         TEXTURES("textures"),
         TUTORIAL("tutorial"),
+        FORGE_LEVEL_PRE("forge_level_pre"),
         LEVEL_RENDERER("level_renderer"),
         WEATHER("weather"),
         AMBIENT_WORLD("ambient_world"),
         PARTICLES("particles"),
         MUSIC("music"),
         SOUND("sound"),
-        KEYBINDS("keybinds");
+        KEYBINDS("keybinds"),
+        FORGE_LEVEL_POST("forge_level_post"),
+        FORGE_CLIENT_POST("forge_client_post");
 
         private final String label;
 
