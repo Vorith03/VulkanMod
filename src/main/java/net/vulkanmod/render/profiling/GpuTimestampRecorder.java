@@ -2,7 +2,6 @@ package net.vulkanmod.render.profiling;
 
 import net.vulkanmod.Initializer;
 import net.vulkanmod.vulkan.Device;
-import net.vulkanmod.vulkan.queue.Queue;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkQueryPoolCreateInfo;
@@ -52,7 +51,6 @@ public final class GpuTimestampRecorder {
         if (slot == null) return;
         synchronized (slot) {
             if (slot.pending || slot.recording) return;
-            slot.queueFamilyIndex = queueFamilyIndex;
             slot.validBits = validBits;
             slot.ended = false;
             slot.recording = true;
@@ -127,10 +125,27 @@ public final class GpuTimestampRecorder {
         }
     }
 
+    /**
+     * Drain all submissions already pending at profiler shutdown. This runs after
+     * the measured frame has ended, so the required device-idle wait cannot pollute
+     * that frame's benchmark timing, but it keeps the raw GPU tail in the JFR file.
+     */
+    public static void flushPending() {
+        if (!initialized || Device.device == null || !hasPending()) return;
+        FlightRecorderCapture.VulkanApiEvent event =
+                FlightRecorderCapture.beginVulkanApi("vkDeviceWaitIdle", Device.device.address());
+        int result = vkDeviceWaitIdle(Device.device);
+        FlightRecorderCapture.endVulkanApi(event, result);
+        if (result != VK_SUCCESS) {
+            Initializer.LOGGER.warn("VulkanMod flight recorder could not drain pending GPU timestamps: VkResult {}", result);
+            return;
+        }
+        SLOTS.forEach((commandBuffer, slot) -> complete(commandBuffer));
+    }
+
     /** Device must already be idle when this is called. */
     public static synchronized void cleanUp() {
         if (queryPool != 0L && Device.device != null) {
-            // Flush any already-complete query pairs before destroying the pool.
             SLOTS.forEach((commandBuffer, slot) -> complete(commandBuffer));
             vkDestroyQueryPool(Device.device, queryPool, null);
         }
@@ -138,6 +153,7 @@ public final class GpuTimestampRecorder {
         timestampValidBits = null;
         SLOTS.clear();
         NEXT_SLOT.set(0);
+        CAPACITY_WARNING.set(false);
         initialized = false;
         unavailable = false;
     }
@@ -187,6 +203,15 @@ public final class GpuTimestampRecorder {
         }
     }
 
+    private static boolean hasPending() {
+        for (Slot slot : SLOTS.values()) {
+            synchronized (slot) {
+                if (slot.pending) return true;
+            }
+        }
+        return false;
+    }
+
     private static Slot slot(long commandBuffer) {
         Slot existing = SLOTS.get(commandBuffer);
         if (existing != null) return existing;
@@ -229,7 +254,6 @@ public final class GpuTimestampRecorder {
 
     private static final class Slot {
         final int index;
-        int queueFamilyIndex;
         int validBits;
         boolean recording;
         boolean ended;
