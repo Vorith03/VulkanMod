@@ -1,6 +1,7 @@
 package net.vulkanmod.vulkan.queue;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import net.vulkanmod.render.profiling.FlightRecorderCapture;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -112,11 +113,14 @@ public class CommandPool {
     }
 
     public synchronized long submitCommands(CommandBuffer commandBuffer, VkQueue queue, boolean useSemaphore) {
+        FlightRecorderCapture.VulkanSubmissionEvent profilerEvent = FlightRecorderCapture.beginVulkanSubmission(
+                commandBuffer.handle.address(), queue.address(), commandBuffer.fence, useSemaphore);
+        int result = VK_SUCCESS;
 
         try(MemoryStack stack = stackPush()) {
             long fence = commandBuffer.fence;
 
-            int result = vkEndCommandBuffer(commandBuffer.handle);
+            result = vkEndCommandBuffer(commandBuffer.handle);
             if(result != VK_SUCCESS) {
                 throw new RuntimeException("Failed to end command buffer: " + result);
             }
@@ -142,6 +146,8 @@ public class CommandPool {
             commandBuffer.recording = false;
             commandBuffer.submitted = true;
             return fence;
+        } finally {
+            FlightRecorderCapture.endVulkanSubmission(profilerEvent, result);
         }
     }
 
