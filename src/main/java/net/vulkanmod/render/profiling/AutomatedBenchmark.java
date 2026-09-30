@@ -278,8 +278,10 @@ public final class AutomatedBenchmark {
                 teleportCommand(-512.25D, 192.5D, 1.75D, 180.0F, -45.0F) }) {
             ParseResults<CommandSourceStack> parsed = dispatcher.parse(command, source);
             if (parsed.getReader().canRead() || !parsed.getExceptions().isEmpty()
-                    || parsed.getContext().getCommand() == null) {
-                throw new IllegalStateException("Benchmark teleport is not accepted by Minecraft's command parser: " + command);
+                    || parsed.getContext().getLastChild().getCommand() == null) {
+                throw new IllegalStateException("Benchmark teleport is not accepted by Minecraft's command parser: "
+                        + command + " cursor=" + parsed.getReader().getCursor()
+                        + " exceptions=" + parsed.getExceptions());
             }
         }
         ParseResults<CommandSourceStack> old = dispatcher.parse("tp 0.000 192.000 0.000 -90.00 30.00", source);
