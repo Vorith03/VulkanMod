@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Check actual Vulkan startup captures for legacy summaries and raw flight-recorder evidence."""
+"""Check actual Vulkan startup captures for summaries, JFR, and raw command evidence."""
 
 import pathlib
+import struct
 import subprocess
 import sys
 import uuid
@@ -49,17 +50,12 @@ for start, stop in zip(windows, windows[1:] + [len(lines)]):
     assert sum(example["class"] == "slow_render" for example in examples) <= 6
     assert len({example["frame_id"] for example in examples}) == len(examples)
     assert all(float(example["total_ms"]) >= 0 for example in examples)
-    # A full window of overlapping stages indicates a broken timing boundary.
-    # Permit isolated startup/OS scheduling anomalies without hiding a systemic error.
     if frames >= 5:
         assert int(accounting["top_level"]) < frames // 2, accounting
         assert float(accounting["top_level_excess_ms"]) < float(window["duration_s"]) * 1000 * .05, accounting
     for label in ("stage_avg_ms", "stage_p95_ms", "tick_stage_p95_ms", "accounting_overlap_frames", "jvm"):
         assert any(f"[VulkanModPerf] {label} " in line for line in block), label
 
-# The raw JFR is now the query-later source of truth. The legacy summary above is
-# retained for compatibility, but CI must prove that a real flight recording was
-# persisted and contains generic frame evidence that can be analyzed after the run.
 flight_recordings = sorted(
     path.parent.glob("vulkanmod-performance-flight-*.jfr"),
     key=lambda candidate: candidate.stat().st_mtime_ns,
@@ -98,7 +94,38 @@ for event_type in (
 ):
     assert event_type in metadata, f"JFR metadata missing {event_type}"
 
+# The fixed-width command sidecar is deliberately independent of JFR's event
+# machinery. Prove that a real launch creates a structurally complete stream and
+# that command-buffer lifetimes can be joined to the canonical JFR submissions.
+command_trace = jfr.with_suffix(".vkcmd")
+assert command_trace.exists(), f"missing Vulkan command trace next to {jfr.name}"
+raw = command_trace.read_bytes()
+assert len(raw) >= 64 + 64, "command trace contains no records"
+assert raw[:8] == b"VMVKCMD1", "bad command trace magic"
+version, record_bytes = struct.unpack_from("<II", raw, 8)
+assert version == 1, version
+assert record_bytes == 64, record_bytes
+assert (len(raw) - 64) % record_bytes == 0, "partial command trace record"
+opcodes = [
+    struct.unpack_from("<I", raw, offset)[0]
+    for offset in range(64, len(raw), record_bytes)
+]
+for opcode, label in ((1, "begin"), (2, "end"), (3, "submit"), (255, "capture footer")):
+    assert opcode in opcodes, f"command trace missing {label} record"
+assert opcodes[-1] == 255, "command trace footer must be last"
+
+footer = struct.unpack_from("<II7Q", raw, len(raw) - record_bytes)
+# Footer payload a/b/c = accepted records / dropped records / dropped chunks.
+accepted, dropped_records, dropped_chunks = footer[3], footer[4], footer[5]
+assert accepted > 0
+assert dropped_records == 0, f"startup command trace overflowed: {dropped_records} records"
+assert dropped_chunks == 0, f"startup command trace overflowed: {dropped_chunks} chunks"
+
+command_metadata = pathlib.Path(str(command_trace) + ".meta.jsonl")
+assert command_metadata.exists(), "missing Vulkan command object metadata sidecar"
+
 print(
     f"Profiler output contract passed: {len(windows)} completed startup windows; "
-    f"raw JFR={jfr.name} ({jfr.stat().st_size} bytes)"
+    f"raw JFR={jfr.name} ({jfr.stat().st_size} bytes); "
+    f"vkcmd={command_trace.name} ({len(opcodes)} records)"
 )
