@@ -3,7 +3,13 @@ name: build
 on:
   push:
     branches: [forge-1.20.1]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,10 +47,8 @@ jobs:
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Validate smoke fixture isolation
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
-      - name: Build and verify distributable
-        run: ./gradlew build --stacktrace
-      - name: Validate packaged Immersive Portals mixin anchors
-        run: python3 scripts/ci/immersive-portals-package-contract.py
+      - name: Compile smoke-test classes
+        run: ./gradlew classes --stacktrace
       - name: Install software Vulkan smoke-test dependencies
         run: |
           sudo apt-get update
@@ -55,18 +59,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke.sh no-splash
       - name: Smoke-test persistent GPU indirect shadow commands
         run: bash scripts/ci/vulkan-smoke.sh gpu-indirect-shadow
-      - name: Smoke-test vanilla Vulkan post-chain execution
-        run: bash scripts/ci/vulkan-smoke.sh post-chain
-      - name: Smoke-test vanilla Vulkan depth post-chain execution
-        run: bash scripts/ci/vulkan-smoke.sh depth-post-chain
-      - name: Smoke-test Vulkan screenshot readback
-        run: bash scripts/ci/vulkan-smoke.sh screenshot
-      - name: Smoke-test FTB Library 2001.2.13 scissor compatibility
-        run: bash scripts/ci/ftb-library-smoke.sh
-      - name: Smoke-test Pick Up Notifier 8.0.0 compatibility
-        run: bash scripts/ci/pickup-notifier-smoke.sh
-      - name: Smoke-test Immersive Portals 3.0.7 compatibility
-        run: bash scripts/ci/immersive-portals-smoke.sh
+      - name: Smoke-test renderer regression paths
+        run: bash scripts/ci/vulkan-smoke.sh renderer-regression
       - name: Check private resource pack fixture configuration
         if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
         run: |
@@ -81,44 +75,31 @@ jobs:
           mkdir -p .ci-private-packs
           gh release download test-packs --repo "$PRIVATE_PACK_REPO" \
             --pattern base.zip --pattern overlay.zip --dir .ci-private-packs
-      - name: Smoke-test both real resource packs
+      - name: Smoke-test Create Chronicles compatibility
+        if: github.event_name != 'push' || vars.VULKANMOD_PRIVATE_PACK_REPO == '' || env.PRIVATE_PACK_TOKEN_CONFIGURED != 'true'
+        run: bash scripts/ci/create-chronicles-compat-smoke.sh
+      - name: Smoke-test Create Chronicles compatibility with real resource packs
         if: github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
         env:
           VULKANMOD_REAL_BASE_PACK: .ci-private-packs/base.zip
           VULKANMOD_REAL_OVERLAY_PACK: .ci-private-packs/overlay.zip
-        run: bash scripts/ci/immersive-portals-smoke.sh
-      - name: Smoke-test Distant Horizons 3.2.0-b compatibility
-        run: bash scripts/ci/distant-horizons-smoke.sh
+        run: bash scripts/ci/create-chronicles-compat-smoke.sh
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
-      - name: Smoke-test Chat Heads 0.13.18 compatibility
-        run: bash scripts/ci/vulkan-smoke.sh chat-heads
-      - name: Smoke-test Flywheel 0.6 compatibility
-        run: bash scripts/ci/vulkan-smoke.sh flywheel
-      - name: Smoke-test Create 0.5.1.j stencil compatibility
-        run: bash scripts/ci/vulkan-smoke.sh create
+      - name: Build and verify distributable
+        run: ./gradlew build --stacktrace
+      - name: Validate packaged Immersive Portals mixin anchors
+        run: python3 scripts/ci/immersive-portals-package-contract.py
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
           path: |
-            vulkan-smoke.log
+            vulkan-smoke*.log
             run/logs/vulkanmod-performance-ci.log
-            vulkan-smoke-no-splash.log
-            vulkan-gpu-indirect-shadow-smoke.log
-            vulkan-post-chain-smoke.log
-            vulkan-depth-post-chain-smoke.log
-            vulkan-screenshot-smoke.log
-            vulkan-smoke-ftb-library.log
-            vulkan-smoke-pickup-notifier.log
-            vulkan-smoke-immersive-portals.log
-            vulkan-smoke-distant-horizons.log
+            vulkan-smoke-create-chronicles-compat-levelrenderer.javap
             run/screenshot-smoke/screenshots/*.png
-            vulkan-smoke-crash-assistant.log
-            vulkan-smoke-chat-heads.log
-            vulkan-smoke-flywheel.log
-            vulkan-smoke-create.log
           if-no-files-found: ignore
       - name: Upload artifacts
         if: always()
