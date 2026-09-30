@@ -61,6 +61,13 @@
     "profiling.ClientLevelPerformanceMixin",
     "profiling.ClientRendererPerformanceMixin",
     "profiling.ClientConnectionPerformanceMixin",
+    "profiling.ClientLevelRendererPerformanceMixin",
+    "profiling.MultiPlayerGameModePerformanceMixin",
+    "profiling.TextureManagerPerformanceMixin",
+    "profiling.TutorialPerformanceMixin",
+    "profiling.ParticleEnginePerformanceMixin",
+    "profiling.MusicManagerPerformanceMixin",
+    "profiling.SoundManagerPerformanceMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RendererPerformanceMixin",
 
