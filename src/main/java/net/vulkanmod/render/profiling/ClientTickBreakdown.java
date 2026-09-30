@@ -6,36 +6,39 @@ import java.util.Arrays;
 import java.util.Locale;
 
 /**
- * Low-overhead leaf attribution for work inside Minecraft.tick().
+ * Low-overhead leaf attribution for work inside Minecraft.tick() during automated benchmarks.
  *
  * <p>This intentionally complements {@link PerformanceProfiler}'s broader client tick
- * buckets. It only becomes active when the parent CLIENT_TICK stage is actually being
- * captured, keeps all hot-path data in primitive arrays, and emits its summary only
- * after the automated benchmark's final measured frame has ended.</p>
+ * buckets. It is inactive for normal gameplay and manual profiling, only begins when
+ * the automated benchmark's parent CLIENT_TICK stage is actually being captured, keeps
+ * hot-path data in primitive arrays, and emits its summary only after the final measured
+ * benchmark frame has ended.</p>
  */
 public final class ClientTickBreakdown {
+    private static final boolean ENABLED = Boolean.getBoolean("vulkanmod.performanceProfiler")
+            && Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark");
     private static final int MAX_SAMPLES = 8192;
     private static final Stage[] STAGES = Stage.values();
     private static final int STAGE_COUNT = STAGES.length;
-    private static final ThreadMXBean THREAD_BEAN = ManagementFactory.getThreadMXBean();
+    private static final ThreadMXBean THREAD_BEAN = ENABLED ? ManagementFactory.getThreadMXBean() : null;
     private static final com.sun.management.ThreadMXBean ALLOCATION_BEAN =
             THREAD_BEAN instanceof com.sun.management.ThreadMXBean bean ? bean : null;
-    private static final boolean ALLOCATION_SUPPORTED = ALLOCATION_BEAN != null
+    private static final boolean ALLOCATION_SUPPORTED = ENABLED && ALLOCATION_BEAN != null
             && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
             && ALLOCATION_BEAN.isThreadAllocatedMemoryEnabled();
 
-    private static final long[] currentStageNanos = new long[STAGE_COUNT];
-    private static final long[] currentStageAllocatedBytes = new long[STAGE_COUNT];
-    private static final long[] stageAllocationStart = new long[STAGE_COUNT];
-    private static final long[] stageSums = new long[STAGE_COUNT];
-    private static final long[] stageMax = new long[STAGE_COUNT];
-    private static final long[] stageAllocationSums = new long[STAGE_COUNT];
-    private static final long[] stageAllocationMax = new long[STAGE_COUNT];
-    private static final long[][] stageSamples = new long[STAGE_COUNT][MAX_SAMPLES];
-    private static final long[][] stageAllocationSamples = new long[STAGE_COUNT][MAX_SAMPLES];
-    private static final long[] tickSamples = new long[MAX_SAMPLES];
-    private static final long[] leafSamples = new long[MAX_SAMPLES];
-    private static final long[] sortScratch = new long[MAX_SAMPLES];
+    private static final long[] currentStageNanos = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] currentStageAllocatedBytes = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] stageAllocationStart = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] stageSums = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] stageMax = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] stageAllocationSums = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[] stageAllocationMax = ENABLED ? new long[STAGE_COUNT] : null;
+    private static final long[][] stageSamples = ENABLED ? new long[STAGE_COUNT][MAX_SAMPLES] : null;
+    private static final long[][] stageAllocationSamples = ENABLED ? new long[STAGE_COUNT][MAX_SAMPLES] : null;
+    private static final long[] tickSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] leafSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
 
     private static boolean tickActive;
     private static long tickStartNanos;
@@ -51,7 +54,7 @@ public final class ClientTickBreakdown {
     }
 
     public static void beginTick() {
-        if (tickActive) return;
+        if (!ENABLED || tickActive) return;
         Arrays.fill(currentStageNanos, 0L);
         Arrays.fill(currentStageAllocatedBytes, 0L);
         Arrays.fill(stageAllocationStart, -1L);
@@ -60,13 +63,13 @@ public final class ClientTickBreakdown {
     }
 
     public static long begin(Stage stage) {
-        if (!tickActive || stage == null) return 0L;
+        if (!ENABLED || !tickActive || stage == null) return 0L;
         stageAllocationStart[stage.ordinal()] = currentThreadAllocatedBytes();
         return System.nanoTime();
     }
 
     public static void end(Stage stage, long startNanos) {
-        if (!tickActive || stage == null || startNanos == 0L) return;
+        if (!ENABLED || !tickActive || stage == null || startNanos == 0L) return;
         long now = System.nanoTime();
         long allocationEnd = currentThreadAllocatedBytes();
         int ordinal = stage.ordinal();
@@ -78,7 +81,7 @@ public final class ClientTickBreakdown {
     }
 
     public static void endTick() {
-        if (!tickActive) return;
+        if (!ENABLED || !tickActive) return;
         long elapsed = Math.max(0L, System.nanoTime() - tickStartNanos);
         tickActive = false;
 
@@ -112,6 +115,7 @@ public final class ClientTickBreakdown {
 
     /** Emit after the final measured frame so diagnostic I/O cannot perturb the capture. */
     public static void emitSummary() {
+        if (!ENABLED) return;
         if (tickActive) endTick();
         if (ticks == 0) return;
 
