@@ -25,7 +25,20 @@ public abstract class DrawBuffersCommandTraceMixin {
     }
 
     @Redirect(
-            method = {"fakeIndirectCmd", "buildDrawBatchesDirect"},
+            method = "fakeIndirectCmd",
+            at = @At(value = "INVOKE",
+                    target = "Lorg/lwjgl/vulkan/VK10;vkCmdDrawIndexed(Lorg/lwjgl/vulkan/VkCommandBuffer;IIIII)V",
+                    remap = false))
+    private static void vulkanmod$recordFakeIndirectDraw(VkCommandBuffer commandBuffer, int indexCount,
+                                                         int instanceCount, int firstIndex,
+                                                         int vertexOffset, int firstInstance) {
+        VulkanCommandTrace.drawIndexed(commandBuffer, indexCount, instanceCount,
+                firstIndex, vertexOffset, firstInstance);
+        vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
+    @Redirect(
+            method = "buildDrawBatchesDirect",
             at = @At(value = "INVOKE",
                     target = "Lorg/lwjgl/vulkan/VK10;vkCmdDrawIndexed(Lorg/lwjgl/vulkan/VkCommandBuffer;IIIII)V",
                     remap = false))
