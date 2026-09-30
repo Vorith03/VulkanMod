@@ -3,6 +3,7 @@ package net.vulkanmod.mixin.profiling;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.render.profiling.AutomatedBenchmark;
 import net.vulkanmod.render.profiling.FlightRecorderCapture;
+import net.vulkanmod.render.profiling.GpuTimestampRecorder;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,6 +26,9 @@ public class PerformanceProfilerMixin {
         FlightRecorderCapture.endFrame();
         AutomatedBenchmark.onFrameEnd(Minecraft.getInstance());
         if (!PerformanceProfiler.isEnabled()) {
+            // The measured frame is already closed. Drain GPU work now so timestamp
+            // query results for the final submissions are still present in the JFR.
+            GpuTimestampRecorder.flushPending();
             FlightRecorderCapture.stop("profiler_complete");
         }
     }
