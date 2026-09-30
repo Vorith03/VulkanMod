@@ -49,13 +49,12 @@ require_in_mode flywheel snapshot_build_gradle
 require_in_mode create snapshot_build_gradle
 require_in_mode create 'maven.modrinth:LNytGWDc:6R069CcK'
 require_in_mode create 'vulkanmod.ciCreateStencilSmoke=true'
-require_in_mode renderer-regression 'vulkanmod.ciRendererRegressionSmoke=true'
 
-for mode in gpu-indirect-shadow renderer-regression depth-post-chain screenshot; do
+for mode in gpu-indirect-shadow depth-post-chain screenshot; do
   require_in_mode "$mode" snapshot_vk_layer_settings
 done
 
-for mode in gpu-indirect-shadow renderer-regression post-chain depth-post-chain screenshot crash-assistant chat-heads flywheel create; do
+for mode in gpu-indirect-shadow post-chain depth-post-chain screenshot crash-assistant chat-heads flywheel create; do
   require_in_mode "$mode" clear_ci_mods
 done
 
