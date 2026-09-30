@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.vulkanmod.vulkan.shader.PipelineState;
 import net.vulkanmod.vulkan.util.ColorUtil;
 import net.vulkanmod.vulkan.util.MappedBuffer;
+import net.vulkanmod.vulkan.util.MatrixProduct;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
@@ -47,6 +48,8 @@ public class VRenderSystem {
     public static MappedBuffer projectionMatrix = new MappedBuffer(16 * 4);
     public static MappedBuffer TextureMatrix = new MappedBuffer(16 * 4);
     public static MappedBuffer MVP = new MappedBuffer(16 * 4);
+    private static final ThreadLocal<MatrixProduct> MVP_SCRATCH =
+            ThreadLocal.withInitial(MatrixProduct::new);
 
     public static MappedBuffer ChunkOffset = new MappedBuffer(3 * 4);
     public static MappedBuffer lightDirection0 = new MappedBuffer(3 * 4);
@@ -160,10 +163,7 @@ public class VRenderSystem {
     }
 
     public static void calculateMVP() {
-        org.joml.Matrix4f MV = new org.joml.Matrix4f(modelViewMatrix.buffer.asFloatBuffer());
-        org.joml.Matrix4f P = new org.joml.Matrix4f(projectionMatrix.buffer.asFloatBuffer());
-
-        P.mul(MV).get(MVP.buffer);
+        MVP_SCRATCH.get().write(projectionMatrix.buffer, modelViewMatrix.buffer, MVP.buffer);
     }
 
     public static void setTextureMatrix(Matrix4f mat) {

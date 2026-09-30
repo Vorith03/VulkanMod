@@ -122,7 +122,7 @@ public class PipelineState {
                 ? framebuffer.getFormat() : VK_FORMAT_UNDEFINED;
         int depthFormat = framebuffer.getDepthAttachment() != null
                 ? framebuffer.getDepthFormat() : VK_FORMAT_UNDEFINED;
-        return Objects.hash(colorFormat, depthFormat);
+        return 31 * (31 + colorFormat) + depthFormat;
     }
 
     @Override
@@ -138,8 +138,15 @@ public class PipelineState {
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState, depthState, stencilState, logicOpState, cullState,
-                renderPassCompatibilityHash(renderPass), colorMask.colorMask);
+        // Match Objects.hash exactly without a varargs array or primitive boxing
+        // on each graphics-pipeline lookup. Do not cache: LogicOpState is mutable.
+        int hash = 31 + Objects.hashCode(blendState);
+        hash = 31 * hash + Objects.hashCode(depthState);
+        hash = 31 * hash + Objects.hashCode(stencilState);
+        hash = 31 * hash + Objects.hashCode(logicOpState);
+        hash = 31 * hash + Boolean.hashCode(cullState);
+        hash = 31 * hash + renderPassCompatibilityHash(renderPass);
+        return 31 * hash + colorMask.colorMask;
     }
 
     public static BlendInfo defaultBlendInfo() {
@@ -277,7 +284,12 @@ public class PipelineState {
         @Override
         public int hashCode() {
             if(!enabled) return Boolean.hashCode(false);
-            return Objects.hash(true, srcRgbFactor, dstRgbFactor, srcAlphaFactor, dstAlphaFactor, blendOp);
+            int hash = 31 + Boolean.hashCode(true);
+            hash = 31 * hash + srcRgbFactor;
+            hash = 31 * hash + dstRgbFactor;
+            hash = 31 * hash + srcAlphaFactor;
+            hash = 31 * hash + dstAlphaFactor;
+            return 31 * hash + blendOp;
         }
     }
 
@@ -315,7 +327,7 @@ public class PipelineState {
         }
 
         public int hashCode() {
-            return Objects.hash(enabled, logicOp);
+            return 31 * (31 + Boolean.hashCode(enabled)) + logicOp;
         }
     }
 
@@ -422,8 +434,14 @@ public class PipelineState {
 
         @Override
         public int hashCode() {
-            return Objects.hash(enabled, function, reference, compareMask, writeMask,
-                    failOp, depthFailOp, passOp);
+            int hash = 31 + Boolean.hashCode(enabled);
+            hash = 31 * hash + function;
+            hash = 31 * hash + reference;
+            hash = 31 * hash + compareMask;
+            hash = 31 * hash + writeMask;
+            hash = 31 * hash + failOp;
+            hash = 31 * hash + depthFailOp;
+            return 31 * hash + passOp;
         }
     }
 
@@ -463,7 +481,9 @@ public class PipelineState {
 
         @Override
         public int hashCode() {
-            return Objects.hash(depthTest, depthMask, function);
+            int hash = 31 + Boolean.hashCode(depthTest);
+            hash = 31 * hash + Boolean.hashCode(depthMask);
+            return 31 * hash + function;
         }
     }
 }

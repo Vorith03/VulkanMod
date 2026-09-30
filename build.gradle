@@ -280,6 +280,8 @@ tasks.register('verifyDistribution') {
 }
 
 tasks.named('check').configure {
+    dependsOn 'testMatrixProduct'
+    dependsOn 'testPipelineStateHash'
     dependsOn 'verifyDistribution'
     dependsOn 'testRegionBatchLayout'
     dependsOn 'testSectionVoxelSnapshot'
@@ -300,6 +302,18 @@ tasks.named('check').configure {
     dependsOn 'testLegacyTextureUnitContract'
     dependsOn 'testConfigPersistenceContract'
     dependsOn 'testProcessLifetimeNativeState'
+}
+
+tasks.register('testMatrixProduct', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.util.MatrixProductTest'
+}
+
+tasks.register('testPipelineStateHash', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.shader.PipelineStateHashTest'
 }
 
 tasks.register('testRegionBatchLayout', JavaExec) {

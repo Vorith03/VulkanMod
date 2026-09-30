@@ -441,6 +441,17 @@ public class WorldRenderer {
         if(limit <= 0)
             return false;
 
+        // Use the same readiness rule as BuildTask before capturing a region or
+        // queueing work. At the loaded-world edge the worker would otherwise
+        // immediately reject the task, dirty/invalidate the section again, and
+        // repeat that allocation and generation churn on the next traversal.
+        // Leave it dirty and retry: neighbours can arrive without camera motion.
+        // The worker retains its check for unloads after this admission check.
+        if(!section.hasXYNeighbours()) {
+            this.needsUpdate = true;
+            return false;
+        }
+
         section.rebuildChunkAsync(this.taskDispatcher, renderRegionCache);
         if (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled())
             performanceScheduledBuilds++;
