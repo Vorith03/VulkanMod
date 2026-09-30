@@ -38,17 +38,30 @@ public final class ClientTickBreakdown {
     private static final long[][] stageAllocationSamples = ENABLED ? new long[STAGE_COUNT][MAX_SAMPLES] : null;
     private static final long[] tickSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] leafSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] textureSpriteUploadSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] textureNonUploadSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
 
     private static boolean tickActive;
+    private static boolean textureStageActive;
     private static long tickStartNanos;
+    private static long currentTextureSpriteUploadNanos;
+    private static int currentTextureSpriteUploadCalls;
+    private static int currentTextureSubUploadCalls;
     private static int ticks;
     private static int sampledTicks;
     private static int overlapTicks;
+    private static int textureUploadActiveTicks;
+    private static int textureUploadOverlapTicks;
     private static long tickSumNanos;
     private static long tickMaxNanos;
     private static long leafSumNanos;
     private static long leafMaxNanos;
+    private static long textureSpriteUploadSumNanos;
+    private static long textureSpriteUploadMaxNanos;
+    private static long textureNonUploadSumNanos;
+    private static long textureSpriteUploadCalls;
+    private static long textureSubUploadCalls;
 
     private ClientTickBreakdown() {
     }
@@ -58,12 +71,17 @@ public final class ClientTickBreakdown {
         Arrays.fill(currentStageNanos, 0L);
         Arrays.fill(currentStageAllocatedBytes, 0L);
         Arrays.fill(stageAllocationStart, -1L);
+        textureStageActive = false;
+        currentTextureSpriteUploadNanos = 0L;
+        currentTextureSpriteUploadCalls = 0;
+        currentTextureSubUploadCalls = 0;
         tickStartNanos = System.nanoTime();
         tickActive = true;
     }
 
     public static long begin(Stage stage) {
         if (!ENABLED || !tickActive || stage == null) return 0L;
+        if (stage == Stage.TEXTURES) textureStageActive = true;
         stageAllocationStart[stage.ordinal()] = currentThreadAllocatedBytes();
         return System.nanoTime();
     }
@@ -78,12 +96,31 @@ public final class ClientTickBreakdown {
         if (allocationStart >= 0L && allocationEnd >= allocationStart)
             currentStageAllocatedBytes[ordinal] += allocationEnd - allocationStart;
         stageAllocationStart[ordinal] = -1L;
+        if (stage == Stage.TEXTURES) textureStageActive = false;
+    }
+
+    /**
+     * Time the complete SpriteContents.upload() body while TextureManager.tick() is
+     * the active leaf. This deliberately brackets one sprite update rather than every
+     * mip copy so the diagnostic itself stays cheap even for very large animated atlases.
+     */
+    public static long beginTextureSpriteUpload(int subUploadCalls) {
+        if (!ENABLED || !tickActive || !textureStageActive) return 0L;
+        currentTextureSpriteUploadCalls++;
+        currentTextureSubUploadCalls += Math.max(0, subUploadCalls);
+        return System.nanoTime();
+    }
+
+    public static void endTextureSpriteUpload(long startNanos) {
+        if (!ENABLED || !tickActive || !textureStageActive || startNanos == 0L) return;
+        currentTextureSpriteUploadNanos += Math.max(0L, System.nanoTime() - startNanos);
     }
 
     public static void endTick() {
         if (!ENABLED || !tickActive) return;
         long elapsed = Math.max(0L, System.nanoTime() - tickStartNanos);
         tickActive = false;
+        textureStageActive = false;
 
         long leaf = 0L;
         for (Stage stage : STAGES) {
@@ -100,6 +137,17 @@ public final class ClientTickBreakdown {
                 stageAllocationSamples[ordinal][sampledTicks] = allocated;
             }
         }
+
+        long textureNanos = currentStageNanos[Stage.TEXTURES.ordinal()];
+        long textureNonUploadNanos = Math.max(0L, textureNanos - currentTextureSpriteUploadNanos);
+        if (currentTextureSpriteUploadNanos > textureNanos) textureUploadOverlapTicks++;
+        if (currentTextureSpriteUploadCalls > 0) textureUploadActiveTicks++;
+        textureSpriteUploadSumNanos += currentTextureSpriteUploadNanos;
+        textureSpriteUploadMaxNanos = Math.max(textureSpriteUploadMaxNanos, currentTextureSpriteUploadNanos);
+        textureNonUploadSumNanos += textureNonUploadNanos;
+        textureSpriteUploadCalls += currentTextureSpriteUploadCalls;
+        textureSubUploadCalls += currentTextureSubUploadCalls;
+
         if (leaf > elapsed) overlapTicks++;
         ticks++;
         tickSumNanos += elapsed;
@@ -109,6 +157,8 @@ public final class ClientTickBreakdown {
         if (sampledTicks < MAX_SAMPLES) {
             tickSamples[sampledTicks] = elapsed;
             leafSamples[sampledTicks] = leaf;
+            textureSpriteUploadSamples[sampledTicks] = currentTextureSpriteUploadNanos;
+            textureNonUploadSamples[sampledTicks] = textureNonUploadNanos;
             sampledTicks++;
         }
     }
@@ -138,6 +188,18 @@ public final class ClientTickBreakdown {
         PerformanceProfiler.benchmarkEvent(avg.toString());
         PerformanceProfiler.benchmarkEvent(p95.toString());
         PerformanceProfiler.benchmarkEvent(max.toString());
+
+        PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
+                "client_tick_texture_detail ticks=%d active_upload_ticks=%d overlap_ticks=%d sprite_upload_calls=%d sub_upload_calls=%d sprite_calls_per_tick=%.3f sub_upload_calls_per_tick=%.3f texture_ms_avg=%.3f sprite_upload_ms_avg=%.3f sprite_upload_ms_p95=%.3f sprite_upload_ms_max=%.3f non_upload_ms_avg=%.3f non_upload_ms_p95=%.3f",
+                ticks, textureUploadActiveTicks, textureUploadOverlapTicks,
+                textureSpriteUploadCalls, textureSubUploadCalls,
+                textureSpriteUploadCalls / (double) ticks, textureSubUploadCalls / (double) ticks,
+                millis(stageSums[Stage.TEXTURES.ordinal()] / ticks),
+                millis(textureSpriteUploadSumNanos / ticks),
+                millis(percentile(textureSpriteUploadSamples, sampledTicks, 0.95D)),
+                millis(textureSpriteUploadMaxNanos),
+                millis(textureNonUploadSumNanos / ticks),
+                millis(percentile(textureNonUploadSamples, sampledTicks, 0.95D))));
 
         if (ALLOCATION_SUPPORTED) {
             StringBuilder allocationAvg = new StringBuilder("client_tick_leaf_allocation_avg_kib");
@@ -175,9 +237,16 @@ public final class ClientTickBreakdown {
 
     private static void reset() {
         tickActive = false;
+        textureStageActive = false;
         tickStartNanos = 0L;
+        currentTextureSpriteUploadNanos = 0L;
+        currentTextureSpriteUploadCalls = 0;
+        currentTextureSubUploadCalls = 0;
         ticks = sampledTicks = overlapTicks = 0;
+        textureUploadActiveTicks = textureUploadOverlapTicks = 0;
         tickSumNanos = tickMaxNanos = leafSumNanos = leafMaxNanos = 0L;
+        textureSpriteUploadSumNanos = textureSpriteUploadMaxNanos = textureNonUploadSumNanos = 0L;
+        textureSpriteUploadCalls = textureSubUploadCalls = 0L;
         Arrays.fill(currentStageNanos, 0L);
         Arrays.fill(currentStageAllocatedBytes, 0L);
         Arrays.fill(stageAllocationStart, -1L);
