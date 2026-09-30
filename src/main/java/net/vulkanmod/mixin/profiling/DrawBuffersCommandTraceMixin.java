@@ -29,9 +29,9 @@ public abstract class DrawBuffersCommandTraceMixin {
             at = @At(value = "INVOKE",
                     target = "Lorg/lwjgl/vulkan/VK10;vkCmdDrawIndexed(Lorg/lwjgl/vulkan/VkCommandBuffer;IIIII)V",
                     remap = false))
-    private static void vulkanmod$recordDirectDraw(VkCommandBuffer commandBuffer, int indexCount,
-                                                   int instanceCount, int firstIndex,
-                                                   int vertexOffset, int firstInstance) {
+    private void vulkanmod$recordDirectDraw(VkCommandBuffer commandBuffer, int indexCount,
+                                            int instanceCount, int firstIndex,
+                                            int vertexOffset, int firstInstance) {
         VulkanCommandTrace.drawIndexed(commandBuffer, indexCount, instanceCount,
                 firstIndex, vertexOffset, firstInstance);
         vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
