@@ -4,61 +4,55 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current executable
 
-- Latest validated executable commit: `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` (`perf: reduce render allocations and reject unready terrain tasks before capture`).
-- CI **#831** / run `36704070880` is fully green.
-- Build artifact: `VulkanMod-Forge-build-831`, artifact ID `11091298348`, SHA-256 `cc3efb35ed782b08bc537045a5fd6137f2d556295b9daeb03350b8715a488db0`.
-- Smoke logs: `VulkanMod-Forge-smoke-log-831`, artifact ID `11091313224`, SHA-256 `f16ef3daef9bdbe2293dc1628651c9a40f8a1bd547442fa7a2e14eb9286a0dcd`.
-- #831 passed distributable verification, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j. The three private-resource-pack fixture steps were skipped as configured.
+- Latest CI-validated executable commit: `e8caca7594d9a61232bd834507fb788972149e1a` (`ci: build distributable before temporary compat graph`).
+- This commit is a CI-only child of the new texture-tick diagnostic commits `9ae1ba1628697f72d092a327b23b78576784cdf3` and `528903351750cc88a222e5b42b6a402d58754e04`; the performance instrumentation is therefore included in the artifact.
+- CI **#844** / run `36709595017` is fully green.
+- Build artifact: `VulkanMod-Forge-build-844`, artifact ID `11094470026`, SHA-256 `4d1cedcd9e57534df8b488997016d3ae1736772d1190bf594055bfe816e0eabf`.
+- Smoke logs: `VulkanMod-Forge-smoke-log-844`, artifact ID `11094355606`, SHA-256 `1c30f7933015fdf3d88bfcec79dd85d1191fabaf966fb35cfa7e15988ef01138`.
+- #844 passed distributable verification, packaged Immersive Portals mixin-anchor validation, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, Create Chronicles compatibility, and Crash Assistant. Private resource-pack fixture steps were skipped as configured.
 - The adversarial audit remains complete: **0/5 repair clusters remaining**. Do not restart it without contradictory live evidence.
 
 ## RX 6900 XT benchmark evidence that drives the next action
 
-The completed automated build #825 stationary diagnostic is the current runtime performance evidence. Detailed evidence is in `docs/PERFORMANCE_CAPTURE_BUILD_825_2026-09-29.md`.
+The latest completed runtime capture is the automated stationary benchmark from build #831 / commit `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` on the user's RX 6900 XT / RADV system. The run used the fixed `VulkanMod_Benchmark` world/camera, 60 s settle, 180 s capture, 260 FPS cap, locked 2552x1374 framebuffer, render distance 16 and simulation distance 12. It completed normally.
 
-- 2,669 / 2,670 frames over 25 ms contained a client tick.
-- Tick-bearing frames averaged about 28.49 ms; render-only frames about 2.77 ms.
-- `client_tick` averaged about 24.17 ms wall / 23.96 ms CPU.
-- Existing nested tick stages left about 20.66 ms in `client_tick_other`; entity tick was about 3.46 ms.
-- Tick-bearing frames allocated about 3.77 MiB on the render thread on average; whole-run render-thread allocation was about 316.6 MiB/s.
-- Vulkan submission/fence/image-acquire/upload waits were small. Do not optimize those first based on current evidence.
-- The 2048-entry staging store stayed full but the earlier repeated rejection/recovery cycle was absent. Do not attribute the recurring tick hitch to staging-cap churn without new evidence.
-- OpenAL failed before measurement and sound was disabled. Keep that startup/audio failure separate from the recurring measured tick cost.
-- The capture completed automated save/exit correctly. It is diagnostic rather than a formal matched Phase 5 baseline because its FPS cap was 260 and complete OpenGL/control provenance is not established.
+Across the 180 s capture:
 
-## CPU allocation and terrain-admission fixes in #831
+- 28,877 frames were recorded in about 179.94 s of summary windows, about 160.48 frames/s.
+- There were exactly 3,600 tick-bearing frames and 25,277 render-only frames.
+- Tick-bearing frames averaged about **28.924 ms**; render-only frames averaged about **2.991 ms**.
+- 2,966 / 3,600 tick-bearing frames exceeded 25 ms, versus only 1 / 25,277 render-only frames. The sustained frame-time problem is therefore tied to the 20 Hz client-tick path, not ordinary render-only frames.
+- Whole-capture client tick averaged **24.274 ms**, p95 **28.945 ms**, max **47.883 ms**.
+- The leaf profiler accounted for **20.605 ms/tick** on average with **0 overlap ticks**, so the direct leaf attribution is internally consistent.
+- `TextureManager.tick()` dominates: **17.569 ms/tick average**, **21.834 ms p95**, **28.911 ms max**. That is about 72% of client-tick elapsed time and about 351 ms of render-thread elapsed time per second at 20 TPS.
+- The next named cost is particles at **1.635 ms/tick average**. Texture-manager allocation is about **274.9 KiB/tick**; particles allocate much more (~2.56 MiB/tick) but consume far less elapsed time, so allocation volume alone does not explain the texture cost.
+- GPU timestamps were disabled in this capture. Vulkan frame-slot/fence/acquire/submit/display waits were small in the available CPU-side stage timings. Do not convert this evidence into a claim about measured GPU execution time.
+- Terrain worker queues were normally idle in the stationary capture and terrain upload/wait timings were small. Do not reopen terrain staging as the primary explanation for this recurring hitch without contradictory evidence.
 
-Commit `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` removes temporary matrices/FloatBuffer views from MVP calculation, removes pipeline-hash varargs/boxing, and rejects neighbor-unready terrain tasks before region capture. The section stays dirty with a traversal retry; the worker's unload recheck remains. Details and limitations: `docs/PERFORMANCE_CPU_ALLOCATION_FIXES_2026-09-30.md`.
+## Texture-tick interpretation and bounded diagnostic
 
-- Java 17 focused checks and the full local `build` passed, including distributable/module verification and all regression tasks.
-- 1,000 matrix cases match the old output bit-for-bit, including nonzero buffer positions, scratch reuse and output aliasing; 10,000 randomized component hashes preserve legacy values.
-- The isolated warmed MVP probe measured 0 allocated bytes for 100,000 new calls versus 27,200,000 bytes for the old path. This is an isolated allocation result, not an RX FPS claim.
-- CI #831 / run `36704070880` is fully green; the new artifact is ready for the RX diagnostic. In-world neighbor arrival/unload behavior and RX performance still need runtime evidence.
-- The ~20.66 ms unnamed tick remainder is still unresolved. Do not label these fixes as its repair or change callback/entity semantics without leaf attribution.
+The measured `textures` leaf is the complete `TextureManager.tick()` call. Current VulkanMod already batches animated sprite uploads into one graphics upload command buffer for the selected upload tick:
 
-## New client-tick attribution retained from #830
+- `MTextureManager.tick()` starts one graphics recording batch, ticks all tickable textures, transitions touched image layouts, then submits the batch once.
+- `MSpriteContents.upload()` suppresses uploads on non-selected catch-up ticks and records the touched Vulkan image for the final transition.
+- `VulkanImage.uploadSubTextureAsync()` appends mip copies to that shared command buffer while the batch is active.
 
-Build #830 adds automated-benchmark-only leaf timing and allocation attribution while preserving the existing broad profiler stages. See `docs/PERFORMANCE_TICK_ATTRIBUTION_2026-09-30.md`.
+Therefore, “batch animated texture submissions” is **not** an evidence-backed optimization; that mechanism already exists.
 
-New leaf buckets cover:
+The remaining important uncertainty is inside the 17.569 ms texture bucket:
 
-- Forge client tick pre/post event dispatch;
-- Forge client-level tick pre/post event dispatch;
-- GUI tick;
-- `GameRenderer.pick`;
-- multiplayer game-mode tick;
-- texture-manager tick;
-- tutorial tick;
-- vanilla `LevelRenderer.tick`;
-- `LevelRenderer.tickRain`;
-- ambient-world `ClientLevel.animateTick`;
-- particles;
-- music;
-- sound;
-- keybind handling.
+1. CPU-side texture ticker / animation / interpolation work before `SpriteContents.upload()`, versus
+2. the actual sprite/mip upload path: staging copy plus Vulkan copy-command recording.
 
-For each leaf, the automated benchmark reports average / p95 / max wall time and, when supported by the JVM, average / p95 / max render-thread allocated KiB. Summary formatting/output occurs only after the final measured frame. The extra leaf profiler is gated by both `vulkanmod.performanceProfiler=true` and `vulkanmod.performanceProfiler.autoBenchmark=true`; normal gameplay and manual profiling do not allocate its sample buffers or collect its leaf metrics.
+Changing animation cadence, interpolation, or visibility semantics before separating those costs would risk resource-pack correctness for an unproven benefit. The build #844 diagnostic resolves that distinction without changing rendering behavior:
 
-Expected end-of-capture lines include `client_tick_breakdown`, `client_tick_leaf_avg_ms`, `client_tick_leaf_p95_ms`, `client_tick_leaf_max_ms`, and corresponding `client_tick_leaf_allocation_*_kib` lines.
+- `ClientTickBreakdown` now records aggregate time spent inside complete `SpriteContents.upload()` bodies while the texture leaf is active.
+- It records the number of sprite upload calls and the corresponding mip/sub-upload count.
+- It derives the per-tick non-upload remainder from the actual same-tick texture total minus same-tick sprite-upload time; p95 is calculated from per-tick remainder samples rather than by subtracting independent percentiles.
+- Timing adds only one start/end clock pair per sprite upload, not per mip copy. All counters remain automated-benchmark-only and normal gameplay/manual profiling stay unaffected.
+- The new end-of-capture line is `client_tick_texture_detail` with `active_upload_ticks`, `sprite_upload_calls`, `sub_upload_calls`, calls-per-tick, `texture_ms_avg`, sprite-upload avg/p95/max, and non-upload avg/p95.
+
+CI #844 proves the diagnostic compiles, packages, applies through normal Forge startup, and preserves the existing smoke/compatibility matrix. It does **not** establish a performance improvement yet; this is the smallest experiment needed before changing the hot path.
 
 ## Active sequencing
 
@@ -70,7 +64,7 @@ Expected end-of-capture lines include `client_tick_breakdown`, `client_tick_leaf
 
 ## Next useful action
 
-Run **build #831** on the user's RX 6900 XT/Create Chronicles environment with the same automated stationary benchmark workload/settings used for the successful #825 diagnostic.
+Run **build #844** on the user's RX 6900 XT/Create Chronicles environment using the **same automated stationary benchmark** as the successful build #831 capture.
 
 Required flags:
 
@@ -79,15 +73,13 @@ Required flags:
 -Dvulkanmod.performanceProfiler.autoBenchmark=true
 ```
 
-Keep the same benchmark world, view, framebuffer/settings and 260 FPS cap for this diagnostic rerun so the retained tick attribution and the new allocation/admission fixes can be compared to #825. Do not silently convert this into the formal Phase 5 baseline. Keep Minecraft focused; do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`. `latest.log` is only necessary if automation aborts or another runtime issue appears.
+Keep the same benchmark world, camera, locked 2552x1374 framebuffer/settings, render distance 16, simulation distance 12 and 260 FPS cap. Keep Minecraft focused and do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`; `latest.log` is only needed if automation aborts or another runtime issue appears.
 
-Interpret the result using this order:
+The decisive line is `client_tick_texture_detail`:
 
-1. If a Forge pre/post event bucket dominates time/allocation, instrument only that EventBus family down to listener/mod ownership.
-2. If vanilla `level_renderer` / `weather` dominates, investigate redundant renderer-maintenance work and its required Forge/mod semantics.
-3. If another named leaf dominates, investigate that concrete subsystem rather than renderer-wide tuning.
-4. If a leaf mainly dominates allocation, investigate object churn there before GC tuning.
-5. If all leaves are small but `client_tick_other` remains large, inspect the remaining Forge-patched `Minecraft.tick()` work and add one more bounded attribution layer.
-6. Keep broad Vulkan GPU timestamps deferred unless CPU accounting no longer explains frame pacing.
+1. If `sprite_upload_ms_avg` explains most of `texture_ms_avg`, follow upload call count/mip count into staging-copy and Vulkan copy-command recording. The likely high-value experiment is reducing per-region CPU/Vulkan command overhead without changing animation semantics.
+2. If `non_upload_ms_avg` explains most of `texture_ms_avg`, trace the animated texture ticker/interpolation path instead. Preserve animation cadence and resource-pack behavior until redundant work is demonstrated.
+3. If both are substantial, quantify the maximum benefit of each and attack the larger, safer mechanism first.
+4. Treat #831 as the matched pre-diagnostic evidence. The #844 instrumentation has nonzero timing overhead, so use the new split primarily to locate the mechanism; do not present a small end-to-end FPS difference between #831 and #844 as a confirmed optimization.
 
-No unchanged repeat of build #825 or intermediate build #830 is needed. One #831 capture supplies the retained tick attribution plus evidence for the allocation/admission fixes. Read the new evidence document before interpreting scheduling deltas; admission skips are not completed builds.
+Do not ask for another broad compatibility retest. One #844 stationary benchmark capture answers the specific remaining performance question.
