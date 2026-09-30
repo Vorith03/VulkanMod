@@ -47,8 +47,10 @@ jobs:
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Validate smoke fixture isolation
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
-      - name: Compile smoke-test classes
-        run: ./gradlew classes --stacktrace
+      - name: Build and verify distributable
+        run: ./gradlew build --stacktrace
+      - name: Validate packaged Immersive Portals mixin anchors
+        run: python3 scripts/ci/immersive-portals-package-contract.py
       - name: Install software Vulkan smoke-test dependencies
         run: |
           sudo apt-get update
@@ -90,10 +92,6 @@ jobs:
         run: bash scripts/ci/create-chronicles-compat-smoke.sh
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
-      - name: Build and verify distributable
-        run: ./gradlew build --stacktrace
-      - name: Validate packaged Immersive Portals mixin anchors
-        run: python3 scripts/ci/immersive-portals-package-contract.py
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
