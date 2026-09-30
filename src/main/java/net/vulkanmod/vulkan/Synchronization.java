@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan;
 
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import net.vulkanmod.render.profiling.FlightRecorderCapture;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.util.VUtil;
@@ -101,9 +102,16 @@ public class Synchronization {
         VkDevice device = Vulkan.getDevice();
         int waitCount = idx;
         long startNanos = System.nanoTime();
+        FlightRecorderCapture.VulkanFenceWaitEvent profilerEvent =
+                FlightRecorderCapture.beginVulkanFenceWait(0L, waitCount);
+        int result = VK_SUCCESS;
 
         fences.limit(waitCount);
-        vkWaitForFences(device, fences, true, VUtil.UINT64_MAX);
+        try {
+            result = vkWaitForFences(device, fences, true, VUtil.UINT64_MAX);
+        } finally {
+            FlightRecorderCapture.endVulkanFenceWait(profilerEvent, result);
+        }
 
         this.fenceWaitNanos += Math.max(0L, System.nanoTime() - startNanos);
         this.fenceWaitCalls++;
@@ -198,8 +206,14 @@ public class Synchronization {
 
     public static void waitFence(long fence) {
         VkDevice device = Vulkan.getDevice();
-
-        vkWaitForFences(device, fence, true, VUtil.UINT64_MAX);
+        FlightRecorderCapture.VulkanFenceWaitEvent profilerEvent =
+                FlightRecorderCapture.beginVulkanFenceWait(fence, 1);
+        int result = VK_SUCCESS;
+        try {
+            result = vkWaitForFences(device, fence, true, VUtil.UINT64_MAX);
+        } finally {
+            FlightRecorderCapture.endVulkanFenceWait(profilerEvent, result);
+        }
     }
 
     public static boolean checkFenceStatus(long fence) {
