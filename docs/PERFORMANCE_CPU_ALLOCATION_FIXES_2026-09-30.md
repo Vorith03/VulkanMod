@@ -44,7 +44,8 @@ section voxel snapshot tests pass. New tests run as part of Gradle check/build:
 - MatrixProductTest compares 1,000 arbitrary/perspective/affine cases bit-for-bit
   with the old implementation, exercises consecutive scratch reuse, nonzero
   buffer positions and aliased outputs, and measures warmed thread allocation.
-  100,000 warmed new MVP updates allocate zero bytes on this JVM.
+  100,000 warmed new MVP updates allocate zero bytes on this JVM, versus
+  27,200,000 bytes for the old path (272 bytes per call).
 - PipelineStateHashTest compares 10,000 randomized component states against the
   original Objects.hash values, including mutable logic ops and disabled blend
   equivalence.
@@ -52,9 +53,17 @@ section voxel snapshot tests pass. New tests run as part of Gradle check/build:
 The first local setup attempt failed while ForgeGradle's generated injected JAR
 was incomplete (ZipException: zip END header not found). The bounded retry passed
 compilation and all focused tests; no project dependency change was made.
-Full production build and Vulkan compatibility smoke coverage are required in
-CI before recommending the new artifact. User-machine correctness/performance
-validation remains pending.
+The complete local production `build` also passed (39 tasks), including all
+regression tasks and distributable/module verification. CI #831 / run
+`36704070880` is fully green for executable commit
+`bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622`: both startup modes, persistent GPU
+indirect, post-chain/depth-post-chain, screenshot readback, FTB Library, Pick Up
+Notifier, Immersive Portals, Distant Horizons, Crash Assistant, Chat Heads,
+Flywheel and Create all passed. Three private-pack steps were skipped as
+configured. Artifact: VulkanMod-Forge-build-831, ID `11091298348`, ZIP SHA-256
+`cc3efb35ed782b08bc537045a5fd6137f2d556295b9daeb03350b8715a488db0`.
+User-machine correctness/performance validation remains pending; CI startup
+smokes do not exercise in-world neighbor arrival/unload scheduling.
 
 ## Next measurement
 

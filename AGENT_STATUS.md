@@ -4,11 +4,11 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current executable
 
-- Latest validated executable commit: `da556942d2695711fa80f0e6b031a46268f3dbad` (`perf: keep tick leaf profiling benchmark-only`).
-- CI **#830** / run `36685436931` is fully green.
-- Build artifact: `VulkanMod-Forge-build-830`, artifact ID `11082634645`, SHA-256 `c88cb38ff5cb4d32ade94a22eeb05538cce4cd60ae2c31281018fcdcf7aeebcb`.
-- Smoke logs: `VulkanMod-Forge-smoke-log-830`, artifact ID `11082859035`, SHA-256 `347cf5ed5362a8f852151a4d7cb3a3a3e83c5e868609afa2bc31ca892f090497`.
-- #830 passed distributable verification, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j. The three private-resource-pack fixture steps were skipped as configured.
+- Latest validated executable commit: `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` (`perf: reduce render allocations and reject unready terrain tasks before capture`).
+- CI **#831** / run `36704070880` is fully green.
+- Build artifact: `VulkanMod-Forge-build-831`, artifact ID `11091298348`, SHA-256 `cc3efb35ed782b08bc537045a5fd6137f2d556295b9daeb03350b8715a488db0`.
+- Smoke logs: `VulkanMod-Forge-smoke-log-831`, artifact ID `11091313224`, SHA-256 `f16ef3daef9bdbe2293dc1628651c9a40f8a1bd547442fa7a2e14eb9286a0dcd`.
+- #831 passed distributable verification, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j. The three private-resource-pack fixture steps were skipped as configured.
 - The adversarial audit remains complete: **0/5 repair clusters remaining**. Do not restart it without contradictory live evidence.
 
 ## RX 6900 XT benchmark evidence that drives the next action
@@ -25,7 +25,17 @@ The completed automated build #825 stationary diagnostic is the current runtime 
 - OpenAL failed before measurement and sound was disabled. Keep that startup/audio failure separate from the recurring measured tick cost.
 - The capture completed automated save/exit correctly. It is diagnostic rather than a formal matched Phase 5 baseline because its FPS cap was 260 and complete OpenGL/control provenance is not established.
 
-## New client-tick attribution in #830
+## CPU allocation and terrain-admission fixes in #831
+
+Commit `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` removes temporary matrices/FloatBuffer views from MVP calculation, removes pipeline-hash varargs/boxing, and rejects neighbor-unready terrain tasks before region capture. The section stays dirty with a traversal retry; the worker's unload recheck remains. Details and limitations: `docs/PERFORMANCE_CPU_ALLOCATION_FIXES_2026-09-30.md`.
+
+- Java 17 focused checks and the full local `build` passed, including distributable/module verification and all regression tasks.
+- 1,000 matrix cases match the old output bit-for-bit, including nonzero buffer positions, scratch reuse and output aliasing; 10,000 randomized component hashes preserve legacy values.
+- The isolated warmed MVP probe measured 0 allocated bytes for 100,000 new calls versus 27,200,000 bytes for the old path. This is an isolated allocation result, not an RX FPS claim.
+- CI #831 / run `36704070880` is fully green; the new artifact is ready for the RX diagnostic. In-world neighbor arrival/unload behavior and RX performance still need runtime evidence.
+- The ~20.66 ms unnamed tick remainder is still unresolved. Do not label these fixes as its repair or change callback/entity semantics without leaf attribution.
+
+## New client-tick attribution retained from #830
 
 Build #830 adds automated-benchmark-only leaf timing and allocation attribution while preserving the existing broad profiler stages. See `docs/PERFORMANCE_TICK_ATTRIBUTION_2026-09-30.md`.
 
@@ -60,7 +70,7 @@ Expected end-of-capture lines include `client_tick_breakdown`, `client_tick_leaf
 
 ## Next useful action
 
-Run **build #830** on the user's RX 6900 XT/Create Chronicles environment with the same automated stationary benchmark workload/settings used for the successful #825 diagnostic.
+Run **build #831** on the user's RX 6900 XT/Create Chronicles environment with the same automated stationary benchmark workload/settings used for the successful #825 diagnostic.
 
 Required flags:
 
@@ -69,7 +79,7 @@ Required flags:
 -Dvulkanmod.performanceProfiler.autoBenchmark=true
 ```
 
-Keep the same benchmark world, view, framebuffer/settings and 260 FPS cap for this diagnostic rerun so the new attribution can be compared to #825. Do not silently convert this into the formal Phase 5 baseline. Keep Minecraft focused; do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`. `latest.log` is only necessary if automation aborts or another runtime issue appears.
+Keep the same benchmark world, view, framebuffer/settings and 260 FPS cap for this diagnostic rerun so the retained tick attribution and the new allocation/admission fixes can be compared to #825. Do not silently convert this into the formal Phase 5 baseline. Keep Minecraft focused; do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`. `latest.log` is only necessary if automation aborts or another runtime issue appears.
 
 Interpret the result using this order:
 
@@ -80,4 +90,4 @@ Interpret the result using this order:
 5. If all leaves are small but `client_tick_other` remains large, inspect the remaining Forge-patched `Minecraft.tick()` work and add one more bounded attribution layer.
 6. Keep broad Vulkan GPU timestamps deferred unless CPU accounting no longer explains frame pacing.
 
-No unchanged repeat of build #825 is useful now; the #830 instrumentation is the reason for the next user-machine run.
+No unchanged repeat of build #825 or intermediate build #830 is needed. One #831 capture supplies the retained tick attribution plus evidence for the allocation/admission fixes. Read the new evidence document before interpreting scheduling deltas; admission skips are not completed builds.
