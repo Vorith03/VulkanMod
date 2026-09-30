@@ -69,6 +69,7 @@
     "profiling.MusicManagerPerformanceMixin",
     "profiling.SoundManagerPerformanceMixin",
     "profiling.PerformanceProfilerMixin",
+    "profiling.RendererFlightRecorderMixin",
     "profiling.RendererPerformanceMixin",
 
     "render.entity.EntityRendererM",
