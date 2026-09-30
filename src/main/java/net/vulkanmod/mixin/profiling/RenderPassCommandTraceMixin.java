@@ -24,7 +24,7 @@ public abstract class RenderPassCommandTraceMixin {
     private void vulkanmod$recordBeginRenderPass(VkCommandBuffer commandBuffer,
                                                   VkRenderPassBeginInfo beginInfo,
                                                   int contents) {
-        VulkanCommandTrace.beginRenderPass(commandBuffer, beginInfo, contents);
+        VulkanCommandTrace.beginRenderPass(commandBuffer, beginInfo);
         vkCmdBeginRenderPass(commandBuffer, beginInfo, contents);
     }
 
