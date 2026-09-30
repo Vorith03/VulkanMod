@@ -1,10 +1,13 @@
 package net.vulkanmod.render.profiling;
 
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.ParseResults;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.commands.TeleportCommand;
 import net.minecraft.world.level.Level;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.WorldRenderer;
@@ -32,7 +35,7 @@ public final class AutomatedBenchmark {
     private enum State { WAITING, TELEPORTING, WAIT_TERRAIN, SETTLING, CAPTURING, SAVING, STOPPING, FINISHED, ABORTED }
     private static State state = State.WAITING;
     private static volatile boolean teleportApplied;
-    private static volatile boolean teleportFailed;
+    private static volatile String teleportFailure;
     private static long teleportRequestedAt;
     private static long terrainAppearedAt;
     private static long captureStartedAt;
@@ -69,7 +72,11 @@ public final class AutomatedBenchmark {
         }
 
         long now = System.nanoTime();
-        if (teleportFailed || state == State.TELEPORTING && now - teleportRequestedAt > TELEPORT_TIMEOUT_NANOS) {
+        if (teleportFailure != null) {
+            abort(teleportFailure);
+            return;
+        }
+        if (state == State.TELEPORTING && now - teleportRequestedAt > TELEPORT_TIMEOUT_NANOS) {
             abort("server teleport did not complete within 30 seconds");
             return;
         }
@@ -191,20 +198,28 @@ public final class AutomatedBenchmark {
             try {
                 ServerPlayer player = server.getPlayerList().getPlayer(playerId);
                 if (player == null || player.level().dimension() != Level.OVERWORLD) {
-                    teleportFailed = true;
+                    teleportFailure = "benchmark player unavailable in the Overworld";
                     return;
                 }
                 CommandSourceStack source = player.createCommandSourceStack().withPermission(4);
-                server.getCommands().performPrefixedCommand(source, "gamemode spectator");
-                int teleported = server.getCommands().performPrefixedCommand(source, String.format(Locale.ROOT,
-                        "tp %.3f %.3f %.3f %.2f %.2f", X, Y, Z, YAW, PITCH));
+                if (!player.isSpectator()
+                        && server.getCommands().performPrefixedCommand(source, "gamemode spectator") <= 0) {
+                    teleportFailure = "server rejected benchmark Spectator command";
+                    return;
+                }
+                int teleported = server.getCommands().performPrefixedCommand(source, teleportCommand(X, Y, Z, YAW, PITCH));
                 teleportApplied = teleported > 0;
-                teleportFailed = !teleportApplied;
+                if (!teleportApplied) teleportFailure = "server rejected benchmark teleport command; see command error in latest.log";
             } catch (RuntimeException failure) {
-                teleportFailed = true;
+                teleportFailure = "server benchmark command raised " + failure.getClass().getSimpleName();
                 Initializer.LOGGER.error("VulkanMod benchmark could not place the player", failure);
             }
         });
+    }
+
+    private static String teleportCommand(double x, double y, double z, float yaw, float pitch) {
+        // Vanilla's location-only overload has no rotation; the rotated overload needs targets.
+        return String.format(Locale.ROOT, "tp @s %.3f %.3f %.3f %.2f %.2f", x, y, z, yaw, pitch);
     }
 
     private static boolean atTargetPose(Minecraft minecraft) {
@@ -248,8 +263,24 @@ public final class AutomatedBenchmark {
         return Math.max(start + duration, cap == 0L ? 0L : Math.max(start, cap) + afterCap);
     }
 
-    /** Smoke oracle for the optional staging-cap extension, without a world fixture. */
+    /** Command syntax and staging deadline oracles without executing against a world. */
     public static void verifyForCi() {
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        TeleportCommand.register(dispatcher);
+        CommandSourceStack source = CommandSourceStack.NULL.withPermission(4);
+        for (String command : new String[] {
+                teleportCommand(0.0D, 192.0D, 0.0D, -90.0F, 30.0F),
+                teleportCommand(-512.25D, 192.5D, 1.75D, 180.0F, -45.0F) }) {
+            ParseResults<CommandSourceStack> parsed = dispatcher.parse(command, source);
+            if (parsed.getReader().canRead() || !parsed.getExceptions().isEmpty()
+                    || parsed.getContext().getCommand() == null) {
+                throw new IllegalStateException("Benchmark teleport is not accepted by Minecraft's command parser: " + command);
+            }
+        }
+        ParseResults<CommandSourceStack> old = dispatcher.parse("tp 0.000 192.000 0.000 -90.00 30.00", source);
+        if (!old.getReader().canRead()) {
+            throw new IllegalStateException("Benchmark teleport regression oracle no longer rejects the targetless rotation");
+        }
         if (captureEndAt(100L, 0L, 200L, 60L) != 300L
                 || captureEndAt(100L, 260L, 200L, 60L) != 320L
                 || captureEndAt(100L, 150L, 200L, 60L) != 300L
