@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.vulkanmod.interfaces.VNativeImageI;
 import net.vulkanmod.interfaces.VSpriteContentsI;
+import net.vulkanmod.render.profiling.ClientTickBreakdown;
 import net.vulkanmod.render.texture.SpriteMipMemoryTracker;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
@@ -35,6 +36,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
     @Unique private boolean vulkanmod$materializedDeferredMips;
     @Unique private int vulkanmod$deferredMipLevel = -1;
     @Unique private long vulkanmod$deferredMipBytes;
+    @Unique private long vulkanmod$performanceUploadStartNanos;
 
     @Override
     public boolean vulkanmod$isStaticSprite() {
@@ -160,6 +162,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
             height = Math.max(1, height >> 1);
             total += (long)width * height * bytesPerPixel;
         }
+
         return total;
     }
 
@@ -170,6 +173,14 @@ public abstract class MSpriteContents implements VSpriteContentsI {
             return;
         }
 
+        this.vulkanmod$performanceUploadStartNanos = ClientTickBreakdown.beginTextureSpriteUpload(
+                nativeImages != null ? nativeImages.length : 0);
         SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
+    }
+
+    @Inject(method = "upload", at = @At("RETURN"))
+    private void vulkanmod$finishPerformanceUpload(int i, int j, int k, int l, NativeImage[] nativeImages, CallbackInfo ci) {
+        ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
+        this.vulkanmod$performanceUploadStartNanos = 0L;
     }
 }
