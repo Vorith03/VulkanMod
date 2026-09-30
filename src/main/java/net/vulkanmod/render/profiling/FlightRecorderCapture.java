@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
+import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -21,9 +22,9 @@ import java.util.UUID;
  *
  * <p>This deliberately does not know about terrain, entities, textures, ticks, or
  * any other subsystem whose importance would have to be predicted in advance.
- * JFR's profile configuration continuously samples the JVM and records runtime
- * events across all threads. VulkanMod adds only a generic runTick frame envelope
- * so arbitrary samples can later be correlated to individual frames.</p>
+ * JFR continuously samples the JVM and records runtime events across all threads.
+ * VulkanMod adds only a generic runTick frame envelope so arbitrary samples can
+ * later be correlated to individual frames.</p>
  *
  * <p>The existing hand-instrumented {@link PerformanceProfiler} summaries remain
  * useful as cheap derived views, but this recording is the source artifact for
@@ -34,6 +35,8 @@ public final class FlightRecorderCapture {
             && Boolean.parseBoolean(System.getProperty(
                     "vulkanmod.performanceProfiler.flightRecorder", "true"));
     private static final String OUTPUT_PROPERTY = "vulkanmod.performanceProfiler.flightRecorderOutput";
+    private static final long JAVA_SAMPLE_MS = longProperty("flightRecorderJavaSampleMillis", 2L, 1L, 100L);
+    private static final long NATIVE_SAMPLE_MS = longProperty("flightRecorderNativeSampleMillis", 5L, 1L, 100L);
 
     private static Recording recording;
     private static Path outputPath;
@@ -55,6 +58,16 @@ public final class FlightRecorderCapture {
             Recording next = new Recording(configuration);
             next.setName("VulkanMod performance flight recorder");
             next.setToDisk(true);
+
+            // The stock profile configuration already captures JVM/GC/allocation/JIT
+            // telemetry. Tighten only the generic evidence needed to explain short
+            // frame stalls; these are not application-specific subsystem metrics.
+            next.enable("jdk.ExecutionSample").withPeriod(Duration.ofMillis(JAVA_SAMPLE_MS));
+            next.enable("jdk.NativeMethodSample").withPeriod(Duration.ofMillis(NATIVE_SAMPLE_MS));
+            next.enable("jdk.ThreadPark").withThreshold(Duration.ZERO).withStackTrace();
+            next.enable("jdk.ThreadSleep").withThreshold(Duration.ZERO).withStackTrace();
+            next.enable("jdk.JavaMonitorEnter").withThreshold(Duration.ZERO).withStackTrace();
+            next.enable("jdk.JavaMonitorWait").withThreshold(Duration.ZERO).withStackTrace();
             next.enable(FrameEvent.class).withoutStackTrace();
 
             outputPath = resolveOutputPath();
@@ -64,8 +77,9 @@ public final class FlightRecorderCapture {
             next.start();
             recording = next;
             installShutdownHook();
-            Initializer.LOGGER.info("VulkanMod raw performance flight recorder enabled; output: {}",
-                    outputPath.toAbsolutePath());
+            Initializer.LOGGER.info(
+                    "VulkanMod raw performance flight recorder enabled; output: {}; Java sample={} ms; native sample={} ms",
+                    outputPath.toAbsolutePath(), JAVA_SAMPLE_MS, NATIVE_SAMPLE_MS);
             return true;
         } catch (IOException | ParseException | RuntimeException failure) {
             failed = true;
@@ -137,6 +151,16 @@ public final class FlightRecorderCapture {
         shutdownHookInstalled = true;
         Runtime.getRuntime().addShutdownHook(new Thread(
                 () -> stop("jvm_shutdown"), "VulkanMod performance flight recorder shutdown"));
+    }
+
+    private static long longProperty(String suffix, long fallback, long min, long max) {
+        try {
+            long value = Long.parseLong(System.getProperty(
+                    "vulkanmod.performanceProfiler." + suffix, Long.toString(fallback)));
+            return Math.max(min, Math.min(max, value));
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     @Name("net.vulkanmod.RunTickFrame")
