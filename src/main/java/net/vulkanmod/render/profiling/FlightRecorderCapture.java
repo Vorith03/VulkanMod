@@ -20,6 +20,8 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.lwjgl.vulkan.VK10.VK_SUCCESS;
+
 /**
  * Raw, query-later performance capture for VulkanMod profiling runs.
  *
@@ -82,6 +84,7 @@ public final class FlightRecorderCapture {
             next.enable(VulkanFenceWaitEvent.class).withStackTrace().withoutThreshold();
             next.enable(VulkanQueueIdleEvent.class).withStackTrace().withoutThreshold();
             next.enable(VulkanApiEvent.class).withStackTrace().withoutThreshold();
+            next.enable(GpuCommandBufferEvent.class).withoutStackTrace();
 
             Path nextOutput = resolveOutputPath();
             Path parent = nextOutput.getParent();
@@ -147,6 +150,10 @@ public final class FlightRecorderCapture {
     public static void endVulkanSubmission(VulkanSubmissionEvent event, int result) {
         if (event == null) return;
         event.result = result;
+        if (result == VK_SUCCESS && event.commandBuffer != 0L) {
+            GpuTimestampRecorder.submitted(
+                    event.commandBuffer, event.sequence, event.queue, event.fence);
+        }
         event.commit();
     }
 
@@ -196,6 +203,25 @@ public final class FlightRecorderCapture {
         event.commit();
     }
 
+    /** Emit completed raw GPU timestamps correlated to a Vulkan submission sequence. */
+    public static void recordGpuCommandBuffer(long commandBuffer, long submissionSequence,
+                                               long queue, long fence, long startTicks,
+                                               long endTicks, long elapsedTicks,
+                                               long gpuNanos, int validBits) {
+        if (!capturing) return;
+        GpuCommandBufferEvent event = new GpuCommandBufferEvent();
+        event.commandBuffer = commandBuffer;
+        event.submissionSequence = submissionSequence;
+        event.queue = queue;
+        event.fence = fence;
+        event.startTicks = startTicks;
+        event.endTicks = endTicks;
+        event.elapsedTicks = elapsedTicks;
+        event.gpuNanos = gpuNanos;
+        event.timestampValidBits = validBits;
+        event.commit();
+    }
+
     /**
      * Stop and persist the raw recording. The benchmark may call this before JVM
      * shutdown; the shutdown hook is only a safety net for interrupted/manual runs.
@@ -229,6 +255,10 @@ public final class FlightRecorderCapture {
 
     public static boolean enabled() {
         return ENABLED;
+    }
+
+    public static boolean isCapturing() {
+        return capturing;
     }
 
     private static long currentThreadCpuNanos() {
@@ -332,5 +362,31 @@ public final class FlightRecorderCapture {
         long object;
         @Label("VkResult")
         int result;
+    }
+
+    @Name("net.vulkanmod.GpuCommandBuffer")
+    @Label("GPU command-buffer execution")
+    @Category({"VulkanMod", "GPU"})
+    @Description("Raw Vulkan timestamp-query result for a complete submitted command buffer")
+    @StackTrace(false)
+    private static final class GpuCommandBufferEvent extends Event {
+        @Label("Command buffer")
+        long commandBuffer;
+        @Label("Submission sequence")
+        long submissionSequence;
+        @Label("Queue")
+        long queue;
+        @Label("Fence")
+        long fence;
+        @Label("GPU start timestamp")
+        long startTicks;
+        @Label("GPU end timestamp")
+        long endTicks;
+        @Label("GPU elapsed ticks")
+        long elapsedTicks;
+        @Label("GPU elapsed time (ns)")
+        long gpuNanos;
+        @Label("Timestamp valid bits")
+        int timestampValidBits;
     }
 }
