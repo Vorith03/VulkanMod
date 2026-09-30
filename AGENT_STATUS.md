@@ -1,130 +1,83 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
-This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical implementation detail belongs in Git and focused evidence documents; keep this file centered on facts that affect the next session.
+This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Repository state
+## Current executable
 
-- `9624f0be` / CI **#818** / run `36640414458` was the last fully green profiler executable before named-world automation. Artifact: `VulkanMod-Forge-build-818` (ID `11066561828`; artifact ZIP SHA-256 `5f0a2398a21b5d7c0f0509b1953d4935ccc90ba0529fbb7e2131dd46bc25fe99`); smoke log artifact `VulkanMod-Forge-smoke-log-818` (ID `11066711727`). The real startup capture has six windows with zero top-level overlap, valid tick-local CPU/allocation samples, bounded joint frame examples, and measured profiler summary cost. Its smoke interval is 0.25 s, so its ~1–7 ms per-summary overhead is not a measurement of the default five-second capture overhead. This CI does not exercise an in-world terrain workload.
-- `b6b63cd0` / CI **#821** / run `36643411536` validated the first unattended benchmark executable (all 31 steps; three private-resource-pack fixture steps skipped as configured). Artifact: `VulkanMod-Forge-build-821` (ID `11067622502`, artifact ZIP SHA-256 `d8d7f3c08ae43ea11c3ac795c7bf7c8cca3f0c0060b4cf475220fd95dd6be35e`); smoke logs `VulkanMod-Forge-smoke-log-821` (ID `11067662223`). This adds opt-in, named-world unattended profiling: integrated-server Spectator teleport, client pose/terrain readiness checks, 60-second settle, configurable measured duration (default 180 seconds), post-staging-cap extension, on-screen countdown, output flush, normal single-player world teardown, then game close. CI #819 caught a nonexistent `Minecraft.disconnect()` call; `81db5de1` uses the compiled Forge 1.20.1 level-disconnect/clear-level path. Startup CI cannot validate the in-world teleport/save/close behavior; the first RX run must. See `docs/PERFORMANCE_PROFILING.md`.
-- `384e2d82` / CI **#822** / run `36644976279` passed all 31 steps (three private-resource-pack steps skipped). Artifact: `VulkanMod-Forge-build-822` (ID `11068716720`, artifact ZIP SHA-256 `cc1f94dc4dab7f3888d222e982a9c6b421bea2f86006466c94038164acc816e9`); smoke logs ID `11068730414`. This hardens capture validity and retention. Automated default filenames contain a run UUID and use CREATE_NEW; explicit output paths and normal profiling retain their existing truncate behavior. `capture_identity` records schema=1, UUID, loaded mod version (CI versions contain build/short SHA), and automation mode. Automatic save/close requires successful output flush and close; output failure aborts and leaves the game open. Focus loss, pause, non-local/non-first-person camera, and measured framebuffer resize also abort, with a reason in the capture when healthy and always in `latest.log`. The retained startup capture has six valid windows, a parseable UUID, and `vulkanmod_version=0.3.2-forge.2-build.822-g384e2d82`; its updated output contract passes. An isolated Java 17 probe of the exact production output methods passed normal completion, injected write/flush/close failures, disabled/unstarted capture, and unfinished-frame cases. This verifies completion reporting, not real disk exhaustion or Minecraft/controller integration; in-world validity/save/close still need runtime evidence.
-- `3a0e6713` is the current fully green executable. CI **#825** / run `36666321378` passed all 31 steps (three private-resource-pack steps skipped). Artifact: `VulkanMod-Forge-build-825` (ID `11075679651`, artifact ZIP SHA-256 `359bd35b312e1a5c852992c7285d13fd2af60741108722d98ab165c321b45d58`); smoke logs ID `11075724243`. The first user automated run on 2026-09-29 rejected `tp X Y Z yaw pitch` at the rotation arguments and aborted before measured capture. The controller now uses the valid rotated form `tp @s X Y Z yaw pitch`, separates immediate rejection from the 30-second timeout, reports Spectator failure, and avoids repeating Spectator mode when already active. The startup oracle uses Minecraft's actual TeleportCommand, follows the tp alias to its final command context, accepts default/fractional poses, and rejects the old targetless rotation. This is a confirmed controller bug; it supplies no new renderer performance evidence. The later user #825 capture completes automation and normal world-save teardown; see the RX diagnostic below. Launcher exit status/native stderr remain unavailable.
-- The profiler now computes `unaccounted` as a per-frame positive remainder with p95/max rather than clamping a difference of window averages. It records tick-local CPU time and allocated bytes, evenly spaced tick frames and slow render-only examples with joint stage timing, player/screen presence, summary overhead, and extra parent/child timing integrity checks. Read `docs/PERFORMANCE_PROFILING.md` before interpreting new fields. Exact per-frame GC attribution, individual mod callbacks, worker latency quantiles, GPU timestamps, and presentation intervals are intentionally gated on what the next RX capture actually shows.
-- `401ef894` updated `ROADMAP.md` to reflect verified Phase 4 **7/8** and the current Phase 5 measurement priority. It was an independent documentation commit; the profiler patch was replayed on top without modifying that work.
-- `2b634a1f` / CI **#816** first repaired the display-update overlap and passed all 31 steps. Its smoke capture had zero top-level overlap; an ordinary menu window measured `submit_render=2.873 ms`, `display_update=0.013 ms`, and `unaccounted=0.331 ms`, rather than #815's overlapping 3.202/3.223 ms and clamped zero residual.
-- #815 was also fully green, but its newly retained profiler smoke capture exposed a measurement error: the old display-update call-site injection enclosed the submit hook from another mixin at the same invocation. #816 times `Window.updateDisplay()` inside VulkanMod's overwrite and checks overlapping top-level totals in CI. Do not add `display_update` to `submit_render` or infer complete phase coverage from `unaccounted=0` in #806/#815. The prior RX tick cadence, broad render cost, and staging-cap recovery evidence remain valid. See `docs/PERFORMANCE_PROFILING.md` and `docs/PERFORMANCE_CAPTURE_2026-09-29.md`.
-- `c57151c9` adds a once-per-second on-screen voxel staging count during opt-in profiler capture, without F3. CI **#811** / run `36618961222` is fully green (31 steps). Artifact: `VulkanMod-Forge-build-811` (ID `11057922105`). User capture instructions below supersede the earlier counter-unobservable guidance.
-- `7569b45f` corrects a measurement error in the #809-era profiler: `capture_start` dimensions precede the user's window resize. It now records first/last framebuffer dimensions, width/height ranges, and observed changes for every measured summary window. CI **#810** / run `36602819406` is fully green. Artifact: `VulkanMod-Forge-build-810` (ID `11050377216`, SHA-256 `50e50c71d931a3b3423044698308a8a0681936eb0d4858117ab3642fb02f1447`). The #806 stationary in-world resolution is unknown; do not use its initial 854×480 value as the measured-world resolution or claim a resolution-matched render A/B from it.
-- Performance diagnostic code at `ac9aa125` and its missing-import correction `477bb9d5` are on `forge-1.20.1`. CI #808 / run `36558345092` failed Java compilation on the missing `ChunkArea` import; CI **#809** / run `36558618489` is fully green for `477bb9d5`, including distributable and all public compatibility smokes. Artifact: `VulkanMod-Forge-build-809` (ID `11029477220`, SHA-256 `a9bd6e6f794bcb5d4dd066b8f12ea9514c7537872b3af09107145bfe073a11c2`). Read `docs/PERFORMANCE_CAPTURE_2026-09-29.md` for the exact #806 capture analysis.
-- The user's original performance diagnostic used `0b5e596623591e9e2180c9b67cb572bfc3afcca2` (`perf: split broad runTick profiling phases`).
-- Public CI **#806** / run `36552111888` is fully green. Build/distributable, packaged Immersive Portals anchors, both startup modes, persistent GPU indirect, post-chain/depth post-chain, screenshot readback, FTB Library, Pick Up Notifier, exact Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j all passed. Public private-pack steps were skipped as expected.
-- Testable artifact is `VulkanMod-Forge-build-806` (artifact `11025174241`, SHA-256 `348bba3a1ebb0c1f5caaaff5a52aa1aea6379563a30e480638e8820fd90296a5`).
-- The adversarial audit remains complete: **0 / 5 repair clusters remaining**. Do not reopen it without contradictory live evidence.
+- Latest validated executable commit: `da556942d2695711fa80f0e6b031a46268f3dbad` (`perf: keep tick leaf profiling benchmark-only`).
+- CI **#830** / run `36685436931` is fully green.
+- Build artifact: `VulkanMod-Forge-build-830`, artifact ID `11082634645`, SHA-256 `c88cb38ff5cb4d32ade94a22eeb05538cce4cd60ae2c31281018fcdcf7aeebcb`.
+- Smoke logs: `VulkanMod-Forge-smoke-log-830`, artifact ID `11082859035`, SHA-256 `347cf5ed5362a8f852151a4d7cb3a3a3e83c5e868609afa2bc31ca892f090497`.
+- #830 passed distributable verification, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, FTB Library, Pick Up Notifier, Immersive Portals 3.0.7, Distant Horizons 3.2.0-b, Crash Assistant, Chat Heads, Flywheel 0.6, and Create 0.5.1.j. The three private-resource-pack fixture steps were skipped as configured.
+- The adversarial audit remains complete: **0/5 repair clusters remaining**. Do not restart it without contradictory live evidence.
 
-## Build #825 RX stationary diagnostic (2026-09-29)
+## RX 6900 XT benchmark evidence that drives the next action
 
-The later user files `vulkanmod-performance-stationary(5).log`, `latest(5).log`, and `debug(2).log` satisfy the pending automation test. Capture UUID `6da1a30e-ef2d-49f6-b76a-547bff8ca0d1` records the correct #825 executable, a 60-second settle, 180.020 measured seconds, 31,466 frames and successful benchmark completion. All 36 windows retain the fixed pose, 2552×1374 framebuffer, render distance 16 / simulation distance 12, no screen, player present, and zero timing overlap/unbalanced counters. All dimensions save and Minecraft reaches Stopping. The supplied files do not prove launcher exit code zero or close the independent #801 native-shutdown issue.
+The completed automated build #825 stationary diagnostic is the current runtime performance evidence. Detailed evidence is in `docs/PERFORMANCE_CAPTURE_BUILD_825_2026-09-29.md`.
 
-This is a diagnostic, not a matched Phase 5 baseline: reported FPS cap is 260 rather than contract unlimited; complete graphics/seed/pristine-copy provenance and the OpenGL counterpart are not established. Keep Phase 5 at 4/7. Detailed evidence, source hashes, limits and weighting are in `docs/PERFORMANCE_CAPTURE_BUILD_825_2026-09-29.md`.
+- 2,669 / 2,670 frames over 25 ms contained a client tick.
+- Tick-bearing frames averaged about 28.49 ms; render-only frames about 2.77 ms.
+- `client_tick` averaged about 24.17 ms wall / 23.96 ms CPU.
+- Existing nested tick stages left about 20.66 ms in `client_tick_other`; entity tick was about 3.46 ms.
+- Tick-bearing frames allocated about 3.77 MiB on the render thread on average; whole-run render-thread allocation was about 316.6 MiB/s.
+- Vulkan submission/fence/image-acquire/upload waits were small. Do not optimize those first based on current evidence.
+- The 2048-entry staging store stayed full but the earlier repeated rejection/recovery cycle was absent. Do not attribute the recurring tick hitch to staging-cap churn without new evidence.
+- OpenAL failed before measurement and sound was disabled. Keep that startup/audio failure separate from the recurring measured tick cost.
+- The capture completed automated save/exit correctly. It is diagnostic rather than a formal matched Phase 5 baseline because its FPS cap was 260 and complete OpenGL/control provenance is not established.
 
-- 2,669 of 2,670 frames over 25 ms contain a client tick. Tick-bearing frames average 28.49 ms versus 2.77 ms render-only. Client tick wall/CPU averages are 24.17/23.96 ms, with 20.66 ms in `client_tick_other` and 3.46 ms in entity tick. CPU work in the unnamed tick path is the first attribution target; these logs do not identify an individual mod.
-- Render-thread allocation averages 316.6 MiB/s, including ~3.77 MiB per tick-bearing frame. Investigate allocating stacks as well as CPU stacks; window-wide allocation must not be labeled renderer-only.
-- The full staging store stays at 2048 entries. CPU recoveries remain 11 and input-publication rejections remain 2 throughout measurement; only 32 additional accepted builds occur between first and last summaries. The #806 repeated rejection/recovery cycle is absent here. This supports preflight containment, not a comparable FPS speedup.
-- Whole-run throughput is ~174.8 FPS; final ~60 seconds are ~208.9 FPS. Terrain setup falls to near zero after ~85 measured seconds, so the early windows remain a transient despite the fixed settle. Do not claim a render improvement against #806's unknown resolution.
-- OpenAL startup still fails once with `IllegalStateException: Failed to open OpenAL device` and disables sound before capture. No measured-window warning/error spam explains the recurring tick frames. Keep the audio failure separate.
-- GPU execution/presentation timestamps remain unavailable. Existing CPU wait/submit/upload stages are small; broad GPU timestamp instrumentation is not the next discriminator.
+## New client-tick attribution in #830
+
+Build #830 adds automated-benchmark-only leaf timing and allocation attribution while preserving the existing broad profiler stages. See `docs/PERFORMANCE_TICK_ATTRIBUTION_2026-09-30.md`.
+
+New leaf buckets cover:
+
+- Forge client tick pre/post event dispatch;
+- Forge client-level tick pre/post event dispatch;
+- GUI tick;
+- `GameRenderer.pick`;
+- multiplayer game-mode tick;
+- texture-manager tick;
+- tutorial tick;
+- vanilla `LevelRenderer.tick`;
+- `LevelRenderer.tickRain`;
+- ambient-world `ClientLevel.animateTick`;
+- particles;
+- music;
+- sound;
+- keybind handling.
+
+For each leaf, the automated benchmark reports average / p95 / max wall time and, when supported by the JVM, average / p95 / max render-thread allocated KiB. Summary formatting/output occurs only after the final measured frame. The extra leaf profiler is gated by both `vulkanmod.performanceProfiler=true` and `vulkanmod.performanceProfiler.autoBenchmark=true`; normal gameplay and manual profiling do not allocate its sample buffers or collect its leaf metrics.
+
+Expected end-of-capture lines include `client_tick_breakdown`, `client_tick_leaf_avg_ms`, `client_tick_leaf_p95_ms`, `client_tick_leaf_max_ms`, and corresponding `client_tick_leaf_allocation_*_kib` lines.
 
 ## Active sequencing
 
-- Live Phase 4 evidence is **7/8**. The only remaining mandatory Phase 4 gate is world enter/leave/re-enter plus resource reload. The user explicitly does **not** want that work prioritized now; treat the lifecycle gate as deferred.
-- Phase 5 measurement work is **4/7** and is the current useful priority. Open numeric gates are the RX 6900 XT OpenGL baseline, Vulkan baseline, and hitch/frame-time evidence under the fixed benchmark contract.
-- Phase 7 GPU-terrain/hybrid work remains **6/11**. The first substantial open implementation gate there is correct GPU visibility/section selection, but performance claims still require comparable Phase 5 evidence.
-- `ROADMAP.md` now records the verified Phase 4 7/8 state and Phase 5 priority; its remaining lifecycle gate stays open and deferred.
-
-## Current RX 6900 XT compatibility evidence
-
-Build #801 established the current visual compatibility baseline:
-
-- Immersive Portals portal rendering and traversal work correctly, including remote-world framebuffer composition attached/clipped to the portal.
-- Creative inventory block/item imagery renders correctly.
-- Third-person player and ordinary entity rendering work correctly.
-- Create/Flywheel ordinary gameplay and moving contraption rendering work correctly.
-- Representative particles/translucency/entities/GUI paths work correctly.
-- Do not ask the user to repeat those checks unless a later executable change directly threatens them.
-
-The same #801 session independently reproduced a shutdown/native-lifetime abort after normal Minecraft shutdown (`double free or corruption` / exit 134). Keep that separate from the now-working rendering paths. Do not make speculative native-ownership changes without focused ownership evidence or a native backtrace.
-
-## Performance / critical-path instrumentation
-
-The reusable opt-in profiling layer is documented in `docs/PERFORMANCE_PROFILING.md`.
-
-Enable it with:
-
-```text
--Dvulkanmod.performanceProfiler=true
-```
-
-Default output:
-
-```text
-logs/vulkanmod-performance.log
-```
-
-Useful bounded capture controls include:
-
-```text
--Dvulkanmod.performanceProfiler.summarySeconds=5
--Dvulkanmod.performanceProfiler.durationSeconds=30
--Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-stationary.log
--Dvulkanmod.performanceProfiler.slowFrameMs=25
-```
-
-The initial RX 6900 XT diagnostic capture supplied on 2026-09-29 was useful but is **not a fixed-contract Phase 5 baseline**:
-
-- VulkanMod reported effective render distance `D: 32`; the fixed baseline contract is render distance 16.
-- The active-world portion remained under substantial terrain population/build churn instead of representing the required settled 60-second stationary state.
-- Across the sustained active-world windows, frame wall time was roughly 30.3 ms weighted average while roughly 28.0 ms (~92%) remained in the old `unaccounted` bucket.
-- Known ordinary costs were much smaller: terrain setup ~2.0 ms average, terrain uploads ~0.14 ms, submit/present ~0.09 ms, and frame waits near zero. This does **not** support optimizing submit/fence/upload code first.
-- Some isolated multi-hundred/multi-thousand-ms hitches were GC-heavy (including a ~1.67 s frame paired with ~1.49 s GC), but ordinary sustained 30–45 ms frames were not explained by GC.
-- Exact ~16.7 ms periods elsewhere in the capture make an FPS limiter worth distinguishing explicitly, but do not assume their cause until the new limiter stage is observed.
-
-`0b5e5966` added broad top-level `runTick()` timing around `Minecraft.tick()`, `GameRenderer.render(...)`, `Window.updateDisplay()`, and `RenderSystem.limitDisplayFPS(...)`. Its display call-site hook inadvertently nested Vulkan submission because of mixin ordering; #816 corrects this inside the window method and emits both overlap counts and excess time. Terrain setup/reposition/uploads remain nested renderer detail. Existing frame-slot/fence/bookkeeping and submit/present timing remain intact.
-
-The profiler is still deliberately CPU wall-clock only. Do not add blanket Vulkan GPU timestamp instrumentation until the broad split shows that GPU/pass timing is actually the next missing discriminator.
-
-## Immersive Portals retained compatibility boundary
-
-The IP 3.0.7 investigation is closed on current hardware evidence. Retain these semantic boundaries unless new evidence contradicts them:
-
-- cancel IP's obsolete vanilla `earlyRemoteUpload()` terrain prepass;
-- remove only the stale merged vanilla terrain-camera dispatcher dependency;
-- keep the geometry callback while bypassing unsupported OpenGL query-result handling;
-- use VulkanMod's generic sampled `RenderTarget` path for IP's secondary framebuffer;
-- support depth clamp through the Vulkan pipeline feature gate;
-- restore IP's explicit portal matrices after legacy `ShaderInstance.apply()` and immediately before the IP-owned portal mesh submission boundary;
-- keep the IP custom-shader reload ownership bridge even though actual F3+T testing remains deferred.
-
-Focused details remain in `docs/CREATE_CHRONICLES_COMPATIBILITY.md` and `docs/CREATE_CHRONICLES_COMPAT_MATRIX.md`.
-
-## GPU-terrain flags / safety
-
-Whole-section accelerated bypass requires:
-
-```text
--Dvulkanmod.experimentalGpuTerrainMesher=true
--Dvulkanmod.experimentalGpuTerrainCpuBypass=true
--Dvulkanmod.experimentalGpuTerrainDrawHandoff=true
-```
-
-Mixed-section APPEND additionally requires:
-
-```text
--Dvulkanmod.experimentalGpuTerrainHybrid=true
-```
-
-Keep accelerated consumption default-off until representative RX correctness and comparable frame-time evidence are complete. Preserve CPU/fail-closed handling for unsupported Forge terrain callbacks/content. Do not weaken production memory safety or ownership rules merely to make a test pass.
+- Phase 4: **7/8**. World enter/leave/re-enter plus resource reload is the only mandatory open gate and remains deferred at the user's request.
+- Phase 5: **4/7**, current useful priority. Formal OpenGL baseline, Vulkan baseline, and hitch/frame-time evidence remain open under the fixed benchmark contract.
+- Phase 7 GPU-terrain/hybrid: **6/11**. Correct GPU visibility/section selection is the first substantial open implementation gate, but performance claims still require comparable Phase 5 evidence.
+- Immersive Portals current compatibility behavior is RX-confirmed working. Preserve its documented semantic boundary in `docs/CREATE_CHRONICLES_COMPATIBILITY.md` unless new evidence contradicts it.
+- The independent shutdown/native-lifetime abort observed around build #801 remains unresolved and separate from rendering/performance work. Do not make speculative native ownership changes without focused evidence or a native backtrace.
 
 ## Next useful action
 
-Attribute the sustained ~20.7 ms `client_tick_other` CPU remainder and high allocation rate from the completed #825 RX capture. Inspect the exact Forge-patched `Minecraft.tick()` implementation and current timing boundaries, then add bounded sampling or targeted instrumentation for the implicated callback family. Keep the output opt-in and retain capture validity/overlap checks. Read `docs/PERFORMANCE_CAPTURE_BUILD_825_2026-09-29.md` and `docs/PERFORMANCE_PROFILING.md` before choosing probes. Do not guess a responsible mod, tune GC first, or optimize Vulkan submit/fences based on this evidence.
+Run **build #830** on the user's RX 6900 XT/Create Chronicles environment with the same automated stationary benchmark workload/settings used for the successful #825 diagnostic.
 
-No unchanged repeat of the #825 automation test is needed. A new RX capture should answer function/mod/allocation attribution after a meaningful instrumentation change. Formal OpenGL/Vulkan comparisons remain pending under `docs/TERRAIN_PERFORMANCE_BASELINE.md`, including matching framebuffer/settings, contract-unlimited cap and world-copy provenance. A separate render-distance-32 capture can be labeled as a gameplay stress workload later.
+Required flags:
+
+```text
+-Dvulkanmod.performanceProfiler=true
+-Dvulkanmod.performanceProfiler.autoBenchmark=true
+```
+
+Keep the same benchmark world, view, framebuffer/settings and 260 FPS cap for this diagnostic rerun so the new attribution can be compared to #825. Do not silently convert this into the formal Phase 5 baseline. Keep Minecraft focused; do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`. `latest.log` is only necessary if automation aborts or another runtime issue appears.
+
+Interpret the result using this order:
+
+1. If a Forge pre/post event bucket dominates time/allocation, instrument only that EventBus family down to listener/mod ownership.
+2. If vanilla `level_renderer` / `weather` dominates, investigate redundant renderer-maintenance work and its required Forge/mod semantics.
+3. If another named leaf dominates, investigate that concrete subsystem rather than renderer-wide tuning.
+4. If a leaf mainly dominates allocation, investigate object churn there before GC tuning.
+5. If all leaves are small but `client_tick_other` remains large, inspect the remaining Forge-patched `Minecraft.tick()` work and add one more bounded attribution layer.
+6. Keep broad Vulkan GPU timestamps deferred unless CPU accounting no longer explains frame pacing.
+
+No unchanged repeat of build #825 is useful now; the #830 instrumentation is the reason for the next user-machine run.
