@@ -6,9 +6,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.commands.TeleportCommand;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
@@ -267,7 +270,9 @@ public final class AutomatedBenchmark {
     public static void verifyForCi() {
         CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
         TeleportCommand.register(dispatcher);
-        CommandSourceStack source = CommandSourceStack.NULL.withPermission(4);
+        // Parsing only reads permissions; no world, server, entity or output sink is executed.
+        CommandSourceStack source = new CommandSourceStack(null, Vec3.ZERO, new Vec2(0.0F, 0.0F),
+                null, 4, "benchmark-parser", Component.literal("benchmark-parser"), null, null);
         for (String command : new String[] {
                 teleportCommand(0.0D, 192.0D, 0.0D, -90.0F, 30.0F),
                 teleportCommand(-512.25D, 192.5D, 1.75D, 180.0F, -45.0F) }) {
