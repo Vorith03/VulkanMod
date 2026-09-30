@@ -32,7 +32,7 @@ import static org.lwjgl.vulkan.VK10.vkWaitForFences;
  * stack trace answers which code caused a submission/wait/acquire/present after the
  * capture, so no terrain/entity/texture hypothesis has to be chosen in advance.</p>
  */
-@Mixin(value = Renderer.class, priority = 900)
+@Mixin(value = Renderer.class, priority = 900, remap = false)
 public abstract class RendererFlightRecorderMixin {
     @Shadow private List<VkCommandBuffer> commandBuffers;
     @Shadow private VkCommandBuffer currentCmdBuffer;
