@@ -2,7 +2,6 @@ package net.vulkanmod.mixin.profiling;
 
 import net.vulkanmod.render.profiling.FlightRecorderCapture;
 import net.vulkanmod.render.profiling.GpuTimestampRecorder;
-import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.queue.Queue;
 import org.lwjgl.PointerBuffer;
@@ -23,7 +22,7 @@ import static org.lwjgl.vulkan.VK10.vkQueueSubmit;
 import static org.lwjgl.vulkan.VK10.vkWaitForFences;
 
 /** Records Vulkan's generic immediate-command and device-idle boundaries. */
-@Mixin(value = Vulkan.class, priority = 900)
+@Mixin(value = Vulkan.class, priority = 900, remap = false)
 public abstract class VulkanFlightRecorderMixin {
     @Shadow private static VkCommandBuffer immediateCmdBuffer;
 
