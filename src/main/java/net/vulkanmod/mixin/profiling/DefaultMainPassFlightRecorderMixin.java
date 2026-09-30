@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Writes the generic end timestamp immediately before the main command buffer closes. */
-@Mixin(value = DefaultMainPass.class, priority = 900)
+@Mixin(value = DefaultMainPass.class, priority = 900, remap = false)
 public abstract class DefaultMainPassFlightRecorderMixin {
     @Inject(
             method = "end",
