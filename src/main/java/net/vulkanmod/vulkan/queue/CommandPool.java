@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.queue;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.vulkanmod.render.profiling.FlightRecorderCapture;
+import net.vulkanmod.render.profiling.GpuTimestampRecorder;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -16,11 +17,13 @@ import static org.lwjgl.vulkan.VK10.*;
 
 public class CommandPool {
     long id;
+    private final int queueFamilyIndex;
 
     private final List<CommandBuffer> commandBuffers = new ObjectArrayList<>();
     private final java.util.Queue<CommandBuffer> availableCmdBuffers = new ArrayDeque<>();
 
     CommandPool(int queueFamilyIndex) {
+        this.queueFamilyIndex = queueFamilyIndex;
         this.createCommandPool(queueFamilyIndex);
     }
 
@@ -103,6 +106,7 @@ public class CommandPool {
                 throw new RuntimeException("Failed to begin command buffer: " + result);
             }
             commandBuffer.recording = true;
+            GpuTimestampRecorder.begin(commandBuffer.handle, queueFamilyIndex);
 
             return commandBuffer;
         }
@@ -120,6 +124,7 @@ public class CommandPool {
         try(MemoryStack stack = stackPush()) {
             long fence = commandBuffer.fence;
 
+            GpuTimestampRecorder.end(commandBuffer.handle);
             result = vkEndCommandBuffer(commandBuffer.handle);
             if(result != VK_SUCCESS) {
                 throw new RuntimeException("Failed to end command buffer: " + result);
@@ -198,6 +203,7 @@ public class CommandPool {
         }
 
         public void reset() {
+            GpuTimestampRecorder.complete(this.handle);
             this.submitted = false;
             this.recording = false;
             addToAvailable(this);
