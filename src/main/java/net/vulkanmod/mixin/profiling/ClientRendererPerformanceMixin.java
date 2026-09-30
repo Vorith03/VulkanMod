@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.profiling;
 
 import net.minecraft.client.renderer.GameRenderer;
+import net.vulkanmod.render.profiling.ClientTickBreakdown;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -12,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public class ClientRendererPerformanceMixin {
     @Unique private long vulkanmod$rendererTickStart;
+    @Unique private long vulkanmod$pickStart;
     @Unique private long vulkanmod$worldRenderStart;
     @Unique private int vulkanmod$worldRenderDepth;
 
@@ -24,6 +26,17 @@ public class ClientRendererPerformanceMixin {
     private void vulkanmod$endRendererTick(CallbackInfo ci) {
         PerformanceProfiler.end(PerformanceProfiler.Stage.CLIENT_RENDERER_TICK, vulkanmod$rendererTickStart);
         vulkanmod$rendererTickStart = 0L;
+    }
+
+    @Inject(method = "pick(F)V", at = @At("HEAD"))
+    private void vulkanmod$beginPick(float partialTick, CallbackInfo ci) {
+        vulkanmod$pickStart = ClientTickBreakdown.begin(ClientTickBreakdown.Stage.PICK);
+    }
+
+    @Inject(method = "pick(F)V", at = @At("RETURN"))
+    private void vulkanmod$endPick(float partialTick, CallbackInfo ci) {
+        ClientTickBreakdown.end(ClientTickBreakdown.Stage.PICK, vulkanmod$pickStart);
+        vulkanmod$pickStart = 0L;
     }
 
     // Portal rendering can recurse into renderLevel. Count only the outer call so

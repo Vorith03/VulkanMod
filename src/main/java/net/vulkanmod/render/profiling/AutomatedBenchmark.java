@@ -141,6 +141,7 @@ public final class AutomatedBenchmark {
         if (now < captureEndAt(captureStartedAt, capReachedAt, CAPTURE_NANOS, AFTER_CAP_NANOS)) return;
 
         state = State.SAVING;
+        ClientTickBreakdown.emitSummary();
         PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
                 "complete world=%s measured_s=%.3f staging_cap_seen=%s after_cap_s=%.3f",
                 WORLD_NAME.replace(' ', '_'), (now - captureStartedAt) / 1_000_000_000.0D,
@@ -257,6 +258,7 @@ public final class AutomatedBenchmark {
 
     private static void abort(String reason) {
         state = State.ABORTED;
+        ClientTickBreakdown.emitSummary();
         PerformanceProfiler.benchmarkEvent("aborted reason=" + reason.replace(' ', '_'));
         PerformanceProfiler.abortAutomatedCapture();
         Initializer.LOGGER.warn("VulkanMod automated benchmark stopped without exiting: {}", reason);
@@ -268,6 +270,7 @@ public final class AutomatedBenchmark {
 
     /** Command syntax and staging deadline oracles without executing against a world. */
     public static void verifyForCi() {
+        ClientTickBreakdown.verifyForCi();
         CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
         TeleportCommand.register(dispatcher);
         // Parsing only reads permissions; no world, server, entity or output sink is executed.

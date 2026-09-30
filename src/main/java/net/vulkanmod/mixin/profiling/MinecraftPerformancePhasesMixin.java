@@ -1,6 +1,7 @@
 package net.vulkanmod.mixin.profiling;
 
 import net.minecraft.client.Minecraft;
+import net.vulkanmod.render.profiling.ClientTickBreakdown;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -20,6 +21,7 @@ public class MinecraftPerformancePhasesMixin {
     @Unique private long vulkanmod$clientTickStart;
     @Unique private long vulkanmod$gameRenderStart;
     @Unique private long vulkanmod$frameLimitStart;
+    @Unique private long vulkanmod$keybindStart;
 
     @Inject(
             method = "runTick",
@@ -31,6 +33,7 @@ public class MinecraftPerformancePhasesMixin {
     )
     private void vulkanmod$beginClientTick(boolean tick, CallbackInfo ci) {
         vulkanmod$clientTickStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.CLIENT_TICK);
+        if (vulkanmod$clientTickStart != 0L) ClientTickBreakdown.beginTick();
     }
 
     @Inject(
@@ -42,8 +45,20 @@ public class MinecraftPerformancePhasesMixin {
             )
     )
     private void vulkanmod$endClientTick(boolean tick, CallbackInfo ci) {
+        if (vulkanmod$clientTickStart != 0L) ClientTickBreakdown.endTick();
         PerformanceProfiler.end(PerformanceProfiler.Stage.CLIENT_TICK, vulkanmod$clientTickStart);
         vulkanmod$clientTickStart = 0L;
+    }
+
+    @Inject(method = "handleKeybinds", at = @At("HEAD"))
+    private void vulkanmod$beginKeybinds(CallbackInfo ci) {
+        vulkanmod$keybindStart = ClientTickBreakdown.begin(ClientTickBreakdown.Stage.KEYBINDS);
+    }
+
+    @Inject(method = "handleKeybinds", at = @At("RETURN"))
+    private void vulkanmod$endKeybinds(CallbackInfo ci) {
+        ClientTickBreakdown.end(ClientTickBreakdown.Stage.KEYBINDS, vulkanmod$keybindStart);
+        vulkanmod$keybindStart = 0L;
     }
 
     @Inject(
