@@ -1,5 +1,7 @@
 package net.vulkanmod.render.profiling;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -15,11 +17,22 @@ public final class ClientTickBreakdown {
     private static final int MAX_SAMPLES = 8192;
     private static final Stage[] STAGES = Stage.values();
     private static final int STAGE_COUNT = STAGES.length;
+    private static final ThreadMXBean THREAD_BEAN = ManagementFactory.getThreadMXBean();
+    private static final com.sun.management.ThreadMXBean ALLOCATION_BEAN =
+            THREAD_BEAN instanceof com.sun.management.ThreadMXBean bean ? bean : null;
+    private static final boolean ALLOCATION_SUPPORTED = ALLOCATION_BEAN != null
+            && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
+            && ALLOCATION_BEAN.isThreadAllocatedMemoryEnabled();
 
     private static final long[] currentStageNanos = new long[STAGE_COUNT];
+    private static final long[] currentStageAllocatedBytes = new long[STAGE_COUNT];
+    private static final long[] stageAllocationStart = new long[STAGE_COUNT];
     private static final long[] stageSums = new long[STAGE_COUNT];
     private static final long[] stageMax = new long[STAGE_COUNT];
+    private static final long[] stageAllocationSums = new long[STAGE_COUNT];
+    private static final long[] stageAllocationMax = new long[STAGE_COUNT];
     private static final long[][] stageSamples = new long[STAGE_COUNT][MAX_SAMPLES];
+    private static final long[][] stageAllocationSamples = new long[STAGE_COUNT][MAX_SAMPLES];
     private static final long[] tickSamples = new long[MAX_SAMPLES];
     private static final long[] leafSamples = new long[MAX_SAMPLES];
     private static final long[] sortScratch = new long[MAX_SAMPLES];
@@ -40,17 +53,28 @@ public final class ClientTickBreakdown {
     public static void beginTick() {
         if (tickActive) return;
         Arrays.fill(currentStageNanos, 0L);
+        Arrays.fill(currentStageAllocatedBytes, 0L);
+        Arrays.fill(stageAllocationStart, -1L);
         tickStartNanos = System.nanoTime();
         tickActive = true;
     }
 
     public static long begin(Stage stage) {
-        return tickActive && stage != null ? System.nanoTime() : 0L;
+        if (!tickActive || stage == null) return 0L;
+        stageAllocationStart[stage.ordinal()] = currentThreadAllocatedBytes();
+        return System.nanoTime();
     }
 
     public static void end(Stage stage, long startNanos) {
         if (!tickActive || stage == null || startNanos == 0L) return;
-        currentStageNanos[stage.ordinal()] += Math.max(0L, System.nanoTime() - startNanos);
+        long now = System.nanoTime();
+        long allocationEnd = currentThreadAllocatedBytes();
+        int ordinal = stage.ordinal();
+        currentStageNanos[ordinal] += Math.max(0L, now - startNanos);
+        long allocationStart = stageAllocationStart[ordinal];
+        if (allocationStart >= 0L && allocationEnd >= allocationStart)
+            currentStageAllocatedBytes[ordinal] += allocationEnd - allocationStart;
+        stageAllocationStart[ordinal] = -1L;
     }
 
     public static void endTick() {
@@ -62,10 +86,16 @@ public final class ClientTickBreakdown {
         for (Stage stage : STAGES) {
             int ordinal = stage.ordinal();
             long value = currentStageNanos[ordinal];
+            long allocated = currentStageAllocatedBytes[ordinal];
             leaf += value;
             stageSums[ordinal] += value;
             stageMax[ordinal] = Math.max(stageMax[ordinal], value);
-            if (sampledTicks < MAX_SAMPLES) stageSamples[ordinal][sampledTicks] = value;
+            stageAllocationSums[ordinal] += allocated;
+            stageAllocationMax[ordinal] = Math.max(stageAllocationMax[ordinal], allocated);
+            if (sampledTicks < MAX_SAMPLES) {
+                stageSamples[ordinal][sampledTicks] = value;
+                stageAllocationSamples[ordinal][sampledTicks] = allocated;
+            }
         }
         if (leaf > elapsed) overlapTicks++;
         ticks++;
@@ -86,23 +116,40 @@ public final class ClientTickBreakdown {
         if (ticks == 0) return;
 
         PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
-                "client_tick_breakdown ticks=%d sampled_ticks=%d sample_cap=%d overlap_ticks=%d tick_ms_avg=%.3f tick_ms_p95=%.3f tick_ms_max=%.3f leaf_ms_avg=%.3f leaf_ms_p95=%.3f leaf_ms_max=%.3f",
+                "client_tick_breakdown ticks=%d sampled_ticks=%d sample_cap=%d overlap_ticks=%d tick_ms_avg=%.3f tick_ms_p95=%.3f tick_ms_max=%.3f leaf_ms_avg=%.3f leaf_ms_p95=%.3f leaf_ms_max=%.3f leaf_allocation_available=%s",
                 ticks, sampledTicks, MAX_SAMPLES, overlapTicks,
                 millis(tickSumNanos / ticks), millis(percentile(tickSamples, sampledTicks, 0.95D)), millis(tickMaxNanos),
-                millis(leafSumNanos / ticks), millis(percentile(leafSamples, sampledTicks, 0.95D)), millis(leafMaxNanos)));
+                millis(leafSumNanos / ticks), millis(percentile(leafSamples, sampledTicks, 0.95D)), millis(leafMaxNanos),
+                ALLOCATION_SUPPORTED));
 
         StringBuilder avg = new StringBuilder("client_tick_leaf_avg_ms");
         StringBuilder p95 = new StringBuilder("client_tick_leaf_p95_ms");
         StringBuilder max = new StringBuilder("client_tick_leaf_max_ms");
         for (Stage stage : STAGES) {
             int ordinal = stage.ordinal();
-            append(avg, stage.label, stageSums[ordinal] / ticks);
-            append(p95, stage.label, percentile(stageSamples[ordinal], sampledTicks, 0.95D));
-            append(max, stage.label, stageMax[ordinal]);
+            appendNanos(avg, stage.label, stageSums[ordinal] / ticks);
+            appendNanos(p95, stage.label, percentile(stageSamples[ordinal], sampledTicks, 0.95D));
+            appendNanos(max, stage.label, stageMax[ordinal]);
         }
         PerformanceProfiler.benchmarkEvent(avg.toString());
         PerformanceProfiler.benchmarkEvent(p95.toString());
         PerformanceProfiler.benchmarkEvent(max.toString());
+
+        if (ALLOCATION_SUPPORTED) {
+            StringBuilder allocationAvg = new StringBuilder("client_tick_leaf_allocation_avg_kib");
+            StringBuilder allocationP95 = new StringBuilder("client_tick_leaf_allocation_p95_kib");
+            StringBuilder allocationMax = new StringBuilder("client_tick_leaf_allocation_max_kib");
+            for (Stage stage : STAGES) {
+                int ordinal = stage.ordinal();
+                appendKib(allocationAvg, stage.label, stageAllocationSums[ordinal] / ticks);
+                appendKib(allocationP95, stage.label,
+                        percentile(stageAllocationSamples[ordinal], sampledTicks, 0.95D));
+                appendKib(allocationMax, stage.label, stageAllocationMax[ordinal]);
+            }
+            PerformanceProfiler.benchmarkEvent(allocationAvg.toString());
+            PerformanceProfiler.benchmarkEvent(allocationP95.toString());
+            PerformanceProfiler.benchmarkEvent(allocationMax.toString());
+        }
         reset();
     }
 
@@ -128,13 +175,26 @@ public final class ClientTickBreakdown {
         ticks = sampledTicks = overlapTicks = 0;
         tickSumNanos = tickMaxNanos = leafSumNanos = leafMaxNanos = 0L;
         Arrays.fill(currentStageNanos, 0L);
+        Arrays.fill(currentStageAllocatedBytes, 0L);
+        Arrays.fill(stageAllocationStart, -1L);
         Arrays.fill(stageSums, 0L);
         Arrays.fill(stageMax, 0L);
+        Arrays.fill(stageAllocationSums, 0L);
+        Arrays.fill(stageAllocationMax, 0L);
     }
 
-    private static void append(StringBuilder builder, String label, long nanos) {
+    private static long currentThreadAllocatedBytes() {
+        return ALLOCATION_SUPPORTED ? ALLOCATION_BEAN.getThreadAllocatedBytes(Thread.currentThread().getId()) : -1L;
+    }
+
+    private static void appendNanos(StringBuilder builder, String label, long nanos) {
         builder.append(' ').append(label).append('=')
                 .append(String.format(Locale.ROOT, "%.3f", millis(nanos)));
+    }
+
+    private static void appendKib(StringBuilder builder, String label, long bytes) {
+        builder.append(' ').append(label).append('=')
+                .append(String.format(Locale.ROOT, "%.3f", bytes / 1024.0D));
     }
 
     private static long percentile(long[] values, int count, double percentile) {
