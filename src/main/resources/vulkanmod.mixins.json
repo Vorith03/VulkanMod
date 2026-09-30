@@ -68,9 +68,11 @@
     "profiling.ParticleEnginePerformanceMixin",
     "profiling.MusicManagerPerformanceMixin",
     "profiling.SoundManagerPerformanceMixin",
+    "profiling.DefaultMainPassFlightRecorderMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RendererFlightRecorderMixin",
     "profiling.RendererPerformanceMixin",
+    "profiling.VulkanFlightRecorderMixin",
 
     "render.entity.EntityRendererM",
     "render.model.ModelPartCubeM",
