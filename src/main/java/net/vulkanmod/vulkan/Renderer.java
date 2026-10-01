@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.render.chunk.TerrainShaderManager;
+import net.vulkanmod.render.profiling.GpuTimestampProfiler;
 import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
@@ -91,6 +92,7 @@ public class Renderer {
 
         allocateCommandBuffers();
         createSyncObjects();
+        GpuTimestampProfiler.create(framesNum);
 
         AreaUploadManager.INSTANCE.createLists(framesNum);
     }
@@ -249,6 +251,7 @@ public class Renderer {
                 throw new RuntimeException("Failed to begin recording command buffer:" + err);
             }
 
+            GpuTimestampProfiler.beginFrame(currentFrame, commandBuffer);
             mainPass.begin(commandBuffer, stack);
             this.recordingFrame = true;
 
@@ -327,6 +330,7 @@ public class Renderer {
             return;
 
         vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
+        GpuTimestampProfiler.retireFrame(currentFrame);
 
         MemoryManager.getInstance().initFrame(currentFrame);
         drawer.resetBuffers(currentFrame);
@@ -396,6 +400,7 @@ public class Renderer {
                 throw new RuntimeException("Failed to submit draw command buffer: " + vkResult);
             }
 
+            GpuTimestampProfiler.markSubmitted(currentFrame);
             // Queue order plus this frame fence now covers all same-graphics-queue
             // helper uploads accumulated since this slot was last recycled. Mark it
             // reusable even if presentation below reports OUT_OF_DATE/SUBOPTIMAL and
@@ -482,6 +487,7 @@ public class Renderer {
 
             drawer.createResources(framesNum);
             AreaUploadManager.INSTANCE.createLists(framesNum);
+            GpuTimestampProfiler.recreate(framesNum);
         }
 
         createSyncObjects();
@@ -501,6 +507,7 @@ public class Renderer {
     public void cleanUpResources() {
         // Vulkan.cleanUp established device idleness before calling this method.
         ScreenshotReadback.cancelAll(new IllegalStateException("Renderer closed before screenshot capture"));
+        GpuTimestampProfiler.destroy();
         destroySyncObjects();
 
         drawer.cleanUpResources();
