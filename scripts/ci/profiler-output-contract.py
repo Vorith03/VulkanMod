@@ -12,7 +12,10 @@ def fields(line):
 
 path = pathlib.Path(sys.argv[1])
 lines = path.read_text(encoding="utf-8").splitlines()
-assert any("[VulkanModPerf] capture_start " in line for line in lines), "missing profiler start"
+capture = next(fields(line) for line in lines if "[VulkanModPerf] capture_start " in line)
+assert capture["gpu_timestamps"] == "true", "startup smoke must activate requested GPU timestamps"
+assert capture["gpu_timestamps_requested"] == "true"
+assert capture["gpu_timestamp_scope"] == "main_graphics_command_buffer"
 assert any("[VulkanModPerf] environment " in line for line in lines), "missing environment"
 identity = next(fields(line) for line in lines if "[VulkanModPerf] capture_identity " in line)
 assert identity["schema"] == "1"
