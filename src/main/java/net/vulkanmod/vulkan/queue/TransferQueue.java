@@ -6,6 +6,7 @@ import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdCopyBuffer;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
 
