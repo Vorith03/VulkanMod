@@ -90,7 +90,7 @@ public final class AutoIndexBufferWidthTest {
         require(drawer.bindUsesAutoIndexType,
                 "Drawer.bindAutoIndexBuffer() must bind the automatic index buffer Vulkan type");
         require(drawer.typedDrawBindsParameter,
-                "Typed drawIndexed overload must pass its index-type parameter to Vulkan");
+                "Typed drawIndexed overload must pass its index-type parameter to the Vulkan bind path");
 
         VboVisitor vbo = inspect(
                 "net/vulkanmod/render/VBO.class", new VboVisitor());
@@ -139,12 +139,50 @@ public final class AutoIndexBufferWidthTest {
                     && descriptor.equals("(Lnet/vulkanmod/vulkan/memory/VertexBuffer;" +
                     "Lnet/vulkanmod/vulkan/memory/IndexBuffer;II)V")) {
                 return new MethodVisitor(Opcodes.ASM9) {
+                    private boolean lastInstructionLoadsIndexType;
+
+                    @Override
+                    public void visitVarInsn(int opcode, int varIndex) {
+                        lastInstructionLoadsIndexType = opcode == Opcodes.ILOAD && varIndex == 4;
+                    }
+
+                    @Override
+                    public void visitInsn(int opcode) {
+                        lastInstructionLoadsIndexType = false;
+                    }
+
+                    @Override
+                    public void visitIntInsn(int opcode, int operand) {
+                        lastInstructionLoadsIndexType = false;
+                    }
+
+                    @Override
+                    public void visitTypeInsn(int opcode, String type) {
+                        lastInstructionLoadsIndexType = false;
+                    }
+
+                    @Override
+                    public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDescriptor) {
+                        lastInstructionLoadsIndexType = false;
+                    }
+
+                    @Override
+                    public void visitLdcInsn(Object value) {
+                        lastInstructionLoadsIndexType = false;
+                    }
+
                     @Override
                     public void visitMethodInsn(int opcode, String owner, String methodName,
                                                 String methodDescriptor, boolean isInterface) {
-                        if(owner.equals("org/lwjgl/vulkan/VK10")
-                                && methodName.equals("vkCmdBindIndexBuffer"))
+                        boolean bindOwner = owner.equals("org/lwjgl/vulkan/VK10")
+                                || owner.equals("net/vulkanmod/render/profiling/TracedVulkanCommands");
+                        if(bindOwner
+                                && methodName.equals("vkCmdBindIndexBuffer")
+                                && methodDescriptor.equals("(Lorg/lwjgl/vulkan/VkCommandBuffer;JJI)V")
+                                && lastInstructionLoadsIndexType) {
                             typedDrawBindsParameter = true;
+                        }
+                        lastInstructionLoadsIndexType = false;
                     }
                 };
             }
