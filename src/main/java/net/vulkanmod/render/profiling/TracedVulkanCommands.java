@@ -11,6 +11,7 @@ import org.lwjgl.vulkan.VkRenderPassBeginInfo;
 import org.lwjgl.vulkan.VkRenderingInfo;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
@@ -73,6 +74,13 @@ public final class TracedVulkanCommands {
                                           int stageFlags, int offset, ByteBuffer values) {
         VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset,
                 values == null ? 0 : values.remaining());
+        org.lwjgl.vulkan.VK10.vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, values);
+    }
+
+    public static void vkCmdPushConstants(VkCommandBuffer commandBuffer, long layout,
+                                          int stageFlags, int offset, FloatBuffer values) {
+        VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset,
+                values == null ? 0 : values.remaining() * Float.BYTES);
         org.lwjgl.vulkan.VK10.vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, values);
     }
 
