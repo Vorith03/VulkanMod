@@ -26,6 +26,33 @@ public final class TracedVulkanCommands {
     private TracedVulkanCommands() {
     }
 
+    public static void nvkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, int firstBinding,
+                                               int bindingCount, long pBuffers, long pOffsets) {
+        VulkanCommandTrace.bindVertexBuffersNative(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
+        org.lwjgl.vulkan.VK10.nvkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
+    }
+
+    public static void vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, long buffer,
+                                            long offset, int indexType) {
+        VulkanCommandTrace.bindIndexBuffer(commandBuffer, buffer, offset, indexType);
+        org.lwjgl.vulkan.VK10.vkCmdBindIndexBuffer(commandBuffer, buffer, offset, indexType);
+    }
+
+    public static void vkCmdDraw(VkCommandBuffer commandBuffer, int vertexCount,
+                                 int instanceCount, int firstVertex, int firstInstance) {
+        VulkanCommandTrace.draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+        org.lwjgl.vulkan.VK10.vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+
+    public static void vkCmdDrawIndexed(VkCommandBuffer commandBuffer, int indexCount,
+                                        int instanceCount, int firstIndex,
+                                        int vertexOffset, int firstInstance) {
+        VulkanCommandTrace.drawIndexed(commandBuffer, indexCount, instanceCount,
+                firstIndex, vertexOffset, firstInstance);
+        org.lwjgl.vulkan.VK10.vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount,
+                firstIndex, vertexOffset, firstInstance);
+    }
+
     public static void vkCmdCopyBuffer(VkCommandBuffer commandBuffer, long srcBuffer,
                                        long dstBuffer, VkBufferCopy.Buffer regions) {
         VulkanCommandTrace.copyBuffer(commandBuffer, srcBuffer, dstBuffer, regions);
