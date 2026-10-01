@@ -11,8 +11,11 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.Arrays;
 
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.nvkCmdBindVertexBuffers;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdBindIndexBuffer;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdDraw;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdDrawIndexed;
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK10.vkCmdDraw;
 
 public class Drawer {
     private static final int INITIAL_VB_SIZE = 2000000;

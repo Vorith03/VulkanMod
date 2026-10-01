@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.passes;
 
+import net.vulkanmod.render.profiling.VulkanCommandTrace;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
@@ -79,6 +80,7 @@ public class DefaultMainPass implements MainPass {
             swapChain.presentLayout(stack, commandBuffer, Renderer.getCurrentImage());
         }
 
+        VulkanCommandTrace.end(commandBuffer);
         int result = vkEndCommandBuffer(commandBuffer);
         if(result != VK_SUCCESS) {
             throw new RuntimeException("Failed to record command buffer:" + result);

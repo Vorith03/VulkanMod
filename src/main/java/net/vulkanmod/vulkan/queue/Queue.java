@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.queue;
 
+import net.vulkanmod.render.profiling.FlightRecorderCapture;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.PointerBuffer;
@@ -55,7 +56,14 @@ public abstract class Queue {
     }
 
     public void waitIdle() {
-        vkQueueWaitIdle(queue);
+        FlightRecorderCapture.VulkanQueueIdleEvent profilerEvent =
+                FlightRecorderCapture.beginVulkanQueueIdle(queue.address());
+        int result = VK_SUCCESS;
+        try {
+            result = vkQueueWaitIdle(queue);
+        } finally {
+            FlightRecorderCapture.endVulkanQueueIdle(profilerEvent, result);
+        }
     }
 
     public enum Family {

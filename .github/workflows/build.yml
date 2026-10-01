@@ -45,6 +45,10 @@ jobs:
           sed -i "s/^mod_version=.*/mod_version=${ci_version}/" gradle.properties
           echo "CI mod version: ${ci_version}"
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
+      - name: Validate Vulkan command trace coverage
+        run: |
+          python3 scripts/ci/vulkan-command-trace-coverage.py --inventory | tee vulkan-command-trace-inventory.txt
+          python3 scripts/ci/vulkan-command-trace-coverage.py
       - name: Validate smoke fixture isolation
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Build and verify distributable
@@ -99,7 +103,11 @@ jobs:
           name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
           path: |
             vulkan-*.log
+            vulkan-command-trace-inventory.txt
             run/logs/vulkanmod-performance-ci.log
+            run/logs/vulkanmod-performance-flight-*.jfr
+            run/logs/vulkanmod-performance-flight-*.vkcmd
+            run/logs/vulkanmod-performance-flight-*.vkcmd.meta.jsonl
             vulkan-smoke-create-chronicles-compat-levelrenderer.javap
             run/screenshot-smoke/screenshots/*.png
           if-no-files-found: ignore

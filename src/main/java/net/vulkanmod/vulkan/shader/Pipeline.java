@@ -236,7 +236,8 @@ public abstract class Pipeline {
                 this.updateUniforms(uniformBuffers);
                 this.updateDescriptorSet(stack, uniformBuffers);
 
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
+                net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdBindDescriptorSets(
+                        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
                         0, stack.longs(currentSet), dynamicOffsets);
             }
         }

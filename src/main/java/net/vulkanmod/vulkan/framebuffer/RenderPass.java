@@ -10,6 +10,10 @@ import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
 
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdBeginRenderPass;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdBeginRenderingKHR;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdEndRenderPass;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdEndRenderingKHR;
 import static org.lwjgl.vulkan.VK10.*;
 
 public class RenderPass {
@@ -236,11 +240,11 @@ public class RenderPass {
             }
         }
 
-        KHRDynamicRendering.vkCmdBeginRenderingKHR(commandBuffer, renderingInfo);
+        vkCmdBeginRenderingKHR(commandBuffer, renderingInfo);
     }
 
     public void endDynamicRendering(VkCommandBuffer commandBuffer) {
-        KHRDynamicRendering.vkCmdEndRenderingKHR(commandBuffer);
+        vkCmdEndRenderingKHR(commandBuffer);
     }
 
     public Framebuffer getFramebuffer() {
