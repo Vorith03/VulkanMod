@@ -10,6 +10,7 @@ import org.lwjgl.vulkan.VkMemoryBarrier;
 import org.lwjgl.vulkan.VkRenderPassBeginInfo;
 import org.lwjgl.vulkan.VkRenderingInfo;
 
+import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
@@ -29,10 +30,21 @@ public final class TracedVulkanCommands {
     private TracedVulkanCommands() {
     }
 
+    public static void vkCmdBindPipeline(VkCommandBuffer commandBuffer, int bindPoint, long pipeline) {
+        VulkanCommandTrace.bindPipeline(commandBuffer, bindPoint, pipeline);
+        org.lwjgl.vulkan.VK10.vkCmdBindPipeline(commandBuffer, bindPoint, pipeline);
+    }
+
     public static void nvkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, int firstBinding,
                                                int bindingCount, long pBuffers, long pOffsets) {
         VulkanCommandTrace.bindVertexBuffersNative(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
         org.lwjgl.vulkan.VK10.nvkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
+    }
+
+    public static void vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, int firstBinding,
+                                              LongBuffer buffers, LongBuffer offsets) {
+        VulkanCommandTrace.bindVertexBuffers(commandBuffer, firstBinding, buffers, offsets);
+        org.lwjgl.vulkan.VK10.vkCmdBindVertexBuffers(commandBuffer, firstBinding, buffers, offsets);
     }
 
     public static void vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, long buffer,
@@ -51,6 +63,19 @@ public final class TracedVulkanCommands {
                 descriptorSets, dynamicOffsets);
     }
 
+    public static void nvkCmdPushConstants(VkCommandBuffer commandBuffer, long layout,
+                                           int stageFlags, int offset, int size, long values) {
+        VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset, size);
+        org.lwjgl.vulkan.VK10.nvkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);
+    }
+
+    public static void vkCmdPushConstants(VkCommandBuffer commandBuffer, long layout,
+                                          int stageFlags, int offset, ByteBuffer values) {
+        VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset,
+                values == null ? 0 : values.remaining());
+        org.lwjgl.vulkan.VK10.vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, values);
+    }
+
     public static void vkCmdDraw(VkCommandBuffer commandBuffer, int vertexCount,
                                  int instanceCount, int firstVertex, int firstInstance) {
         VulkanCommandTrace.draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
@@ -64,6 +89,23 @@ public final class TracedVulkanCommands {
                 firstIndex, vertexOffset, firstInstance);
         org.lwjgl.vulkan.VK10.vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount,
                 firstIndex, vertexOffset, firstInstance);
+    }
+
+    public static void vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, long buffer,
+                                                long offset, int drawCount, int stride) {
+        VulkanCommandTrace.drawIndexedIndirect(commandBuffer, buffer, offset, drawCount, stride);
+        org.lwjgl.vulkan.VK10.vkCmdDrawIndexedIndirect(commandBuffer, buffer, offset, drawCount, stride);
+    }
+
+    public static void vkCmdDispatch(VkCommandBuffer commandBuffer, int x, int y, int z) {
+        VulkanCommandTrace.dispatch(commandBuffer, x, y, z);
+        org.lwjgl.vulkan.VK10.vkCmdDispatch(commandBuffer, x, y, z);
+    }
+
+    public static void vkCmdFillBuffer(VkCommandBuffer commandBuffer, long buffer,
+                                       long offset, long size, int data) {
+        VulkanCommandTrace.fillBuffer(commandBuffer, buffer, offset, size, data);
+        org.lwjgl.vulkan.VK10.vkCmdFillBuffer(commandBuffer, buffer, offset, size, data);
     }
 
     public static void vkCmdCopyBuffer(VkCommandBuffer commandBuffer, long srcBuffer,
