@@ -31,6 +31,7 @@ public final class GpuTimestampProfiler {
             && Boolean.getBoolean("vulkanmod.performanceProfiler.gpuTimestamps");
     private static final int QUERY_COUNT = 2;
     private static final int MAX_SAMPLES = 65_536;
+    public static final String SCOPE = "main_graphics_command_buffer";
 
     private static final long[] samples = REQUESTED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = REQUESTED ? new long[MAX_SAMPLES] : null;
@@ -115,8 +116,8 @@ public final class GpuTimestampProfiler {
         active = true;
         status = "active";
         Initializer.LOGGER.info(
-                "VulkanMod GPU timestamp profiler enabled: frameSlots={} validBits={} timestampPeriodNs={}",
-                frames, timestampValidBits, String.format(Locale.ROOT, "%.6f", timestampPeriodNanos));
+                "VulkanMod GPU timestamp profiler enabled: scope={} frameSlots={} validBits={} timestampPeriodNs={}",
+                SCOPE, frames, timestampValidBits, String.format(Locale.ROOT, "%.6f", timestampPeriodNanos));
     }
 
     /** Rebuild frame-slot-owned pools after a device-idle swapchain image-count change. */
@@ -181,8 +182,8 @@ public final class GpuTimestampProfiler {
         avg = sampledFrames == 0 ? 0L : avg / sampledFrames;
 
         PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
-                "gpu_timestamps requested=true active=%s status=%s measured_frames=%d sampled_frames=%d sample_cap=%d dropped_samples=%d read_failures=%d timestamp_valid_bits=%d timestamp_period_ns=%.6f gpu_frame_ms_avg=%.3f gpu_frame_ms_p50=%.3f gpu_frame_ms_p95=%.3f gpu_frame_ms_p99=%.3f gpu_frame_ms_max=%.3f",
-                active, status, measuredFrames, sampledFrames, MAX_SAMPLES, droppedSamples, readFailures,
+                "gpu_timestamps requested=true active=%s status=%s scope=%s includes_helper_submissions=false includes_present=false measured_frames=%d sampled_frames=%d sample_cap=%d dropped_samples=%d read_failures=%d timestamp_valid_bits=%d timestamp_period_ns=%.6f main_graphics_ms_avg=%.3f main_graphics_ms_p50=%.3f main_graphics_ms_p95=%.3f main_graphics_ms_p99=%.3f main_graphics_ms_max=%.3f",
+                active, status, SCOPE, measuredFrames, sampledFrames, MAX_SAMPLES, droppedSamples, readFailures,
                 timestampValidBits, timestampPeriodNanos,
                 millis(avg), millis(percentile(0.50D)), millis(percentile(0.95D)),
                 millis(percentile(0.99D)), millis(max)));
@@ -255,8 +256,8 @@ public final class GpuTimestampProfiler {
 
         if (!smokeResultAnnounced && Boolean.getBoolean("vulkanmod.smokeTest")) {
             smokeResultAnnounced = true;
-            Initializer.LOGGER.info("VULKANMOD_GPU_TIMESTAMP_SMOKE_OK gpu_frame_ms={}",
-                    String.format(Locale.ROOT, "%.3f", millis(nanos)));
+            Initializer.LOGGER.info("VULKANMOD_GPU_TIMESTAMP_SMOKE_OK scope={} main_graphics_ms={}",
+                    SCOPE, String.format(Locale.ROOT, "%.3f", millis(nanos)));
         }
     }
 
