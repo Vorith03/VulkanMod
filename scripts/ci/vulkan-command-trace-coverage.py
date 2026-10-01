@@ -4,14 +4,17 @@
 The profiler is intended to be capture-first: a new vkCmd*/nvkCmd* producer must not
 silently bypass the query-later command stream. Calls routed through
 TracedVulkanCommands are already covered and are omitted from the raw inventory.
-Inventory mode therefore reports only direct Vulkan command calls that still need
-to be migrated or explicitly covered. Check mode turns that same discovered set
-into a hard CI contract.
+
+Check mode turns the remaining direct call sites into a hard CI contract. Each
+manifest key must either name a concrete registered tracer or carry an explicit
+EXEMPT:<reason> debt marker. Exemptions are exact call-site keys, never wildcard
+source exclusions, so adding a new raw command still fails CI.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -20,6 +23,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = REPO / "src/main/java/net/vulkanmod"
 DEFAULT_MANIFEST = REPO / "scripts/ci/vulkan-command-trace-coverage.tsv"
+MIXIN_CONFIG = REPO / "src/main/resources/vulkanmod.mixins.json"
 
 COMMAND_RE = re.compile(r"\b(?P<command>n?vkCmd[A-Za-z0-9_]+)\s*\(")
 METHOD_RE = re.compile(
@@ -44,6 +48,8 @@ EXCLUDED_PREFIXES = (
     "src/main/java/net/vulkanmod/mixin/profiling/",
     "src/main/java/net/vulkanmod/render/profiling/",
 )
+MIXIN_SOURCE_PREFIX = "src/main/java/net/vulkanmod/mixin/"
+EXEMPT_PREFIX = "EXEMPT:"
 
 
 @dataclass(frozen=True, order=True)
@@ -144,13 +150,7 @@ def closing_brace(clean: str, opening: int) -> int:
 
 
 def method_ranges(clean: str) -> list[MethodRange]:
-    """Locate method bodies so a call is attributed to its enclosing method.
-
-    The old scanner simply chose the most recently declared method. That leaked a
-    method name across its closing brace and mislabelled later private helpers. A
-    brace-aware range keeps the manifest stable and, for anonymous/nested classes,
-    deliberately chooses the innermost enclosing method.
-    """
+    """Locate method bodies so a call is attributed to its enclosing method."""
     ranges: list[MethodRange] = []
     for pattern in (METHOD_RE, CONSTRUCTOR_RE):
         for match in pattern.finditer(clean):
@@ -212,12 +212,40 @@ def load_manifest(path: Path) -> dict[tuple[str, str, str], str]:
         key = (source, method, command)
         if key in entries:
             raise ValueError(f"{path}:{number}: duplicate coverage key {key}")
+        if tracer.startswith(EXEMPT_PREFIX) and not tracer[len(EXEMPT_PREFIX):].strip():
+            raise ValueError(f"{path}:{number}: EXEMPT entry requires a reason")
         entries[key] = tracer
     return entries
 
 
-def verify_tracer(key: tuple[str, str, str], tracer: str) -> str | None:
+def registered_mixins() -> set[str]:
+    try:
+        config = json.loads(MIXIN_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not read mixin config {MIXIN_CONFIG}: {exc}") from exc
+    registered: set[str] = set()
+    for section in ("mixins", "client", "server"):
+        values = config.get(section, [])
+        if isinstance(values, list):
+            registered.update(value for value in values if isinstance(value, str))
+    return registered
+
+
+def tracer_mixin_id(tracer: str) -> str | None:
+    if not tracer.startswith(MIXIN_SOURCE_PREFIX) or not tracer.endswith(".java"):
+        return None
+    relative = tracer[len(MIXIN_SOURCE_PREFIX):-len(".java")]
+    return relative.replace("/", ".")
+
+
+def verify_tracer(
+    key: tuple[str, str, str],
+    tracer: str,
+    registered: set[str],
+) -> str | None:
     source, method, command = key
+    if tracer.startswith(EXEMPT_PREFIX):
+        return None
     path = REPO / tracer
     if not path.is_file():
         return f"{source}|{method}|{command}: tracer does not exist: {tracer}"
@@ -228,6 +256,9 @@ def verify_tracer(key: tuple[str, str, str], tracer: str) -> str | None:
         return f"{source}|{method}|{command}: tracer does not mention command: {tracer}"
     if method not in text:
         return f"{source}|{method}|{command}: tracer does not mention target method: {tracer}"
+    mixin_id = tracer_mixin_id(tracer)
+    if mixin_id is not None and mixin_id not in registered:
+        return f"{source}|{method}|{command}: tracer mixin is not registered: {mixin_id}"
     return None
 
 
@@ -243,6 +274,7 @@ def check(calls: list[CallSite], manifest_path: Path) -> int:
         return 1
     try:
         manifest = load_manifest(manifest_path)
+        registered = registered_mixins()
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -260,7 +292,7 @@ def check(calls: list[CallSite], manifest_path: Path) -> int:
     for key in sorted(expected - actual):
         failures.append("stale Vulkan command coverage entry: " + "|".join(key))
     for key in sorted(actual & expected):
-        problem = verify_tracer(key, manifest[key])
+        problem = verify_tracer(key, manifest[key], registered)
         if problem:
             failures.append(problem)
 
@@ -271,13 +303,22 @@ def check(calls: list[CallSite], manifest_path: Path) -> int:
             print(f" - {failure}", file=sys.stderr)
         return 1
 
-    print(f"Vulkan command trace coverage OK: {len(actual)} unique raw callsite keys / {len(calls)} raw calls")
+    exempt = sum(1 for tracer in manifest.values() if tracer.startswith(EXEMPT_PREFIX))
+    traced = len(manifest) - exempt
+    print(
+        f"Vulkan command trace coverage OK: {len(actual)} unique raw callsite keys / "
+        f"{len(calls)} raw calls ({traced} traced, {exempt} explicit exemptions)"
+    )
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--inventory", action="store_true", help="print direct Vulkan callsites not routed through the traced facade")
+    parser.add_argument(
+        "--inventory",
+        action="store_true",
+        help="print direct Vulkan callsites not routed through the traced facade",
+    )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     args = parser.parse_args()
 
