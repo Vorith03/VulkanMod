@@ -115,6 +115,7 @@ public final class AutomatedBenchmark {
             captureHeight = minecraft.getWindow().getHeight();
             captureStartedAt = now;
             state = State.CAPTURING;
+            GpuTimestampProfiler.armAutomatedCapture();
             PerformanceProfiler.armAutomatedCapture();
             Initializer.LOGGER.info("VulkanMod benchmark capture starting in world '{}' at {}, {}, {} yaw {} pitch {}",
                     WORLD_NAME, X, Y, Z, YAW, PITCH);
@@ -271,6 +272,7 @@ public final class AutomatedBenchmark {
     /** Command syntax and staging deadline oracles without executing against a world. */
     public static void verifyForCi() {
         ClientTickBreakdown.verifyForCi();
+        GpuTimestampProfiler.verifyForCi();
         CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
         TeleportCommand.register(dispatcher);
         // Parsing only reads permissions; no world, server, entity or output sink is executed.
