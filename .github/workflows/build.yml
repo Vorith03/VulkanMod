@@ -70,7 +70,7 @@ jobs:
       - name: Smoke-test Vulkan screenshot readback
         run: bash scripts/ci/vulkan-smoke.sh screenshot
       - name: Check private resource pack fixture configuration
-        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true')
+        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
         run: |
           echo 'Configure both VULKANMOD_PRIVATE_PACK_REPO (variable) and VULKANMOD_PRIVATE_PACK_TOKEN (secret), or neither.' >&2
           exit 1
