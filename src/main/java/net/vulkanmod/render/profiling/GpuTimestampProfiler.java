@@ -49,6 +49,7 @@ public final class GpuTimestampProfiler {
     private static final int QUERY_COUNT = FIXED_QUERY_COUNT + MAX_TERRAIN_SEGMENTS * 2;
     private static final int ALL_BOUNDARIES_MASK = (1 << 4) - 1;
     private static final int MAX_SAMPLES = 65_536;
+    private static final long PARTITION_TOLERANCE_NANOS = 5_000L;
 
     public static final String SCOPE = "main_graphics_command_buffer";
 
@@ -450,20 +451,34 @@ public final class GpuTimestampProfiler {
             long hud = durationNanos(values.get(HUD_BEGIN_QUERY), values.get(HUD_END_QUERY));
             long tail = durationNanos(values.get(HUD_END_QUERY), values.get(FRAME_END_QUERY));
 
-            long terrain = 0L;
             boolean valid = preWorld >= 0L && world >= 0L && between >= 0L && hud >= 0L && tail >= 0L;
-            for (int segment = 0; valid && segment < segmentCount; segment++) {
-                int bit = 1 << segment;
-                if ((completedMask & bit) == 0) continue;
-                int query = FIXED_QUERY_COUNT + segment * 2;
-                long duration = durationNanos(values.get(query), values.get(query + 1));
-                if (duration < 0L) valid = false;
-                else terrain += duration;
+            if (valid) {
+                long upper = frameNanos + PARTITION_TOLERANCE_NANOS;
+                valid = preWorld <= upper && world <= upper && between <= upper && hud <= upper && tail <= upper;
+            }
+            if (valid) {
+                long partition = preWorld + world + between + hud + tail;
+                valid = Math.abs(partition - frameNanos) <= PARTITION_TOLERANCE_NANOS;
             }
 
-            // Terrain segments are disjoint and recorded inside the outer world span. Allow a
-            // tiny rounding tolerance because each timestamp delta is converted independently.
-            if (valid && terrain <= world + 1_000L) {
+            long terrain = 0L;
+            boolean terrainComplete = terrainOverflow == 0 && completeSegments == segmentCount;
+            for (int segment = 0; valid && terrainComplete && segment < segmentCount; segment++) {
+                int bit = 1 << segment;
+                if ((completedMask & bit) == 0) {
+                    terrainComplete = false;
+                    break;
+                }
+                int query = FIXED_QUERY_COUNT + segment * 2;
+                long duration = durationNanos(values.get(query), values.get(query + 1));
+                if (duration < 0L || duration > world + PARTITION_TOLERANCE_NANOS) {
+                    terrainComplete = false;
+                } else {
+                    terrain += duration;
+                }
+            }
+
+            if (valid && terrainComplete && terrain <= world + PARTITION_TOLERANCE_NANOS) {
                 breakdownFrames++;
                 recordPass(PassSeries.PRE_WORLD, preWorld);
                 recordPass(PassSeries.WORLD, world);
@@ -505,10 +520,9 @@ public final class GpuTimestampProfiler {
     private static void recordPass(PassSeries series, long nanos) {
         int ordinal = series.ordinal();
         int count = passSampleCounts[ordinal];
-        if (count < MAX_SAMPLES) {
-            passSamples[ordinal][count] = nanos;
-            passSampleCounts[ordinal] = count + 1;
-        }
+        if (count >= MAX_SAMPLES) return;
+        passSamples[ordinal][count] = nanos;
+        passSampleCounts[ordinal] = count + 1;
         passSampleSums[ordinal] += nanos;
         passSampleMax[ordinal] = Math.max(passSampleMax[ordinal], nanos);
     }
