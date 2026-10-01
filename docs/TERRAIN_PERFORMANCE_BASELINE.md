@@ -8,6 +8,7 @@ This is the minimum repeatable benchmark contract for the Forge 1.20.1 terrain-p
 - Primary resolution: the user's stable near-2560x1440 windowed size on the ultrawide display. Exact framebuffer dimensions are recorded by the Vulkan profiler and must remain the same between comparison runs.
 - Use the same Minecraft/Forge version, mod set, resource packs, render distance, simulation distance, graphics options, FOV, window/framebuffer size and frame-cap/vsync state for every A/B comparison.
 - Keep Embeddium, Oculus and other renderer replacements in the same enabled/disabled state between comparison runs.
+- **Keep Distant Horizons distant rendering disabled for the existing Phase 5 benchmark series.** The recorded stationary benchmarks, including the #831 RX capture that drives current optimization work, were run without Distant Horizons rendering enabled. Any future DH-enabled run is a separate workload and must be explicitly labeled rather than directly compared to this series.
 - Record exact settings with each result rather than silently changing them to improve a score.
 - Do not call a performance change an improvement without a comparable before/after run. Correctness fixes and architectural groundwork may land before a full comparison baseline exists.
 
@@ -50,6 +51,7 @@ Use this profile for the fixed terrain cases:
 | Entity distance | 100% |
 | GUI scale | 3 |
 | Shaderpack | None |
+| Distant Horizons distant rendering | Disabled |
 | Renderer replacements | Embeddium/Oculus/Rubidium Extra/Oculus-Flywheel-Compat disabled |
 | Resource packs | The same selected PureBDcraft base + Create Chronicles PureBDcraft pack used by the target instance, in the same order |
 
@@ -130,6 +132,7 @@ Every measured result should include:
 - Java version and JVM memory arguments;
 - selected resource-pack filenames/versions;
 - exact framebuffer dimensions for the measured run (read from the Vulkan profiler when available; record manually for OpenGL control runs);
+- Distant Horizons distant-rendering state (disabled for the current baseline series);
 - whether experimental GPU-terrain flags were enabled and their exact values;
 - A, B or C case identifier;
 - average FPS;
