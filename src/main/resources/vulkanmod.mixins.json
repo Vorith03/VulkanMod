@@ -69,7 +69,6 @@
     "profiling.MusicManagerPerformanceMixin",
     "profiling.SoundManagerPerformanceMixin",
     "profiling.CommandPoolCommandTraceMixin",
-    "profiling.DefaultMainPassCommandTraceMixin",
     "profiling.DefaultMainPassFlightRecorderMixin",
     "profiling.DrawBuffersCommandTraceMixin",
     "profiling.FlightRecorderCommandTraceMixin",
