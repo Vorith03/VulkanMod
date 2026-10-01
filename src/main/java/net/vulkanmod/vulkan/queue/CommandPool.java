@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.queue;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.vulkanmod.render.profiling.FlightRecorderCapture;
 import net.vulkanmod.render.profiling.GpuTimestampRecorder;
+import net.vulkanmod.render.profiling.VulkanCommandTrace;
 import net.vulkanmod.vulkan.Vulkan;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -107,6 +108,7 @@ public class CommandPool {
             }
             commandBuffer.recording = true;
             GpuTimestampRecorder.begin(commandBuffer.handle, queueFamilyIndex);
+            VulkanCommandTrace.begin(commandBuffer.handle, queueFamilyIndex);
 
             return commandBuffer;
         }
@@ -124,6 +126,7 @@ public class CommandPool {
         try(MemoryStack stack = stackPush()) {
             long fence = commandBuffer.fence;
 
+            VulkanCommandTrace.end(commandBuffer.handle);
             GpuTimestampRecorder.end(commandBuffer.handle);
             result = vkEndCommandBuffer(commandBuffer.handle);
             if(result != VK_SUCCESS) {
