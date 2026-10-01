@@ -49,6 +49,7 @@ public final class FlightRecorderCapture {
     private static volatile Recording recording;
     private static volatile boolean capturing;
     private static volatile Path outputPath;
+    private static volatile long activeFrameSequence;
     private static FrameEvent frameEvent;
     private static long frameSequence;
     private static long frameCpuStart = -1L;
@@ -119,9 +120,11 @@ public final class FlightRecorderCapture {
         if (frameEvent != null) return;
 
         FrameEvent event = new FrameEvent();
-        event.sequence = ++frameSequence;
+        long sequence = ++frameSequence;
+        event.sequence = sequence;
         event.tickRequested = tickRequested;
         frameCpuStart = currentThreadCpuNanos();
+        activeFrameSequence = sequence;
         event.begin();
         frameEvent = event;
     }
@@ -136,6 +139,7 @@ public final class FlightRecorderCapture {
         event.cpuNanos = frameCpuStart >= 0L && cpuEnd >= frameCpuStart ? cpuEnd - frameCpuStart : -1L;
         frameCpuStart = -1L;
         event.commit();
+        activeFrameSequence = 0L;
     }
 
     /** Begin a universal Vulkan command-buffer submission event. */
@@ -144,6 +148,7 @@ public final class FlightRecorderCapture {
         if (!capturing) return null;
         VulkanSubmissionEvent event = new VulkanSubmissionEvent();
         event.sequence = SUBMISSION_SEQUENCE.incrementAndGet();
+        event.frameSequence = activeFrameSequence;
         event.commandBuffer = commandBuffer;
         event.queue = queue;
         event.fence = fence;
@@ -166,6 +171,7 @@ public final class FlightRecorderCapture {
     public static VulkanFenceWaitEvent beginVulkanFenceWait(long fence, int fenceCount) {
         if (!capturing) return null;
         VulkanFenceWaitEvent event = new VulkanFenceWaitEvent();
+        event.frameSequence = activeFrameSequence;
         event.fence = fence;
         event.fenceCount = fenceCount;
         event.begin();
@@ -181,6 +187,7 @@ public final class FlightRecorderCapture {
     public static VulkanQueueIdleEvent beginVulkanQueueIdle(long queue) {
         if (!capturing) return null;
         VulkanQueueIdleEvent event = new VulkanQueueIdleEvent();
+        event.frameSequence = activeFrameSequence;
         event.queue = queue;
         event.begin();
         return event;
@@ -196,6 +203,7 @@ public final class FlightRecorderCapture {
     public static VulkanApiEvent beginVulkanApi(String operation, long object) {
         if (!capturing) return null;
         VulkanApiEvent event = new VulkanApiEvent();
+        event.frameSequence = activeFrameSequence;
         event.operation = operation;
         event.object = object;
         event.begin();
@@ -235,6 +243,7 @@ public final class FlightRecorderCapture {
         if (!ENABLED) return true;
         endFrame();
         capturing = false;
+        activeFrameSequence = 0L;
         Recording current = recording;
         recording = null;
         if (current == null) return !failed;
@@ -309,6 +318,8 @@ public final class FlightRecorderCapture {
     public static final class VulkanSubmissionEvent extends Event {
         @Label("Submission sequence")
         long sequence;
+        @Label("Containing frame sequence, or zero outside runTick")
+        long frameSequence;
         @Label("Command buffer")
         long commandBuffer;
         @Label("Queue")
@@ -327,6 +338,8 @@ public final class FlightRecorderCapture {
     @Description("CPU wall time blocked at vkWaitForFences")
     @StackTrace(true)
     public static final class VulkanFenceWaitEvent extends Event {
+        @Label("Containing frame sequence, or zero outside runTick")
+        long frameSequence;
         @Label("Fence")
         long fence;
         @Label("Fence count")
@@ -341,6 +354,8 @@ public final class FlightRecorderCapture {
     @Description("CPU wall time blocked at vkQueueWaitIdle")
     @StackTrace(true)
     public static final class VulkanQueueIdleEvent extends Event {
+        @Label("Containing frame sequence, or zero outside runTick")
+        long frameSequence;
         @Label("Queue")
         long queue;
         @Label("VkResult")
@@ -353,6 +368,8 @@ public final class FlightRecorderCapture {
     @Description("Generic duration and caller for Vulkan API operations that may block or delimit presentation")
     @StackTrace(true)
     public static final class VulkanApiEvent extends Event {
+        @Label("Containing frame sequence, or zero outside runTick")
+        long frameSequence;
         @Label("Operation")
         String operation;
         @Label("Vulkan object")
