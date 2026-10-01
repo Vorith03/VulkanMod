@@ -72,7 +72,6 @@
     "profiling.DefaultMainPassCommandTraceMixin",
     "profiling.DefaultMainPassFlightRecorderMixin",
     "profiling.DrawBuffersCommandTraceMixin",
-    "profiling.DrawerCommandTraceMixin",
     "profiling.FlightRecorderCommandTraceMixin",
     "profiling.GpuTimestampCommandTraceMixin",
     "profiling.PerformanceProfilerMixin",
@@ -88,7 +87,6 @@
 
     "render.entity.EntityRendererM",
     "render.model.ModelPartCubeM",
-    "render.model.ModelPartM",
     "render.vertex.FaceBakeryM",
     "render.vertex.BufferBuilderM",
     "render.vertex.VertexBufferM",
