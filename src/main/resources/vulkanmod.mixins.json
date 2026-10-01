@@ -94,6 +94,7 @@
     "render.RenderTargetMixin",
     "render.GameRendererMixin",
     "render.GameRendererScreenshotMixin",
+    "render.GameRendererPostChainSmokeMixin",
     "render.GlProgramManagerMixin",
     "render.GlStateManagerM",
     "render.GlStateManagerClearDepthMixin",
@@ -123,7 +124,8 @@
 
     "util.ScreenshotRecorderM",
 
-    "vertex.SpriteCoordinateExpanderM$DoubleM",
+    "vertex.SpriteCoordinateExpanderM",
+    "vertex.VertexMultiConsumersM$DoubleM",
     "vertex.VertexMultiConsumersM$MultipleM",
     "vertex.VertexMultiConsumersM$SheetDecalM",
 
