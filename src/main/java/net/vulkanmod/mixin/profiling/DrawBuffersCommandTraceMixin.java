@@ -41,12 +41,23 @@ public abstract class DrawBuffersCommandTraceMixin {
     }
 
     @Redirect(
-            method = {"fakeIndirectCmd", "buildDrawBatchesDirect"},
+            method = "fakeIndirectCmd",
             at = @At(value = "INVOKE",
                     target = "Lorg/lwjgl/vulkan/VK10;nvkCmdPushConstants(Lorg/lwjgl/vulkan/VkCommandBuffer;JIIIJ)V",
                     remap = false))
-    private static void vulkanmod$recordPushConstants(VkCommandBuffer commandBuffer, long layout,
-                                                       int stageFlags, int offset, int size, long values) {
+    private static void vulkanmod$recordFakePushConstants(VkCommandBuffer commandBuffer, long layout,
+                                                           int stageFlags, int offset, int size, long values) {
+        VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset, size);
+        nvkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);
+    }
+
+    @Redirect(
+            method = "buildDrawBatchesDirect",
+            at = @At(value = "INVOKE",
+                    target = "Lorg/lwjgl/vulkan/VK10;nvkCmdPushConstants(Lorg/lwjgl/vulkan/VkCommandBuffer;JIIIJ)V",
+                    remap = false))
+    private void vulkanmod$recordDirectPushConstants(VkCommandBuffer commandBuffer, long layout,
+                                                      int stageFlags, int offset, int size, long values) {
         VulkanCommandTrace.pushConstants(commandBuffer, layout, stageFlags, offset, size);
         nvkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);
     }
