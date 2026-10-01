@@ -139,36 +139,12 @@ public final class AutoIndexBufferWidthTest {
                     && descriptor.equals("(Lnet/vulkanmod/vulkan/memory/VertexBuffer;" +
                     "Lnet/vulkanmod/vulkan/memory/IndexBuffer;II)V")) {
                 return new MethodVisitor(Opcodes.ASM9) {
-                    private boolean lastInstructionLoadsIndexType;
+                    private boolean loadsIndexTypeParameter;
 
                     @Override
                     public void visitVarInsn(int opcode, int varIndex) {
-                        lastInstructionLoadsIndexType = opcode == Opcodes.ILOAD && varIndex == 4;
-                    }
-
-                    @Override
-                    public void visitInsn(int opcode) {
-                        lastInstructionLoadsIndexType = false;
-                    }
-
-                    @Override
-                    public void visitIntInsn(int opcode, int operand) {
-                        lastInstructionLoadsIndexType = false;
-                    }
-
-                    @Override
-                    public void visitTypeInsn(int opcode, String type) {
-                        lastInstructionLoadsIndexType = false;
-                    }
-
-                    @Override
-                    public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDescriptor) {
-                        lastInstructionLoadsIndexType = false;
-                    }
-
-                    @Override
-                    public void visitLdcInsn(Object value) {
-                        lastInstructionLoadsIndexType = false;
+                        if(opcode == Opcodes.ILOAD && varIndex == 4)
+                            loadsIndexTypeParameter = true;
                     }
 
                     @Override
@@ -179,10 +155,9 @@ public final class AutoIndexBufferWidthTest {
                         if(bindOwner
                                 && methodName.equals("vkCmdBindIndexBuffer")
                                 && methodDescriptor.equals("(Lorg/lwjgl/vulkan/VkCommandBuffer;JJI)V")
-                                && lastInstructionLoadsIndexType) {
+                                && loadsIndexTypeParameter) {
                             typedDrawBindsParameter = true;
                         }
-                        lastInstructionLoadsIndexType = false;
                     }
                 };
             }
