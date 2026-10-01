@@ -62,6 +62,7 @@ public final class VulkanCommandTrace {
     public static final int OP_BIND_INDEX_BUFFER = 12;
     public static final int OP_BIND_DESCRIPTOR_SET = 13;
     public static final int OP_PUSH_CONSTANTS = 14;
+    public static final int OP_DESCRIPTOR_DYNAMIC_OFFSET = 15;
     public static final int OP_DRAW = 20;
     public static final int OP_DRAW_INDEXED = 21;
     public static final int OP_DRAW_INDEXED_INDIRECT = 22;
@@ -210,12 +211,21 @@ public final class VulkanCommandTrace {
         try {
             int position = sets.position();
             int count = sets.remaining();
-            long dynamic0 = dynamicOffsets == null || !dynamicOffsets.hasRemaining()
+            int dynamicCount = dynamicOffsets == null ? 0 : dynamicOffsets.remaining();
+            long dynamic0 = dynamicCount == 0
                     ? -1L : Integer.toUnsignedLong(dynamicOffsets.get(dynamicOffsets.position()));
             for(int index = 0; index < count; ++index) {
                 record(commandBuffer, OP_BIND_DESCRIPTOR_SET,
                         bindPoint, layout, firstSet + index, sets.get(position + index),
-                        dynamicOffsets == null ? 0L : dynamicOffsets.remaining(), dynamic0);
+                        dynamicCount, dynamic0);
+            }
+            if(dynamicOffsets != null) {
+                int dynamicPosition = dynamicOffsets.position();
+                for(int index = 0; index < dynamicCount; ++index) {
+                    record(commandBuffer, OP_DESCRIPTOR_DYNAMIC_OFFSET,
+                            bindPoint, layout, firstSet, count, index,
+                            Integer.toUnsignedLong(dynamicOffsets.get(dynamicPosition + index)));
+                }
             }
         } catch(RuntimeException failure) {
             DROPPED_RECORDS.incrementAndGet();
