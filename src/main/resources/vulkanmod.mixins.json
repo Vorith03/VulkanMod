@@ -83,7 +83,6 @@
     "profiling.RendererPerformanceMixin",
     "profiling.SwapChainCommandTraceMixin",
     "profiling.VulkanFlightRecorderMixin",
-    "profiling.VulkanImageCommandTraceMixin",
 
     "render.entity.EntityRendererM",
     "render.model.ModelPartCubeM",

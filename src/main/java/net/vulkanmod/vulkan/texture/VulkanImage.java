@@ -17,6 +17,8 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.Objects;
 
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdCopyBufferToImage;
+import static net.vulkanmod.render.profiling.TracedVulkanCommands.vkCmdPipelineBarrier;
 import static net.vulkanmod.vulkan.Vulkan.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
