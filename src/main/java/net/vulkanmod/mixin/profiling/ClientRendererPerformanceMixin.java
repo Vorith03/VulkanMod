@@ -2,7 +2,9 @@ package net.vulkanmod.mixin.profiling;
 
 import net.minecraft.client.renderer.GameRenderer;
 import net.vulkanmod.render.profiling.ClientTickBreakdown;
+import net.vulkanmod.render.profiling.GpuTimestampProfiler;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
+import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -40,16 +42,21 @@ public class ClientRendererPerformanceMixin {
     }
 
     // Portal rendering can recurse into renderLevel. Count only the outer call so
-    // nested worlds remain included without double-counting their CPU time.
+    // nested worlds remain included without double-counting their CPU or GPU time.
     @Inject(method = "renderLevel", at = @At("HEAD"))
     private void vulkanmod$beginWorldRender(CallbackInfo ci) {
-        if (vulkanmod$worldRenderDepth++ == 0)
+        if (vulkanmod$worldRenderDepth++ == 0) {
             vulkanmod$worldRenderStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.WORLD_RENDER);
+            GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
+                    GpuTimestampProfiler.Boundary.WORLD_BEGIN);
+        }
     }
 
     @Inject(method = "renderLevel", at = @At("RETURN"))
     private void vulkanmod$endWorldRender(CallbackInfo ci) {
         if (--vulkanmod$worldRenderDepth == 0) {
+            GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
+                    GpuTimestampProfiler.Boundary.WORLD_END);
             PerformanceProfiler.end(PerformanceProfiler.Stage.WORLD_RENDER, vulkanmod$worldRenderStart);
             vulkanmod$worldRenderStart = 0L;
         }

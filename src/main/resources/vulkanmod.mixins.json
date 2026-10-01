@@ -62,6 +62,7 @@
     "profiling.ClientRendererPerformanceMixin",
     "profiling.ClientConnectionPerformanceMixin",
     "profiling.ClientLevelRendererPerformanceMixin",
+    "profiling.WorldRendererGpuPerformanceMixin",
     "profiling.MultiPlayerGameModePerformanceMixin",
     "profiling.TextureManagerPerformanceMixin",
     "profiling.TutorialPerformanceMixin",
