@@ -105,6 +105,9 @@ jobs:
             vulkan-*.log
             vulkan-command-trace-inventory.txt
             run/logs/vulkanmod-performance-ci.log
+            run/logs/vulkanmod-performance-flight-*.jfr
+            run/logs/vulkanmod-performance-flight-*.vkcmd
+            run/logs/vulkanmod-performance-flight-*.vkcmd.meta.jsonl
             vulkan-smoke-create-chronicles-compat-levelrenderer.javap
             run/screenshot-smoke/screenshots/*.png
           if-no-files-found: ignore
