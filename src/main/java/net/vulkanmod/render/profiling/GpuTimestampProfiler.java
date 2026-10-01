@@ -29,6 +29,8 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class GpuTimestampProfiler {
     private static final boolean REQUESTED = Boolean.getBoolean("vulkanmod.performanceProfiler")
             && Boolean.getBoolean("vulkanmod.performanceProfiler.gpuTimestamps");
+    private static final boolean AUTOMATED_BENCHMARK = REQUESTED
+            && Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark");
     private static final int QUERY_COUNT = 2;
     private static final int MAX_SAMPLES = 65_536;
     public static final String SCOPE = "main_graphics_command_buffer";
@@ -42,6 +44,7 @@ public final class GpuTimestampProfiler {
     private static boolean[] pending;
     private static boolean initialized;
     private static boolean active;
+    private static boolean captureActive = initialCaptureActive(REQUESTED, AUTOMATED_BENCHMARK);
     private static boolean smokeResultAnnounced;
     private static int timestampValidBits;
     private static double timestampPeriodNanos;
@@ -60,6 +63,17 @@ public final class GpuTimestampProfiler {
 
     public static boolean active() {
         return active;
+    }
+
+    /**
+     * Arm exactly when the automated CPU capture is armed. Startup/menu/settling frames
+     * are deliberately excluded so the final GPU distribution describes the same measured
+     * stationary interval as the CPU/tick profiler.
+     */
+    public static void armAutomatedCapture() {
+        if (!REQUESTED || !AUTOMATED_BENCHMARK) return;
+        resetMeasurements();
+        captureActive = true;
     }
 
     /** Called after the Vulkan device and Renderer frame-slot count are known. */
@@ -133,7 +147,7 @@ public final class GpuTimestampProfiler {
 
     /** Record the beginning of the main graphics command buffer. */
     public static void beginFrame(int slot, VkCommandBuffer commandBuffer) {
-        if (!usable(slot) || pending[slot]) return;
+        if (!captureActive || !usable(slot) || pending[slot]) return;
         long pool = queryPools[slot];
         vkCmdResetQueryPool(commandBuffer, pool, 0, QUERY_COUNT);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, pool, 0);
@@ -143,7 +157,7 @@ public final class GpuTimestampProfiler {
 
     /** Record the end after the final swapchain layout transition but before vkEndCommandBuffer. */
     public static void endFrame(int slot, VkCommandBuffer commandBuffer) {
-        if (!usable(slot) || !armed[slot]) return;
+        if (!captureActive || !usable(slot) || !armed[slot]) return;
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPools[slot], 1);
         ended[slot] = true;
     }
@@ -151,7 +165,7 @@ public final class GpuTimestampProfiler {
     /** Mark a timestamp pair as GPU-owned only after the graphics submit succeeds. */
     public static void markSubmitted(int slot) {
         if (!usable(slot)) return;
-        if (armed[slot] && ended[slot]) pending[slot] = true;
+        if (captureActive && armed[slot] && ended[slot]) pending[slot] = true;
         armed[slot] = false;
         ended[slot] = false;
     }
@@ -187,6 +201,8 @@ public final class GpuTimestampProfiler {
                 timestampValidBits, timestampPeriodNanos,
                 millis(avg), millis(percentile(0.50D)), millis(percentile(0.95D)),
                 millis(percentile(0.99D)), millis(max)));
+
+        if (AUTOMATED_BENCHMARK) captureActive = false;
     }
 
     /** Called only after device idleness has been established. */
@@ -194,7 +210,31 @@ public final class GpuTimestampProfiler {
         destroyPools();
         active = false;
         initialized = false;
+        captureActive = false;
         if (REQUESTED && "active".equals(status)) status = "destroyed";
+    }
+
+    public static void verifyForCi() {
+        if (!initialCaptureActive(true, false)
+                || initialCaptureActive(true, true)
+                || initialCaptureActive(false, false)
+                || initialCaptureActive(false, true)) {
+            throw new IllegalStateException("GPU timestamp capture-boundary contract is invalid");
+        }
+        if (MAX_SAMPLES < 8192 || QUERY_COUNT != 2 || SCOPE.isBlank()) {
+            throw new IllegalStateException("GPU timestamp profiler capacity/scope contract is invalid");
+        }
+    }
+
+    private static boolean initialCaptureActive(boolean requested, boolean automatedBenchmark) {
+        return requested && !automatedBenchmark;
+    }
+
+    private static void resetMeasurements() {
+        sampledFrames = 0;
+        measuredFrames = 0L;
+        droppedSamples = 0L;
+        readFailures = 0L;
     }
 
     private static boolean usable(int slot) {
