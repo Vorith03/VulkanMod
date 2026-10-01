@@ -216,6 +216,7 @@ public final class ClientTickBreakdown {
             PerformanceProfiler.benchmarkEvent(allocationP95.toString());
             PerformanceProfiler.benchmarkEvent(allocationMax.toString());
         }
+        GpuTimestampProfiler.emitCaptureSummary();
         reset();
     }
 
