@@ -1,0 +1,101 @@
+# Exact raw Vulkan command coverage contract.
+# Format: source<TAB>method<TAB>command<TAB>tracer-or-EXEMPT:reason
+# EXEMPT entries are deliberate debt, not wildcard exclusions: adding a new raw call still fails CI.
+src/main/java/net/vulkanmod/mixin/compatibility/PostPassM.java	vulkanmod$setUprightViewport	vkCmdSetViewport	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesDirect	nvkCmdPushConstants	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesDirect	vkCmdBindIndexBuffer	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesDirect	vkCmdBindVertexBuffers	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesDirect	vkCmdDrawIndexed	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesIndirect	vkCmdBindIndexBuffer	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesIndirect	vkCmdBindVertexBuffers	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	buildDrawBatchesIndirect	vkCmdDrawIndexedIndirect	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	fakeIndirectCmd	nvkCmdPushConstants	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/DrawBuffers.java	fakeIndirectCmd	vkCmdDrawIndexed	src/main/java/net/vulkanmod/mixin/profiling/DrawBuffersCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	barrierComputeWritesToConsumers	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	barrierPreviousConsumersToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/GpuTerrainOutputComputeSmokeTest.java	dispatch	vkCmdPushConstants	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/RegionDrawBatch.java	draw	vkCmdBindVertexBuffers	src/main/java/net/vulkanmod/mixin/profiling/RegionDrawBatchCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/RegionDrawBatch.java	draw	vkCmdDrawIndexedIndirect	src/main/java/net/vulkanmod/mixin/profiling/RegionDrawBatchCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/RegionDrawBatch.java	draw	vkCmdPushConstants	src/main/java/net/vulkanmod/mixin/profiling/RegionDrawBatchCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	barrierComputeReadsToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	barrierComputeToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	barrierTransferToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuLiveSectionSelectionDiagnostic.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowSmokeTest.java	verify	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	barrierComputeToIndirect	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	barrierPriorIndirectReadToTransfer	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	barrierTransferToCompute	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	dispatch	vkCmdBindDescriptorSets	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	dispatch	vkCmdBindPipeline	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	dispatch	vkCmdDispatch	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionShadowStore.java	dispatch	vkCmdFillBuffer	src/main/java/net/vulkanmod/mixin/profiling/GpuSectionSelectionShadowCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	barrierComputeToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	barrierTransferToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuSectionSelectionSmokeTest.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	barrierComputeWritesToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	barrierTransferWritesToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainModelComputeProbe.java	dispatch	vkCmdPushConstants	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	barrierInputsToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	barrierScratchToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	barrierTargetToTransferWrite	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	barrierTargetTransferToConsumers	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainPersistentVertexSmokeTest.java	dispatch	vkCmdPushConstants	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	barrierComputeWritesToConsumers	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	barrierInputsToCompute	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	barrierReadbackToHost	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	submitDispatch	vkCmdBindDescriptorSets	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	submitDispatch	vkCmdBindPipeline	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	submitDispatch	vkCmdDispatch	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	submitDispatch	vkCmdFillBuffer	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/GpuTerrainSectionMesher.java	submitDispatch	vkCmdPushConstants	src/main/java/net/vulkanmod/mixin/profiling/GpuTerrainSectionMesherCommandTraceMixin.java
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	barrierComputeWritesToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	barrierTransferWritesToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/SparseLightingComputeProbe.java	dispatch	vkCmdPushConstants	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	barrierComputeWritesToTransfer	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	barrierTransferWritesToCompute	vkCmdPipelineBarrier	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	dispatch	vkCmdBindDescriptorSets	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	dispatch	vkCmdBindPipeline	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	dispatch	vkCmdDispatch	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	dispatch	vkCmdFillBuffer	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/render/chunk/voxel/VoxelComputeProbe.java	dispatch	vkCmdPushConstants	EXEMPT:startup/self-test/probe command outside benchmark capture
+src/main/java/net/vulkanmod/vulkan/Renderer.java	beginFrame	vkCmdSetDepthBias	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	bindGraphicsPipeline	vkCmdBindPipeline	src/main/java/net/vulkanmod/mixin/profiling/RendererCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/Renderer.java	clearAttachments	vkCmdClearAttachments	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	popDebugSection	vkCmdEndDebugUtilsLabelEXT	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	pushConstants	nvkCmdPushConstants	src/main/java/net/vulkanmod/mixin/profiling/RendererCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/Renderer.java	pushDebugSection	vkCmdBeginDebugUtilsLabelEXT	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	resetScissor	vkCmdSetScissor	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	setDepthBias	vkCmdSetDepthBias	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	setScissor	vkCmdSetScissor	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	setViewport	vkCmdSetScissor	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/Renderer.java	setViewport	vkCmdSetViewport	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/framebuffer/RenderTargetManager.java	copyColorToBuffer	vkCmdCopyImageToBuffer	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/framebuffer/RenderTargetManager.java	copyColorToBuffer	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/RenderTargetManagerCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/framebuffer/RenderTargetManager.java	copyDepth	vkCmdCopyImage	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/framebuffer/RenderTargetManager.java	transitionDepth	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/RenderTargetManagerCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/framebuffer/SwapChain.java	colorAttachmentLayout	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/SwapChainCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/framebuffer/SwapChain.java	presentLayout	vkCmdPipelineBarrier	src/main/java/net/vulkanmod/mixin/profiling/SwapChainCommandTraceMixin.java
+src/main/java/net/vulkanmod/vulkan/passes/DefaultMainPass.java	begin	vkCmdSetScissor	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/passes/DefaultMainPass.java	begin	vkCmdSetViewport	EXEMPT:production command not yet represented by raw trace schema
+src/main/java/net/vulkanmod/vulkan/texture/ScreenshotReadbackSmokeTest.java	pattern	vkCmdClearAttachments	EXEMPT:startup/self-test/probe command outside benchmark capture
