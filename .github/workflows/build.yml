@@ -46,7 +46,7 @@ jobs:
           echo "CI mod version: ${ci_version}"
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Inventory Vulkan command trace coverage
-        run: python3 scripts/ci/vulkan-command-trace-coverage.py --inventory
+        run: python3 scripts/ci/vulkan-command-trace-coverage.py --inventory | tee vulkan-command-trace-inventory.txt
       - name: Validate smoke fixture isolation
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Build and verify distributable
@@ -70,7 +70,7 @@ jobs:
       - name: Smoke-test Vulkan screenshot readback
         run: bash scripts/ci/vulkan-smoke.sh screenshot
       - name: Check private resource pack fixture configuration
-        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
+        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true')
         run: |
           echo 'Configure both VULKANMOD_PRIVATE_PACK_REPO (variable) and VULKANMOD_PRIVATE_PACK_TOKEN (secret), or neither.' >&2
           exit 1
@@ -101,6 +101,7 @@ jobs:
           name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
           path: |
             vulkan-*.log
+            vulkan-command-trace-inventory.txt
             run/logs/vulkanmod-performance-ci.log
             vulkan-smoke-create-chronicles-compat-levelrenderer.javap
             run/screenshot-smoke/screenshots/*.png
