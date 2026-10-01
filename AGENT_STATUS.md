@@ -16,6 +16,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 The latest completed hardware capture remains the automated stationary benchmark from build #831 / commit `bbc8dd7aa244db1f138a7329b13b8e5f7ecf5622` on the user's RX 6900 XT / RADV system. The run used the fixed `VulkanMod_Benchmark` world/camera, 60 s settle, 180 s capture, 260 FPS cap, locked 2552x1374 framebuffer, render distance 16 and simulation distance 12. It completed normally.
 
+**Distant Horizons rendering was disabled for #831 and for the existing Phase 5 benchmark captures discussed here. Keep Distant Horizons disabled for the matched #931 capture. A future DH-enabled capture is a different workload and must be explicitly labeled rather than compared directly with this series.**
+
 Across the 180 s capture:
 
 - 28,877 frames were recorded in about 179.94 s of summary windows, about 160.48 frames/s.
@@ -106,15 +108,34 @@ Do not add finer per-draw/per-mod GPU probes before reading the #931 RX result. 
 
 Run **build #931** on the user's RX 6900 XT/Create Chronicles environment using the **same automated stationary benchmark** as the successful build #831 capture.
 
-Required flags:
+Use this full benchmark JVM-property set for the matched #931 diagnostic:
 
 ```text
 -Dvulkanmod.performanceProfiler=true
 -Dvulkanmod.performanceProfiler.autoBenchmark=true
 -Dvulkanmod.performanceProfiler.gpuTimestamps=true
+-Dvulkanmod.performanceProfiler.summarySeconds=5
+-Dvulkanmod.performanceProfiler.durationSeconds=180
+-Dvulkanmod.performanceProfiler.slowFrameMs=25
+-Dvulkanmod.performanceProfiler.maxSamples=4096
+-Dvulkanmod.performanceProfiler.benchmarkWorld=VulkanMod Benchmark
+-Dvulkanmod.performanceProfiler.benchmarkX=0
+-Dvulkanmod.performanceProfiler.benchmarkY=192
+-Dvulkanmod.performanceProfiler.benchmarkZ=0
+-Dvulkanmod.performanceProfiler.benchmarkYaw=-90
+-Dvulkanmod.performanceProfiler.benchmarkPitch=30
+-Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
+-Dvulkanmod.performanceProfiler.benchmarkAfterStagingCapSeconds=60
+-Dvulkanmod.experimentalSectionVoxels=true
+-Dvulkanmod.experimentalGpuTerrainMesher=true
+-Dvulkanmod.experimentalGpuTerrainCpuBypass=true
+-Dvulkanmod.experimentalGpuTerrainDrawHandoff=true
+-Dvulkanmod.experimentalGpuTerrainHybrid=true
 ```
 
-Keep the same benchmark world/camera, locked 2552x1374 framebuffer/settings, render distance 16, simulation distance 12 and 260 FPS cap. Keep Minecraft focused and do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`; `latest.log` is only needed if automation aborts or another runtime issue appears.
+`experimentalSectionVoxels=true` is intentionally explicit even though the GPU-terrain CPU-bypass path also forces the required voxel/sparse-lighting staging on. Keeping it in the launch contract makes the intended workload self-describing. Do not set an explicit profiler output path; automated runs then create a unique `logs/vulkanmod-performance-benchmark-<UUID>.log` instead of overwriting earlier captures.
+
+Keep the same locked 2552x1374 framebuffer/settings, render distance 16, simulation distance 12 and 260 FPS cap. **Keep Distant Horizons rendering disabled.** Keep Minecraft focused and do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`; `latest.log` is only needed if automation aborts or another runtime issue appears.
 
 This one capture now answers three bounded questions:
 
