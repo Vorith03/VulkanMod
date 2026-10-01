@@ -84,11 +84,11 @@ public abstract class GpuTerrainSectionMesherCommandTraceMixin {
             at = @At(value = "INVOKE",
                     target = "Lorg/lwjgl/vulkan/VK10;vkCmdPipelineBarrier(Lorg/lwjgl/vulkan/VkCommandBuffer;IIILorg/lwjgl/vulkan/VkMemoryBarrier$Buffer;Lorg/lwjgl/vulkan/VkBufferMemoryBarrier$Buffer;Lorg/lwjgl/vulkan/VkImageMemoryBarrier$Buffer;)V",
                     remap = false))
-    private void vulkanmod$recordBarrier(VkCommandBuffer commandBuffer, int srcStageMask,
-                                          int dstStageMask, int dependencyFlags,
-                                          VkMemoryBarrier.Buffer memoryBarriers,
-                                          VkBufferMemoryBarrier.Buffer bufferBarriers,
-                                          VkImageMemoryBarrier.Buffer imageBarriers) {
+    private static void vulkanmod$recordBarrier(VkCommandBuffer commandBuffer, int srcStageMask,
+                                                 int dstStageMask, int dependencyFlags,
+                                                 VkMemoryBarrier.Buffer memoryBarriers,
+                                                 VkBufferMemoryBarrier.Buffer bufferBarriers,
+                                                 VkImageMemoryBarrier.Buffer imageBarriers) {
         VulkanCommandTrace.pipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags,
                 memoryBarriers, bufferBarriers, imageBarriers);
         vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags,
