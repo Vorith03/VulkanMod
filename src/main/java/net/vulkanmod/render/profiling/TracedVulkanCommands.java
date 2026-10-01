@@ -10,6 +10,9 @@ import org.lwjgl.vulkan.VkMemoryBarrier;
 import org.lwjgl.vulkan.VkRenderPassBeginInfo;
 import org.lwjgl.vulkan.VkRenderingInfo;
 
+import java.nio.IntBuffer;
+import java.nio.LongBuffer;
+
 /**
  * Vulkan command-recording facade for code owned by VulkanMod.
  *
@@ -36,6 +39,16 @@ public final class TracedVulkanCommands {
                                             long offset, int indexType) {
         VulkanCommandTrace.bindIndexBuffer(commandBuffer, buffer, offset, indexType);
         org.lwjgl.vulkan.VK10.vkCmdBindIndexBuffer(commandBuffer, buffer, offset, indexType);
+    }
+
+    public static void vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer, int bindPoint,
+                                               long layout, int firstSet,
+                                               LongBuffer descriptorSets,
+                                               IntBuffer dynamicOffsets) {
+        VulkanCommandTrace.bindDescriptorSets(commandBuffer, bindPoint, layout, firstSet,
+                descriptorSets, dynamicOffsets);
+        org.lwjgl.vulkan.VK10.vkCmdBindDescriptorSets(commandBuffer, bindPoint, layout, firstSet,
+                descriptorSets, dynamicOffsets);
     }
 
     public static void vkCmdDraw(VkCommandBuffer commandBuffer, int vertexCount,
