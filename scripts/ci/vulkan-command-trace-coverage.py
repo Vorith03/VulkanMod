@@ -58,6 +58,13 @@ class CallSite:
         return self.source, self.method, self.command
 
 
+@dataclass(frozen=True)
+class MethodRange:
+    start: int
+    end: int
+    name: str
+
+
 def sanitize_java(text: str) -> str:
     """Blank comments and literals while preserving offsets/newlines."""
     chars = list(text)
@@ -122,20 +129,42 @@ def sanitize_java(text: str) -> str:
     return "".join(chars)
 
 
-def method_positions(clean: str) -> list[tuple[int, str]]:
-    positions = [(m.start(), m.group("name")) for m in METHOD_RE.finditer(clean)]
-    positions.extend((m.start(), m.group("name")) for m in CONSTRUCTOR_RE.finditer(clean))
-    positions.sort()
-    return positions
+def closing_brace(clean: str, opening: int) -> int:
+    """Return the exclusive end of the block opened at opening."""
+    depth = 0
+    for index in range(opening, len(clean)):
+        char = clean[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return len(clean)
 
 
-def method_for(position: int, methods: list[tuple[int, str]]) -> str:
-    current = "<class-init>"
-    for start, name in methods:
-        if start > position:
-            break
-        current = name
-    return current
+def method_ranges(clean: str) -> list[MethodRange]:
+    """Locate method bodies so a call is attributed to its enclosing method.
+
+    The old scanner simply chose the most recently declared method. That leaked a
+    method name across its closing brace and mislabelled later private helpers. A
+    brace-aware range keeps the manifest stable and, for anonymous/nested classes,
+    deliberately chooses the innermost enclosing method.
+    """
+    ranges: list[MethodRange] = []
+    for pattern in (METHOD_RE, CONSTRUCTOR_RE):
+        for match in pattern.finditer(clean):
+            opening = match.end() - 1
+            ranges.append(MethodRange(match.start(), closing_brace(clean, opening), match.group("name")))
+    ranges.sort(key=lambda method: (method.start, -method.end))
+    return ranges
+
+
+def method_for(position: int, methods: list[MethodRange]) -> str:
+    enclosing = [method for method in methods if method.start <= position < method.end]
+    if not enclosing:
+        return "<class-init>"
+    return max(enclosing, key=lambda method: method.start).name
 
 
 def facade_imports(clean: str) -> set[str]:
@@ -160,7 +189,7 @@ def discover() -> list[CallSite]:
             continue
         text = path.read_text(encoding="utf-8")
         clean = sanitize_java(text)
-        methods = method_positions(clean)
+        methods = method_ranges(clean)
         imports = facade_imports(clean)
         for match in COMMAND_RE.finditer(clean):
             if routed_through_facade(clean, match, imports):
