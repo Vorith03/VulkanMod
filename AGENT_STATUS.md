@@ -4,12 +4,12 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current executable
 
-- Latest CI-validated executable commit: `e545e32cae13ec2698bea97b609dfa8e0621814a` (`perf: arm GPU timestamps with benchmark capture`).
-- CI **#928** / run `36901279213` is fully green.
-- Build artifact: `VulkanMod-Forge-build-928`, artifact ID `11181958146`, SHA-256 `838f01b785eda4037b8e1060bab92b9d1242330c5a6b5eecb2adad8c0212755d`.
-- Smoke logs: `VulkanMod-Forge-smoke-log-928`, artifact ID `11181813280`, SHA-256 `97821992e3a2dd05d86322e548da6a8410a86c5f918fbfdae969ddc63c4ad68a`.
-- #928 passed distributable verification, packaged Immersive Portals mixin-anchor validation, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, Create Chronicles compatibility, and Crash Assistant. Private resource-pack fixture steps were skipped as configured.
-- The normal Lavapipe startup smoke now enables the optional GPU timestamp profiler, requires a real `VULKANMOD_GPU_TIMESTAMP_SMOKE_OK` result, and validates truthful GPU active/requested/scope fields in the profiler capture. This proves query-pool creation, timestamp writes, submission, existing-fence retirement and query readback on software Vulkan.
+- Latest CI-validated executable commit: `2b6e1ac915965069b63b776b342313993b18fe5f` (`perf: harden GPU pass sample validity`).
+- CI **#931** / run `36909650317` is fully green.
+- Build artifact: `VulkanMod-Forge-build-931`, artifact ID `11186381851`, SHA-256 `9a8bd4cc5d2fb823f7ed39fe92be6584f7f21f7f5490ca532fbdc0ba0263edcc`.
+- Smoke logs: `VulkanMod-Forge-smoke-log-931`, artifact ID `11186331840`, SHA-256 `5cf7757a6ffeb16d37c1b7858e59ed703b699270527f61582e3cebd7067388ca`.
+- #931 passed distributable verification, packaged Immersive Portals mixin-anchor validation, both Forge startup modes, persistent GPU indirect, post-chain/depth-post-chain, screenshot readback, Create Chronicles compatibility, and Crash Assistant. Private resource-pack fixture steps were skipped as configured.
+- The normal Lavapipe startup smoke enables GPU timestamps and requires a real `VULKANMOD_GPU_TIMESTAMP_SMOKE_OK` result. #931 therefore exercises the expanded query pool, timestamp writes, submission, existing-fence retirement and multi-query readback on software Vulkan rather than compile-only code.
 - The adversarial audit remains complete: **0/5 repair clusters remaining**. Do not restart it without contradictory live evidence.
 
 ## RX 6900 XT benchmark evidence that still drives the optimization decision
@@ -29,7 +29,7 @@ Across the 180 s capture:
 - GPU timestamps were disabled in #831. Vulkan frame-slot/fence/acquire/submit/display waits were small in the available CPU-side timings, but that capture cannot establish GPU execution cost.
 - Terrain worker queues were normally idle in the stationary capture and terrain upload/wait timings were small. Do not reopen terrain staging as the primary explanation for this recurring hitch without contradictory evidence.
 
-## Texture-tick diagnostic now present in #928
+## Texture-tick diagnostic retained in #931
 
 The measured `textures` leaf is the complete `TextureManager.tick()` call. Current VulkanMod already batches animated sprite uploads into one graphics upload command buffer for the selected upload tick:
 
@@ -39,7 +39,7 @@ The measured `textures` leaf is the complete `TextureManager.tick()` call. Curre
 
 Therefore, “batch animated texture submissions” is **not** an evidence-backed optimization; that mechanism already exists.
 
-The #844 diagnostic, retained in #928, separates the dominant 17.569 ms texture bucket without changing rendering behavior:
+The diagnostic retained in #931 separates the dominant 17.569 ms texture bucket without changing rendering behavior:
 
 - aggregate time spent inside complete `SpriteContents.upload()` bodies while the texture leaf is active;
 - sprite-upload call count and corresponding mip/sub-upload count;
@@ -49,9 +49,7 @@ The #844 diagnostic, retained in #928, separates the dominant 17.569 ms texture 
 
 The decisive output line is `client_tick_texture_detail`.
 
-## Optional GPU timestamp profiler now present in #928
-
-Build #928 also adds the next broad discriminator that the CPU profiler could not answer.
+## GPU timestamp profiler now present in #931
 
 Enable it with:
 
@@ -59,27 +57,42 @@ Enable it with:
 -Dvulkanmod.performanceProfiler.gpuTimestamps=true
 ```
 
-The timestamp scope is intentionally `main_graphics_command_buffer`:
+The guaranteed scope remains `main_graphics_command_buffer`:
 
-- `TOP_OF_PIPE` after the main graphics command buffer begins;
-- `BOTTOM_OF_PIPE` after the final swapchain layout transition and before command-buffer end;
-- one two-query pool per Renderer frame slot;
+- frame start is `TOP_OF_PIPE` after the main graphics command buffer begins;
+- frame end is `BOTTOM_OF_PIPE` after the final swapchain layout transition and before command-buffer end;
+- query pools are owned per Renderer frame slot;
 - normal reads occur only after that slot's **existing** frame fence has already been waited, so steady-state profiling adds no new GPU/CPU synchronization point;
-- a final pending tail query may use `VK_QUERY_RESULT_WAIT_BIT` after the last measured frame, outside recorded `runTick()` CPU time;
+- a final pending tail query may use `VK_QUERY_RESULT_WAIT_BIT` after the last measured frame, outside recorded `runTick()` CPU time; and
 - graphics timestamp support/period/query failures fail closed rather than fabricating a result.
 
-The final automated line is `benchmark gpu_timestamps` with capture-wide main-graphics average/p50/p95/p99/max, measured/sample counts, query failures, timestamp valid bits and device timestamp period.
+The final `benchmark gpu_timestamps` line reports capture-wide main-graphics average/p50/p95/p99/max plus measured/sample counts, query failures, timestamp valid bits and timestamp period.
 
-Important interpretation boundary:
+Important boundary: `main_graphics_ms_*` is **not total GPU frame time**. Separate helper/upload command-buffer execution and presentation/display are explicitly excluded.
 
-- `main_graphics_ms_*` is **not total GPU frame time**;
-- separate helper/upload command-buffer execution is explicitly excluded;
-- presentation/display interval is explicitly excluded; and
-- individual render-pass GPU timing is not yet instrumented.
+### Coarse GPU pass breakdown
 
-Automated GPU sampling is dormant during startup/menu/teleport/terrain-load/settling and resets/arms at the same transition that starts the measured CPU capture. This correction was made before #928 was accepted so the GPU distribution and CPU/tick distribution describe the same benchmark interval.
+#931 adds the bounded coarse breakdown requested before the next hardware run. Fixed frame markers partition the main graphics span into:
 
-Do not add per-pass/helper GPU timestamps until the RX result establishes that broad GPU execution is materially relevant. The next layer must be evidence-driven.
+- `pre_world`: frame start to the outermost `GameRenderer.renderLevel` entry;
+- `world`: outermost `renderLevel` entry to exit, including recursive portal-world rendering;
+- `between_world_hud`: outer world exit to `Gui.render` entry; this is boundary-defined and must **not** be described as exclusively post-processing;
+- `hud`: complete `Gui.render` GPU interval; and
+- `tail`: HUD exit to main graphics command-buffer end.
+
+VulkanMod terrain rendering also has a bounded sub-attribution:
+
+- each `WorldRenderer.renderSectionLayer` call receives a timestamp pair, up to **32 terrain segments per frame**;
+- `terrain` is the sum of complete terrain segments inside the outer world span;
+- `world_other = world - terrain` is a residual containing entities, effects, block entities, weather/sky/cloud work, Forge callbacks, portal rendering and any other non-terrain world commands. It is not an entity-only timer.
+
+The final line is `benchmark gpu_passes`. Each named bucket reports sample count, average, p95 and max. It also reports `breakdown_frames`, invalid frames, terrain segment count and terrain-segment drops.
+
+The profiler validates the partition before accepting a frame: fixed pass durations must add back to the measured main-graphics span within 5 microseconds, and terrain must be complete, non-overflowed and no larger than its enclosing world span. Invalid/incomplete pass frames are omitted from pass averages rather than contaminating them. The main-graphics aggregate remains independently available.
+
+Automated GPU sampling is dormant during startup/menu/teleport/terrain-load/settling and resets/arms at the same transition that starts the CPU capture, so CPU/tick/GPU distributions describe the same measured interval.
+
+Do not add finer per-draw/per-mod GPU probes before reading the #931 RX result. The next layer must still be evidence-driven.
 
 ## Active sequencing
 
@@ -91,7 +104,7 @@ Do not add per-pass/helper GPU timestamps until the RX result establishes that b
 
 ## Next useful action
 
-Run **build #928** on the user's RX 6900 XT/Create Chronicles environment using the **same automated stationary benchmark** as the successful build #831 capture.
+Run **build #931** on the user's RX 6900 XT/Create Chronicles environment using the **same automated stationary benchmark** as the successful build #831 capture.
 
 Required flags:
 
@@ -103,18 +116,22 @@ Required flags:
 
 Keep the same benchmark world/camera, locked 2552x1374 framebuffer/settings, render distance 16, simulation distance 12 and 260 FPS cap. Keep Minecraft focused and do not resize during measurement. Return the generated `logs/vulkanmod-performance-benchmark-*.log`; `latest.log` is only needed if automation aborts or another runtime issue appears.
 
-This one capture now answers two bounded questions:
+This one capture now answers three bounded questions:
 
 1. `client_tick_texture_detail` separates the dominant texture tick into complete sprite-upload work versus non-upload ticker/animation work.
-2. `benchmark gpu_timestamps` establishes whether main graphics GPU execution is itself substantial during the same measured interval.
+2. `benchmark gpu_timestamps` establishes the main graphics GPU execution distribution over the same measured interval.
+3. `benchmark gpu_passes` identifies the broad main-command-buffer region responsible if GPU execution is material, including terrain versus non-terrain world GPU work.
 
 Decision rules:
 
 1. If `sprite_upload_ms_avg` explains most of `texture_ms_avg`, follow upload call/mip counts into staging-copy and Vulkan copy-command-recording overhead. Preserve animation semantics.
 2. If `non_upload_ms_avg` explains most of `texture_ms_avg`, trace animated texture ticker/interpolation work instead. Do not reduce cadence or visibility semantics until redundant work is demonstrated.
 3. If both texture components are substantial, quantify each maximum benefit and attack the larger, safer mechanism first.
-4. If `main_graphics_ms_*` is small while CPU tick frames remain slow, keep optimization focused on CPU/tick work and do not add per-pass GPU probes.
-5. If `main_graphics_ms_*` is materially large, add the minimum next timestamp boundaries needed to separate broad GPU passes. Helper/upload GPU timing is a separate scope and should be added only if the evidence points there.
-6. Treat #831 as the matched pre-diagnostic evidence. #928 contains extra texture and GPU instrumentation, so use the new splits primarily to locate mechanism; do not present a small end-to-end FPS difference between #831 and #928 as a confirmed optimization.
+4. If `main_graphics_ms_*` is small while CPU tick frames remain slow, keep optimization focused on CPU/tick work; do not add finer GPU probes.
+5. If `world_ms_*` dominates and `terrain_ms_*` explains most of it, terrain GPU work becomes the next bounded GPU investigation.
+6. If `world_other_ms_*` dominates, investigate the non-terrain world path rather than terrain.
+7. If `between_world_hud_ms_*`, `hud_ms_*`, or `tail_ms_*` dominates, trace that exact boundary-defined region next; do not infer a narrower subsystem from the label alone.
+8. Helper/upload GPU execution remains outside the current scope. Add it only if main-graphics/pass evidence is insufficient and the texture/upload path or synchronization evidence specifically points there.
+9. Treat #831 as the matched pre-diagnostic evidence. #931 contains extra texture and GPU instrumentation, so use the new splits primarily to locate mechanism; do not present a small end-to-end FPS difference between #831 and #931 as a confirmed optimization.
 
-Do not ask for another broad compatibility retest. One #928 stationary benchmark capture is the next hardware evidence needed.
+Do not ask for another broad compatibility retest. One #931 stationary benchmark capture is the next hardware evidence needed.
