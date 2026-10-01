@@ -498,8 +498,9 @@ public final class PerformanceProfiler {
                 : -1;
         Initializer.LOGGER.info("VulkanMod performance profiling enabled; output: {}", outputPath.toAbsolutePath());
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d initial_framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=false",
-                SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight));
+                "[VulkanModPerf] capture_start summary_seconds=%.3f duration_seconds=%s slow_frame_ms=%.3f max_samples=%d initial_framebuffer_px=%dx%d cpu_wall_clock=true gpu_timestamps=%s gpu_timestamps_requested=%s gpu_timestamp_scope=%s",
+                SUMMARY_SECONDS, duration, SLOW_FRAME_MS, MAX_SAMPLES, framebufferWidth, framebufferHeight,
+                GpuTimestampProfiler.active(), GpuTimestampProfiler.requested(), GpuTimestampProfiler.SCOPE));
         writeLine("[VulkanModPerf] capture_identity schema=1 run_id=" + RUN_ID
                 + " vulkanmod_version=" + Initializer.getVersion().replace(' ', '_')
                 + " automated=" + AUTOMATED_BENCHMARK);
