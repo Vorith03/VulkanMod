@@ -68,7 +68,6 @@
     "profiling.ParticleEnginePerformanceMixin",
     "profiling.MusicManagerPerformanceMixin",
     "profiling.SoundManagerPerformanceMixin",
-    "profiling.CommandPoolCommandTraceMixin",
     "profiling.DefaultMainPassFlightRecorderMixin",
     "profiling.DrawBuffersCommandTraceMixin",
     "profiling.FlightRecorderCommandTraceMixin",
@@ -95,7 +94,6 @@
     "render.RenderTargetMixin",
     "render.GameRendererMixin",
     "render.GameRendererScreenshotMixin",
-    "render.GameRendererPostChainSmokeMixin",
     "render.GlProgramManagerMixin",
     "render.GlStateManagerM",
     "render.GlStateManagerClearDepthMixin",
@@ -125,8 +123,7 @@
 
     "util.ScreenshotRecorderM",
 
-    "vertex.SpriteCoordinateExpanderM",
-    "vertex.VertexMultiConsumersM$DoubleM",
+    "vertex.SpriteCoordinateExpanderM$DoubleM",
     "vertex.VertexMultiConsumersM$MultipleM",
     "vertex.VertexMultiConsumersM$SheetDecalM",
 
