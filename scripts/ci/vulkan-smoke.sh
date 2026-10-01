@@ -130,8 +130,9 @@ run_client() {
 
 case "$mode" in
   startup)
-    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.summarySeconds=0.25 -Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-ci.log" vulkan-smoke.log
+    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.performanceProfiler.summarySeconds=0.25 -Dvulkanmod.performanceProfiler.output=logs/vulkanmod-performance-ci.log" vulkan-smoke.log
     grep -F "Vulkan smoke test passed" vulkan-smoke.log
+    grep -F "VULKANMOD_GPU_TIMESTAMP_SMOKE_OK" vulkan-smoke.log
     grep -F "Liquid vertex alpha/UV smoke test passed" vulkan-smoke.log
     grep -F "Vertex/Forge consumer contract smoke passed" vulkan-smoke.log
     grep -F "Forge shader registration/reload contract smoke passed" vulkan-smoke.log
