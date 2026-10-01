@@ -87,6 +87,10 @@ assert "net.vulkanmod.RunTickFrame" in summary, "JFR missing VulkanMod frame eve
 
 frame_events = jfr_events(jfr, "net.vulkanmod.RunTickFrame")
 assert frame_events, "JFR contains no recorded frame events"
+frame_sequences = [int(event["sequence"]) for event in frame_events]
+assert all(sequence > 0 for sequence in frame_sequences), "frame sequence must be positive"
+assert len(frame_sequences) == len(set(frame_sequences)), "duplicate JFR frame sequence"
+frame_sequence_set = set(frame_sequences)
 
 metadata = subprocess.run(
     ["jfr", "metadata", str(jfr)],
@@ -113,6 +117,24 @@ assert len(successful_submissions) == sum(
     1 for event in submission_events
     if int(event.get("result", -1)) == 0 and int(event.get("commandBuffer", 0)) != 0
 ), "duplicate JFR Vulkan submission sequence"
+
+# Universal Vulkan boundaries carry the exact runTick envelope in which they were
+# observed. Zero is deliberately reserved for work outside any Minecraft frame.
+def verify_frame_links(event_type, events):
+    linked = 0
+    for event in events:
+        assert "frameSequence" in event, f"{event_type} missing frameSequence field"
+        sequence = int(event["frameSequence"])
+        assert sequence >= 0, (event_type, sequence)
+        if sequence != 0:
+            assert sequence in frame_sequence_set, f"{event_type} references unknown frame {sequence}"
+            linked += 1
+    return linked
+
+linked_submissions = verify_frame_links("VulkanSubmission", submission_events)
+assert linked_submissions > 0, "no Vulkan submission is explicitly correlated to a Minecraft frame"
+verify_frame_links("VulkanFenceWait", jfr_events(jfr, "net.vulkanmod.VulkanFenceWait"))
+verify_frame_links("VulkanApi", jfr_events(jfr, "net.vulkanmod.VulkanApi"))
 
 gpu_events = jfr_events(jfr, "net.vulkanmod.GpuCommandBuffer")
 assert gpu_events, "JFR contains no completed GPU command-buffer timestamps"
@@ -184,19 +206,25 @@ for sequence, submit in trace_submissions.items():
 
 # GPU timestamp events are allowed to be a subset (a device may expose fewer
 # timestamp-capable command buffers), but every emitted GPU event must close the
-# exact same JFR/vkcmd identity chain.
+# exact same frame -> JFR submission -> vkcmd -> GPU identity chain.
+frame_linked_gpu = 0
 for event in gpu_events:
     sequence = int(event["submissionSequence"])
     assert sequence in successful_submissions, f"GPU event references unknown JFR submission {sequence}"
     assert sequence in trace_submissions, f"GPU event references unknown vkcmd submission {sequence}"
     submit = trace_submissions[sequence]
     submission = successful_submissions[sequence]
+    frame_sequence = int(submission["frameSequence"])
+    if frame_sequence != 0:
+        assert frame_sequence in frame_sequence_set
+        frame_linked_gpu += 1
     assert int(event["commandBuffer"]) == submit[6] == int(submission["commandBuffer"])
     assert int(event["queue"]) == submit[4] == int(submission["queue"])
     assert int(event["fence"]) == submit[5] == int(submission["fence"])
     assert int(event["gpuNanos"]) >= 0
     assert int(event["elapsedTicks"]) >= 0
     assert int(event["timestampValidBits"]) > 0
+assert frame_linked_gpu > 0, "no GPU timestamp closes the CPU-frame-to-GPU correlation chain"
 
 command_metadata = pathlib.Path(str(command_trace) + ".meta.jsonl")
 assert command_metadata.exists(), "missing Vulkan command object metadata sidecar"
@@ -205,5 +233,6 @@ print(
     f"Profiler output contract passed: {len(windows)} completed startup windows; "
     f"raw JFR={jfr.name} ({jfr.stat().st_size} bytes); "
     f"vkcmd={command_trace.name} ({len(records)} records); "
-    f"submission_joins={len(trace_submissions)}; gpu_joins={len(gpu_events)}"
+    f"submission_joins={len(trace_submissions)}; gpu_joins={len(gpu_events)}; "
+    f"frame_submission_joins={linked_submissions}; frame_gpu_joins={frame_linked_gpu}"
 )
