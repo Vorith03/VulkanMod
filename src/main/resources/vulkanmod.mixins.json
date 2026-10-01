@@ -83,7 +83,6 @@
     "profiling.RendererFlightRecorderMixin",
     "profiling.RendererPerformanceMixin",
     "profiling.SwapChainCommandTraceMixin",
-    "profiling.TransferQueueCommandTraceMixin",
     "profiling.VulkanFlightRecorderMixin",
     "profiling.VulkanImageCommandTraceMixin",
 
