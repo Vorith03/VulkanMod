@@ -71,6 +71,8 @@
     "profiling.DefaultMainPassFlightRecorderMixin",
     "profiling.DrawBuffersCommandTraceMixin",
     "profiling.FlightRecorderCommandTraceMixin",
+    "profiling.GpuSectionSelectionShadowCommandTraceMixin",
+    "profiling.GpuTerrainSectionMesherCommandTraceMixin",
     "profiling.GpuTimestampCommandTraceMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RegionDrawBatchCommandTraceMixin",
