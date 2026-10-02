@@ -10,6 +10,7 @@ import net.vulkanmod.interfaces.VTextureManagerI;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -63,6 +64,12 @@ public abstract class MTextureManager implements VTextureManagerI {
         // the command-buffer batch has a symmetric start/end lifecycle.
         boolean uploadSprites = SpriteUtil.shouldUpload();
         if(uploadSprites) {
+            // MemoryDiagnostics internally samples system pressure at a 250 ms
+            // cadence. The animated texture loop can issue thousands of subuploads
+            // per tick, so pay that sampling gate once at the owning batch boundary
+            // instead of once per mip. Unbatched/resource-loading uploads retain the
+            // per-upload safety check in VTextureSelector.
+            MemoryDiagnostics.enforceSystemMemorySafety("animated texture staging");
             Device.getGraphicsQueue().startRecording();
             // SpriteContents keeps its own nested scope. Holding one outer scope for
             // the whole texture tick lets consecutive animated sprites targeting the
