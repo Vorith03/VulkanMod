@@ -67,6 +67,7 @@ public abstract class VTextureSelector {
     // above Minecraft's practical mip count and overflow simply flushes early.
     private static int spriteUploadDepth;
     private static VulkanImage spriteUploadTexture;
+    private static long spriteUploadStagingBufferId;
     private static int spriteUploadRegionCount;
     private static final int[] spriteMipLevels = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
     private static final int[] spriteWidths = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
@@ -179,6 +180,7 @@ public abstract class VTextureSelector {
     public static void beginSpriteUploadBatch() {
         if(spriteUploadDepth++ == 0) {
             spriteUploadTexture = null;
+            spriteUploadStagingBufferId = VK_NULL_HANDLE;
             spriteUploadRegionCount = 0;
         }
     }
@@ -193,6 +195,7 @@ public abstract class VTextureSelector {
                 flushSpriteUploadCopies();
             } finally {
                 spriteUploadTexture = null;
+                spriteUploadStagingBufferId = VK_NULL_HANDLE;
                 spriteUploadRegionCount = 0;
             }
         }
@@ -294,7 +297,7 @@ public abstract class VTextureSelector {
                 spriteUploadTexture = texture;
                 stagingBuffer.copyTexture(buffer, layout, texture.formatSize);
                 queueSpriteUploadCopy(mipLevel, width, height, xOffset, yOffset,
-                        (int)stagingBuffer.getOffset());
+                        stagingBuffer.getId(), (int)stagingBuffer.getOffset());
             } else {
                 // The first upload for an image still uses VulkanImage's normal path
                 // so it owns the SHADER_READ/UNDEFINED -> TRANSFER_DST transition.
@@ -313,9 +316,20 @@ public abstract class VTextureSelector {
     }
 
     private static void queueSpriteUploadCopy(int mipLevel, int width, int height,
-                                              int xOffset, int yOffset, int bufferOffset) {
+                                              int xOffset, int yOffset,
+                                              long stagingBufferId, int bufferOffset) {
+        // StagingBuffer growth swaps its VkBuffer but deliberately retires the old
+        // allocation only after the active upload batch ends. If growth happened
+        // while this sprite was being staged, close the old region set against the
+        // old handle before accumulating regions from the replacement buffer.
+        if(spriteUploadRegionCount > 0 && spriteUploadStagingBufferId != stagingBufferId) {
+            flushSpriteUploadCopies();
+        }
         if(spriteUploadRegionCount == MAX_SPRITE_COPY_BATCH_REGIONS) {
             flushSpriteUploadCopies();
+        }
+        if(spriteUploadRegionCount == 0) {
+            spriteUploadStagingBufferId = stagingBufferId;
         }
 
         int index = spriteUploadRegionCount++;
@@ -335,11 +349,11 @@ public abstract class VTextureSelector {
 
         VulkanImage texture = spriteUploadTexture;
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
-        if(texture == null || !graphicsQueue.hasActiveUploadBatch()) {
+        if(texture == null || spriteUploadStagingBufferId == VK_NULL_HANDLE
+                || !graphicsQueue.hasActiveUploadBatch()) {
             throw new IllegalStateException("Sprite upload copy batch lost its graphics command-buffer owner");
         }
 
-        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferImageCopy.Buffer regions = VkBufferImageCopy.calloc(count, stack);
             for(int i = 0; i < count; ++i) {
@@ -357,13 +371,14 @@ public abstract class VTextureSelector {
 
             vkCmdCopyBufferToImage(
                     graphicsQueue.getCommandBuffer().getHandle(),
-                    stagingBuffer.getId(),
+                    spriteUploadStagingBufferId,
                     texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     regions);
         }
 
         spriteUploadRegionCount = 0;
+        spriteUploadStagingBufferId = VK_NULL_HANDLE;
     }
 
     private static void resetStagingSubmissionWindow() {
