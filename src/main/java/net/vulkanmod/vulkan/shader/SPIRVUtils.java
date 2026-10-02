@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.shader;
 
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.NativeResource;
+import net.vulkanmod.vulkan.shader.cache.CompilationCache;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -78,6 +79,14 @@ public class SPIRVUtils {
 
     public static synchronized SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
 
+        byte[] cacheKey = CompilationCache.shaderKey(filename, source, shaderKind.kind, DEBUG, OPTIMIZATIONS);
+        byte[] cached = CompilationCache.readShader(cacheKey);
+        if(cached != null) {
+            ByteBuffer code = MemoryUtil.memAlloc(cached.length);
+            code.put(cached).flip();
+            return SPIRV.nativeBuffer(code);
+        }
+
         if(compiler == 0) compiler = shaderc_compiler_initialize();
 
         if(compiler == NULL) {
@@ -114,6 +123,7 @@ public class SPIRVUtils {
             }
 
             SPIRV spirv = SPIRV.shadercResult(result, shaderc_result_get_bytes(result));
+            CompilationCache.writeShader(cacheKey, spirv.bytecode());
             resultTransferred = true;
             return spirv;
         } finally {
@@ -144,6 +154,7 @@ public class SPIRVUtils {
     }
 
     public static synchronized void destroyCompiler() {
+        CompilationCache.report();
         if(compiler == NULL)
             return;
 

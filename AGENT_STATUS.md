@@ -92,6 +92,15 @@ The owner requested a plan for investigation and implementation of GPU texture a
 
 ## Next useful action
 
+The owner has now requested implementation of the complete performance feature
+shortlist. `docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md` tracks implemented paths,
+remaining integration work and adoption gates. The first executable slice adds
+persistent compilation caches with a local corruption/identity/admission contract
+and a native shader/pipeline-cache smoke gate; CI is pending. Continue usage-driven
+texture animation and adaptive chunk scheduling while it runs. Keep the #946
+matched capture as the baseline for separately toggled experiments; no hardware
+gain or accelerated rendering adoption is established by this implementation work.
+
 1. Use CI-green build **#946** for the exact same automated stationary RX benchmark contract used for #935.
 2. The latest supplied `08881808-771c-499a-b9bd-81f1db2c468c` capture is the already-recorded #935 evidence, not a post-optimization result; do not mistake it for candidate validation.
 3. Compare in this order:

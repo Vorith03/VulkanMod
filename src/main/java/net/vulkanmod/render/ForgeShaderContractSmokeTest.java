@@ -182,6 +182,7 @@ public final class ForgeShaderContractSmokeTest {
         }
 
         Initializer.LOGGER.info("Forge shader registration/reload contract smoke passed");
+        net.vulkanmod.vulkan.shader.cache.CompilationCacheSmokeTest.run();
     }
 
     private static void require(boolean condition, String message) {

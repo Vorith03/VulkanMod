@@ -26,6 +26,7 @@ public class Config {
     public boolean experimentalGpuTerrain = false;
     public boolean uniqueOpaqueLayer = true;
     public boolean entityCulling = true;
+    public boolean persistentCompilationCache = true;
 
     private static Path path;
 

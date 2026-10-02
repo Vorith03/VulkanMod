@@ -4,6 +4,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.vulkanmod.Initializer;
+import net.vulkanmod.vulkan.shader.cache.BoundedDiskCache;
+import net.vulkanmod.vulkan.shader.cache.CompilationCache;
+import net.vulkanmod.vulkan.shader.cache.PipelineCacheIdentity;
+import org.lwjgl.PointerBuffer;
+import java.nio.ByteOrder;
 import net.minecraft.util.GsonHelper;
 import net.vulkanmod.vulkan.*;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
@@ -47,6 +53,26 @@ public abstract class Pipeline {
             VkPipelineCacheCreateInfo cacheCreateInfo = VkPipelineCacheCreateInfo.calloc(stack);
             cacheCreateInfo.sType(VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
 
+            byte[] uuid = new byte[16];
+            Device.deviceProperties.pipelineCacheUUID().duplicate().get(uuid);
+            byte[] saved = CompilationCache.readPipeline(persistentCacheKey(uuid));
+            if(PipelineCacheIdentity.matches(saved, Device.deviceProperties.vendorID(),
+                    Device.deviceProperties.deviceID(), uuid)) {
+                ByteBuffer initial = MemoryUtil.memAlloc(saved.length);
+                try {
+                    initial.put(saved).flip();
+                    cacheCreateInfo.pInitialData(initial);
+                    LongBuffer result = stack.mallocLong(1);
+                    int status = vkCreatePipelineCache(DEVICE, cacheCreateInfo, null, result);
+                    if(status == VK_SUCCESS) {
+                        Initializer.LOGGER.info("Loaded Vulkan pipeline cache: {} bytes", saved.length);
+                        return result.get(0);
+                    }
+                    Initializer.LOGGER.warn("Saved Vulkan pipeline cache rejected ({}); creating empty cache", status);
+                } finally { MemoryUtil.memFree(initial); }
+                cacheCreateInfo.pInitialData(null);
+            }
+
             LongBuffer pPipelineCache = stack.mallocLong(1);
 
             if(vkCreatePipelineCache(DEVICE, cacheCreateInfo, null, pPipelineCache) != VK_SUCCESS) {
@@ -58,7 +84,60 @@ public abstract class Pipeline {
     }
 
     public static void destroyPipelineCache() {
-        vkDestroyPipelineCache(DEVICE, PIPELINE_CACHE, null);
+        try {
+            if(CompilationCache.enabled()) savePipelineCache();
+        } finally {
+            vkDestroyPipelineCache(DEVICE, PIPELINE_CACHE, null);
+        }
+    }
+
+    private static byte[] persistentCacheKey(byte[] uuid) {
+        ByteBuffer identity = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN);
+        identity.putInt(Device.deviceProperties.vendorID()).putInt(Device.deviceProperties.deviceID())
+                .putInt(Device.deviceProperties.driverVersion()).putInt(Device.deviceProperties.apiVersion()).put(uuid);
+        return BoundedDiskCache.digest(identity.array());
+    }
+
+    private static void savePipelineCache() {
+        try(MemoryStack stack = stackPush()) {
+            PointerBuffer size = stack.mallocPointer(1);
+            if(vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, size, null) != VK_SUCCESS) return;
+            long length = size.get(0);
+            if(length < 32 || length > CompilationCache.MAX_PIPELINE_BYTES) return;
+            ByteBuffer data = MemoryUtil.memAlloc((int)length);
+            try {
+                if(vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, size, data) != VK_SUCCESS) return;
+                if(size.get(0) < 32 || size.get(0) > length) return;
+                byte[] saved = new byte[(int)size.get(0)];
+                data.get(saved);
+                byte[] uuid = new byte[16];
+                Device.deviceProperties.pipelineCacheUUID().duplicate().get(uuid);
+                if(PipelineCacheIdentity.matches(saved, Device.deviceProperties.vendorID(),
+                        Device.deviceProperties.deviceID(), uuid))
+                    CompilationCache.writePipeline(persistentCacheKey(uuid), saved);
+            } finally { MemoryUtil.memFree(data); }
+        }
+    }
+
+    public static void verifyPersistentCacheForSmoke() {
+        savePipelineCache();
+        byte[] uuid = new byte[16];
+        Device.deviceProperties.pipelineCacheUUID().duplicate().get(uuid);
+        byte[] saved = CompilationCache.readPipeline(persistentCacheKey(uuid));
+        if(!PipelineCacheIdentity.matches(saved, Device.deviceProperties.vendorID(),
+                Device.deviceProperties.deviceID(), uuid))
+            throw new IllegalStateException("Pipeline cache persistence round trip failed");
+        ByteBuffer initial = MemoryUtil.memAlloc(saved.length);
+        try(MemoryStack stack = stackPush()) {
+            initial.put(saved).flip();
+            VkPipelineCacheCreateInfo info = VkPipelineCacheCreateInfo.calloc(stack)
+                    .sType(VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO).pInitialData(initial);
+            LongBuffer result = stack.mallocLong(1);
+            int status = vkCreatePipelineCache(DEVICE, info, null, result);
+            if(status != VK_SUCCESS)
+                throw new IllegalStateException("Persisted pipeline cache rejected in smoke: " + status);
+            vkDestroyPipelineCache(DEVICE, result.get(0), null);
+        } finally { MemoryUtil.memFree(initial); }
     }
 
     public static void recreateDescriptorSets(int frames) {
