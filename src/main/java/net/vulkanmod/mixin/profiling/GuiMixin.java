@@ -7,10 +7,8 @@ import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.profiling.AutomatedBenchmark;
 import net.vulkanmod.render.profiling.ClientTickBreakdown;
-import net.vulkanmod.render.profiling.GpuTimestampProfiler;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.render.profiling.ProfilerOverlay;
-import net.vulkanmod.vulkan.Renderer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,7 +25,6 @@ public class GuiMixin {
     @Unique private long vulkanmod$nextStagingRefresh;
     @Unique private String vulkanmod$stagingLine;
     @Unique private String vulkanmod$benchmarkLine;
-    @Unique private long vulkanmod$hudStart;
     @Unique private long vulkanmod$guiTickStart;
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -44,21 +41,6 @@ public class GuiMixin {
     private void vulkanmod$endGuiTick(boolean paused, CallbackInfo ci) {
         ClientTickBreakdown.end(ClientTickBreakdown.Stage.GUI, vulkanmod$guiTickStart);
         vulkanmod$guiTickStart = 0L;
-    }
-
-    @Inject(method = "render", at = @At("HEAD"))
-    private void vulkanmod$beginHudRender(GuiGraphics guiGraphics, float f, CallbackInfo ci) {
-        GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
-                GpuTimestampProfiler.Boundary.HUD_BEGIN);
-        vulkanmod$hudStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.HUD_RENDER);
-    }
-
-    @Inject(method = "render", at = @At("RETURN"))
-    private void vulkanmod$endHudRender(GuiGraphics guiGraphics, float f, CallbackInfo ci) {
-        GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
-                GpuTimestampProfiler.Boundary.HUD_END);
-        PerformanceProfiler.end(PerformanceProfiler.Stage.HUD_RENDER, vulkanmod$hudStart);
-        vulkanmod$hudStart = 0L;
     }
 
     @Inject(method = "render", at = @At(value = "INVOKE",

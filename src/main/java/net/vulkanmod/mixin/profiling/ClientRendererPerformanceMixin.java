@@ -17,6 +17,7 @@ public class ClientRendererPerformanceMixin {
     @Unique private long vulkanmod$rendererTickStart;
     @Unique private long vulkanmod$pickStart;
     @Unique private long vulkanmod$worldRenderStart;
+    @Unique private long vulkanmod$hudRenderStart;
     @Unique private int vulkanmod$worldRenderDepth;
 
     @Inject(method = "tick()V", at = @At("HEAD"))
@@ -60,5 +61,25 @@ public class ClientRendererPerformanceMixin {
             PerformanceProfiler.end(PerformanceProfiler.Stage.WORLD_RENDER, vulkanmod$worldRenderStart);
             vulkanmod$worldRenderStart = 0L;
         }
+    }
+
+    // Forge installs ForgeGui, which fully overrides Gui.render(). Bracket the
+    // GameRenderer call site so virtual dispatch to either implementation is timed.
+    @Inject(method = "render(FJZ)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/Gui;render(Lnet/minecraft/client/gui/GuiGraphics;F)V"))
+    private void vulkanmod$beginHudRender(CallbackInfo ci) {
+        GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
+                GpuTimestampProfiler.Boundary.HUD_BEGIN);
+        vulkanmod$hudRenderStart = PerformanceProfiler.begin(PerformanceProfiler.Stage.HUD_RENDER);
+    }
+
+    @Inject(method = "render(FJZ)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/Gui;render(Lnet/minecraft/client/gui/GuiGraphics;F)V",
+            shift = At.Shift.AFTER))
+    private void vulkanmod$endHudRender(CallbackInfo ci) {
+        GpuTimestampProfiler.boundary(Renderer.getCurrentFrame(), Renderer.getCommandBuffer(),
+                GpuTimestampProfiler.Boundary.HUD_END);
+        PerformanceProfiler.end(PerformanceProfiler.Stage.HUD_RENDER, vulkanmod$hudRenderStart);
+        vulkanmod$hudRenderStart = 0L;
     }
 }

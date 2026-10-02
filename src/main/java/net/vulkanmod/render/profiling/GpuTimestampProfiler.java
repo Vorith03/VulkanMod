@@ -50,6 +50,7 @@ public final class GpuTimestampProfiler {
     private static final int ALL_BOUNDARIES_MASK = (1 << 4) - 1;
     private static final int MAX_SAMPLES = 65_536;
     private static final long PARTITION_TOLERANCE_NANOS = 5_000L;
+    private static final long TERRAIN_SUM_TOLERANCE_NANOS = 64L;
 
     public static final String SCOPE = "main_graphics_command_buffer";
 
@@ -78,6 +79,41 @@ public final class GpuTimestampProfiler {
         TAIL
     }
 
+    private enum BreakdownFailure {
+        NONE,
+        MISSING_FIXED_MARKERS,
+        MARKER_ORDER,
+        RECONSTRUCTION,
+        TERRAIN_INCOMPLETE,
+        TERRAIN_CONTAINMENT
+    }
+
+    private static final class BreakdownFailureCounters {
+        long invalidFrames;
+        long missingFixedMarkerFrames;
+        long missingWorldBeginFrames;
+        long missingWorldEndFrames;
+        long missingHudBeginFrames;
+        long missingHudEndFrames;
+        long markerOrderFailures;
+        long reconstructionFailures;
+        long terrainIncompleteFailures;
+        long terrainContainmentFailures;
+
+        void reset() {
+            invalidFrames = 0L;
+            missingFixedMarkerFrames = 0L;
+            missingWorldBeginFrames = 0L;
+            missingWorldEndFrames = 0L;
+            missingHudBeginFrames = 0L;
+            missingHudEndFrames = 0L;
+            markerOrderFailures = 0L;
+            reconstructionFailures = 0L;
+            terrainIncompleteFailures = 0L;
+            terrainContainmentFailures = 0L;
+        }
+    }
+
     private static final long[] samples = REQUESTED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = REQUESTED ? new long[MAX_SAMPLES] : null;
     private static final long[][] passSamples = REQUESTED
@@ -85,6 +121,8 @@ public final class GpuTimestampProfiler {
     private static final int[] passSampleCounts = REQUESTED ? new int[PassSeries.values().length] : null;
     private static final long[] passSampleSums = REQUESTED ? new long[PassSeries.values().length] : null;
     private static final long[] passSampleMax = REQUESTED ? new long[PassSeries.values().length] : null;
+    private static final long[] breakdownScratch = REQUESTED ? new long[PassSeries.values().length] : null;
+    private static final BreakdownFailureCounters breakdownFailures = new BreakdownFailureCounters();
 
     private static long[] queryPools;
     private static boolean[] armed;
@@ -102,6 +140,7 @@ public final class GpuTimestampProfiler {
     private static boolean active;
     private static boolean captureActive = initialCaptureActive(REQUESTED, AUTOMATED_BENCHMARK);
     private static boolean smokeResultAnnounced;
+    private static boolean passSmokeResultAnnounced;
     private static int timestampValidBits;
     private static double timestampPeriodNanos;
     private static int sampledFrames;
@@ -109,7 +148,6 @@ public final class GpuTimestampProfiler {
     private static long droppedSamples;
     private static long readFailures;
     private static long breakdownFrames;
-    private static long breakdownInvalidFrames;
     private static long terrainSegments;
     private static long terrainSegmentDrops;
     private static String status = REQUESTED ? "not_initialized" : "disabled";
@@ -140,6 +178,11 @@ public final class GpuTimestampProfiler {
     public static void create(int frames) {
         if (!REQUESTED || initialized) return;
         initialized = true;
+
+        if (Boolean.getBoolean("vulkanmod.smokeTest")) {
+            verifyForCi();
+            Initializer.LOGGER.info("VULKANMOD_GPU_TIMESTAMP_CONTRACT_OK");
+        }
 
         if (frames <= 0) {
             status = "invalid_frame_count";
@@ -330,10 +373,17 @@ public final class GpuTimestampProfiler {
                 millis(percentile(samples, sampledFrames, 0.95D)),
                 millis(percentile(samples, sampledFrames, 0.99D)), millis(max)));
 
+        long unaccountedFrames = Math.max(0L,
+                measuredFrames - breakdownFrames - breakdownFailures.invalidFrames);
         PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
-                "gpu_passes scope=%s breakdown_frames=%d invalid_frames=%d terrain_segments=%d terrain_segment_drops=%d max_terrain_segments_per_frame=%d %s %s %s %s %s %s %s",
-                SCOPE, breakdownFrames, breakdownInvalidFrames, terrainSegments, terrainSegmentDrops,
-                MAX_TERRAIN_SEGMENTS,
+                "gpu_passes scope=%s breakdown_frames=%d invalid_frames=%d unaccounted_frames=%d missing_fixed_marker_frames=%d missing_world_begin_frames=%d missing_world_end_frames=%d missing_hud_begin_frames=%d missing_hud_end_frames=%d marker_order_failures=%d reconstruction_failures=%d terrain_incomplete_failures=%d terrain_containment_failures=%d terrain_segments=%d terrain_segment_drops=%d max_terrain_segments_per_frame=%d %s %s %s %s %s %s %s",
+                SCOPE, breakdownFrames, breakdownFailures.invalidFrames, unaccountedFrames,
+                breakdownFailures.missingFixedMarkerFrames,
+                breakdownFailures.missingWorldBeginFrames, breakdownFailures.missingWorldEndFrames,
+                breakdownFailures.missingHudBeginFrames, breakdownFailures.missingHudEndFrames,
+                breakdownFailures.markerOrderFailures, breakdownFailures.reconstructionFailures,
+                breakdownFailures.terrainIncompleteFailures, breakdownFailures.terrainContainmentFailures,
+                terrainSegments, terrainSegmentDrops, MAX_TERRAIN_SEGMENTS,
                 passStats("pre_world", PassSeries.PRE_WORLD),
                 passStats("world", PassSeries.WORLD),
                 passStats("terrain", PassSeries.TERRAIN),
@@ -361,14 +411,92 @@ public final class GpuTimestampProfiler {
                 || initialCaptureActive(false, true)) {
             throw new IllegalStateException("GPU timestamp capture-boundary contract is invalid");
         }
-        if (MAX_SAMPLES < 8192 || FIXED_QUERY_COUNT != 6 || QUERY_COUNT != 70
+        if (MAX_SAMPLES < 8192 || FRAME_START_QUERY != 0
+                || Boundary.WORLD_BEGIN.query != 1 || Boundary.WORLD_BEGIN.bit != 1
+                || Boundary.WORLD_END.query != 2 || Boundary.WORLD_END.bit != 2
+                || Boundary.HUD_BEGIN.query != 3 || Boundary.HUD_BEGIN.bit != 4
+                || Boundary.HUD_END.query != 4 || Boundary.HUD_END.bit != 8
+                || FRAME_END_QUERY != 5 || FIXED_QUERY_COUNT != 6 || QUERY_COUNT != 70
                 || MAX_TERRAIN_SEGMENTS != 32 || SCOPE.isBlank()) {
-            throw new IllegalStateException("GPU timestamp profiler capacity/scope contract is invalid");
+            throw new IllegalStateException("GPU timestamp profiler query layout/capacity contract is invalid");
         }
         if (deltaTicks(100L, 150L, 64) != 50L
                 || deltaTicks(250L, 5L, 8) != 11L
                 || deltaTicks(5L, 5L, 8) != 0L) {
             throw new IllegalStateException("GPU timestamp wrap arithmetic is invalid");
+        }
+
+        long[] complete = new long[FIXED_QUERY_COUNT + 4];
+        complete[FRAME_START_QUERY] = 100L;
+        complete[WORLD_BEGIN_QUERY] = 110L;
+        complete[WORLD_END_QUERY] = 160L;
+        complete[HUD_BEGIN_QUERY] = 170L;
+        complete[HUD_END_QUERY] = 180L;
+        complete[FRAME_END_QUERY] = 200L;
+        complete[FIXED_QUERY_COUNT] = 120L;
+        complete[FIXED_QUERY_COUNT + 1] = 130L;
+        complete[FIXED_QUERY_COUNT + 2] = 140L;
+        complete[FIXED_QUERY_COUNT + 3] = 145L;
+        long[] decoded = new long[PassSeries.values().length];
+        long frameNanos = durationNanos(complete[FRAME_START_QUERY], complete[FRAME_END_QUERY], 64, 10.0D);
+        BreakdownFailure result = analyzeBreakdown(LongBuffer.wrap(complete), ALL_BOUNDARIES_MASK,
+                2, 0b11, 0, frameNanos, 64, 10.0D, decoded);
+        if (result != BreakdownFailure.NONE
+                || decoded[PassSeries.PRE_WORLD.ordinal()] != 100L
+                || decoded[PassSeries.WORLD.ordinal()] != 500L
+                || decoded[PassSeries.TERRAIN.ordinal()] != 150L
+                || decoded[PassSeries.WORLD_OTHER.ordinal()] != 350L
+                || decoded[PassSeries.BETWEEN_WORLD_HUD.ordinal()] != 100L
+                || decoded[PassSeries.HUD.ordinal()] != 100L
+                || decoded[PassSeries.TAIL.ordinal()] != 200L) {
+            throw new IllegalStateException("GPU timestamp synthetic pass decoding is invalid");
+        }
+
+        BreakdownFailureCounters counters = new BreakdownFailureCounters();
+        int missingHudMask = Boundary.WORLD_BEGIN.bit | Boundary.WORLD_END.bit;
+        BreakdownFailure missing = analyzeBreakdown(LongBuffer.wrap(complete), missingHudMask,
+                2, 0b11, 0, frameNanos, 64, 10.0D, decoded);
+        accountBreakdownFailure(missing, missingHudMask, counters);
+        if (missing != BreakdownFailure.MISSING_FIXED_MARKERS
+                || counters.invalidFrames != 1L || counters.missingFixedMarkerFrames != 1L
+                || counters.missingWorldBeginFrames != 0L || counters.missingWorldEndFrames != 0L
+                || counters.missingHudBeginFrames != 1L || counters.missingHudEndFrames != 1L) {
+            throw new IllegalStateException("GPU timestamp missing-marker accounting is invalid");
+        }
+
+        long[] outOfOrder = complete.clone();
+        outOfOrder[WORLD_END_QUERY] = 105L;
+        if (analyzeBreakdown(LongBuffer.wrap(outOfOrder), ALL_BOUNDARIES_MASK,
+                2, 0b11, 0, frameNanos, 64, 10.0D, decoded) != BreakdownFailure.MARKER_ORDER) {
+            throw new IllegalStateException("GPU timestamp marker-order rejection is invalid");
+        }
+
+        long[] reconstruction = complete.clone();
+        reconstruction[WORLD_BEGIN_QUERY] = 20L;
+        reconstruction[WORLD_END_QUERY] = 10L;
+        reconstruction[HUD_BEGIN_QUERY] = 20L;
+        reconstruction[HUD_END_QUERY] = 30L;
+        long wrappedFrameNanos = durationNanos(250L, 60L, 8, 100.0D);
+        reconstruction[FRAME_START_QUERY] = 250L;
+        reconstruction[FRAME_END_QUERY] = 60L;
+        if (analyzeBreakdown(LongBuffer.wrap(reconstruction), ALL_BOUNDARIES_MASK,
+                0, 0, 0, wrappedFrameNanos, 8, 100.0D, decoded) != BreakdownFailure.RECONSTRUCTION) {
+            throw new IllegalStateException("GPU timestamp reconstruction rejection is invalid");
+        }
+
+        if (analyzeBreakdown(LongBuffer.wrap(complete), ALL_BOUNDARIES_MASK,
+                2, 0b01, 0, frameNanos, 64, 10.0D, decoded) != BreakdownFailure.TERRAIN_INCOMPLETE
+                || analyzeBreakdown(LongBuffer.wrap(complete), ALL_BOUNDARIES_MASK,
+                2, 0b11, 1, frameNanos, 64, 10.0D, decoded) != BreakdownFailure.TERRAIN_INCOMPLETE) {
+            throw new IllegalStateException("GPU timestamp terrain completeness rejection is invalid");
+        }
+
+        long[] terrainOutsideWorld = complete.clone();
+        terrainOutsideWorld[FIXED_QUERY_COUNT] = 1000L;
+        terrainOutsideWorld[FIXED_QUERY_COUNT + 1] = 1010L;
+        if (analyzeBreakdown(LongBuffer.wrap(terrainOutsideWorld), ALL_BOUNDARIES_MASK,
+                2, 0b11, 0, frameNanos, 64, 10.0D, decoded) != BreakdownFailure.TERRAIN_CONTAINMENT) {
+            throw new IllegalStateException("GPU timestamp terrain containment rejection is invalid");
         }
     }
 
@@ -382,9 +510,9 @@ public final class GpuTimestampProfiler {
         droppedSamples = 0L;
         readFailures = 0L;
         breakdownFrames = 0L;
-        breakdownInvalidFrames = 0L;
         terrainSegments = 0L;
         terrainSegmentDrops = 0L;
+        breakdownFailures.reset();
         if (passSampleCounts != null) Arrays.fill(passSampleCounts, 0);
         if (passSampleSums != null) Arrays.fill(passSampleSums, 0L);
         if (passSampleMax != null) Arrays.fill(passSampleMax, 0L);
@@ -441,55 +569,26 @@ public final class GpuTimestampProfiler {
         else droppedSamples++;
 
         terrainSegmentDrops += terrainOverflow;
-        int completeSegments = Integer.bitCount(completedMask);
-        terrainSegments += completeSegments;
+        terrainSegments += Integer.bitCount(completedMask);
 
-        if (boundaryMask == ALL_BOUNDARIES_MASK) {
-            long preWorld = durationNanos(values.get(FRAME_START_QUERY), values.get(WORLD_BEGIN_QUERY));
-            long world = durationNanos(values.get(WORLD_BEGIN_QUERY), values.get(WORLD_END_QUERY));
-            long between = durationNanos(values.get(WORLD_END_QUERY), values.get(HUD_BEGIN_QUERY));
-            long hud = durationNanos(values.get(HUD_BEGIN_QUERY), values.get(HUD_END_QUERY));
-            long tail = durationNanos(values.get(HUD_END_QUERY), values.get(FRAME_END_QUERY));
-
-            boolean valid = preWorld >= 0L && world >= 0L && between >= 0L && hud >= 0L && tail >= 0L;
-            if (valid) {
-                long upper = frameNanos + PARTITION_TOLERANCE_NANOS;
-                valid = preWorld <= upper && world <= upper && between <= upper && hud <= upper && tail <= upper;
+        BreakdownFailure failure = analyzeBreakdown(values, boundaryMask, segmentCount,
+                completedMask, terrainOverflow, frameNanos, timestampValidBits,
+                timestampPeriodNanos, breakdownScratch);
+        if (failure == BreakdownFailure.NONE) {
+            breakdownFrames++;
+            for (PassSeries series : PassSeries.values()) {
+                recordPass(series, breakdownScratch[series.ordinal()]);
             }
-            if (valid) {
-                long partition = preWorld + world + between + hud + tail;
-                valid = Math.abs(partition - frameNanos) <= PARTITION_TOLERANCE_NANOS;
+            if (!passSmokeResultAnnounced && Boolean.getBoolean("vulkanmod.smokeTest")) {
+                passSmokeResultAnnounced = true;
+                Initializer.LOGGER.info("VULKANMOD_GPU_PASS_SMOKE_OK scope={} world_ms={} terrain_ms={} hud_ms={}",
+                        SCOPE,
+                        String.format(Locale.ROOT, "%.3f", millis(breakdownScratch[PassSeries.WORLD.ordinal()])),
+                        String.format(Locale.ROOT, "%.3f", millis(breakdownScratch[PassSeries.TERRAIN.ordinal()])),
+                        String.format(Locale.ROOT, "%.3f", millis(breakdownScratch[PassSeries.HUD.ordinal()])));
             }
-
-            long terrain = 0L;
-            boolean terrainComplete = terrainOverflow == 0 && completeSegments == segmentCount;
-            for (int segment = 0; valid && terrainComplete && segment < segmentCount; segment++) {
-                int bit = 1 << segment;
-                if ((completedMask & bit) == 0) {
-                    terrainComplete = false;
-                    break;
-                }
-                int query = FIXED_QUERY_COUNT + segment * 2;
-                long duration = durationNanos(values.get(query), values.get(query + 1));
-                if (duration < 0L || duration > world + PARTITION_TOLERANCE_NANOS) {
-                    terrainComplete = false;
-                } else {
-                    terrain += duration;
-                }
-            }
-
-            if (valid && terrainComplete && terrain <= world + PARTITION_TOLERANCE_NANOS) {
-                breakdownFrames++;
-                recordPass(PassSeries.PRE_WORLD, preWorld);
-                recordPass(PassSeries.WORLD, world);
-                recordPass(PassSeries.TERRAIN, terrain);
-                recordPass(PassSeries.WORLD_OTHER, Math.max(0L, world - terrain));
-                recordPass(PassSeries.BETWEEN_WORLD_HUD, between);
-                recordPass(PassSeries.HUD, hud);
-                recordPass(PassSeries.TAIL, tail);
-            } else {
-                breakdownInvalidFrames++;
-            }
+        } else {
+            accountBreakdownFailure(failure, boundaryMask, breakdownFailures);
         }
 
         if (!smokeResultAnnounced && Boolean.getBoolean("vulkanmod.smokeTest")) {
@@ -499,10 +598,105 @@ public final class GpuTimestampProfiler {
         }
     }
 
+    private static BreakdownFailure analyzeBreakdown(LongBuffer values, int boundaryMask,
+                                                     int segmentCount, int completedMask,
+                                                     int terrainOverflow, long frameNanos,
+                                                     int validBits, double periodNanos,
+                                                     long[] decoded) {
+        if (boundaryMask != ALL_BOUNDARIES_MASK) return BreakdownFailure.MISSING_FIXED_MARKERS;
+
+        long preWorld = durationNanos(values.get(FRAME_START_QUERY), values.get(WORLD_BEGIN_QUERY),
+                validBits, periodNanos);
+        long world = durationNanos(values.get(WORLD_BEGIN_QUERY), values.get(WORLD_END_QUERY),
+                validBits, periodNanos);
+        long between = durationNanos(values.get(WORLD_END_QUERY), values.get(HUD_BEGIN_QUERY),
+                validBits, periodNanos);
+        long hud = durationNanos(values.get(HUD_BEGIN_QUERY), values.get(HUD_END_QUERY),
+                validBits, periodNanos);
+        long tail = durationNanos(values.get(HUD_END_QUERY), values.get(FRAME_END_QUERY),
+                validBits, periodNanos);
+        if (preWorld < 0L || world < 0L || between < 0L || hud < 0L || tail < 0L) {
+            return BreakdownFailure.MARKER_ORDER;
+        }
+
+        long upper = frameNanos + PARTITION_TOLERANCE_NANOS;
+        if (preWorld > upper || world > upper || between > upper || hud > upper || tail > upper) {
+            return BreakdownFailure.RECONSTRUCTION;
+        }
+        long partition = preWorld + world + between + hud + tail;
+        if (Math.abs(partition - frameNanos) > PARTITION_TOLERANCE_NANOS) {
+            return BreakdownFailure.RECONSTRUCTION;
+        }
+
+        if (segmentCount < 0 || segmentCount > MAX_TERRAIN_SEGMENTS) {
+            return BreakdownFailure.TERRAIN_INCOMPLETE;
+        }
+        int completeSegments = Integer.bitCount(completedMask);
+        if (terrainOverflow != 0 || completeSegments != segmentCount) {
+            return BreakdownFailure.TERRAIN_INCOMPLETE;
+        }
+
+        long terrain = 0L;
+        long worldBeginTimestamp = values.get(WORLD_BEGIN_QUERY);
+        for (int segment = 0; segment < segmentCount; segment++) {
+            int bit = 1 << segment;
+            if ((completedMask & bit) == 0) return BreakdownFailure.TERRAIN_INCOMPLETE;
+
+            int query = FIXED_QUERY_COUNT + segment * 2;
+            long segmentStart = values.get(query);
+            long segmentEnd = values.get(query + 1);
+            long duration = durationNanos(segmentStart, segmentEnd, validBits, periodNanos);
+            long startOffset = durationNanos(worldBeginTimestamp, segmentStart, validBits, periodNanos);
+            long endOffset = durationNanos(worldBeginTimestamp, segmentEnd, validBits, periodNanos);
+            if (duration < 0L || startOffset < 0L || endOffset < 0L
+                    || startOffset > world
+                    || endOffset > world
+                    || endOffset < startOffset) {
+                return BreakdownFailure.TERRAIN_CONTAINMENT;
+            }
+            terrain += duration;
+            if (terrain > world + TERRAIN_SUM_TOLERANCE_NANOS) {
+                return BreakdownFailure.TERRAIN_CONTAINMENT;
+            }
+        }
+
+        decoded[PassSeries.PRE_WORLD.ordinal()] = preWorld;
+        decoded[PassSeries.WORLD.ordinal()] = world;
+        decoded[PassSeries.TERRAIN.ordinal()] = terrain;
+        decoded[PassSeries.WORLD_OTHER.ordinal()] = Math.max(0L, world - terrain);
+        decoded[PassSeries.BETWEEN_WORLD_HUD.ordinal()] = between;
+        decoded[PassSeries.HUD.ordinal()] = hud;
+        decoded[PassSeries.TAIL.ordinal()] = tail;
+        return BreakdownFailure.NONE;
+    }
+
+    private static void accountBreakdownFailure(BreakdownFailure failure, int boundaryMask,
+                                                BreakdownFailureCounters counters) {
+        if (failure == BreakdownFailure.NONE) return;
+        counters.invalidFrames++;
+        switch (failure) {
+            case MISSING_FIXED_MARKERS -> {
+                counters.missingFixedMarkerFrames++;
+                if ((boundaryMask & Boundary.WORLD_BEGIN.bit) == 0) counters.missingWorldBeginFrames++;
+                if ((boundaryMask & Boundary.WORLD_END.bit) == 0) counters.missingWorldEndFrames++;
+                if ((boundaryMask & Boundary.HUD_BEGIN.bit) == 0) counters.missingHudBeginFrames++;
+                if ((boundaryMask & Boundary.HUD_END.bit) == 0) counters.missingHudEndFrames++;
+            }
+            case MARKER_ORDER -> counters.markerOrderFailures++;
+            case RECONSTRUCTION -> counters.reconstructionFailures++;
+            case TERRAIN_INCOMPLETE -> counters.terrainIncompleteFailures++;
+            case TERRAIN_CONTAINMENT -> counters.terrainContainmentFailures++;
+        }
+    }
+
     private static long durationNanos(long start, long end) {
-        long ticks = deltaTicks(start, end, timestampValidBits);
+        return durationNanos(start, end, timestampValidBits, timestampPeriodNanos);
+    }
+
+    private static long durationNanos(long start, long end, int validBits, double periodNanos) {
+        long ticks = deltaTicks(start, end, validBits);
         if (ticks < 0L) return -1L;
-        double nanosDouble = ticks * timestampPeriodNanos;
+        double nanosDouble = ticks * periodNanos;
         if (!(nanosDouble >= 0.0D) || !Double.isFinite(nanosDouble)) return -1L;
         return Math.round(nanosDouble);
     }
