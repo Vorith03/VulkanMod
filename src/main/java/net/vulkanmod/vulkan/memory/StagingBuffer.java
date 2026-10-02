@@ -13,6 +13,7 @@ public class StagingBuffer extends Buffer {
     private int highWaterMark;
     private int resizeCount;
     private int growthLimit = Integer.MAX_VALUE;
+    private ByteBuffer mappedByteBuffer;
 
     public StagingBuffer(int bufferSize) {
         super(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, MemoryTypes.HOST_MEM);
@@ -38,10 +39,25 @@ public class StagingBuffer extends Buffer {
         if(required > this.bufferSize) {
             resizeBuffer(calculateGrowthSize(this.bufferSize, (int)required, this.growthLimit));
         }
-        layout.copyTo(source, MemoryUtil.memByteBuffer(this.data.get(0), this.bufferSize), (int)alignedUsed);
+        layout.copyTo(source, mappedByteBuffer(), (int)alignedUsed);
         this.offset = (int)alignedUsed;
         this.usedBytes = (int)required;
         this.highWaterMark = Math.max(this.highWaterMark, this.usedBytes);
+    }
+
+    /**
+     * Reuse the Java view of mapped staging memory rather than constructing a new
+     * DirectByteBuffer wrapper for every animated-texture subupload. The backing
+     * address and capacity remain stable until resizeBuffer() replaces the Vulkan
+     * allocation, at which point the cached view is invalidated.
+     */
+    private ByteBuffer mappedByteBuffer() {
+        ByteBuffer view = this.mappedByteBuffer;
+        if(view == null) {
+            view = MemoryUtil.memByteBuffer(this.data.get(0), this.bufferSize);
+            this.mappedByteBuffer = view;
+        }
+        return view;
     }
 
     /**
@@ -132,6 +148,7 @@ public class StagingBuffer extends Buffer {
     private void resizeBuffer(int newSize) {
         MemoryManager.getInstance().addToFreeable(this);
         this.createBuffer(newSize);
+        this.mappedByteBuffer = null;
         this.resizeCount++;
     }
 
