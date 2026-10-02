@@ -10,6 +10,7 @@ import net.vulkanmod.interfaces.VTextureManagerI;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -61,14 +62,23 @@ public abstract class MTextureManager implements VTextureManagerI {
         // animated sprites before Minecraft.tick() begins. Snapshot that decision so
         // the command-buffer batch has a symmetric start/end lifecycle.
         boolean uploadSprites = SpriteUtil.shouldUpload();
-        if(uploadSprites)
+        if(uploadSprites) {
             Device.getGraphicsQueue().startRecording();
+            // SpriteContents keeps its own nested scope. Holding one outer scope for
+            // the whole texture tick lets consecutive animated sprites targeting the
+            // same atlas share vkCmdCopyBufferToImage calls instead of forcing one
+            // Vulkan copy command per sprite. VTextureSelector still flushes on image
+            // changes, staging-buffer growth and the fixed region cap, preserving the
+            // existing ordering and ownership boundaries.
+            VTextureSelector.beginSpriteUploadBatch();
+        }
 
         for (Tickable tickable : this.tickableTextures) {
             tickable.tick();
         }
 
         if(uploadSprites) {
+            VTextureSelector.endSpriteUploadBatch();
             SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
             Device.getGraphicsQueue().endRecordingAndSubmit();
         }
