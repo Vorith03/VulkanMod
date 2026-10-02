@@ -176,11 +176,20 @@ public abstract class MSpriteContents implements VSpriteContentsI {
         this.vulkanmod$performanceUploadStartNanos = ClientTickBreakdown.beginTextureSpriteUpload(
                 nativeImages != null ? nativeImages.length : 0);
         SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
+        // One SpriteContents upload normally emits one NativeImage upload per mip.
+        // Keep every staged copy, but let VTextureSelector combine those mip copy
+        // regions into one vkCmdCopyBufferToImage while the texture tick owns its
+        // shared graphics command buffer.
+        VTextureSelector.beginSpriteUploadBatch();
     }
 
     @Inject(method = "upload", at = @At("RETURN"))
     private void vulkanmod$finishPerformanceUpload(int i, int j, int k, int l, NativeImage[] nativeImages, CallbackInfo ci) {
-        ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
-        this.vulkanmod$performanceUploadStartNanos = 0L;
+        try {
+            VTextureSelector.endSpriteUploadBatch();
+        } finally {
+            ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
+            this.vulkanmod$performanceUploadStartNanos = 0L;
+        }
     }
 }
