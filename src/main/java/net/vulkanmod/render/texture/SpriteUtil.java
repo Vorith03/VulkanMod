@@ -10,7 +10,8 @@ public abstract class SpriteUtil {
 
     private static boolean doUpload = false;
 
-    private static Set<VulkanImage> transitionedLayouts = new HashSet<>();
+    private static final Set<VulkanImage> transitionedLayouts = new HashSet<>();
+    private static VulkanImage lastTransitionedLayout;
 
     public static void setDoUpload(boolean b) {
         doUpload = b;
@@ -21,12 +22,19 @@ public abstract class SpriteUtil {
     }
 
     public static void addTransitionedLayout(VulkanImage image) {
-        transitionedLayouts.add(image);
+        // Animated sprites are normally visited atlas-by-atlas. Avoid repeating a
+        // HashSet lookup for every sprite when the previous sprite already marked
+        // the same Vulkan image; the set still handles non-consecutive duplicates.
+        if(image != lastTransitionedLayout) {
+            transitionedLayouts.add(image);
+            lastTransitionedLayout = image;
+        }
     }
 
     public static void transitionLayouts(CommandPool.CommandBuffer commandBuffer) {
         transitionedLayouts.forEach(image -> image.readOnlyLayout(commandBuffer));
 
         transitionedLayouts.clear();
+        lastTransitionedLayout = null;
     }
 }
