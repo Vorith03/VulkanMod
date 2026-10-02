@@ -49,6 +49,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Validate GPU profiler hook contract
         run: python3 scripts/ci/gpu-profiler-contract.py
+      - name: Validate automated attribution capture boundaries
+        run: python3 scripts/ci/attribution-capture-contract.py
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
       - name: Validate packaged Immersive Portals mixin anchors

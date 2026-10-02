@@ -11,7 +11,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
   2. `322f8b15e8a62081554321bcb0131b7645386858` — skip repeated same-atlas transition `HashSet` lookups;
   3. `d1da0cc298e6ab46c99f06bb86ec89fcaf8cb26a` — reuse the mapped texture-staging `ByteBuffer` view instead of allocating a wrapper for every subupload.
 - `282d6c00...` was an incomplete attempt to move texture memory-pressure sampling to the outer batch. It was immediately reverted by `4f0f0e0e7a59d95f7282f60d85819610a5dea5fb`; do not treat it as an active optimization.
-- CI **#940** / run `36998527537` validates the final effective code state at `4f0f0e0e...`; it was still running when this checkpoint was written. The following docs-only commit does not change executable source: `1de161918a42387b08272dcf5b52be5c54707c61`.
+- Current executable is `80f51f75f6938cd99085e4c858f1bf02b8ec8694`, validated by completed successful CI **#945** / run `37047079961` (live Actions API inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution. Earlier attribution runs #942/#943 failed; the live signature fixes supersede those attempts. Hardware validation of this executable remains pending.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -82,14 +82,19 @@ Per-subupload `MemoryDiagnostics.enforceSystemMemorySafety()` fast-path work and
 - Phase 5: **4/7** and current priority. Continue comparable benchmark-driven optimization and hitch/frame-time evidence.
 - Phase 7 GPU-terrain/hybrid: **6/11** and paused for Phase 5 measurement priority. The #935 GPU profile gives no reason to reopen unrelated terrain optimization now.
 
+## Attribution capture-boundary correction
+
+A follow-up source review found that the #945 helpers admitted warmup texture/world calls, unlike the parent profiler. The correction gates texture samples on the captured client-tick scope and world samples on captured frames. Attribution summaries now execute inside `finishAutomatedCapture` after its admission guard, rather than from a mixin HEAD that could emit/reset on a rejected finish. Added an executable Java 17 contract covering warmup exclusion, out-of-tick calls, recursive/overflow world ownership, copy-flush counters and reset; CI runs it before the full build. Local Java compilation failed because the available external JDK crashed with SIGBUS; no local Java test pass is claimed. Full CI for this correction is pending. Use the corrected build after CI passes for the next hardware benchmark; #945 remains the last verified CI build, not the preferred attribution capture.
+
 ## Next useful action
 
-1. Confirm CI #940 completes green for `4f0f0e0e...` (same executable source as current docs-only HEAD).
-2. Once green, run that build with the exact same automated stationary RX benchmark contract used for #935.
+1. Confirm CI for the attribution capture-boundary correction passes, then use that build for the exact same automated stationary RX benchmark contract used for #935.
+2. The latest supplied `08881808-771c-499a-b9bd-81f1db2c468c` capture is the already-recorded #935 evidence, not a post-optimization result; do not mistake it for candidate validation.
 3. Compare in this order:
    - total texture tick and client tick average/p95;
    - `sprite_upload_ms_avg/p95`;
    - texture allocation KiB/tick — primary validation for mapped-view reuse;
    - sprite/subupload calls per tick — must remain near #935 to prove unchanged semantics;
    - `non_upload_ms_avg/p95` — determines whether ticker/interpolation work becomes the next texture target.
-4. If texture cost is no longer dominant, use the same run to choose between particle owner/type attribution and finer CPU `world_render_other` attribution. Do not preselect either before seeing the new profile.
+4. Inspect the new `texture_outer_batch_attribution` summary to separate outer batch drain/layout/submission from animation iteration and assess regions per copy flush; inspect world-render attribution for CPU residual ownership. Do not subtract independent p95 values as though they were a residual percentile.
+5. If texture cost is no longer dominant, use the same run to choose between particle owner/type attribution and finer CPU `world_render_other` attribution. Do not preselect either before seeing the new profile.

@@ -56,7 +56,7 @@ public final class TextureTickAttribution {
     }
 
     public static long beginTick() {
-        if (!ENABLED || tickActive) return 0L;
+        if (!ENABLED || tickActive || !PerformanceProfiler.isClientTickCapturing()) return 0L;
         Arrays.fill(currentPhaseNanos, 0L);
         activePhase = -1;
         currentOverlap = false;

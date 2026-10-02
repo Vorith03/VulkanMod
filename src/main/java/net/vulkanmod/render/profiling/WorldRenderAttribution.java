@@ -47,7 +47,7 @@ public final class WorldRenderAttribution {
     }
 
     public static void beginWorldRender() {
-        if (!ENABLED) return;
+        if (!ENABLED || !PerformanceProfiler.isFrameCapturing()) return;
         if (worldDepth++ == 0) {
             Arrays.fill(currentCategoryNanos, 0L);
             categoryStackDepth = 0;

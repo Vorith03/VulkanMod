@@ -76,7 +76,6 @@
     "profiling.EntityRenderDispatcherPerformanceMixin",
     "profiling.ParticleEngineRenderPerformanceMixin",
     "profiling.LevelRendererRenderPerformanceMixin",
-    "profiling.PerformanceProfilerAttributionMixin",
     "profiling.VTextureSelectorProfilingMixin",
 
     "render.entity.EntityRendererM",

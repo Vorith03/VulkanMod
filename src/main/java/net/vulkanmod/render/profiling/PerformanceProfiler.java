@@ -187,6 +187,16 @@ public final class PerformanceProfiler {
         return active;
     }
 
+    /** True only inside an admitted measured frame, excluding benchmark warmup. */
+    public static boolean isFrameCapturing() {
+        return active && frameActive;
+    }
+
+    /** Match client-tick leaf attribution to its measured parent scope. */
+    public static boolean isClientTickCapturing() {
+        return isFrameCapturing() && clientTickActive;
+    }
+
     public static void armAutomatedCapture() {
         if (AUTOMATED_BENCHMARK && active) captureArmed = true;
     }
@@ -201,6 +211,8 @@ public final class PerformanceProfiler {
     /** Close a measured world capture before the controller saves and quits. */
     public static boolean finishAutomatedCapture(String reason) {
         if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return false;
+        TextureTickAttribution.emitSummary();
+        WorldRenderAttribution.emitSummary();
         long now = System.nanoTime();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,
