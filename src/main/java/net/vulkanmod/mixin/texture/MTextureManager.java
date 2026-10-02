@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.texture.Tickable;
 import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.interfaces.VTextureAtlasI;
 import net.vulkanmod.interfaces.VTextureManagerI;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -55,14 +56,18 @@ public abstract class MTextureManager implements VTextureManagerI {
      */
     @Overwrite
     public void tick() {
-        if(Renderer.skipRendering)
+        long attributionTickStart = TextureTickAttribution.beginTick();
+        if(Renderer.skipRendering) {
+            TextureTickAttribution.endTick(attributionTickStart);
             return;
+        }
 
         // MinecraftMixin selects the one catch-up tick that is allowed to upload
         // animated sprites before Minecraft.tick() begins. Snapshot that decision so
         // the command-buffer batch has a symmetric start/end lifecycle.
         boolean uploadSprites = SpriteUtil.shouldUpload();
         if(uploadSprites) {
+            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_START);
             Device.getGraphicsQueue().startRecording();
             // SpriteContents keeps its own nested scope. Holding one outer scope for
             // the whole texture tick lets consecutive animated sprites targeting the
@@ -71,6 +76,7 @@ public abstract class MTextureManager implements VTextureManagerI {
             // changes, staging-buffer growth and the fixed region cap, preserving the
             // existing ordering and ownership boundaries.
             VTextureSelector.beginSpriteUploadBatch();
+            TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_START, phaseStart);
         }
 
         for (Tickable tickable : this.tickableTextures) {
@@ -78,10 +84,19 @@ public abstract class MTextureManager implements VTextureManagerI {
         }
 
         if(uploadSprites) {
+            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
             VTextureSelector.endSpriteUploadBatch();
+            TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_DRAIN, phaseStart);
+
+            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS);
             SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+            TextureTickAttribution.end(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS, phaseStart);
+
+            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.QUEUE_SUBMIT);
             Device.getGraphicsQueue().endRecordingAndSubmit();
+            TextureTickAttribution.end(TextureTickAttribution.Phase.QUEUE_SUBMIT, phaseStart);
         }
+        TextureTickAttribution.endTick(attributionTickStart);
     }
 
     /**

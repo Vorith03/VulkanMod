@@ -71,6 +71,12 @@
     "profiling.SoundManagerPerformanceMixin",
     "profiling.PerformanceProfilerMixin",
     "profiling.RendererPerformanceMixin",
+    "profiling.GameRendererWorldAttributionMixin",
+    "profiling.ForgeHooksClientPerformanceMixin",
+    "profiling.EntityRenderDispatcherPerformanceMixin",
+    "profiling.ParticleEngineRenderPerformanceMixin",
+    "profiling.LevelRendererRenderPerformanceMixin",
+    "profiling.PerformanceProfilerAttributionMixin",
 
     "render.entity.EntityRendererM",
     "render.model.ModelPartCubeM",
