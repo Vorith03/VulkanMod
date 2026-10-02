@@ -79,12 +79,14 @@ public abstract class MTextureManager implements VTextureManagerI {
             TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_START, phaseStart);
         }
 
+        long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.TICKABLE_LOOP);
         for (Tickable tickable : this.tickableTextures) {
             tickable.tick();
         }
+        TextureTickAttribution.end(TextureTickAttribution.Phase.TICKABLE_LOOP, phaseStart);
 
         if(uploadSprites) {
-            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
+            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
             VTextureSelector.endSpriteUploadBatch();
             TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_DRAIN, phaseStart);
 

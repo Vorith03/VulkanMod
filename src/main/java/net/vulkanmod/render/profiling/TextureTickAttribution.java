@@ -8,9 +8,9 @@ import java.util.Locale;
  * individual SpriteContents.upload() timers.
  *
  * <p>The existing ClientTickBreakdown remains authoritative for total texture and
- * sprite-upload time. This helper measures only the outer Vulkan upload-batch
- * lifecycle so the reported non-upload residual can be corrected without changing
- * texture cadence, bytes, synchronization, or command ownership.</p>
+ * sprite-upload time. This helper measures the outer Vulkan upload-batch lifecycle,
+ * the complete tickable-texture loop, and actual batched copy flushes so the old
+ * non-upload residual can be separated without changing texture behavior.</p>
  */
 public final class TextureTickAttribution {
     private static final boolean ENABLED = Boolean.getBoolean("vulkanmod.performanceProfiler")
@@ -21,11 +21,12 @@ public final class TextureTickAttribution {
 
     private static final long[] currentPhaseNanos = ENABLED ? new long[PHASE_COUNT] : null;
     private static final long[] phaseSums = ENABLED ? new long[PHASE_COUNT] : null;
-    private static final long[] phaseMax = ENABLED ? new long[PHASE_COUNT] : null;
     private static final long[] phaseCalls = ENABLED ? new long[PHASE_COUNT] : null;
     private static final long[][] phaseSamples = ENABLED ? new long[PHASE_COUNT][MAX_SAMPLES] : null;
     private static final long[] tickSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] outerBatchSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] copyFlushSamples = ENABLED ? new long[MAX_SAMPLES] : null;
+    private static final long[] outerCopyFlushSamples = ENABLED ? new long[MAX_SAMPLES] : null;
     private static final long[] sortScratch = ENABLED ? new long[MAX_SAMPLES] : null;
 
     private static boolean tickActive;
@@ -36,9 +37,20 @@ public final class TextureTickAttribution {
     private static int uploadTicks;
     private static int overlapTicks;
     private static long tickSumNanos;
-    private static long tickMaxNanos;
     private static long outerBatchSumNanos;
-    private static long outerBatchMaxNanos;
+
+    private static long currentCopyFlushNanos;
+    private static long currentOuterCopyFlushNanos;
+    private static int currentCopyFlushes;
+    private static int currentCopyRegions;
+    private static int currentOuterCopyFlushes;
+    private static int currentOuterCopyRegions;
+    private static long copyFlushNanosSum;
+    private static long outerCopyFlushNanosSum;
+    private static long copyFlushes;
+    private static long copyRegions;
+    private static long outerCopyFlushes;
+    private static long outerCopyRegions;
 
     private TextureTickAttribution() {
     }
@@ -48,6 +60,12 @@ public final class TextureTickAttribution {
         Arrays.fill(currentPhaseNanos, 0L);
         activePhase = -1;
         currentOverlap = false;
+        currentCopyFlushNanos = 0L;
+        currentOuterCopyFlushNanos = 0L;
+        currentCopyFlushes = 0;
+        currentCopyRegions = 0;
+        currentOuterCopyFlushes = 0;
+        currentOuterCopyRegions = 0;
         tickActive = true;
         return System.nanoTime();
     }
@@ -74,6 +92,25 @@ public final class TextureTickAttribution {
         activePhase = -1;
     }
 
+    /** Begin timing one non-empty vkCmdCopyBufferToImage region flush. */
+    public static long beginSpriteCopyFlush() {
+        return ENABLED && tickActive ? System.nanoTime() : 0L;
+    }
+
+    /** Record one non-empty flush and the number of VkBufferImageCopy regions it emitted. */
+    public static void endSpriteCopyFlush(long startNanos, int regions) {
+        if (!ENABLED || !tickActive || startNanos == 0L || regions <= 0) return;
+        long elapsed = Math.max(0L, System.nanoTime() - startNanos);
+        currentCopyFlushNanos += elapsed;
+        currentCopyFlushes++;
+        currentCopyRegions += regions;
+        if (activePhase == Phase.BATCH_DRAIN.ordinal()) {
+            currentOuterCopyFlushNanos += elapsed;
+            currentOuterCopyFlushes++;
+            currentOuterCopyRegions += regions;
+        }
+    }
+
     public static void endTick(long startNanos) {
         if (!ENABLED || !tickActive || startNanos == 0L) return;
         long elapsed = Math.max(0L, System.nanoTime() - startNanos);
@@ -86,9 +123,8 @@ public final class TextureTickAttribution {
         for (Phase phase : PHASES) {
             int ordinal = phase.ordinal();
             long value = currentPhaseNanos[ordinal];
-            outerBatch += value;
+            if (phase.residualCorrection) outerBatch += value;
             phaseSums[ordinal] += value;
-            phaseMax[ordinal] = Math.max(phaseMax[ordinal], value);
             if (sampledTicks < MAX_SAMPLES) phaseSamples[ordinal][sampledTicks] = value;
         }
 
@@ -96,12 +132,18 @@ public final class TextureTickAttribution {
         if (outerBatch > 0L) uploadTicks++;
         if (currentOverlap) overlapTicks++;
         tickSumNanos += elapsed;
-        tickMaxNanos = Math.max(tickMaxNanos, elapsed);
         outerBatchSumNanos += outerBatch;
-        outerBatchMaxNanos = Math.max(outerBatchMaxNanos, outerBatch);
+        copyFlushNanosSum += currentCopyFlushNanos;
+        outerCopyFlushNanosSum += currentOuterCopyFlushNanos;
+        copyFlushes += currentCopyFlushes;
+        copyRegions += currentCopyRegions;
+        outerCopyFlushes += currentOuterCopyFlushes;
+        outerCopyRegions += currentOuterCopyRegions;
         if (sampledTicks < MAX_SAMPLES) {
             tickSamples[sampledTicks] = elapsed;
             outerBatchSamples[sampledTicks] = outerBatch;
+            copyFlushSamples[sampledTicks] = currentCopyFlushNanos;
+            outerCopyFlushSamples[sampledTicks] = currentOuterCopyFlushNanos;
             sampledTicks++;
         }
         tickActive = false;
@@ -115,11 +157,15 @@ public final class TextureTickAttribution {
         }
 
         StringBuilder line = new StringBuilder(String.format(Locale.ROOT,
-                "texture_outer_batch_attribution ticks=%d sampled_ticks=%d sample_cap=%d upload_ticks=%d overlap_ticks=%d texture_tick_ms_avg=%.3f texture_tick_ms_p95=%.3f outer_batch_ms_avg=%.3f outer_batch_ms_p95=%.3f outer_batch_ms_max=%.3f outer_batch_ms_per_upload_tick=%.3f correction=client_tick_texture_detail.non_upload_ms_avg-minus-outer_batch_ms_avg",
+                "texture_outer_batch_attribution ticks=%d sampled_ticks=%d sample_cap=%d upload_ticks=%d overlap_ticks=%d texture_tick_ms_avg=%.3f texture_tick_ms_p95=%.3f outer_batch_ms_avg=%.3f outer_batch_ms_p95=%.3f copy_flushes=%d copy_regions=%d copy_flushes_per_tick=%.3f copy_regions_per_tick=%.3f regions_per_flush=%.3f copy_flush_cpu_ms_avg=%.3f copy_flush_cpu_ms_p95=%.3f outer_copy_flushes=%d outer_copy_regions=%d outer_copy_flush_cpu_ms_avg=%.3f outer_copy_flush_cpu_ms_p95=%.3f corrected_non_upload=client_tick_texture_detail.non_upload_ms_avg-minus-outer_batch_ms_avg animation_iteration=tickable_loop_ms_avg-minus-client_tick_texture_detail.sprite_upload_ms_avg",
                 ticks, sampledTicks, MAX_SAMPLES, uploadTicks, overlapTicks,
                 millis(tickSumNanos / ticks), millis(percentile(tickSamples, sampledTicks, 0.95D)),
                 millis(outerBatchSumNanos / ticks), millis(percentile(outerBatchSamples, sampledTicks, 0.95D)),
-                millis(outerBatchMaxNanos), uploadTicks == 0 ? 0.0D : millis(outerBatchSumNanos / uploadTicks)));
+                copyFlushes, copyRegions, copyFlushes / (double)ticks, copyRegions / (double)ticks,
+                copyFlushes == 0L ? 0.0D : copyRegions / (double)copyFlushes,
+                millis(copyFlushNanosSum / ticks), millis(percentile(copyFlushSamples, sampledTicks, 0.95D)),
+                outerCopyFlushes, outerCopyRegions, millis(outerCopyFlushNanosSum / ticks),
+                millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
         for (Phase phase : PHASES) {
             int ordinal = phase.ordinal();
             line.append(' ').append(phase.label).append("_calls=").append(phaseCalls[ordinal]);
@@ -149,23 +195,29 @@ public final class TextureTickAttribution {
         activePhase = -1;
         currentOverlap = false;
         ticks = sampledTicks = uploadTicks = overlapTicks = 0;
-        tickSumNanos = tickMaxNanos = outerBatchSumNanos = outerBatchMaxNanos = 0L;
+        tickSumNanos = outerBatchSumNanos = 0L;
+        currentCopyFlushNanos = currentOuterCopyFlushNanos = 0L;
+        currentCopyFlushes = currentCopyRegions = currentOuterCopyFlushes = currentOuterCopyRegions = 0;
+        copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
+        copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
         Arrays.fill(currentPhaseNanos, 0L);
         Arrays.fill(phaseSums, 0L);
-        Arrays.fill(phaseMax, 0L);
         Arrays.fill(phaseCalls, 0L);
     }
 
     public enum Phase {
-        BATCH_START("batch_start"),
-        BATCH_DRAIN("batch_drain"),
-        LAYOUT_TRANSITIONS("layout_transitions"),
-        QUEUE_SUBMIT("queue_submit");
+        BATCH_START("batch_start", true),
+        TICKABLE_LOOP("tickable_loop", false),
+        BATCH_DRAIN("batch_drain", true),
+        LAYOUT_TRANSITIONS("layout_transitions", true),
+        QUEUE_SUBMIT("queue_submit", true);
 
         private final String label;
+        private final boolean residualCorrection;
 
-        Phase(String label) {
+        Phase(String label, boolean residualCorrection) {
             this.label = label;
+            this.residualCorrection = residualCorrection;
         }
     }
 }
