@@ -86,6 +86,10 @@ Per-subupload `MemoryDiagnostics.enforceSystemMemorySafety()` fast-path work and
 
 A follow-up source review found that the #945 helpers admitted warmup texture/world calls, unlike the parent profiler. The correction gates texture samples on the captured client-tick scope and world samples on captured frames. Attribution summaries now execute inside `finishAutomatedCapture` after its admission guard, rather than from a mixin HEAD that could emit/reset on a rejected finish. Added an executable Java 17 contract covering warmup exclusion, out-of-tick calls, recursive/overflow world ownership, copy-flush counters and reset; CI runs it before the full build. Local Java compilation failed because the available external JDK crashed with SIGBUS; no local Java test pass is claimed. CI **#946** passed the new Java contract, Forge build/distributable checks, packaged portal anchors, both Vulkan startup paths, indirect shadows, ordinary/depth post chains, screenshot readback, combined Create Chronicles compatibility and Crash Assistant. The JAR upload succeeded. Private real-pack fixture steps were skipped, so this run does not establish real-pack coverage. Use #946 for the next hardware benchmark.
 
+## GPU offload investigation plan
+
+The owner requested a plan for investigation and implementation of GPU texture animation, terrain visibility/indirect commands, hybrid meshing and qualified particle work. `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` defines O1–O8, eligibility/ownership/oracles, GPU timing scope, bounded memory, fallback and adoption gates. O1 is the matched #946 comparison; O2 is the exact Forge animation contract/oracle and can proceed while hardware evidence is pending. No offload implementation/default or Phase 7 gate changed.
+
 ## Next useful action
 
 1. Use CI-green build **#946** for the exact same automated stationary RX benchmark contract used for #935.

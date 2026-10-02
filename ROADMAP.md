@@ -199,6 +199,12 @@ Mandatory gates:
 
 Evidence: `docs/TERRAIN_PERFORMANCE_BASELINE.md` now fixes the benchmark seed, 2560x1440 graphics profile, stationary camera, eastbound `X=-512 -> +512` spectator route, result record, and A/B acceptance contract. Numeric OpenGL/Vulkan/frame-time results remain open.
 
+GPU offload investigation and conditional implementation are sequenced in
+`docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md`: corrected baseline and texture eligibility,
+resident-frame copies, measured compute interpolation, then existing terrain and
+qualified particle tracks. This plan does not close measurement gates or enable
+accelerated defaults.
+
 ### Default comparison target
 
 The comparison should answer practical user questions, not win a synthetic benchmark. Use the fixed 2560×1440 benchmark profile for comparable A/B runs; additional gameplay resolutions may be reported separately but must not be mixed into that baseline series.
