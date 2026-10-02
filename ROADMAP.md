@@ -205,6 +205,10 @@ resident-frame copies, measured compute interpolation, then existing terrain and
 qualified particle tracks. This plan does not close measurement gates or enable
 accelerated defaults.
 
+Broader work-avoidance, caching, compatibility and workload options are researched
+in `docs/PERFORMANCE_FEATURE_OPPORTUNITIES_2026-10-02.md`. This shortlist does not
+change phase completion or the matched #946 hardware comparison priority.
+
 ### Default comparison target
 
 The comparison should answer practical user questions, not win a synthetic benchmark. Use the fixed 2560×1440 benchmark profile for comparable A/B runs; additional gameplay resolutions may be reported separately but must not be mixed into that baseline series.
