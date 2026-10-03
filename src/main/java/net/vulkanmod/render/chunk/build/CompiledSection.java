@@ -14,6 +14,8 @@ import java.util.Set;
 
 public class CompiledSection {
     public List<net.minecraft.client.renderer.texture.SpriteContents> animatedSprites = List.of();
+    // GPU-only model tables bypass quad emission and cannot provide exact usage yet.
+    public boolean unknownAnimatedSpriteUsage;
     public static final CompiledSection UNCOMPILED = new CompiledSection() {
         public boolean canSeeThrough(Direction dir1, Direction dir2) {
             return false;
@@ -42,4 +44,3 @@ public class CompiledSection {
         return this.visibilitySet.visibilityBetween(dir1, dir2);
     }
 }
-

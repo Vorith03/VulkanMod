@@ -25,7 +25,7 @@ public final class SpriteAnimationState {
         long grace = Math.max(0, Math.min(5000, Initializer.CONFIG.animationVisibilityGraceMs)) * 1_000_000L;
         boolean always = false;
         String[] exclusions = Initializer.CONFIG.animationAlwaysActiveSprites;
-        if(exclusions != null) for(String excluded : exclusions) if(excluded.equals(spriteId)) { always = true; break; }
+        if(exclusions != null) for(String excluded : exclusions) if(java.util.Objects.equals(excluded, spriteId)) { always = true; break; }
         materialize = SpriteUtil.shouldUpload() && visibility.materialize(System.nanoTime(), grace, !always);
         if(!materialize) visibility.skipped();
     }

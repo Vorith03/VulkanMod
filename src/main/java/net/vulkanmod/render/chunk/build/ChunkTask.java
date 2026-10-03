@@ -142,6 +142,7 @@ public class ChunkTask {
                 } else {
                     CompiledSection compiledChunk = new CompiledSection();
                     compiledChunk.animatedSprites = List.copyOf(animatedSprites);
+                    compiledChunk.unknownAnimatedSpriteUsage = compileResults.gpuTerrainCpuBypassed;
                     compiledChunk.visibilitySet = compileResults.visibilitySet;
                     compiledChunk.renderableBlockEntities.addAll(compileResults.blockEntities);
                     compiledChunk.transparencyState = compileResults.transparencyState;

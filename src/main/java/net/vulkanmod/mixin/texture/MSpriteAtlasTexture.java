@@ -51,6 +51,12 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
     private long vulkanmod$atlasUploadStartNanos;
 
     @Override
+    public void vulkanmod$markAllAnimatedSpritesUsed() {
+        for(SpriteContents sprite : this.sprites)
+            net.vulkanmod.render.texture.SpriteAnimationUsage.use(sprite);
+    }
+
+    @Override
     public int vulkanmod$retireStaticSpriteCpuDataForReload() {
         int retired = 0;
         int staticSprites = 0;

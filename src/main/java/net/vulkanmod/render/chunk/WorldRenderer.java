@@ -601,9 +601,16 @@ public class WorldRenderer {
         renderType.setupRenderState();
 
         if(net.vulkanmod.render.texture.SpriteAnimationUsage.enabled()) {
+            boolean unknownUsage = false;
             for(RenderSection section : this.chunkQueue) {
+                unknownUsage |= section.getCompiledSection().unknownAnimatedSpriteUsage;
                 for(var sprite : section.getCompiledSection().animatedSprites)
                     net.vulkanmod.render.texture.SpriteAnimationUsage.use(sprite);
+            }
+            if(unknownUsage) {
+                var atlas = this.minecraft.getModelManager().getAtlas(
+                        net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS);
+                ((net.vulkanmod.interfaces.VTextureAtlasI)atlas).vulkanmod$markAllAnimatedSpritesUsed();
             }
         }
 
