@@ -84,7 +84,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
     private static boolean immersivePortalsClassesPresent() {
         try {
             MixinService.getService().getBytecodeProvider()
-                    .getClassNode("qouteall.imm_ptl.core.IPGlobal", false);
+                    .getClassNode("qouteall.imm_ptl.core.IPGlobal");
             return true;
         } catch(ClassNotFoundException | IOException absent) {
             return false;

@@ -149,7 +149,10 @@ boundary. The combined IP fixture then failed because IP redirects the same
 GameRenderer.renderLevel call. MixinPlugin now excludes both scale wrappers when
 IPGlobal bytecode is present, without initializing portal classes; a combined
 transformed-hook oracle requires the original IP redirect and absence of scaling
-wrappers. Full combined validation is pending the next CI.
+wrappers. CI **#959** (run `37097480279`, job `111130260527`) rejected the request for
+untransformed bytecode during startup: ModLauncher does not support that API mode.
+Presence detection now uses its supported default bytecode retrieval (no class
+initialization). Full combined validation remains pending.
 IP installations conservatively retain native resolution,
 including the current user's pack; loaded-world/reload/hardware adoption is open.
 Continue render-scale CI qualification, then legacy Flywheel and DH numeric
