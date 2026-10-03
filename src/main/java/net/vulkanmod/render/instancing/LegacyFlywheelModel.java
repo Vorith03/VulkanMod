@@ -6,11 +6,46 @@ import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.BitSet;
+import java.util.Optional;
+import org.lwjgl.system.MemoryUtil;
 
 /** Optional pinned 0.6 BlockModel CPU reader. Never calls createEBO, GL pools, writers or deletion. */
 public final class LegacyFlywheelModel {
     private static final String BLOCK_MODEL = "com.jozufozu.flywheel.core.model.BlockModel";
     private LegacyFlywheelModel() {}
+
+    /**
+     * Consume a newly supplied, live CPU-only BlockModel. Unsupported ownership is
+     * left untouched for the fallback owner. Qualified allocations are released on
+     * both successful import and invalid geometry, without model.delete()/GL calls.
+     */
+    public static Optional<ModelGeometry> takeOwned(Object model) {
+        if(model == null || !model.getClass().getName().equals(BLOCK_MODEL)) return Optional.empty();
+        final ByteBuffer vertices, indices;
+        try {
+            Object reader = inheritedField(model, "reader");
+            String name = reader.getClass().getName();
+            String known = "com.jozufozu.flywheel.core.vertex.BlockVertexListUnsafe";
+            if(!name.equals(known) && !name.equals(known + "$Shaded")) return Optional.empty();
+            vertices = (ByteBuffer)inheritedField(reader, "contents");
+            Object supplier = field(model, "eboSupplier");
+            String supplierName = supplier.getClass().getName();
+            if(supplier.getClass().isSynthetic() && supplierName.startsWith(BLOCK_MODEL + "$$Lambda$")) {
+                indices = null;
+            } else if(supplierName.equals(BLOCK_MODEL + "$BufferEBOSupplier")
+                    && (int)field(supplier, "eboName") == -1) {
+                indices = (ByteBuffer)field(supplier, "indexBuffer");
+            } else return Optional.empty();
+            if(!vertices.isDirect() || (indices != null && !indices.isDirect())) return Optional.empty();
+        } catch(ReflectiveOperationException failure) {
+            return Optional.empty(); // API ownership cannot be qualified; fallback retains the source.
+        }
+        try { return Optional.of(importModel(model)); }
+        finally {
+            MemoryUtil.memFree(vertices);
+            MemoryUtil.memFree(indices);
+        }
+    }
 
     public static ModelGeometry importModel(Object model) {
         if(!model.getClass().getName().equals(BLOCK_MODEL))

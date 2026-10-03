@@ -158,3 +158,41 @@ GL-bearing delete path. Preserve RenderLayer/RenderType identity and origin-list
 notification; unknown material/program/model cases need a real fallback rather than
 raising an exception after global Backend.canUseInstancing has suppressed Create's
 ordinary renderers. Keep backend availability disabled until that routing is proven.
+
+## Legacy material ownership integration (2026-10-03, candidate)
+
+`LegacyFlywheelMaterials` now exposes the actual optional MaterialManager,
+MaterialGroup and Material interfaces through proxies, scoped to one world identity
+and reload generation. RenderLayer, RenderType and struct identities partition the
+cache; model keys retain the legacy equality-based lookup within their material.
+Repeated requests return the same Instancer without invoking the supplier again.
+The exact pinned ModelType and transformed program qualify; unknown specs are not
+probed or passed to a GL writer. Total groups/materials/models are bounded to 4096
+each and retained copied geometry to 256 MiB (plus per-model/per-instance limits).
+
+Newly supplied qualified CPU-only BlockModels are imported and their exact owned
+vertex/custom-index allocations freed in finally, without Model.delete or GL calls.
+Unqualified ownership stays untouched and is handed to a required fallback owner.
+Fallback receives the original layer/state/spec/key; for an already-created unknown
+model it receives that exact object through a single-use supplier. Its lifecycle is
+explicit: clear membership before origin listeners, close on generation retirement.
+This is a delegation interface, **not a qualified world-rendering fallback**. The
+engine must supply and test a renderer before enabling global backend availability.
+
+Qualified shared Vulkan meshes allocate lazily on draw and retire once with their
+material generation. Origin changes preserve mesh/instancer identity, clear all local
+and delegated membership, publish the new coordinate and notify weak recreation
+listeners afterward. Failed recreation remains retryable at the same coordinate.
+Retired manager/group/material/instancer handles cannot create fresh local instances.
+The caller must finish Flywheel tasks and stay on the render thread. A replacement
+world/reload creates a fresh manager; production reload/portal engine ownership is
+still open.
+
+The actual pinned fixture now exercises API default methods, supplier-once/equal-key
+caching, material/layer/state/world-generation isolation, custom-index invalid-import
+retry, unknown-spec/model delegation, origin clear/recreation ordering and stale
+handle rejection. Existing standalone CPU ownership/input contracts pass locally.
+Full local Gradle validation remains unavailable: its distribution download is
+network-blocked. Candidate compilation and actual optional fixture CI are pending.
+This candidate does not install an Engine, translate Flywheel's material shaders,
+qualify lightmap/diffuse/fog/alpha/crumbling/translucency or change Backend.isOn.

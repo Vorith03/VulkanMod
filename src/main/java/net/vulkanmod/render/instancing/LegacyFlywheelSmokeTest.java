@@ -80,6 +80,7 @@ public final class LegacyFlywheelSmokeTest {
             first.createInstance(); first.clearForOriginShift();
             if(first.snapshot().remaining()!=0) throw new AssertionError("Legacy origin clear failed");
         }
+        LegacyFlywheelMaterialSmokeTest.verify(loader);
         LegacyFlywheelInstances.format(5).validateLimits(5,16,2048,2047);
         Initializer.LOGGER.info("Flywheel CPU adapter smoke passed: actual BlockModel sequential/custom indices and shading, aligned ModelData, shifted light bytes, dirty/removal/transfer/origin ownership; backend remains off");
     }
