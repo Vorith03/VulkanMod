@@ -10,6 +10,7 @@ import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.mixin.render.GameRendererPostEffectAccessor;
 import net.vulkanmod.mixin.render.LevelRendererPostChainsAccessor;
+import net.vulkanmod.mixin.render.RenderTargetTextureNamesAccessor;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
@@ -86,8 +87,7 @@ public final class WorldRenderScale {
         primary.width = primary.viewWidth = scaledWidth;
         primary.height = primary.viewHeight = scaledHeight;
         try {
-            if(primary.colorTextureId > 0) GlTexture.setVulkanImage(primary.colorTextureId, color());
-            if(primary.depthBufferId > 0) GlTexture.setVulkanImage(primary.depthBufferId, depth());
+            remapNames(primary, color(), depth());
             target.bindWrite(true);
             Renderer.clearAttachments(0x4100);
         } catch(RuntimeException | Error failure) {
@@ -103,8 +103,7 @@ public final class WorldRenderScale {
         main = null;
         primary.width = width; primary.height = height;
         primary.viewWidth = viewWidth; primary.viewHeight = viewHeight;
-        if(primary.colorTextureId > 0) GlTexture.setVulkanImage(primary.colorTextureId, Vulkan.getSwapChain().getColorAttachment());
-        if(primary.depthBufferId > 0) GlTexture.setVulkanImage(primary.depthBufferId, Vulkan.getSwapChain().getDepthAttachment());
+        remapNames(primary, Vulkan.getSwapChain().getColorAttachment(), Vulkan.getSwapChain().getDepthAttachment());
         primary.bindWrite(true); // Transition low-resolution color on this same primary buffer.
         if(!composite) { ScreenshotReadback.resolveWorldPending(false); return; }
         boolean oldDepth = VRenderSystem.depthTest, oldMask = VRenderSystem.depthMask;
@@ -134,6 +133,14 @@ public final class WorldRenderScale {
             VRenderSystem.colorMask = oldColorMask;
             ScreenshotReadback.resolveWorldPending(composited);
         }
+    }
+
+    private static void remapNames(RenderTarget primary, VulkanImage color, VulkanImage depth) {
+        var names = (RenderTargetTextureNamesAccessor)primary;
+        int colorName = names.vulkanmod$getColorTextureName();
+        int depthName = names.vulkanmod$getDepthTextureName();
+        if(colorName > 0) GlTexture.setVulkanImage(colorName, color);
+        if(depthName > 0) GlTexture.setVulkanImage(depthName, depth);
     }
 
     /** Only remap a full native viewport while the owned world target is bound. */

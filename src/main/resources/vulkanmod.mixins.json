@@ -21,6 +21,7 @@
     "compatibility.EntityCullingBlockEntityMixin",
     "render.WorldRenderScaleMixin",
     "render.WorldRenderScaleCleanupMixin",
+    "render.RenderTargetTextureNamesAccessor",
     "render.GameRendererPostEffectAccessor",
     "render.LevelRendererPostChainsAccessor",
     "compatibility.CreateStencilElementMixin",
