@@ -4,20 +4,23 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.shader.PipelineState;
-import net.vulkanmod.vulkan.texture.ScreenshotReadback;
+import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
+import net.vulkanmod.vulkan.util.ColorUtil;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.system.MemoryStack;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.BitSet;
-import java.util.concurrent.TimeUnit;
 
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -98,22 +101,25 @@ public final class LegacyFlywheelPipelineSmokeTest {
                     scene(pipeline,pass==3 ? 100 : 0,pass==3 ? 0 : 100,pass==3 ? 50 : 200,pass==2 ? 0.3f : 0);
                     pipeline.draw(mesh,instances,0,pass==4 ? 0 : 2);
                 }
-                var capture=ScreenshotReadback.request(target);
-                target.unbindWrite(); minecraft.getMainRenderTarget().bindWrite(true);
-                if(pass==3) {
-                    // Recorded commands still reference this pipeline. Production close must wait for its frame fence.
-                    pipeline.close(); pipeline.close();
-                    try { scene(pipeline,0,100,200,0); throw new AssertionError("Retired material reused"); }
-                    catch(IllegalStateException expected) {}
-                }
-                renderer.endFrame();
-                try(NativeImage image=capture.get(10,TimeUnit.SECONDS)) {
-                    int[] left=pass==8 ? new int[]{32,69,9,64} : pass>=6 ? new int[]{34,69,65,64} : pass==1 ? new int[]{37,75,80,64} : pass==2 || pass==4 || pass==5 ? new int[]{0,0,0,255}
-                            : pass==3 ? new int[]{51,102,153,64} : new int[]{22,47,6,64};
-                    int[] right=pass==8 ? new int[]{113,13,30,128} : pass>=6 ? new int[]{133,54,91,128} : pass==5 ? new int[]{22,47,6,64} : pass==4 ? new int[]{0,0,0,255} : pass==3 ? new int[]{51,102,153,128} : new int[]{188,22,50,128};
-                    expect(image,image.getWidth()/4,image.getHeight()/2,left);
-                    expect(image,3*image.getWidth()/4,image.getHeight()/2,right);
-                    expect(image,1,1,new int[]{0,0,0,255});
+                // Screenshots deliberately force opaque alpha. This shader oracle needs raw attachment alpha.
+                try(var capture=RawCapture.record(target)) {
+                    target.unbindWrite(); minecraft.getMainRenderTarget().bindWrite(true);
+                    if(pass==3) {
+                        // Recorded commands still reference this pipeline. Production close must wait for its frame fence.
+                        pipeline.close(); pipeline.close();
+                        try { scene(pipeline,0,100,200,0); throw new AssertionError("Retired material reused"); }
+                        catch(IllegalStateException expected) {}
+                    }
+                    renderer.endFrame();
+                    Vulkan.waitIdle(); // Oracle only: complete this frame's raw transfer before mapping it.
+                    try(NativeImage image=capture.read()) {
+                        int[] left=pass==8 ? new int[]{32,69,9,64} : pass>=6 ? new int[]{34,69,65,64} : pass==1 ? new int[]{37,75,80,64} : pass==2 || pass==4 || pass==5 ? new int[]{0,0,0,255}
+                                : pass==3 ? new int[]{51,102,153,64} : new int[]{22,47,6,64};
+                        int[] right=pass==8 ? new int[]{113,13,30,128} : pass>=6 ? new int[]{133,54,91,128} : pass==5 ? new int[]{22,47,6,64} : pass==4 ? new int[]{0,0,0,255} : pass==3 ? new int[]{51,102,153,128} : new int[]{188,22,50,128};
+                        expect(image,image.getWidth()/4,image.getHeight()/2,left);
+                        expect(image,3*image.getWidth()/4,image.getHeight()/2,right);
+                        expect(image,1,1,new int[]{0,0,0,255});
+                    }
                 }
                 if(instances.position()!=0 || instances.limit()!=instances.capacity()) throw new AssertionError("Material draw changed caller snapshot");
             }
@@ -134,6 +140,37 @@ public final class LegacyFlywheelPipelineSmokeTest {
     private static VulkanImage texture(int width,int height) {
         return VulkanImage.createTextureImage(VK_FORMAT_R8G8B8A8_UNORM,1,width,height,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,4,false,true);
+    }
+    /** Test-only raw transfer. Production screenshot opacity and asynchronous lifetime remain unchanged. */
+    private record RawCapture(long buffer,long allocation,int width,int height,int format) implements AutoCloseable {
+        static RawCapture record(TextureTarget target) {
+            VulkanImage image=GlTexture.getVulkanImage(target.getColorTextureId());
+            if(image==null || (image.format!=VK_FORMAT_R8G8B8A8_UNORM && image.format!=VK_FORMAT_B8G8R8A8_UNORM))
+                throw new AssertionError("Raw shader oracle target has an unexpected format");
+            int bytes=Math.multiplyExact(Math.multiplyExact(image.width,image.height),4);
+            try(MemoryStack stack=MemoryStack.stackPush()) {
+                var buffer=stack.mallocLong(1); var allocation=stack.mallocPointer(1);
+                MemoryManager.getInstance().createBuffer(bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,buffer,allocation);
+                var capture=new RawCapture(buffer.get(0),allocation.get(0),image.width,image.height,image.format);
+                try { RenderTargetManager.copyColorToBuffer(image,capture.buffer); return capture; }
+                catch(RuntimeException | Error failure) { capture.close(); throw failure; }
+            }
+        }
+        NativeImage read() {
+            NativeImage image=new NativeImage(width,height,false);
+            try {
+                MemoryManager.getInstance().MapAndCopy(allocation,width*height*4,pointer -> {
+                    ByteBuffer bytes=pointer.getByteBuffer(0,width*height*4).order(ByteOrder.LITTLE_ENDIAN);
+                    for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
+                        int rgba=bytes.getInt((y*width+x)*4);
+                        image.setPixelRGBA(x,y,format==VK_FORMAT_B8G8R8A8_UNORM ? ColorUtil.BGRAtoRGBA(rgba) : rgba);
+                    }
+                });
+                return image;
+            } catch(RuntimeException | Error failure) { image.close(); throw failure; }
+        }
+        public void close() { MemoryManager.freeBuffer(buffer,allocation); }
     }
     private static void scene(LegacyFlywheelPipeline pipeline,float cameraZ,float start,float end,float alpha) {
         pipeline.setScene(new Matrix4f(),0,0,cameraZ,0.2f,0.4f,0.6f,start,end,alpha);

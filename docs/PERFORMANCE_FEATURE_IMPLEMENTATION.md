@@ -288,6 +288,9 @@ normal normalization/directional diffuse, instance replacement of black/unlit so
 vertices, distinguishable block/sky lightmap channels, legacy light coordinates,
 atlas/light/fog alpha separation, alpha discard, per-draw uniform isolation, mixed-axis
 cylindrical fog, resize/zero count and retirement while commands still reference the
-pipeline. Its waits/readback are test-only. Full native CI is pending. Real world
+pipeline. Its waits/readback are test-only. #971 compiled the shader and produced
+expected first RGB pixels but the alpha oracle used the production screenshot API,
+which intentionally forces opacity. The follow-up uses a test-only raw attachment
+transfer; production screenshot behavior is unchanged. Full native CI is pending. Real world
 and portal rendering, resource reload, custom programs, crumbling, translucent
 state/ordering and engine adoption remain open.
