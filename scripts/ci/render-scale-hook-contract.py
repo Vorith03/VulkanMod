@@ -9,6 +9,13 @@ methods = re.split(r'(?m)^  (?=\S.*\(.*\);$)', text)
 body = next((method for method in methods if method.startswith('public void render(float, long, boolean);')), None)
 if body is None:
     raise SystemExit('Missing transformed GameRenderer.render(float,long,boolean)')
+if '--portals' in sys.argv[2:]:
+    if 'vulkanmod$scaleWorld:' in body or 'vulkanmod$composeBeforeGui:' in body:
+        raise SystemExit('World scaling wrapper competes with Immersive Portals')
+    if not re.search(r'invoke\w+.*redirectRenderingWorld:', body):
+        raise SystemExit('Missing original Immersive Portals world render redirect')
+    print('World scale portal fallback passed: original IP world redirect retained')
+    raise SystemExit(0)
 anchors = [r'invoke\w+.*vulkanmod\$scaleWorld:',
            r'invoke\w+.*PostChain\.process:',
            r'invoke\w+.*vulkanmod\$composeBeforeGui:',

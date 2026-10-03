@@ -10,8 +10,10 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
+import org.spongepowered.asm.service.MixinService;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -51,6 +53,15 @@ public class MixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
 
+        if(("net.vulkanmod.mixin.render.WorldRenderScaleMixin".equals(mixinClassName)
+                || "net.vulkanmod.mixin.render.WorldRenderScaleCleanupMixin".equals(mixinClassName))
+                && immersivePortalsClassesPresent()) {
+            // IP redirects the same renderLevel invocation. Scaling already
+            // retains native resolution for IP; preserve its original hook at
+            // transformation time instead of competing with a disabled wrapper.
+            return false;
+        }
+
         if(POST_CHAIN_SMOKE_MIXIN.equals(mixinClassName)
                 && !Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY)
                 && !Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY)
@@ -68,6 +79,16 @@ public class MixinPlugin implements IMixinConfigPlugin {
         }
 
         return true;
+    }
+
+    private static boolean immersivePortalsClassesPresent() {
+        try {
+            MixinService.getService().getBytecodeProvider()
+                    .getClassNode("qouteall.imm_ptl.core.IPGlobal", false);
+            return true;
+        } catch(ClassNotFoundException | IOException absent) {
+            return false;
+        }
     }
 
     @Override

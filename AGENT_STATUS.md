@@ -143,6 +143,13 @@ DrawUtil's fullscreen projection now uses Vulkan zero-to-one depth (its original
 GL projection clipped the z=0 quad at z=-1). Native qualification remains pending.
 PostChain.resize invalidates cached scale extents; the oracle now checks an external
 native resize followed by the same rounded scale extent, using actual camera fields.
+CI **#958** (run `37096994150`, job `111128835588`, commit `117cfd0b...`) passed the
+complete native scale/resize/pixel/depth/effect/abort suite and transformed GUI
+boundary. The combined IP fixture then failed because IP redirects the same
+GameRenderer.renderLevel call. MixinPlugin now excludes both scale wrappers when
+IPGlobal bytecode is present, without initializing portal classes; a combined
+transformed-hook oracle requires the original IP redirect and absence of scaling
+wrappers. Full combined validation is pending the next CI.
 IP installations conservatively retain native resolution,
 including the current user's pack; loaded-world/reload/hardware adoption is open.
 Continue render-scale CI qualification, then legacy Flywheel and DH numeric

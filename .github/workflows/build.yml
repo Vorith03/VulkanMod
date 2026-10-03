@@ -118,7 +118,7 @@ jobs:
           path: |
             vulkan-*.log
             run/logs/vulkanmod-performance-ci.log
-            vulkan-smoke-create-chronicles-compat-levelrenderer.javap
+            vulkan-*.javap
             run/screenshot-smoke/screenshots/*.png
           if-no-files-found: ignore
       - name: Upload distributable JAR

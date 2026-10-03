@@ -232,6 +232,15 @@ if global_survivors != 1:
 print("Immersive Portals dispatcher rewrite selected only the terrain-override context")
 PY
 python3 scripts/ci/entity-culling-hook-contract.py vulkan-smoke-create-chronicles-compat-levelrenderer.javap
+exported_game_renderer="$(find run/.mixin.out .mixin.out \
+  -type f -path '*/net/minecraft/client/renderer/GameRenderer.class' \
+  -print -quit 2>/dev/null || true)"
+if [[ -z "$exported_game_renderer" ]]; then
+  echo "Mixin did not export GameRenderer for portal scale-fallback verification" >&2
+  exit 1
+fi
+javap -c -p "$exported_game_renderer" > vulkan-render-scale-portals-gamerenderer.javap
+python3 scripts/ci/render-scale-hook-contract.py vulkan-render-scale-portals-gamerenderer.javap --portals
 
 # Every compatibility contract still has its own positive marker. A combined
 # launch is successful only when all of them are observed in the same process.
