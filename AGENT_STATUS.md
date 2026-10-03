@@ -133,7 +133,10 @@ separate world-icon timing and failed-render restoration. The camera post effect
 runs after renderLevel, so capture stays active through it and ends before GuiGraphics
 construction; an outer Minecraft render-call wrapper owns final abort cleanup.
 Native attachment/pixel/depth/post-effect tests and transformed boundary oracle are
-pending feature CI. IP installations conservatively retain native resolution,
+pending feature CI. CI **#955** (run `37096310048`, job `111126852288`) failed Java
+compilation because this branch does not include MixinExtras; the two wrappers now
+use the existing Sponge Mixin Redirect facility without a new runtime dependency.
+IP installations conservatively retain native resolution,
 including the current user's pack; loaded-world/reload/hardware adoption is open.
 Continue render-scale CI qualification, then legacy Flywheel and DH numeric
 data adapters, preserving the working fallbacks and recording unimplemented scope.
