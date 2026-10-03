@@ -232,6 +232,12 @@ public abstract class Pipeline {
     }
 
     protected void createDescriptorSets(int frames) {
+        if(buffers.isEmpty() && images.isEmpty()) {
+            // Descriptor-free shaders need no pool, allocation, binding or frame reset.
+            // Older validation/spec revisions reject pools with no descriptor types.
+            descriptorSets = new DescriptorSets[0];
+            return;
+        }
         descriptorSets = new DescriptorSets[frames];
         for(int i = 0; i < frames; ++i) {
             descriptorSets[i] = new DescriptorSets(i);
@@ -251,7 +257,7 @@ public abstract class Pipeline {
     public ManualUBO getManualUBO() { return this.manualUBO; }
 
     public void resetDescriptorPool(int i) {
-        if(this.descriptorSets != null)
+        if(this.descriptorSets != null && this.descriptorSets.length != 0)
                 this.descriptorSets[i].resetIdx();
 
     }
@@ -261,11 +267,13 @@ public abstract class Pipeline {
     public long getLayout() { return pipelineLayout; }
 
     public void bindDescriptorSets(VkCommandBuffer commandBuffer, int frame) {
+        if(this.descriptorSets.length == 0) return;
         UniformBuffers uniformBuffers = Renderer.getDrawer().getUniformBuffers();
         this.descriptorSets[frame].bindSets(commandBuffer, uniformBuffers);
     }
 
     public void bindDescriptorSets(VkCommandBuffer commandBuffer, UniformBuffers uniformBuffers, int frame) {
+        if(this.descriptorSets.length == 0) return;
         this.descriptorSets[frame].bindSets(commandBuffer, uniformBuffers);
     }
 
