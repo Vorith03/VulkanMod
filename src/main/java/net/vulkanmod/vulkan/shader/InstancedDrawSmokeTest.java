@@ -131,6 +131,7 @@ public final class InstancedDrawSmokeTest {
             target = new TextureTarget(64, 32, true, Minecraft.ON_OSX);
             for(int pass = 0; pass < 6; pass++) {
                 int phase = pass % 3;
+                if(pass == 4) shared32 = new SharedModelBuffer(shared32.geometry());
                 if(phase == 1) target.resize(80, 48, Minecraft.ON_OSX);
                 renderer.resetBuffers(); renderer.beginFrame();
                 target.setClearColor(0,0,0,1); target.clear(Minecraft.ON_OSX); target.bindWrite(true);
@@ -165,6 +166,12 @@ public final class InstancedDrawSmokeTest {
                 Renderer.getDrawer().drawIndexed(model, indices, 6);
                 var capture = ScreenshotReadback.request(target);
                 target.unbindWrite(); minecraft.getMainRenderTarget().bindWrite(true);
+                if(pass == 3) {
+                    // Retire while this frame still holds recorded GPU references; no oracle wait here.
+                    shared32.close(); shared32.close();
+                    try { shared32.vertices(); throw new AssertionError("Closed shared mesh remained drawable"); }
+                    catch(IllegalStateException expected) { }
+                }
                 renderer.endFrame();
                 try(NativeImage image = capture.get(10, TimeUnit.SECONDS)) {
                     expect(image, image.getWidth()/4, image.getHeight()/2, phase == 0 ? 0xFF000080 : 0xFF000000);
