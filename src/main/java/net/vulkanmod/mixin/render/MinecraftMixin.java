@@ -245,6 +245,7 @@ public class MinecraftMixin {
     @Inject(method = "close", at = @At(value = "HEAD"))
     public void close(CallbackInfo ci) {
         Vulkan.waitIdle();
+        net.vulkanmod.render.scale.WorldRenderScale.close();
 
     }
     @Inject(method = "close", at = @At(value = "RETURN"))

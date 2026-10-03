@@ -188,7 +188,8 @@ public class ShaderInstanceM implements ShaderMixed {
 
             if (this.SCREEN_SIZE != null) {
                 Window window = Minecraft.getInstance().getWindow();
-                this.SCREEN_SIZE.set((float)window.getWidth(), (float)window.getHeight());
+                this.SCREEN_SIZE.set((float)net.vulkanmod.render.scale.WorldRenderScale.renderWidth(window.getWidth()),
+                        (float)net.vulkanmod.render.scale.WorldRenderScale.renderHeight(window.getHeight()));
             }
 
             if (this.LINE_WIDTH != null) {

@@ -3,6 +3,7 @@ package net.vulkanmod.mixin.render;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.render.scale.WorldRenderScale;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.MainTargetIdentity;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
@@ -63,6 +64,12 @@ public class MainTargetMixin extends RenderTarget {
         if(!MainTargetIdentity.isPrimary((MainTarget)(Object)this))
             return super.getColorTextureId();
 
+        if(WorldRenderScale.active()) {
+            if(this.colorTextureId <= 0) this.colorTextureId = GlTexture.genTextureId();
+            GlTexture.setVulkanImage(this.colorTextureId, WorldRenderScale.color());
+            return this.colorTextureId;
+        }
+
         SwapChain swapChain = Vulkan.getSwapChain();
         if(!swapChain.supportsColorSampling()) {
             throw new UnsupportedOperationException(
@@ -83,7 +90,8 @@ public class MainTargetMixin extends RenderTarget {
 
         if(this.depthBufferId <= 0)
             this.depthBufferId = GlTexture.genTextureId();
-        GlTexture.setVulkanImage(this.depthBufferId, Vulkan.getSwapChain().getDepthAttachment());
+        GlTexture.setVulkanImage(this.depthBufferId, WorldRenderScale.active()
+                ? WorldRenderScale.depth() : Vulkan.getSwapChain().getDepthAttachment());
         return this.depthBufferId;
     }
 
@@ -92,6 +100,11 @@ public class MainTargetMixin extends RenderTarget {
     public void bindRead() {
         if(!MainTargetIdentity.isPrimary((MainTarget)(Object)this)) {
             super.bindRead();
+            return;
+        }
+
+        if(WorldRenderScale.active()) {
+            WorldRenderScale.target().bindRead();
             return;
         }
 

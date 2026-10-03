@@ -25,6 +25,7 @@ import static org.lwjgl.vulkan.VK10.*;
 /** On-demand, render-thread-owned captures; no per-frame copy or persistent image cache. */
 public final class ScreenshotReadback {
     private static final List<Request> pending = new ArrayList<>();
+    private static final List<Request> worldPending = new ArrayList<>();
     private static final List<Readback> recorded = new ArrayList<>();
     private static Capture capture;
 
@@ -33,12 +34,16 @@ public final class ScreenshotReadback {
     public static CompletableFuture<NativeImage> request(RenderTarget target) {
         RenderSystem.assertOnRenderThread();
         CompletableFuture<NativeImage> result = new CompletableFuture<>();
-        if(pending.size() + recorded.size() >= 8) {
+        if(pending.size() + worldPending.size() + recorded.size() >= 8) {
             result.completeExceptionally(new IllegalStateException("Too many pending screenshots"));
             return result;
         }
         Request request = new Request(target, result);
-        if(Renderer.getInstance().isRecordingFrame())
+        if(net.vulkanmod.render.scale.WorldRenderScale.active()
+                && target instanceof MainTarget mainTarget
+                && net.vulkanmod.vulkan.framebuffer.MainTargetIdentity.isPrimary(mainTarget))
+            worldPending.add(request); // Native world icon after upscale, before GUI.
+        else if(Renderer.getInstance().isRecordingFrame())
             record(request);
         else
             pending.add(request); // F2 is normally polled AFTER present: capture the next rendered frame.
@@ -51,13 +56,22 @@ public final class ScreenshotReadback {
         requests.forEach(ScreenshotReadback::record);
     }
 
+    public static void resolveWorldPending(boolean completed) {
+        List<Request> requests = List.copyOf(worldPending);
+        worldPending.clear();
+        if(completed) requests.forEach(ScreenshotReadback::record);
+        else requests.forEach(request -> request.result.completeExceptionally(
+                new IllegalStateException("World render ended before screenshot composition")));
+    }
+
     private static void record(Request request) {
         if(request.result.isCancelled())
             return;
         long buffer = 0, allocation = 0;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             // Resolve at recording time, after any resize/recreation, not at keypress time.
-            VulkanImage source = request.target instanceof MainTarget
+            VulkanImage source = request.target instanceof MainTarget mainTarget
+                    && net.vulkanmod.vulkan.framebuffer.MainTargetIdentity.isPrimary(mainTarget)
                     ? Vulkan.getSwapChain().getColorAttachment()
                     : GlTexture.getVulkanImage(request.target.getColorTextureId());
             if(source == null || !source.supportsTransferSource())
@@ -127,6 +141,8 @@ public final class ScreenshotReadback {
     public static void cancelAll(Throwable failure) {
         List<Request> requests = List.copyOf(pending);
         pending.clear();
+        List<Request> worldRequests = List.copyOf(worldPending);
+        worldPending.clear();
         List<Readback> readbacks = List.copyOf(recorded);
         recorded.clear();
         for(Readback readback : readbacks) {
@@ -134,6 +150,7 @@ public final class ScreenshotReadback {
             readback.request.result.completeExceptionally(failure);
         }
         requests.forEach(request -> request.result.completeExceptionally(failure));
+        worldRequests.forEach(request -> request.result.completeExceptionally(failure));
     }
 
     /** Replay vanilla save/crop/event logic only after its synchronous image input exists. */

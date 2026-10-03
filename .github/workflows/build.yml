@@ -63,6 +63,8 @@ jobs:
         run: python3 scripts/ci/chunk-budget-contract.py
       - name: Validate offline server and pregeneration tooling
         run: python3 scripts/ci/deployment-contract.py
+      - name: Validate world render scale dimensions
+        run: python3 scripts/ci/render-scale-contract.py
       - name: Build and verify distributable
         run: ./gradlew build --stacktrace
       - name: Validate packaged Immersive Portals mixin anchors

@@ -643,6 +643,10 @@ public class Renderer {
     }
 
     public static void setViewport(int x, int y, int width, int height) {
+        if(net.vulkanmod.render.scale.WorldRenderScale.remapViewport(x, y, width, height)) {
+            width = net.vulkanmod.render.scale.WorldRenderScale.renderWidth(width);
+            height = net.vulkanmod.render.scale.WorldRenderScale.renderHeight(height);
+        }
         try(MemoryStack stack = stackPush()) {
             VkViewport.Buffer viewport = VkViewport.calloc(1, stack);
             viewport.x(x);

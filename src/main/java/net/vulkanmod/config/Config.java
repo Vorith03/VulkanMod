@@ -41,6 +41,7 @@ public class Config {
     public double chunkPublicationBudgetMs = 2.0;
     public int chunkPublicationsPerFrame = 8;
     public double chunkTargetFrameMs = 16.6667;
+    public double worldRenderScale = 1.0;
 
     private static Path path;
 

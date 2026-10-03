@@ -48,6 +48,10 @@ public final class RenderTargetManager {
     }
 
     public static void bindMain(boolean updateViewport, int viewWidth, int viewHeight) {
+        if(net.vulkanmod.render.scale.WorldRenderScale.active()) {
+            net.vulkanmod.render.scale.WorldRenderScale.target().bindWrite(updateViewport);
+            return;
+        }
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
         if(commandBuffer == null || Renderer.skipRendering)
             return;

@@ -30,6 +30,7 @@ public final class ScreenshotReadbackSmokeTest {
     public static void verify(Minecraft minecraft) throws Exception {
         TextureUploadSmokeTest.verify();
         net.vulkanmod.render.texture.SpriteAnimationSmokeTest.verify();
+        net.vulkanmod.render.scale.WorldRenderScaleSmokeTest.verify(minecraft);
         Renderer renderer = Renderer.getInstance();
         RenderTarget main = minecraft.getMainRenderTarget();
         File directory = new File("screenshot-smoke");

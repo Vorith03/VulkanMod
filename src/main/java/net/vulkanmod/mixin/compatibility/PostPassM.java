@@ -82,7 +82,8 @@ public class PostPassM {
         this.effect.safeGetUniform("Time").set(partialTicks);
         Minecraft minecraft = Minecraft.getInstance();
         this.effect.safeGetUniform("ScreenSize").set(
-                (float)minecraft.getWindow().getWidth(), (float)minecraft.getWindow().getHeight());
+                (float)net.vulkanmod.render.scale.WorldRenderScale.renderWidth(minecraft.getWindow().getWidth()),
+                (float)net.vulkanmod.render.scale.WorldRenderScale.renderHeight(minecraft.getWindow().getHeight()));
 
         this.outTarget.clear(Minecraft.ON_OSX);
         this.outTarget.bindWrite(false);

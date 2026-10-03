@@ -316,8 +316,8 @@ public class VRenderSystem {
     public static void updateScreenSize() {
         Window window = Minecraft.getInstance().getWindow();
 
-        screenSize.putFloat(0, (float)window.getWidth());
-        screenSize.putFloat(4, (float)window.getHeight());
+        screenSize.putFloat(0, (float)net.vulkanmod.render.scale.WorldRenderScale.renderWidth(window.getWidth()));
+        screenSize.putFloat(4, (float)net.vulkanmod.render.scale.WorldRenderScale.renderHeight(window.getHeight()));
     }
     
     public static void setWindow(long window) {

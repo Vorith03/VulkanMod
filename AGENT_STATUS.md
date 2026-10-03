@@ -122,10 +122,20 @@ Separate-server/pregeneration tooling is implemented with local synthetic parity
 Forge version/launch, record-lock, copy/rollback, JVM and bounded-command contracts
 passing. CI **#953** (run `37094935396`, job `111122823816`) stopped at the tooling
 contract because the runner's default Python lacks stdlib `tomllib`; the workflow
-now selects the documented Python 3.11 runtime explicitly. Full CI is pending.
+now selects the documented Python 3.11 runtime explicitly. CI **#954**
+(run `37095406659`, job `111124187248`) passed every public gate, including deployment
+contracts and optional-mod compatibility. Private resource-pack fixtures were skipped.
 Actual deployment needs the
 matching installed server distribution, user world and host; none are available.
-Continue world-target/render-scale integration, then legacy Flywheel and DH numeric
+World scaling is implemented opt-in (`worldRenderScale=1.0` default), with sampled
+world color/depth, resized vanilla chains, native bilinear composition before GUI,
+separate world-icon timing and failed-render restoration. The camera post effect
+runs after renderLevel, so capture stays active through it and ends before GuiGraphics
+construction; an outer Minecraft render-call wrapper owns final abort cleanup.
+Native attachment/pixel/depth/post-effect tests and transformed boundary oracle are
+pending feature CI. IP installations conservatively retain native resolution,
+including the current user's pack; loaded-world/reload/hardware adoption is open.
+Continue render-scale CI qualification, then legacy Flywheel and DH numeric
 data adapters, preserving the working fallbacks and recording unimplemented scope.
 Observed graphics-pipeline variant prewarming also remains open. Keep the #946
 matched capture as the baseline for separately toggled experiments; no hardware

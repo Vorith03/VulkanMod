@@ -9,9 +9,9 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | Create/Flywheel Vulkan instancing | Pending legacy API/model/shader adapter | Keep existing working fallback until qualified |
 | Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
 | Adaptive chunk scheduling | Implemented opt-in publication budget, configurable workers and frame-pressure permits | Local Java contract and full CI #950 passed, including real queue/worker smoke; hardware tuning open |
-| World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local bounded-command contract passed; qualified Chunky install and actual user-world execution pending |
-| Separate-server tooling | Implemented strict mod/config parity audit and copied deployment staging | Local fixture/lock/launcher contracts passed; matching real server distribution and user-world/host deployment pending |
-| Render scaling/upscaling | Pending world-target/GUI/depth/post-chain contract | Quality profile separate from canonical benchmark |
+| World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local contracts and full CI #954 passed; qualified Chunky install and actual user-world execution pending |
+| Separate-server tooling | Implemented strict mod/config parity audit and copied deployment staging | Local contracts and full CI #954 passed; matching real server distribution and user-world/host deployment pending |
+| Render scaling/upscaling | Implemented opt-in bilinear world scaling with native GUI | Native pixel/depth/effect and transformed boundary checks pending CI; IP installs conservatively retain native resolution |
 | Far-terrain LOD | Pending DH numeric-data/Vulkan rendering adapter | DH currently does not work; suppression is not LOD support |
 
 ## Compilation caches
@@ -57,3 +57,13 @@ The native contract sets real optional-mod culled flags on fresh entity/block-en
 ## Deployment tools
 
 `scripts/performance/deployment.py` implements the separate-server parity/staging and pregeneration command paths. Usage, inputs, exact version/side rules, source-world preservation and adoption checks are in [PERFORMANCE_DEPLOYMENT_TOOLING.md](PERFORMANCE_DEPLOYMENT_TOOLING.md). The tools generate reviewable copies/plans and never launch a server or execute generation. No actual desktop/server/world input is available here; neither deployment nor its performance benefit is claimed.
+
+## World render scaling
+
+`worldRenderScale` defaults `1.0` (native). Finite values clamp to 0.5–1.0; invalid non-finite values retain native resolution. The world uses ceil(native extent × scale), a sampled color/depth TextureTarget, and a bilinear fullscreen composition into the native main target before GuiGraphics construction. This is a quality tradeoff, not FSR or temporal reconstruction; no dynamic resolution controller is included. Keep quality profiles separate from the unchanged-workload benchmark.
+
+Primary MainTarget identity is preserved while its attachment lookups, binds, clears, depth copies, viewport and ScreenSize uniforms route to the owned world target. Vanilla camera, outline and transparency chains resize by chain identity/extent and remain inside the world scope. The native target and render state restore before GUI; an outer Minecraft dispatch wrapper restores them if rendering fails. Deferred world-icon requests capture the native composition before GUI, while ordinary F2 requests retain end-of-frame timing. Resources retire through existing framebuffer frame operations; production scaling adds no host readback or device-idle wait.
+
+Any Immersive Portals installation currently retains native resolution because its multi-view ownership has not been qualified for scaling. This includes the user's existing portal setup. Vanilla depth consumers inside the world scope receive scaled depth; native GUI receives the original native depth. Arbitrary third-party post effects and depth consumers outside that scope, loaded-world visual parity, resize/fullscreen, resource reload and hardware benefit remain adoption gates. Scaling is off by default.
+
+The native oracle exercises two scales/resizing, primary attachment identity, red/blue orientation, a sharp one-pixel native overlay, pre-GUI world-icon timing, actual creeper/transparency chains with depth copies, and failed-capture restoration. A transformed-bytecode contract requires capture before camera post processing and composition before native GUI creation. These checks are pending the first feature CI. The built-in blit shader now selects `Framebuffer0`, matching DrawUtil's actual framebuffer texture binding.

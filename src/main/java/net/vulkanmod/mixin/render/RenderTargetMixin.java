@@ -50,6 +50,13 @@ public class RenderTargetMixin {
      */
     @Overwrite
     public void clear(boolean getError) {
+        if((Object)this instanceof MainTarget mainTarget && MainTargetIdentity.isPrimary(mainTarget)
+                && net.vulkanmod.render.scale.WorldRenderScale.active()) {
+            net.vulkanmod.render.scale.WorldRenderScale.target().setClearColor(
+                    this.clearChannels[0], this.clearChannels[1], this.clearChannels[2], this.clearChannels[3]);
+            net.vulkanmod.render.scale.WorldRenderScale.target().clear(getError);
+            return;
+        }
         if(this.framebuffer == null || Renderer.getCommandBuffer() == null)
             return;
 
@@ -250,7 +257,8 @@ public class RenderTargetMixin {
         // Only Minecraft's primary MainTarget maps to the swapchain. Mods may
         // construct auxiliary MainTargets that use generic off-screen backing.
         if(target instanceof MainTarget mainTarget && MainTargetIdentity.isPrimary(mainTarget))
-            return Vulkan.getSwapChain().getDepthAttachment();
+            return net.vulkanmod.render.scale.WorldRenderScale.active()
+                    ? net.vulkanmod.render.scale.WorldRenderScale.depth() : Vulkan.getSwapChain().getDepthAttachment();
 
         int textureId = target.getDepthTextureId();
         return textureId > 0 ? GlTexture.getVulkanImage(textureId) : null;
