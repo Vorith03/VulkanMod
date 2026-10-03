@@ -37,6 +37,14 @@ public abstract class MSpriteContents implements VSpriteContentsI {
     @Unique private int vulkanmod$deferredMipLevel = -1;
     @Unique private long vulkanmod$deferredMipBytes;
     @Unique private long vulkanmod$performanceUploadStartNanos;
+    @Unique private net.vulkanmod.render.texture.SpriteAnimationState vulkanmod$animationState;
+
+    @Override
+    public net.vulkanmod.render.texture.SpriteAnimationState vulkanmod$animationState() {
+        if(vulkanmod$animationState == null)
+            vulkanmod$animationState = new net.vulkanmod.render.texture.SpriteAnimationState();
+        return vulkanmod$animationState;
+    }
 
     @Override
     public boolean vulkanmod$isStaticSprite() {
@@ -132,6 +140,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
     @Inject(method = "close", at = @At("HEAD"))
     private void vulkanmod$clearDeferredMipAccountingOnClose(CallbackInfo ci) {
+        if(vulkanmod$animationState != null) vulkanmod$animationState.close();
         this.vulkanmod$clearDeferredMipAccounting();
     }
 
@@ -168,7 +177,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
     @Inject(method = "upload", at = @At("HEAD"), cancellable = true)
     private void checkUpload(int i, int j, int k, int l, NativeImage[] nativeImages, CallbackInfo ci) {
-        if(!SpriteUtil.shouldUpload()) {
+        if(!SpriteUtil.shouldUpload() || (vulkanmod$animationState != null && !vulkanmod$animationState.materialize())) {
             ci.cancel();
             return;
         }

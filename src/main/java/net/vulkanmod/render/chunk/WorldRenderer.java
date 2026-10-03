@@ -600,6 +600,13 @@ public class WorldRenderer {
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
 
+        if(net.vulkanmod.render.texture.SpriteAnimationUsage.enabled()) {
+            for(RenderSection section : this.chunkQueue) {
+                for(var sprite : section.getCompiledSection().animatedSprites)
+                    net.vulkanmod.render.texture.SpriteAnimationUsage.use(sprite);
+            }
+        }
+
         this.sortTranslucentSections(camX, camY, camZ);
 
         this.minecraft.getProfiler().push("filterempty");

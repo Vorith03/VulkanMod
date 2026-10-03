@@ -127,13 +127,21 @@ public class ChunkTask {
                 float f = (float)vec3.x;
                 float g = (float)vec3.y;
                 float h = (float)vec3.z;
-                CompileResults compileResults = this.compile(f, g, h, chunkBufferBuilderPack);
+                CompileResults compileResults;
+                Set<net.minecraft.client.renderer.texture.SpriteContents> animatedSprites;
+                net.vulkanmod.render.texture.SpriteAnimationUsage.beginBuild();
+                try {
+                    compileResults = this.compile(f, g, h, chunkBufferBuilderPack);
+                } finally {
+                    animatedSprites = net.vulkanmod.render.texture.SpriteAnimationUsage.endBuild();
+                }
 
                 if (this.cancelled.get()) {
                     compileResults.renderedLayers.values().forEach(UploadBuffer::release);
                     return CompletableFuture.completedFuture(Result.CANCELLED);
                 } else {
                     CompiledSection compiledChunk = new CompiledSection();
+                    compiledChunk.animatedSprites = List.copyOf(animatedSprites);
                     compiledChunk.visibilitySet = compileResults.visibilitySet;
                     compiledChunk.renderableBlockEntities.addAll(compileResults.blockEntities);
                     compiledChunk.transparencyState = compileResults.transparencyState;

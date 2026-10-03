@@ -116,6 +116,12 @@
     "texture.MSimpleTexture",
     "texture.MSpriteAtlasTexture",
     "texture.MSpriteContents",
+    "texture.SpriteAnimationFrameAccessor",
+    "texture.SpriteAnimationInfoAccessor",
+    "texture.SpriteInterpolationMixin",
+    "texture.SpriteInterpolationInvoker",
+    "texture.SpriteTickerMixin",
+    "texture.SpriteUsageMixin",
     "texture.MTextureManager",
     "texture.MNativeImage",
 

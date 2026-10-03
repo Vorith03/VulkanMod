@@ -27,6 +27,9 @@ public class Config {
     public boolean uniqueOpaqueLayer = true;
     public boolean entityCulling = true;
     public boolean persistentCompilationCache = true;
+    public boolean animateOnlyUsedTextures = false;
+    public int animationVisibilityGraceMs = 500;
+    public String[] animationAlwaysActiveSprites = new String[0];
 
     private static Path path;
 

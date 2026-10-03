@@ -22,6 +22,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
 public class TerrainBufferBuilder implements VertexConsumer {
+    @Override
+    public void putBulkData(PoseStack.Pose pose, net.minecraft.client.renderer.block.model.BakedQuad quad,
+                            float[] brightness, float red, float green, float blue, float alpha,
+                            int[] light, int overlay, boolean useColor) {
+        net.vulkanmod.render.texture.SpriteAnimationUsage.use(quad.getSprite());
+        VertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, alpha, light, overlay, useColor);
+    }
 	private static final float POS_CONV = 1900.0f;
 	private static final float UV_CONV = 65536.0f;
 	public static final boolean DEBUG_COMPRESSED_VERTEX_RANGE =

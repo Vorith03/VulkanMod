@@ -208,6 +208,7 @@ case "$mode" in
     ;;
 
   screenshot)
+    # This mode also runs the real animation clock/pixel oracle under validation.
     clear_ci_mods
     snapshot_vk_layer_settings
     mkdir -p run
@@ -216,6 +217,7 @@ case "$mode" in
     run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.validation=true" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
     grep -F "Packed texture upload Vulkan smoke passed" vulkan-screenshot-smoke.log
+    grep -F "Sprite usage animation smoke passed" vulkan-screenshot-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-screenshot-smoke.log; then
       echo "Screenshot readback smoke produced invalid Vulkan" >&2
       exit 1

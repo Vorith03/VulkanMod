@@ -23,6 +23,14 @@ import java.util.function.IntConsumer;
 public abstract class BufferBuilderM extends DefaultedVertexConsumer
         implements BufferVertexConsumer, ExtendedVertexBuilder {
 
+    @Override
+    public void putBulkData(PoseStack.Pose pose, net.minecraft.client.renderer.block.model.BakedQuad quad,
+                            float[] brightness, float red, float green, float blue, float alpha,
+                            int[] light, int overlay, boolean useColor) {
+        net.vulkanmod.render.texture.SpriteAnimationUsage.use(quad.getSprite());
+        BufferVertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, alpha, light, overlay, useColor);
+    }
+
     @Shadow public abstract void endVertex();
 
     @Shadow private ByteBuffer buffer;

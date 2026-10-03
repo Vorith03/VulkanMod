@@ -163,6 +163,12 @@ public final class RenderTargetManager {
 
     /** Record an on-demand screenshot while the image is still owned by this frame. */
     public static void copyColorToBuffer(VulkanImage image, long buffer) {
+        copyColorMipToBuffer(image, buffer, 0);
+    }
+
+    public static void copyColorMipToBuffer(VulkanImage image, long buffer, int mip) {
+        if(mip < 0 || mip >= image.mipLevels)
+            throw new IllegalArgumentException("Readback mip outside image");
         Renderer renderer = Renderer.getInstance();
         if(!renderer.isRecordingFrame())
             throw new IllegalStateException("Readback requires a recording frame, before presentation");
@@ -177,8 +183,8 @@ public final class RenderTargetManager {
                 throw new IllegalStateException("Cannot capture an uninitialized RenderTarget");
             image.transitionImageLayout(stack, commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
             VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack);
-            region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).layerCount(1);
-            region.imageExtent().set(image.width, image.height, 1);
+            region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(mip).layerCount(1);
+            region.imageExtent().set(Math.max(1, image.width >> mip), Math.max(1, image.height >> mip), 1);
             vkCmdCopyImageToBuffer(commandBuffer, image.getId(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, region);
 
             VkBufferMemoryBarrier.Buffer hostBarrier = VkBufferMemoryBarrier.calloc(1, stack);

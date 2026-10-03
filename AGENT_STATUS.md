@@ -96,8 +96,10 @@ The owner has now requested implementation of the complete performance feature
 shortlist. `docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md` tracks implemented paths,
 remaining integration work and adoption gates. The first executable slice adds
 persistent compilation caches with a local corruption/identity/admission contract
-and a native shader/pipeline-cache smoke gate; CI is pending. Continue usage-driven
-texture animation and adaptive chunk scheduling while it runs. Keep the #946
+and a native shader/pipeline-cache smoke gate; CI **#947** passed every public gate
+(private real-pack fixtures skipped). Usage-driven animation is now opt-in with
+clock-preserving vanilla refresh and a native all-mip oracle; its CI is pending.
+Continue adaptive chunk scheduling and renderer integration while it runs. Keep the #946
 matched capture as the baseline for separately toggled experiments; no hardware
 gain or accelerated rendering adoption is established by this implementation work.
 
