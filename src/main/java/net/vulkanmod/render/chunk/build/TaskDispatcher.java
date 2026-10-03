@@ -38,6 +38,8 @@ public class TaskDispatcher {
     private static final int COMPLETED_RESULTS_PER_WORKER = 2;
 
     private final Queue<Runnable> toUpload = Queues.newLinkedBlockingDeque();
+    private final FrameWorkBudget publicationBudget = new FrameWorkBudget();
+    private long budgetDeferrals;
     public final ThreadBuilderPack fixedBuffers;
 
     private volatile boolean stopThreads;
@@ -74,6 +76,8 @@ public class TaskDispatcher {
         this.stopThreads = false;
 
         int j = Math.max((Runtime.getRuntime().availableProcessors() - 1) / 2, 1);
+        int configured = net.vulkanmod.Initializer.CONFIG.chunkWorkerThreads;
+        if(configured > 0) j = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), configured));
 
         this.threads = new Thread[j];
 
@@ -132,7 +136,6 @@ public class TaskDispatcher {
             long startNanos = System.nanoTime();
             long queueNanos = scheduledNanos == null ? 0L : Math.max(0L, startNanos - scheduledNanos);
 
-            this.activeTasks.incrementAndGet();
             try {
                 CompletableFuture<ChunkTask.Result> result = task.doTask(builderPack);
                 long elapsedNanos = System.nanoTime() - startNanos;
@@ -151,7 +154,10 @@ public class TaskDispatcher {
                 Minecraft.getInstance().delayCrash(CrashReport.forThrowable(throwable, "Batching chunks"));
                 return;
             } finally {
-                this.activeTasks.decrementAndGet();
+                synchronized(this) {
+                    this.activeTasks.decrementAndGet();
+                    notifyAll();
+                }
             }
         }
     }
@@ -203,22 +209,30 @@ public class TaskDispatcher {
 
     @Nullable
     private synchronized ChunkTask pollTask() {
+        if(ChunkFrameTiming.enabled() && this.threads != null
+                && this.activeTasks.get() >= FrameWorkBudget.workerLimit(this.threads.length,
+                        ChunkFrameTiming.frameMs(), ChunkFrameTiming.targetMs())) return null;
         if(this.highPriorityQuota <= 0) {
             ChunkTask lowPriorityTask = this.lowPriorityTasks.poll();
             if(lowPriorityTask != null) {
                 this.highPriorityQuota = HIGH_PRIORITY_QUOTA;
-                return lowPriorityTask;
+                return this.admitTask(lowPriorityTask);
             }
         }
 
         ChunkTask highPriorityTask = this.highPriorityTasks.poll();
         if(highPriorityTask != null) {
             this.highPriorityQuota--;
-            return highPriorityTask;
+            return this.admitTask(highPriorityTask);
         }
 
         this.highPriorityQuota = HIGH_PRIORITY_QUOTA;
-        return this.lowPriorityTasks.poll();
+        return this.admitTask(this.lowPriorityTasks.poll());
+    }
+
+    private ChunkTask admitTask(ChunkTask task) {
+        if(task != null) this.activeTasks.incrementAndGet();
+        return task;
     }
 
     public void stopThreads() {
@@ -253,10 +267,26 @@ public class TaskDispatcher {
 
     public boolean uploadAllPendingUploads() {
 
+        boolean budgeted = ChunkFrameTiming.enabled();
+        if(budgeted) {
+            double ms = net.vulkanmod.Initializer.CONFIG.chunkPublicationBudgetMs;
+            if(!Double.isFinite(ms)) ms = 2.0;
+            publicationBudget.begin(ChunkFrameTiming.frame(), System.nanoTime(),
+                    (long)(Math.max(0.1, Math.min(20.0, ms)) * 1_000_000),
+                    net.vulkanmod.Initializer.CONFIG.chunkPublicationsPerFrame,
+                    ChunkFrameTiming.frameMs(), ChunkFrameTiming.targetMs());
+        }
+
         Runnable runnable;
         boolean flag = false;
         boolean wokePublicationWaiters = false;
-        while((runnable = this.toUpload.poll()) != null) {
+        while(this.toUpload.peek() != null) {
+            if(budgeted && !publicationBudget.admit(System.nanoTime())) {
+                budgetDeferrals++;
+                break;
+            }
+            runnable = this.toUpload.poll();
+            if(runnable == null) break;
             flag = true;
             runnable.run();
 
@@ -489,6 +519,7 @@ public class TaskDispatcher {
         this.publicationQueueNanos.set(0L);
         this.publicationWorkNanos.set(0L);
         this.earlyPublicationWakeups = 0L;
+        this.budgetDeferrals = 0L;
         UploadBuffer.resetCopyStats();
         if(AreaUploadManager.INSTANCE != null)
             AreaUploadManager.INSTANCE.resetCopyStats();
@@ -533,6 +564,12 @@ public class TaskDispatcher {
                 averageMillis(this.publicationQueueNanos.get(), publishSamples),
                 averageMillis(this.publicationWorkNanos.get(), publishSamples),
                 this.earlyPublicationWakeups));
+        if(ChunkFrameTiming.enabled())
+            lines.add(String.format(Locale.ROOT,
+                    "Terrain budget: %.1f ms frame | worker permits %d | deferred drains %d",
+                    ChunkFrameTiming.frameMs(), FrameWorkBudget.workerLimit(
+                            this.threads == null ? 1 : this.threads.length,
+                            ChunkFrameTiming.frameMs(), ChunkFrameTiming.targetMs()), this.budgetDeferrals));
         if(AreaUploadManager.INSTANCE != null)
             lines.add("Terrain upload: " + AreaUploadManager.INSTANCE.getStats());
         if(net.vulkanmod.render.chunk.voxel.RegionVoxelStore.ENABLED)

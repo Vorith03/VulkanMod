@@ -142,6 +142,7 @@ case "$mode" in
     grep -F "Terrain region batching: enabled" vulkan-smoke.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=false)" vulkan-smoke.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke.log
+    grep -F "Adaptive chunk scheduling smoke passed" vulkan-smoke.log
     python3 scripts/ci/profiler-output-contract.py run/logs/vulkanmod-performance-ci.log
     ;;
 
@@ -163,6 +164,7 @@ case "$mode" in
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log
+    grep -F "Adaptive chunk scheduling smoke passed" vulkan-smoke-no-splash.log
     ;;
 
   gpu-indirect-shadow)

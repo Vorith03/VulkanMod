@@ -30,6 +30,11 @@ public class Config {
     public boolean animateOnlyUsedTextures = false;
     public int animationVisibilityGraceMs = 500;
     public String[] animationAlwaysActiveSprites = new String[0];
+    public boolean adaptiveChunkScheduling = false;
+    public int chunkWorkerThreads = 0;
+    public double chunkPublicationBudgetMs = 2.0;
+    public int chunkPublicationsPerFrame = 8;
+    public double chunkTargetFrameMs = 16.6667;
 
     private static Path path;
 

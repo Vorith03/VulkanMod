@@ -110,6 +110,7 @@ public class MinecraftMixin {
             net.vulkanmod.render.chunk.RegionBatchSmokeTest.verify();
             net.vulkanmod.render.chunk.SectionVoxelSmokeTest.verify();
             net.vulkanmod.render.chunk.build.PublicationDrainSmokeTest.verify();
+            net.vulkanmod.render.chunk.build.AdaptiveChunkSchedulingSmokeTest.verify();
             net.vulkanmod.render.chunk.voxel.GpuSectionSelectionShadowSmokeTest.verify();
             net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic.verifyProbeReadbackForCi();
             net.vulkanmod.render.FlywheelCompatSmokeTest.verifyIfPresent();
@@ -231,7 +232,13 @@ public class MinecraftMixin {
 
     @Inject(method = "runTick", at = @At(value = "HEAD"))
     private void resetBuffers(boolean bl, CallbackInfo ci) {
+        net.vulkanmod.render.chunk.build.ChunkFrameTiming.begin();
         Renderer.getInstance().resetBuffers();
+    }
+
+    @Inject(method = "runTick", at = @At("RETURN"))
+    private void vulkanmod$finishChunkFrameTiming(boolean render, CallbackInfo ci) {
+        net.vulkanmod.render.chunk.build.ChunkFrameTiming.end();
     }
 
 
