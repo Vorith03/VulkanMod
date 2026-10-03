@@ -12,7 +12,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
   3. `d1da0cc298e6ab46c99f06bb86ec89fcaf8cb26a` — reuse the mapped texture-staging `ByteBuffer` view instead of allocating a wrapper for every subupload.
 - `282d6c00...` was an incomplete attempt to move texture memory-pressure sampling to the outer batch. It was immediately reverted by `4f0f0e0e7a59d95f7282f60d85819610a5dea5fb`; do not treat it as an active optimization.
 - Matched benchmark candidate is `1dc5cf4cf074cc3bb35b726e5ca3d0bf46d2e937`, validated by completed successful CI **#946** / run `37066271693` (live Actions job evidence inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution, with warmup exclusion. Earlier attribution runs #942/#943 failed; signature fixes were validated by #945 and the capture-boundary correction by #946. Hardware validation of this executable remains pending.
-- Latest feature-code executable is `56e62c2222c58c0f6fe23b8753b92229faa91417`, fully public-CI green in **#963**, run `37113220066`, job `111174996134`. It adds qualified Vulkan instance-input/draw prerequisites to the feature slices below; Flywheel itself remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
+- Latest feature-code executable is `437fff77ef38722de85edd5dd9ec36e802c26935`, fully public-CI green in **#967**, run `37135821753`, job `111240032366`. It qualifies shared-model import, actual legacy Flywheel instance lifecycle/record encoding, normalized light bytes, UINT32 indices above 65535, caller-slice preservation and append-only uploads/shared-mesh retirement. #966 exposed an unsafe JOML heap-buffer write in the actual Flywheel fixture; explicit numeric matrix writes corrected it and #967 passed. Flywheel remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -103,26 +103,42 @@ Published slices:
 - Optional EntityCulling bridge: `addbbf009a0926c36a79595644c5698c85eef78d`, **#952** green including actual Forge 1.7.2 dispatch and guard-before-cancellation ordering. User installation/version and full portal/custom-bounds effectiveness are unknown.
 - Separate-server/pregeneration offline tooling: **#954** green. Contracts cover parity, Forge launch/version, record locks, copied staging/rollback, JVM and bounded generation commands. Python 3.11 is explicit in CI. No matching server distribution, user world or host is available; actual deployment/generation has not occurred.
 - World scaling: `worldRenderScale=1.0` defaults native; opt-in 0.5–1.0 bilinear world composition before native GUI. Full public CI **#961** passed native attachments, resized pixels/orientation, native overlay, world-icon timing, camera/transparency effects/depth, external chain resize invalidation and abort restoration. Transformed-bytecode checks passed world/post-effect/GUI order and original IP redirect retention. Both scale wrappers are excluded with IP installed, so the user's portal pack retains native resolution. Production adds no host readback/device-idle wait. User-world/reload/visual quality/hardware adoption remains open.
-- Vulkan instancing prerequisite: `ffc6422adbb8a937666199fbaadb35e8e01ccf49` adds immutable binding-1 matrix/packed-field layouts, device admission checks and bounded indexed instance drawing. Descriptor-free pool fix `56e62c2222c58c0f6fe23b8753b92229faa91417` qualified it in full public CI **#963**, including native slice-offset, matrix/color/light, firstInstance, zero-count, resize and subsequent ordinary-draw pixels. This is not an enabled Flywheel engine. Native 32-bit-index adapter coverage remains open.
+- Vulkan instancing prerequisite: `ffc6422adbb8a937666199fbaadb35e8e01ccf49` adds immutable binding-1 matrix/packed-field layouts, device admission checks and bounded indexed instance drawing. Descriptor-free pool fix `56e62c2222c58c0f6fe23b8753b92229faa91417` qualified it in full public CI **#963**, including native slice-offset, matrix/color/light, firstInstance, zero-count, resize and subsequent ordinary-draw pixels. This is not an enabled Flywheel engine. Native 32-bit-index coverage is now qualified by the model/ownership slice in #967.
 
-All feature code is published and locally synchronized. #963's distributable JAR and
-smoke logs were uploaded; no further CI validation is pending for this slice. Private resource-pack fixtures were skipped, not qualified. No new hardware
-speedup is established. Keep #946 as the matched comparison candidate and test
-quality/visibility/scheduling features separately.
+The published model/instance ownership slice adds:
 
-**Next implementation stage:** shared-model import and instance lifecycle ownership for
-the legacy Create/Flywheel Vulkan adapter. The pinned
-1.20.1/0.6 source boundary and concrete implementation prerequisites are recorded in
-`docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md`. Explicit Vulkan instance-data input and
-the native transformed-quad oracle now pass #963; reuse them. The legacy transformed
-record is 106 bytes with light bytes 0/1, color at 2, model mat4 at 6 and normal mat3
-at 70. Reencode these unaligned records into portable aligned Vulkan data; preserve
-normalized lightmap shader semantics. Do not directly bind GL-packed records. Add
-validated model indices, per-frame/fence-safe instance uploads and native 32-bit-index
-coverage. Preserve dirty/removal/
-owner-transfer/origin-rebase semantics and provide unsupported-material/model fallback
-before enabling Backend.isOn; the existing disabled backend preserves working rendering.
-Do not call GL model pools/VAOs or custom Model.createEBO from the Vulkan path.
+- owned, bounded built-in BlockModel CPU import without GL EBO/pool/VAO/writer calls;
+- range-validated immutable sequential/custom indices and 16/32-bit selection;
+- immutable shared Vulkan model buffers with idempotent deferred retirement;
+- actual optional legacy Instancer/ModelData ownership, aligned 108-byte numeric records,
+  normalized shifted light bytes, dirty updates, removal/compaction, transfer/back,
+  failed-packing retries and origin membership clear;
+- append-only per-frame instance uploads through Drawer's existing fence-qualified arena,
+  including caller cursor preservation and multiple changing snapshots within a frame.
+
+Full public CI **#967** / run `37135821753`, job `111240032366`, qualified the
+corrected slice at `437fff77ef38722de85edd5dd9ec36e802c26935`. The preceding #966
+passed native pixels but exposed JOML's unsafe heap-buffer matrix write in the actual
+Flywheel CPU fixture. Explicit ByteBuffer.putFloat component encoding fixes it;
+#967 passed the actual BlockModel sequential/custom index and shading imports,
+actual ModelData dirty/removal/transfer/origin checks, native index/light/upload/
+retirement pixels, distributable packaging and every existing public gate. JAR and
+smoke-log artifact uploads succeeded; private resource-pack fixtures were skipped.
+Local Java ownership/input-admission contracts pass. Full local Gradle build is
+unavailable because the distribution download is network-blocked. All implementation
+is published and locally synchronized. No CI result is pending for this atomic slice;
+no measured hardware speedup is established.
+
+**Next implementation stage:** Engine/MaterialManager/
+MaterialGroup/Material routing for the legacy Create/Flywheel Vulkan adapter, with
+material-key shared-model cache identity, exact transformed/lightmap/shading behavior,
+origin listener/recreation notification, and an actual unsupported-material/program/
+model fallback before any Backend.isOn adoption. Current CPU importer deliberately
+supports only the exact pinned BlockModel and known CPU index suppliers; original
+CPU model lifetime/deletion, crumbling, translucency, reload, world and portal ownership
+still need integration. The pinned source boundary and material shader findings are in
+`docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md`. Do not call GL model pools/VAOs,
+custom Model.createEBO or GL-bearing model.delete from the Vulkan path.
 
 Observed graphics-pipeline variant prewarming and far-terrain LOD/DH numeric-data
 adapters are still unimplemented. DH suppression smoke is not functional LOD.
@@ -130,8 +146,8 @@ The original GPU-offload investigation/implementation O1–O8 in
 `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` also remains in scope; existing terrain/
 indirect/hybrid infrastructure and paused Phase 7 gates must be preserved.
 
-The instance-input prerequisite is a completed atomic milestone; no CI result is
-pending. Continue under AGENTS.md section 3A and this checkpoint. The full feature
+The instance-input and model/instance ownership prerequisites are completed atomic
+milestones; no CI result is pending for this slice. Continue under AGENTS.md section 3A and this checkpoint. The full feature
 request remains unfinished; do not convert prerequisite qualification into backend adoption.
 The matched hardware benchmark remains the independent next user-machine gate:
 

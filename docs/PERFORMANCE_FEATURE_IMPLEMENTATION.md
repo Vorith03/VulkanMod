@@ -6,7 +6,7 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | --- | --- | --- |
 | Persistent compilation caches | Implemented SPIR-V and Vulkan driver cache persistence | Local contract and full CI #947 pass, including native persistence/reload; hardware hitch measurement pending |
 | Usage-driven animated textures | Implemented opt-in vanilla ticker gating and first-use refresh | Full CI #948 green on bounded retry; native clock/all-mip pixel oracle passed both attempts; GPU-only usage fallback added; custom raw-UV consumers and hardware adoption open |
-| Create/Flywheel Vulkan instancing | Vulkan instance-input/draw prerequisite implemented; legacy engine/model/material adapter pending | Full public CI #963 passed aligned matrix/color/light pixel oracle; keep existing working fallback until actual adapter qualification |
+| Create/Flywheel Vulkan instancing | Input, shared-model import and transformed instance ownership implemented; engine/material/fallback routing pending | Full public CI #967 passed actual Flywheel CPU and native high-index/light/upload/retirement oracles; existing fallback remains active |
 | Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
 | Adaptive chunk scheduling | Implemented opt-in publication budget, configurable workers and frame-pressure permits | Local Java contract and full CI #950 passed, including real queue/worker smoke; hardware tuning open |
 | World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local contracts and full CI #954 passed; qualified Chunky install and actual user-world execution pending |
@@ -44,7 +44,7 @@ The first implementation prerequisite now supplies an immutable `InstanceVertexF
 
 The pinned legacy `BasicWriterUnsafe` writes block/sky light as two bytes (`light << 4`), then four RGBA bytes. `ModelWriterUnsafe` writes mat4 at offset 6 and mat3 at offset 70; `BufferLayout` sums sizes without padding, giving a 106-byte stride. Those float offsets and alternating record alignment cannot directly serve this Vulkan input. The adapter must reencode numeric fields into an aligned record and preserve the legacy normalized-light/lightmap shader semantics. The native prerequisite oracle uses an independent aligned 108-byte record with integer ushort light, not an unchanged Flywheel buffer or a qualified Create lightmap shader. Do not instantiate its GL VecBuffer/writer merely to obtain serialized bytes.
 
-The Java contract checks layout admission, immutable ownership, alignment/overlap, device limits and overflow-safe fetch bounds. The native oracle draws a shared quad with independent model/normal matrices, packed color/light and prefix offsets; it checks nonzero firstInstance, zero count, resized targets and an ordinary draw after instancing. It uses 16-bit indices; the API's 32-bit branch still needs a native adapter oracle. Implementation `ffc6422adbb8a937666199fbaadb35e8e01ccf49` passed these pixels in CI #962, which correctly failed validation because descriptor-free shaders created empty descriptor pools. `56e62c2222c58c0f6fe23b8753b92229faa91417` skips descriptor pool creation/allocation/binding/reset for descriptor-free pipelines; full public CI **#963** (run `37113220066`, job `111174996134`) passed the same native pixels without validation errors and all existing public gates. Private resource-pack fixtures were skipped. Flywheel engine/material integration, shared-model import/index validation, dirty/removal/rebase ownership, light/material, crumbling, translucency, reload and portal-world gates remain open. No enabled Flywheel backend or performance gain is claimed.
+The Java contract checks layout admission, immutable ownership, alignment/overlap, device limits and overflow-safe fetch bounds. The native oracle draws a shared quad with independent model/normal matrices, packed color/light and prefix offsets; it checks nonzero firstInstance, zero count, resized targets and an ordinary draw after instancing. That original oracle uses 16-bit indices; the later model/ownership slice qualifies UINT32 indices above 65535 in #967. Implementation `ffc6422adbb8a937666199fbaadb35e8e01ccf49` passed these pixels in CI #962, which correctly failed validation because descriptor-free shaders created empty descriptor pools. `56e62c2222c58c0f6fe23b8753b92229faa91417` skips descriptor pool creation/allocation/binding/reset for descriptor-free pipelines; full public CI **#963** (run `37113220066`, job `111174996134`) passed the same native pixels without validation errors and all existing public gates. Private resource-pack fixtures were skipped. Flywheel engine/material integration, shared-model import/index validation, dirty/removal/rebase ownership, light/material, crumbling, translucency, reload and portal-world gates remain open. No enabled Flywheel backend or performance gain is claimed.
 
 ## Adaptive chunk scheduling
 
@@ -82,7 +82,7 @@ The native oracle exercises two scales/resizing, primary attachment identity, re
 
 ## Legacy CPU model and instance ownership slice (2026-10-03)
 
-The next adapter slice implements owned `ModelGeometry`, optional `LegacyFlywheelModel`
+The model/instance adapter slice implements owned `ModelGeometry`, optional `LegacyFlywheelModel`
 import of the exact pinned built-in `BlockModel`, `SharedModelBuffer` Vulkan ownership,
 `InstanceGroup` CPU lifecycle, and a real optional `Instancer`/`ModelData` proxy in
 `LegacyFlywheelInstances`. Backend availability remains unchanged. This is a callable
@@ -126,8 +126,35 @@ origin clear and close. Full local compilation is unavailable because this works
 has no downloaded Gradle distribution and the wrapper download is network-blocked.
 CI additionally runs the actual pinned Forge Flywheel CPU fixture and a native shared
 mesh with indices 65536–65539, normalized light channels, same-frame changing snapshots,
-firstInstance, zero count, resize and ordinary draw isolation. These new gates are
-pending until the published candidate passes CI. Existing private-pack/hardware gates
+firstInstance, zero count, resize and ordinary draw isolation. Full public CI #967
+(run `37135821753`, job `111240032366`) passed all of these gates and every existing
+public gate at `437fff77ef38722de85edd5dd9ec36e802c26935`. JAR and smoke artifacts
+uploaded successfully; private resource-pack fixtures were skipped. Hardware gates
 remain open. Engine/material routing, unsupported-material fallback, shade/lightmap,
 crumbling, translucency, world/reload/portal ownership and origin listeners are the next
 integration boundary; do not enable Backend.isOn from these prerequisites.
+
+
+The #966 executable (`5b791947...`, run `37135355524`, job `111238774408`)
+passed compilation/distributable, Java ownership, native shared-mesh/normalized-light/
+32-bit/retirement pixels and preceding public renderer gates, then crashed in the
+actual Flywheel CPU fixture with SIGSEGV in `sun.misc.Unsafe.putLong`. JOML 1.10.5
+`MemUtilUnsafe.put(Matrix4f, offset, ByteBuffer)` reads a native destination address
+and checks directness only under Options.DEBUG. The adapter had supplied its heap
+snapshot. `437fff77ef38722de85edd5dd9ec36e802c26935` encodes each numeric matrix
+component with Java ByteBuffer.putFloat instead; this removes that unsafe address
+path without changing record layout. Full public CI #967 / run `37135821753`, job `111240032366`, passed for the
+corrected executable, including both actual pinned Flywheel CPU and native pixel oracles. Crash-report files are now included in smoke artifacts.
+
+Next material routing must preserve the pinned `ModelType`/`Programs.TRANSFORMED`
+contract: model.vert replaces vertex color/light with instance color/light and applies
+model/normal matrices. `context/world.glsl` samples the lightmap through `shiftLight`
+(`light * 255/256 + 1/32`). UNORM fetch qualification alone does not qualify these
+samplers, diffuse/fog/alpha behavior or the retained per-vertex shade membership.
+Material.model(key, supplier) promises the same instancer for repeated keys within
+its owning material. Engine/material/generation cache ownership must satisfy that
+promise, close GPU buffers once, and retire the original CPU model without using its
+GL-bearing delete path. Preserve RenderLayer/RenderType identity and origin-listener
+notification; unknown material/program/model cases need a real fallback rather than
+raising an exception after global Backend.canUseInstancing has suppressed Create's
+ordinary renderers. Keep backend availability disabled until that routing is proven.
