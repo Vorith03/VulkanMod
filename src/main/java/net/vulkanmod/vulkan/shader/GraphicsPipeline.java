@@ -32,6 +32,7 @@ public class GraphicsPipeline extends Pipeline {
 
     private final Map<PipelineKey, Long> graphicsPipelines = new HashMap<>();
     private final VertexFormat vertexFormat;
+    private final InstanceVertexFormat instanceFormat;
 
     private long vertShaderModule = 0;
     private long fragShaderModule = 0;
@@ -51,6 +52,10 @@ public class GraphicsPipeline extends Pipeline {
         this.images = builder.images;
         this.pushConstants = builder.pushConstants;
         this.vertexFormat = builder.vertexFormat;
+        this.instanceFormat = builder.instanceFormat;
+
+        // Reject unsupported instance input before creating any owned native resource.
+        if(instanceFormat != null) validateInstanceFormat();
 
         createDescriptorSetLayout();
         createPipelineLayout();
@@ -117,8 +122,8 @@ public class GraphicsPipeline extends Pipeline {
 
             VkPipelineVertexInputStateCreateInfo vertexInputInfo = VkPipelineVertexInputStateCreateInfo.calloc(stack);
             vertexInputInfo.sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
-            vertexInputInfo.pVertexBindingDescriptions(getBindingDescription(vertexFormat, stack));
-            vertexInputInfo.pVertexAttributeDescriptions(getAttributeDescriptions(vertexFormat));
+            vertexInputInfo.pVertexBindingDescriptions(getBindingDescriptions(stack));
+            vertexInputInfo.pVertexAttributeDescriptions(getAttributeDescriptions());
 
             // ===> ASSEMBLY STAGE <===
 
@@ -271,19 +276,56 @@ public class GraphicsPipeline extends Pipeline {
         this.fragShaderModule = createShaderModule(fragSpirv.bytecode());
     }
 
-    private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat, MemoryStack stack) {
+    public InstanceVertexFormat getInstanceFormat() { return instanceFormat; }
+    public int getVertexStride() { return vertexFormat.getVertexSize(); }
+
+    private void validateInstanceFormat() {
+        VkPhysicalDeviceLimits limits = Device.deviceProperties.limits();
+        if(limits.maxVertexInputBindings() < 2)
+            throw new IllegalArgumentException("Device lacks a second vertex input binding");
+        int modelAttributes = (int)vertexFormat.getElements().stream()
+                .filter(e -> e.getUsage() != VertexFormatElement.Usage.PADDING).count();
+        instanceFormat.validateLimits(modelAttributes, limits.maxVertexInputAttributes(),
+                limits.maxVertexInputBindingStride(), limits.maxVertexInputAttributeOffset());
+        try(MemoryStack stack = stackPush()) {
+            VkFormatProperties properties = VkFormatProperties.calloc(stack);
+            for(var attribute : instanceFormat.attributes()) {
+                vkGetPhysicalDeviceFormatProperties(Device.physicalDevice, instanceVkFormat(attribute.format()), properties);
+                if((properties.bufferFeatures() & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) == 0)
+                    throw new IllegalArgumentException("Unsupported instance vertex format: " + attribute.format());
+            }
+        }
+    }
+
+    private static int instanceVkFormat(InstanceVertexFormat.Format format) {
+        return switch(format) {
+            case FLOAT -> VK_FORMAT_R32_SFLOAT;
+            case FLOAT2 -> VK_FORMAT_R32G32_SFLOAT;
+            case FLOAT3 -> VK_FORMAT_R32G32B32_SFLOAT;
+            case FLOAT4 -> VK_FORMAT_R32G32B32A32_SFLOAT;
+            case UBYTE4_NORMALIZED -> VK_FORMAT_R8G8B8A8_UNORM;
+            case BYTE4_NORMALIZED -> VK_FORMAT_R8G8B8A8_SNORM;
+            case USHORT2 -> VK_FORMAT_R16G16_UINT;
+            case SHORT2 -> VK_FORMAT_R16G16_SINT;
+        };
+    }
+
+    private VkVertexInputBindingDescription.Buffer getBindingDescriptions(MemoryStack stack) {
 
         VkVertexInputBindingDescription.Buffer bindingDescription =
-                VkVertexInputBindingDescription.calloc(1, stack);
+                VkVertexInputBindingDescription.calloc(instanceFormat == null ? 1 : 2, stack);
 
         bindingDescription.binding(0);
         bindingDescription.stride(vertexFormat.getVertexSize());
         bindingDescription.inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
-        return bindingDescription;
+        if(instanceFormat != null)
+            bindingDescription.get(1).binding(1).stride(instanceFormat.stride()).inputRate(VK_VERTEX_INPUT_RATE_INSTANCE);
+
+        return bindingDescription.rewind();
     }
 
-    private static VkVertexInputAttributeDescription.Buffer getAttributeDescriptions(VertexFormat vertexFormat) {
+    private VkVertexInputAttributeDescription.Buffer getAttributeDescriptions() {
 
         ImmutableList<VertexFormatElement> elements = vertexFormat.getElements();
 
@@ -293,7 +335,7 @@ public class GraphicsPipeline extends Pipeline {
         }
 
         VkVertexInputAttributeDescription.Buffer attributeDescriptions =
-                VkVertexInputAttributeDescription.calloc(size, stackGet());
+                VkVertexInputAttributeDescription.calloc(size + (instanceFormat == null ? 0 : instanceFormat.attributes().size()), stackGet());
 
         int offset = 0;
 
@@ -373,6 +415,12 @@ public class GraphicsPipeline extends Pipeline {
             posDescription.offset(((VertexFormatMixed)(vertexFormat)).getOffset(i));
         }
 
+        if(instanceFormat != null) {
+            for(var attribute : instanceFormat.attributes()) {
+                attributeDescriptions.get(size++).binding(1).location(attribute.location())
+                        .format(instanceVkFormat(attribute.format())).offset(attribute.offset());
+            }
+        }
         return attributeDescriptions.rewind();
     }
 

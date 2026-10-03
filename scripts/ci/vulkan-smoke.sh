@@ -219,6 +219,7 @@ case "$mode" in
     run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
     grep -F "World render scale native smoke passed" vulkan-screenshot-smoke.log
+    grep -F "Vulkan instanced draw smoke passed" vulkan-screenshot-smoke.log
     javap -c -p run/.mixin.out/class/net/minecraft/client/renderer/GameRenderer.class > vulkan-render-scale-gamerenderer.javap
     python3 scripts/ci/render-scale-hook-contract.py vulkan-render-scale-gamerenderer.javap
     grep -F "Packed texture upload Vulkan smoke passed" vulkan-screenshot-smoke.log

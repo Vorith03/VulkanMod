@@ -519,6 +519,7 @@ public abstract class Pipeline {
         }
 
         final VertexFormat vertexFormat;
+        InstanceVertexFormat instanceFormat;
         final String shaderPath;
         List<UBO> UBOs;
         ManualUBO manualUBO;
@@ -538,6 +539,11 @@ public abstract class Pipeline {
 
         public Builder(VertexFormat vertexFormat) {
             this(vertexFormat, null);
+        }
+
+        public Builder setInstanceFormat(InstanceVertexFormat format) {
+            this.instanceFormat = java.util.Objects.requireNonNull(format, "instance format");
+            return this;
         }
 
         public GraphicsPipeline createGraphicsPipeline() {

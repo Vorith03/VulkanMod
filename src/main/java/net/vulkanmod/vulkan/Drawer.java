@@ -1,9 +1,13 @@
 package net.vulkanmod.vulkan;
 
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.memory.*;
 import net.vulkanmod.vulkan.util.VUtil;
+import net.vulkanmod.vulkan.shader.GraphicsPipeline;
+import net.vulkanmod.vulkan.shader.InstanceVertexFormat;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
@@ -133,6 +137,49 @@ public class Drawer {
         nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
 
         vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
+    }
+
+    /** Caller owns immutable model indices and fence-safe uploaded buffer slices. */
+    public void drawIndexedInstanced(GraphicsPipeline pipeline, VertexBuffer model, VertexBuffer instances,
+                                     IndexBuffer indices, int indexType, int vertexCount, int indexCount,
+                                     int firstInstance, int instanceCount) {
+        RenderSystem.assertOnRenderThread();
+        InstanceVertexFormat format = pipeline.getInstanceFormat();
+        if(format == null) throw new IllegalArgumentException("Pipeline has no instance binding");
+        if(vertexCount < 0 || indexCount < 0)
+            throw new IllegalArgumentException("Negative model draw count");
+        int indexBytes = switch(indexType) {
+            case VK_INDEX_TYPE_UINT16 -> 2;
+            case VK_INDEX_TYPE_UINT32 -> 4;
+            default -> throw new IllegalArgumentException("Unsupported instance index type");
+        };
+        validateSlice(model, (long)vertexCount * pipeline.getVertexStride(), 4);
+        validateSlice(indices, (long)indexCount * indexBytes, indexBytes);
+        validateSlice(instances, 0, 4);
+        format.validateRange(instances.getUsedBytes() - instances.getOffset(), firstInstance, instanceCount);
+        if(indexCount == 0 || instanceCount == 0) return;
+        if(vertexCount == 0) throw new IllegalArgumentException("Nonempty draw without model vertices");
+        Renderer renderer = Renderer.getInstance();
+        if(!renderer.isRecordingFrame() || renderer.getBoundRenderPass() == null)
+            throw new IllegalStateException("Instanced draw requires a recording render pass");
+        GraphicsPipeline.requestPrimitiveMode(VertexFormat.Mode.TRIANGLES);
+        renderer.bindGraphicsPipeline(pipeline);
+        renderer.uploadAndBindUBOs(pipeline);
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
+            vkCmdBindVertexBuffers(commandBuffer, 0, stack.longs(model.getId(), instances.getId()),
+                    stack.longs(model.getOffset(), instances.getOffset()));
+            vkCmdBindIndexBuffer(commandBuffer, indices.getId(), indices.getOffset(), indexType);
+            vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, 0, 0, firstInstance);
+        }
+    }
+
+    private static void validateSlice(Buffer buffer, long bytes, int alignment) {
+        long offset = buffer.getOffset();
+        if(buffer.getId() == 0 || offset < 0 || offset % alignment != 0 || bytes < 0
+                || offset > buffer.getUsedBytes() || bytes > buffer.getUsedBytes() - offset
+                || buffer.getUsedBytes() > buffer.getBufferSize())
+            throw new IllegalArgumentException("Draw exceeds uploaded buffer slice or has an unaligned offset");
     }
 
     public void bindAutoIndexBuffer(VkCommandBuffer commandBuffer, int drawMode) {
