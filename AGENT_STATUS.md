@@ -12,11 +12,11 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
   3. `d1da0cc298e6ab46c99f06bb86ec89fcaf8cb26a` — reuse the mapped texture-staging `ByteBuffer` view instead of allocating a wrapper for every subupload.
 - `282d6c00...` was an incomplete attempt to move texture memory-pressure sampling to the outer batch. It was immediately reverted by `4f0f0e0e7a59d95f7282f60d85819610a5dea5fb`; do not treat it as an active optimization.
 - Matched benchmark candidate is `1dc5cf4cf074cc3bb35b726e5ca3d0bf46d2e937`, validated by completed successful CI **#946** / run `37066271693` (live Actions job evidence inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution, with warmup exclusion. Earlier attribution runs #942/#943 failed; signature fixes were validated by #945 and the capture-boundary correction by #946. Hardware validation of this executable remains pending.
-- Latest feature-code executable is `437fff77ef38722de85edd5dd9ec36e802c26935`, fully public-CI green in **#967**, run `37135821753`, job `111240032366`. It qualifies shared-model import, actual legacy Flywheel instance lifecycle/record encoding, normalized light bytes, UINT32 indices above 65535, caller-slice preservation and append-only uploads/shared-mesh retirement. #966 exposed an unsafe JOML heap-buffer write in the actual Flywheel fixture; explicit numeric matrix writes corrected it and #967 passed. Flywheel remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
-- Material ownership candidate `ab4a87def00d79f8232f3b1f91d4aedefe157964` is fully public-CI green in **#968**, run `37142141537`, job `111258615844`. Actual MaterialManager/MaterialGroup/Material API, supplier-once/material/layer/state/world-generation caching, owned CPU release, unsupported delegation and origin recreation/stale-handle checks passed. JAR/log uploads succeeded; private packs were skipped. This supplies a callable ownership/delegation layer, not a production engine or qualified fallback renderer. Backend availability is unchanged.
-- Callable CPU-first Engine and actual Batched/Params vertex-consumer fallback `9e7bca9f6d199b60c0d421e5446c31a7d27753c5` are fully public-CI green in **#969**, run `37155602660`, job `111298239954`. Actual emitted ModelType/OrientedType vertices and ownership/origin/task routing passed; JAR/log uploads succeeded. Private packs were skipped. No production InstanceWorld registration, enabled backend, universal custom fallback or GPU material shader qualification is claimed.
+- Model/instance ownership prerequisite `437fff77ef38722de85edd5dd9ec36e802c26935` is fully public-CI green in **#967**, run `37135821753`, job `111240032366`. It qualifies shared-model import, actual legacy Flywheel instance lifecycle/record encoding, normalized light bytes, UINT32 indices above 65535, caller-slice preservation and append-only uploads/shared-mesh retirement. #966 exposed an unsafe JOML heap-buffer write in the actual Flywheel fixture; explicit numeric matrix writes corrected it and #967 passed. Flywheel remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
+- Material ownership `ab4a87def00d79f8232f3b1f91d4aedefe157964` is fully public-CI green in **#968**, run `37142141537`, job `111258615844`. Actual MaterialManager/MaterialGroup/Material API, supplier-once/material/layer/state/world-generation caching, owned CPU release, unsupported delegation and origin recreation/stale-handle checks passed. JAR/log uploads succeeded; private packs were skipped. This supplies a callable ownership/delegation layer, not a production engine or qualified fallback renderer. Backend availability is unchanged.
+- Callable CPU-first Engine and actual Batched/Params vertex-consumer fallback `9e7bca9f6d199b60c0d421e5446c31a7d27753c5` are fully public-CI green in **#969**, run `37155602660`, job `111298239954`. Actual emitted ModelType/OrientedType vertices and ownership/origin/task routing passed; JAR/log uploads succeeded. Private packs were skipped. This CPU slice does not register InstanceWorld, enable the backend or qualify universal custom fallback rendering; GPU shader qualification is the separate #972 gate.
 - Native CPU batching lifetime `5fb3d7024b2f4d0d0f55018e18648debfa319496` is fully public-CI green in **#970**, run `37156114140`, attempt 2, job `111300814405`. Lazy private allocation, grown-buffer release on emission abort/retirement, fresh-source recreation and idempotent/stale-builder checks passed the actual optional fixture. Attempt 1 failed before those checks in Forge early-display union-filesystem class loading (`FileSystemNotFoundException`); one bounded rerun passed without code changes. JAR/log uploads succeeded; private packs were skipped.
-- Transformed/world/block material shader candidate `5150797f3014c1f931a0913ba381b3474beb6ecf` compiled and rendered expected first RGB pixels in **#971**, run `37156868161`, job `111301931288`, but its alpha oracle incorrectly used the deliberately opaque screenshot API. The follow-up uses a test-only raw attachment transfer to validate actual alpha; full shader qualification remains pending its CI. Dynamic world/fog/alpha uniforms and pipeline retirement are not yet adopted by the CPU-first Engine. No InstanceWorld/backend adoption is enabled.
+- Latest feature-code executable `f6400db90f81a4e33dd681e81ad141816c45090e` is fully public-CI green in **#972**, run `37157165558`, job `111302811813`. It qualifies the pinned transformed/world/block shader, instance color/light override, normalized XYZ diffuse, atlas/light/fog alpha separation, alpha discard, model/world matrices, mixed-axis cylindrical linear fog, per-draw dynamic UBO isolation, resize/zero count and frame-fence pipeline retirement. All nine raw attachment pixel cases and Vulkan synchronization validation passed, together with actual Flywheel CPU/lifetime checks and every existing public gate. JAR/log uploads succeeded; private packs were skipped. #971 used the deliberately opaque screenshot API in an alpha oracle; a test-only raw transfer corrected that fixture without changing production screenshots. Dynamic world/material rendering is still not adopted by the CPU-first Engine, and no InstanceWorld/backend adoption is enabled. No CI result remains pending for this atomic slice.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -133,16 +133,22 @@ unavailable because the distribution download is network-blocked. All implementa
 is published and locally synchronized. No CI result is pending for this atomic slice;
 no measured hardware speedup is established.
 
-**Next implementation stage:** qualify the transformed/lightmap/shading/fog/alpha
-material shader candidate, then integrate exact material state and world-event
-rendering with a qualified fallback before
-any Backend.isOn adoption. Callable CPU-first Engine dispatch and built-in sequential
-quad batching pass #969, but actual world-event rendering and registration remain open. Material-key/world/generation cache identity, CPU-source
-release and origin recreation callbacks now pass #968. The required fallback
-interface is tested for delegation/clear/close only; it is not a rendering fallback. Current CPU importer deliberately
-supports only the exact pinned BlockModel and known CPU index suppliers; original
-CPU model lifetime/deletion, crumbling, translucency, reload, world and portal ownership
-still need integration. The pinned source boundary and material shader findings are in
+**Next implementation stage:** integrate the qualified transformed material pipeline
+with exact RenderType/sampler/depth/cull/blend state and origin-relative world-event
+matrices, retaining the actual CPU fallback and an explicit unsupported-case owner.
+Use the callable Engine/material APIs; do not enable Backend.isOn or register an
+InstanceWorld engine until world/event rendering and complete fallback coverage
+qualify. #968 covers material/source/origin ownership, #969 callable CPU transforms,
+#970 native CPU batch lifetime, and #972 transformed material pixels. The native
+pipeline remains separate from the CPU-first Engine.
+
+The CPU fallback qualifies exact owned built-in BlockModels with sequential quad
+topology and Batched numeric transforms. Its external unsupported interface has
+ownership/delegation/clear/close fixtures, not a qualified renderer. Nonsequential or
+unknown model/program/format rendering, crumbling, translucent state/ordering,
+reload, world and portal ownership still need integration. The pinned GPU shader's
+diffuse formula differs from the CPU fallback's unshaded/constant-ambient rules;
+preserve the documented boundary. Details and evidence are in
 `docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md`. Do not call GL model pools/VAOs,
 custom Model.createEBO or GL-bearing model.delete from the Vulkan path.
 
@@ -152,8 +158,8 @@ The original GPU-offload investigation/implementation O1–O8 in
 `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` also remains in scope; existing terrain/
 indirect/hybrid infrastructure and paused Phase 7 gates must be preserved.
 
-The instance-input and model/instance ownership prerequisites are completed atomic
-milestones; no CI result is pending for this slice. Continue under AGENTS.md section 3A and this checkpoint. The full feature
+The instance-input, ownership, callable CPU-engine/lifetime and native material
+shader slices are completed atomic milestones; no CI result is pending for these slices. Continue under AGENTS.md section 3A and this checkpoint. The full feature
 request remains unfinished; do not convert prerequisite qualification into backend adoption.
 The matched hardware benchmark remains the independent next user-machine gate:
 

@@ -258,7 +258,7 @@ in Forge early-display union-filesystem class loading before these checks; one
 bounded retry passed unchanged code. JAR/log uploads succeeded; private packs
 were skipped.
 
-## Transformed material shader (candidate; engine still CPU-first)
+## Qualified transformed material shader (engine still CPU-first)
 
 `LegacyFlywheelPipeline` translates the exact pinned 0.6 GPU shader composition:
 `model.vert`, `InstancingTemplateData.generateFooter`, `core/diffuse.glsl`,
@@ -291,6 +291,12 @@ cylindrical fog, resize/zero count and retirement while commands still reference
 pipeline. Its waits/readback are test-only. #971 compiled the shader and produced
 expected first RGB pixels but the alpha oracle used the production screenshot API,
 which intentionally forces opacity. The follow-up uses a test-only raw attachment
-transfer; production screenshot behavior is unchanged. Full native CI is pending. Real world
+transfer; production screenshot behavior is unchanged. Corrected executable
+`f6400db90f81a4e33dd681e81ad141816c45090e` passed full public CI **#972**, run
+`37157165558`, job `111302811813`. All nine raw RGBA pixel cases, synchronization
+validation, actual optional Flywheel CPU/lifetime fixtures, distributable packaging
+and every existing public gate passed. JAR/log uploads succeeded; private packs
+were skipped. No shader/lifetime CI remains pending. This qualifies the bounded
+material shader and owner, not an installed engine or performance gain. Real world
 and portal rendering, resource reload, custom programs, crumbling, translucent
 state/ordering and engine adoption remain open.
