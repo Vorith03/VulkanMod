@@ -164,7 +164,7 @@ fi
 
 export VK_ICD_FILENAMES="$lvp_icd"
 export LIBGL_ALWAYS_SOFTWARE=1
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true -Dvulkanmod.ciPickupNotifierSmoke=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.ciDistantHorizonsSmoke=true -Dvulkanmod.ciCreateStencilSmoke=true -Dvulkanmod.ciEntityCullingSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true -Dmixin.debug.export.filter=net.minecraft.client.renderer.LevelRenderer -Dmixin.debug.export.decompile=false"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true -Dvulkanmod.ciPickupNotifierSmoke=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.ciDistantHorizonsSmoke=true -Dvulkanmod.ciCreateStencilSmoke=true -Dvulkanmod.ciEntityCullingSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true -Dmixin.debug.export.filter=net.minecraft.client.renderer.* -Dmixin.debug.export.decompile=false"
 
 rm -rf run/.mixin.out .mixin.out
 timeout "$smoke_timeout" xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-create-chronicles-compat.log

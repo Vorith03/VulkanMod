@@ -152,7 +152,11 @@ transformed-hook oracle requires the original IP redirect and absence of scaling
 wrappers. CI **#959** (run `37097480279`, job `111130260527`) rejected the request for
 untransformed bytecode during startup: ModLauncher does not support that API mode.
 Presence detection now uses its supported default bytecode retrieval (no class
-initialization). Full combined validation remains pending.
+initialization). CI **#960** (run `37097690004`, job `111130874818`) passed startup,
+native scale suite, transformed GUI boundary and actual combined compatibility
+runtime; its final new hook oracle lacked GameRenderer because the existing export
+filter selected only LevelRenderer. The fixture now exports both renderer classes;
+full validation awaits that corrected oracle.
 IP installations conservatively retain native resolution,
 including the current user's pack; loaded-world/reload/hardware adoption is open.
 Continue render-scale CI qualification, then legacy Flywheel and DH numeric
