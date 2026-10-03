@@ -43,6 +43,7 @@ public final class InstancedDrawSmokeTest {
         TextureTarget target = null;
         ByteBuffer vertices = MemoryUtil.memAlloc(48), data = MemoryUtil.memAlloc(STRIDE * 3);
         ByteBuffer indexData = MemoryUtil.memAlloc(12), normalizedData = MemoryUtil.memAlloc(STRIDE * 3);
+        ByteBuffer prefixedData = MemoryUtil.memAlloc(STRIDE * 3 + 8);
         try {
             VRenderSystem.cull = false; VRenderSystem.depthTest = false;
             VRenderSystem.depthMask = false; VRenderSystem.stencilTest = false;
@@ -141,8 +142,12 @@ public final class InstancedDrawSmokeTest {
                             VK_INDEX_TYPE_UINT16, 4, 6, first, count);
                 } else {
                     // Production shared mesh and append-only upload, with indices above the 16-bit range.
-                    Renderer.getDrawer().drawIndexedInstanced(instanced32, shared32.vertices(), normalizedData, shared32.indices(),
+                    prefixedData.clear().position(4); prefixedData.put(normalizedData.duplicate());
+                    prefixedData.limit(4 + STRIDE * 3).position(4);
+                    Renderer.getDrawer().drawIndexedInstanced(instanced32, shared32.vertices(), prefixedData, shared32.indices(),
                             shared32.indexType(), shared32.geometry().vertexCount(), 6, first, count);
+                    if(prefixedData.position()!=4 || prefixedData.limit()!=4+STRIDE*3)
+                        throw new AssertionError("Instance upload changed caller cursor");
                     // Reusing/changing caller memory cannot overwrite already recorded instance draws.
                     if(phase == 0) {
                         putInstance(normalizedData, STRIDE, 0, 0, 0, 255, 240, 1);
@@ -182,7 +187,7 @@ public final class InstancedDrawSmokeTest {
             if(indices != null) indices.freeBuffer();
             if(shared32 != null) { shared32.close(); shared32.close(); }
             if(target != null) target.destroyBuffers();
-            MemoryUtil.memFree(vertices); MemoryUtil.memFree(data); MemoryUtil.memFree(indexData); MemoryUtil.memFree(normalizedData);
+            MemoryUtil.memFree(vertices); MemoryUtil.memFree(data); MemoryUtil.memFree(indexData); MemoryUtil.memFree(normalizedData); MemoryUtil.memFree(prefixedData);
             VRenderSystem.cull = oldCull; VRenderSystem.depthTest = oldDepth;
             VRenderSystem.depthMask = oldMask; VRenderSystem.stencilTest = oldStencil;
             PipelineState.blendInfo.enabled = oldBlend; VRenderSystem.colorMask = oldColorMask;

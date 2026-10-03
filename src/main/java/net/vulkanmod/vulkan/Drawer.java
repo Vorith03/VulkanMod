@@ -183,6 +183,8 @@ public class Drawer {
         if(format == null || !data.isDirect() || data.remaining() % format.stride() != 0
                 || data.remaining() > net.vulkanmod.render.instancing.InstanceGroup.MAX_BYTES)
             throw new IllegalArgumentException("Invalid direct instance snapshot");
+        if(vertexCount < 0 || indexCount < 0 || (indexType != VK_INDEX_TYPE_UINT16 && indexType != VK_INDEX_TYPE_UINT32))
+            throw new IllegalArgumentException("Invalid instance model draw");
         format.validateRange(data.remaining(), firstInstance, instanceCount);
         if(!Renderer.getInstance().isRecordingFrame() || Renderer.getInstance().getBoundRenderPass() == null)
             throw new IllegalStateException("Instance upload requires a recording render pass");
@@ -195,7 +197,9 @@ public class Drawer {
                 uploaded.copyToVertexBuffer(1, padding, stack.calloc(padding));
             }
         }
-        uploaded.copyToVertexBuffer(format.stride(), data.remaining() / format.stride(), data);
+        // The existing copy helper normalizes its source cursor; a slice preserves caller position/limit.
+        ByteBuffer source = data.slice();
+        uploaded.copyToVertexBuffer(format.stride(), source.remaining() / format.stride(), source);
         drawIndexedInstanced(pipeline, model, uploaded, indices, indexType, vertexCount, indexCount,
                 firstInstance, instanceCount);
     }
