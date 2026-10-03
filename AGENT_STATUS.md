@@ -120,7 +120,10 @@ external hidden/forced-visible dispatch. Private resource-pack fixtures were ski
 No user installation/version or hardware effectiveness is assumed.
 Separate-server/pregeneration tooling is implemented with local synthetic parity,
 Forge version/launch, record-lock, copy/rollback, JVM and bounded-command contracts
-passing. Full CI for the tooling remains pending. Actual deployment needs the
+passing. CI **#953** (run `37094935396`, job `111122823816`) stopped at the tooling
+contract because the runner's default Python lacks stdlib `tomllib`; the workflow
+now selects the documented Python 3.11 runtime explicitly. Full CI is pending.
+Actual deployment needs the
 matching installed server distribution, user world and host; none are available.
 Continue world-target/render-scale integration, then legacy Flywheel and DH numeric
 data adapters, preserving the working fallbacks and recording unimplemented scope.
