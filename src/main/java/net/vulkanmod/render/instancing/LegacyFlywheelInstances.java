@@ -103,7 +103,17 @@ public final class LegacyFlywheelInstances implements AutoCloseable {
                 out.put(0,(byte)(block.getByte(data)<<4)); out.put(1,(byte)(sky.getByte(data)<<4));
                 out.put(2,(byte)0); out.put(3,(byte)0);
                 out.put(4,r.getByte(data)); out.put(5,g.getByte(data)); out.put(6,b.getByte(data)); out.put(7,a.getByte(data));
-                ((Matrix4f)model.get(data)).get(8,out); ((Matrix3f)normal.get(data)).get(72,out);
+                // JOML's Unsafe ByteBuffer writer assumes a direct buffer. CPU snapshots are heap owned.
+                Matrix4f m = (Matrix4f)model.get(data);
+                out.position(8);
+                out.putFloat(m.m00()).putFloat(m.m01()).putFloat(m.m02()).putFloat(m.m03());
+                out.putFloat(m.m10()).putFloat(m.m11()).putFloat(m.m12()).putFloat(m.m13());
+                out.putFloat(m.m20()).putFloat(m.m21()).putFloat(m.m22()).putFloat(m.m23());
+                out.putFloat(m.m30()).putFloat(m.m31()).putFloat(m.m32()).putFloat(m.m33());
+                Matrix3f n = (Matrix3f)normal.get(data);
+                out.putFloat(n.m00()).putFloat(n.m01()).putFloat(n.m02());
+                out.putFloat(n.m10()).putFloat(n.m11()).putFloat(n.m12());
+                out.putFloat(n.m20()).putFloat(n.m21()).putFloat(n.m22());
                 for(int offset=8; offset<STRIDE; offset+=4)
                     if(!Float.isFinite(out.getFloat(offset))) throw new IllegalArgumentException("Nonfinite transformed instance");
             } catch(IllegalAccessException failure) { throw new IllegalStateException("Legacy data became inaccessible",failure); }

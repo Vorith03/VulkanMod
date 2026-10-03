@@ -122,6 +122,7 @@ jobs:
           path: |
             vulkan-*.log
             run/logs/vulkanmod-performance-ci.log
+            run/hs_err_pid*.log
             vulkan-*.javap
             run/screenshot-smoke/screenshots/*.png
           if-no-files-found: ignore
