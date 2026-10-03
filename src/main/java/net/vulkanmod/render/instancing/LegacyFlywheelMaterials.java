@@ -40,6 +40,7 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
     private final Method getProgram;
     private final Object transformedProgram;
     private final Fallback fallback;
+    private final boolean transformedEnabled;
     private final Object manager;
     private final Map<Object, IdentityHashMap<Object, Group>> layers = new IdentityHashMap<>();
     private final List<WeakReference<Runnable>> listeners = new ArrayList<>();
@@ -52,10 +53,15 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
 
     public LegacyFlywheelMaterials(ClassLoader loader, Object worldIdentity, long generation, Fallback fallback)
             throws ReflectiveOperationException {
+        this(loader, worldIdentity, generation, fallback, true);
+    }
+    public LegacyFlywheelMaterials(ClassLoader loader, Object worldIdentity, long generation, Fallback fallback,
+                                   boolean transformedEnabled) throws ReflectiveOperationException {
         this.loader = loader;
         this.worldIdentity = Objects.requireNonNull(worldIdentity);
         this.generation = generation;
         this.fallback = Objects.requireNonNull(fallback);
+        this.transformedEnabled = transformedEnabled;
         Class<?> managerApi = Class.forName("com.jozufozu.flywheel.api.MaterialManager", false, loader);
         groupApi = Class.forName("com.jozufozu.flywheel.api.MaterialGroup", false, loader);
         materialApi = Class.forName("com.jozufozu.flywheel.api.Material", false, loader);
@@ -72,6 +78,7 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
     }
 
     public Object manager() { requireOpen(); return manager; }
+    public BlockPos origin() { requireOpen(); return origin; }
     public Object worldIdentity() { return worldIdentity; }
     public long generation() { return generation; }
 
@@ -115,7 +122,7 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
         boolean creating;
         Material(Group group, Object spec) {
             this.group = group; this.spec = spec;
-            qualified = spec.getClass() == modelType && transformedProgram.equals(invoke(getProgram, spec));
+            qualified = transformedEnabled && spec.getClass() == modelType && transformedProgram.equals(invoke(getProgram, spec));
             proxy = proxy(materialApi, (self, method, args) -> {
                 if(method.getName().equals("model")) {
                     Object key = args[0];

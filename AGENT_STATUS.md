@@ -13,6 +13,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - `282d6c00...` was an incomplete attempt to move texture memory-pressure sampling to the outer batch. It was immediately reverted by `4f0f0e0e7a59d95f7282f60d85819610a5dea5fb`; do not treat it as an active optimization.
 - Matched benchmark candidate is `1dc5cf4cf074cc3bb35b726e5ca3d0bf46d2e937`, validated by completed successful CI **#946** / run `37066271693` (live Actions job evidence inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution, with warmup exclusion. Earlier attribution runs #942/#943 failed; signature fixes were validated by #945 and the capture-boundary correction by #946. Hardware validation of this executable remains pending.
 - Latest feature-code executable is `437fff77ef38722de85edd5dd9ec36e802c26935`, fully public-CI green in **#967**, run `37135821753`, job `111240032366`. It qualifies shared-model import, actual legacy Flywheel instance lifecycle/record encoding, normalized light bytes, UINT32 indices above 65535, caller-slice preservation and append-only uploads/shared-mesh retirement. #966 exposed an unsafe JOML heap-buffer write in the actual Flywheel fixture; explicit numeric matrix writes corrected it and #967 passed. Flywheel remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
+- Material ownership candidate `ab4a87def00d79f8232f3b1f91d4aedefe157964` is fully public-CI green in **#968**, run `37142141537`, job `111258615844`. Actual MaterialManager/MaterialGroup/Material API, supplier-once/material/layer/state/world-generation caching, owned CPU release, unsupported delegation and origin recreation/stale-handle checks passed. JAR/log uploads succeeded; private packs were skipped. This supplies a callable ownership/delegation layer, not a production engine or qualified fallback renderer. Backend availability is unchanged.
+- A callable CPU-first Engine dispatcher and actual Batched/Params vertex-consumer fallback are the current candidate, pending full CI. The optional fixture now checks emitted ModelType/OrientedType vertices plus ownership/origin/task routing. No production InstanceWorld registration, enabled backend, universal custom fallback or GPU material shader qualification is claimed. Follow the live next executable CI before adopting this slice.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -129,11 +131,11 @@ unavailable because the distribution download is network-blocked. All implementa
 is published and locally synchronized. No CI result is pending for this atomic slice;
 no measured hardware speedup is established.
 
-**Next implementation stage:** Engine/MaterialManager/
-MaterialGroup/Material routing for the legacy Create/Flywheel Vulkan adapter, with
-material-key shared-model cache identity, exact transformed/lightmap/shading behavior,
-origin listener/recreation notification, and an actual unsupported-material/program/
-model fallback before any Backend.isOn adoption. Current CPU importer deliberately
+**Next implementation stage:** integrate the legacy Engine render dispatcher and a
+real CPU batching fallback, then qualify transformed/lightmap/shading pixels before
+any Backend.isOn adoption. Material-key/world/generation cache identity, CPU-source
+release and origin recreation callbacks now pass #968. The required fallback
+interface is tested for delegation/clear/close only; it is not a rendering fallback. Current CPU importer deliberately
 supports only the exact pinned BlockModel and known CPU index suppliers; original
 CPU model lifetime/deletion, crumbling, translucency, reload, world and portal ownership
 still need integration. The pinned source boundary and material shader findings are in

@@ -5,6 +5,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /** CPU owner/compaction boundary. Call from the render thread after Flywheel's tasks complete. */
 public final class InstanceGroup<D> {
@@ -47,10 +48,7 @@ public final class InstanceGroup<D> {
     /** Snapshot is detached from instances and older snapshots; failed packing retries every retained record. */
     public ByteBuffer snapshot() {
         requireOpen();
-        data.removeIf(instance -> {
-            if(!access.removed(instance) && access.owner(instance) == owner) return false;
-            records.remove(instance); return true;
-        });
+        compact();
         var destination = ByteBuffer.allocate(data.size() * stride).order(ByteOrder.nativeOrder());
         try {
             for(D instance : data) {
@@ -69,6 +67,19 @@ public final class InstanceGroup<D> {
             retry = true;
             throw failure;
         }
+    }
+
+    /** CPU fallback uses live records without consuming GPU dirty bits or allocating packed snapshots. */
+    public void forEachLive(Consumer<D> visitor) {
+        requireOpen(); Objects.requireNonNull(visitor); compact();
+        for(D instance : data) visitor.accept(instance);
+    }
+
+    private void compact() {
+        data.removeIf(instance -> {
+            if(!access.removed(instance) && access.owner(instance) == owner) return false;
+            records.remove(instance); return true;
+        });
     }
 
     /** Matches legacy origin shift: drop membership, then the engine notifies recreation listeners. */

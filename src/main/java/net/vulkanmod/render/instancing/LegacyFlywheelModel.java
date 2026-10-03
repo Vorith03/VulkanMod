@@ -20,6 +20,12 @@ public final class LegacyFlywheelModel {
      * both successful import and invalid geometry, without model.delete()/GL calls.
      */
     public static Optional<ModelGeometry> takeOwned(Object model) {
+        return takeOwned(model, geometry -> true);
+    }
+
+    /** Declined geometry keeps its source allocations live for another renderer. */
+    public static Optional<ModelGeometry> takeOwned(Object model, java.util.function.Predicate<ModelGeometry> admission) {
+        java.util.Objects.requireNonNull(admission);
         if(model == null || !model.getClass().getName().equals(BLOCK_MODEL)) return Optional.empty();
         final ByteBuffer vertices, indices;
         try {
@@ -40,10 +46,14 @@ public final class LegacyFlywheelModel {
         } catch(ReflectiveOperationException failure) {
             return Optional.empty(); // API ownership cannot be qualified; fallback retains the source.
         }
-        try { return Optional.of(importModel(model)); }
+        boolean release = true;
+        try {
+            ModelGeometry geometry = importModel(model);
+            if(!admission.test(geometry)) { release = false; return Optional.empty(); }
+            return Optional.of(geometry);
+        }
         finally {
-            MemoryUtil.memFree(vertices);
-            MemoryUtil.memFree(indices);
+            if(release) { MemoryUtil.memFree(vertices); MemoryUtil.memFree(indices); }
         }
     }
 

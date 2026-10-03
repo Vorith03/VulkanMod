@@ -48,8 +48,11 @@ public class OwnershipContract {
   var x=new Data(); x.value=10; var y=new Data(); y.value=20;
   first.add(x); first.add(y); first.add(x);
   var before=first.snapshot(); check(before.remaining()==8 && x.writes==1 && y.writes==1);
+  var live=new ArrayList<Data>(); first.forEachLive(live::add);
+  check(live.equals(List.of(x,y)) && x.writes==1 && y.writes==1);
   first.snapshot(); check(x.writes==1 && y.writes==1);
-  x.value=30; x.dirty=true;
+  x.value=30; x.dirty=true; first.forEachLive(d -> check(d.owner==a));
+  check(x.dirty); // CPU iteration must not consume the GPU publication dirty bit.
   check(first.snapshot().getInt(0)==30 && before.getInt(0)==10 && y.writes==1);
   second.add(x); first.add(x); // transfer back before either owner compacts
   check(first.snapshot().remaining()==8 && second.snapshot().remaining()==0 && access.notices==2);

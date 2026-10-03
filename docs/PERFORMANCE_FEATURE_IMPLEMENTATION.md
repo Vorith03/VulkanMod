@@ -159,7 +159,7 @@ notification; unknown material/program/model cases need a real fallback rather t
 raising an exception after global Backend.canUseInstancing has suppressed Create's
 ordinary renderers. Keep backend availability disabled until that routing is proven.
 
-## Legacy material ownership integration (2026-10-03, candidate)
+## Legacy material ownership integration (2026-10-03, CI #968)
 
 `LegacyFlywheelMaterials` now exposes the actual optional MaterialManager,
 MaterialGroup and Material interfaces through proxies, scoped to one world identity
@@ -193,6 +193,50 @@ caching, material/layer/state/world-generation isolation, custom-index invalid-i
 retry, unknown-spec/model delegation, origin clear/recreation ordering and stale
 handle rejection. Existing standalone CPU ownership/input contracts pass locally.
 Full local Gradle validation remains unavailable: its distribution download is
-network-blocked. Candidate compilation and actual optional fixture CI are pending.
+network-blocked. Full public CI **#968**, run `37142141537`, job `111258615844`,
+passed compilation/distributable packaging, actual optional material fixture, native
+renderer gates and all existing public compatibility checks. JAR and log uploads
+succeeded; private real-pack fixtures were skipped.
 This candidate does not install an Engine, translate Flywheel's material shaders,
 qualify lightmap/diffuse/fog/alpha/crumbling/translucency or change Backend.isOn.
+
+## CPU engine dispatcher and batching fallback (candidate)
+
+`LegacyFlywheelEngine` now exposes the pinned Engine/RenderDispatcher interfaces and
+routes MaterialManager defaults through the generation owner. Its currently callable
+route deliberately sends all materials through CPU batching until transformed GPU
+material shaders qualify. It is not registered in InstanceWorld and Backend.isOn
+remains false. The engine synchronizes its exact task owner before origin clearing,
+rendering and retirement, rejects foreign task/world events, rejects null-layer
+crumbling events and retains camera-distance rebasing with optional fixed-origin
+mode. CPU output copies event.stack and adds the integer origin: InstanceWorld
+already supplies the negative camera translation. The engine owns its BufferSource,
+so finishing a state cannot drain unrelated Minecraft batches. Failed emissions
+reset that source/builder rather than retaining partial batches.
+
+`LegacyFlywheelCpuFallback` invokes the actual Batched transform into the pinned
+ModelTransformer.Params numeric object. It emits ordinary BLOCK/NEW_ENTITY quads
+through VertexConsumer with model/normal transforms, instance-or-source color and
+packed light, overlay, UV/sprite shift and original shade membership. BLOCK output
+uses Forge's directional/constant-ambient diffuse rule; entity formats retain their
+shader lighting. The default legacy CPU normal behavior omits stack normals.
+Ownership/transfer/removal uses InstanceGroup's new live-iteration boundary without
+consuming publication dirty flags or allocating packed GPU snapshots.
+
+Only qualified owned built-in CPU geometry and sequential quad topology use this
+fallback. Nonsequential/custom ownership, unsupported render formats and non-Batched
+structs delegate with their original source still live. A supplied external fallback
+must actually render those cases in the event/world/origin context. No universal
+custom-model or shader-program renderer is claimed. Topology/size admission occurs
+before consuming source allocations. Registration, actual custom fallback rendering,
+real world/portal/reload/crumbling/translucency, and GPU material lightmap/fog/alpha
+pixels remain open. This slice supplies callable dispatch and actual CPU emission;
+it does not by itself permit global Create renderer suppression.
+
+The actual optional fixture adds emitted BufferBuilder byte checks for ModelType and
+OrientedType pose/origin coordinates, color/alpha, light, UV, normals, ordinary and
+constant-ambient shading; owner transfer/back, removal and wrong-type rejection;
+origin clearing; nonsequential source handoff; and actual Engine default/debug/delete,
+pre-frame task synchronization and foreign-owner rejection. Standalone ownership
+contract passes locally, including live-iteration dirty-bit preservation. Full local
+Gradle remains blocked by the distribution download. CI is pending for this slice.
