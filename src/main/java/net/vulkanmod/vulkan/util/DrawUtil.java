@@ -14,7 +14,9 @@ public class DrawUtil {
     public static void drawFramebuffer(Framebuffer framebuffer) {
         Renderer renderer = Renderer.getInstance();
 
-        Matrix4f matrix4f = new Matrix4f().setOrtho(0.0F, 1.0F, 1.0F, 0.0F, 0.0F, 1.0F);
+        // Vulkan clips Z to [0,w] even with depth testing disabled. The GL
+        // projection put this z=0 fullscreen quad at clip z=-1 and discarded it.
+        Matrix4f matrix4f = new Matrix4f().setOrtho(0.0F, 1.0F, 1.0F, 0.0F, 0.0F, 1.0F, true);
 //        matrix4f.setIdentity();
         RenderSystem.setProjectionMatrix(matrix4f, VertexSorting.ORTHOGRAPHIC_Z);
         PoseStack posestack = RenderSystem.getModelViewStack();

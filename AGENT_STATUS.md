@@ -136,6 +136,13 @@ Native attachment/pixel/depth/post-effect tests and transformed boundary oracle 
 pending feature CI. CI **#955** (run `37096310048`, job `111126852288`) failed Java
 compilation because this branch does not include MixinExtras; the two wrappers now
 use the existing Sponge Mixin Redirect facility without a new runtime dependency.
+CI **#956** exposed protected texture-name fields, now read through mapped accessors.
+CI **#957** (run `37096633882`, job `111127792214`) passed the build, startup, indirect
+and ordinary/depth post chains, then rejected the first new composition pixel check.
+DrawUtil's fullscreen projection now uses Vulkan zero-to-one depth (its original
+GL projection clipped the z=0 quad at z=-1). Native qualification remains pending.
+PostChain.resize invalidates cached scale extents; the oracle now checks an external
+native resize followed by the same rounded scale extent, using actual camera fields.
 IP installations conservatively retain native resolution,
 including the current user's pack; loaded-world/reload/hardware adoption is open.
 Continue render-scale CI qualification, then legacy Flywheel and DH numeric

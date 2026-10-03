@@ -22,6 +22,7 @@
     "render.WorldRenderScaleMixin",
     "render.WorldRenderScaleCleanupMixin",
     "render.RenderTargetTextureNamesAccessor",
+    "render.WorldRenderScalePostChainMixin",
     "render.GameRendererPostEffectAccessor",
     "render.LevelRendererPostChainsAccessor",
     "compatibility.CreateStencilElementMixin",

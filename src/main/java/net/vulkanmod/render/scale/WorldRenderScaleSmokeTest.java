@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.PostChain;
 import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.mixin.render.GameRendererPostEffectAccessor;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
@@ -43,7 +44,9 @@ public final class WorldRenderScaleSmokeTest {
                 renderer.endFrame();
                 try(NativeImage image = worldIcon.get(10,TimeUnit.SECONDS)) {
                     if(image.getWidth() != width || image.getPixelRGBA(3,3) != 0xFF0000FF)
-                        throw new AssertionError("World icon did not capture native composition before the GUI");
+                        throw new AssertionError(String.format("World icon differs: extent=%dx%d expected=%dx%d pixel=%08x top=%08x bottom=%08x",
+                                image.getWidth(),image.getHeight(),width,height,image.getPixelRGBA(3,3),
+                                image.getPixelRGBA(width/2,height/4),image.getPixelRGBA(width/2,3*height/4)));
                 }
                 try(NativeImage image = capture.get(10, TimeUnit.SECONDS)) {
                     if(image.getWidth() != width || image.getHeight() != height
@@ -51,14 +54,26 @@ public final class WorldRenderScaleSmokeTest {
                             || image.getPixelRGBA(width/2,3*height/4) != 0xFFFF0000
                             || image.getPixelRGBA(3,3) != 0xFF00FF00
                             || image.getPixelRGBA(4,3) != 0xFF0000FF)
-                        throw new AssertionError("Upscale/native overlay pixels or orientation differ");
+                        throw new AssertionError(String.format("Upscale/native overlay differs: scale=%.2f extent=%dx%d top=%08x bottom=%08x overlay=%08x neighbor=%08x",
+                                scale,image.getWidth(),image.getHeight(),image.getPixelRGBA(width/2,height/4),
+                                image.getPixelRGBA(width/2,3*height/4),image.getPixelRGBA(3,3),image.getPixelRGBA(4,3)));
                 }
             }
             renderer.resetBuffers(); renderer.beginFrame();
             WorldRenderScale.beginCapture(main,0.5);
+            var cameraEffects = (GameRendererPostEffectAccessor)minecraft.gameRenderer;
+            PostChain previousEffect = cameraEffects.vulkanmod$getPostEffect();
             try(PostChain chain = new PostChain(minecraft.getTextureManager(), minecraft.getResourceManager(),
                     main, new ResourceLocation("shaders/post/creeper.json"))) {
-                chain.resize(main.width,main.height);
+                cameraEffects.vulkanmod$setPostEffect(chain);
+                WorldRenderScale.resizeChains(minecraft,main.width,main.height);
+                // An external native resize must invalidate a previously cached
+                // scale extent, even when rounded world dimensions do not change.
+                chain.resize(width,height);
+                WorldRenderScale.resizeChains(minecraft,main.width,main.height);
+                if(chain.getTempTarget("swap").width != main.width
+                        || chain.getTempTarget("swap").height != main.height)
+                    throw new AssertionError("External resize retained stale post-chain extents");
                 clearRect(0,0,main.width,main.height,1,0,0);
                 chain.process(0);
                 WorldRenderScale.endCapture(true);
@@ -70,7 +85,7 @@ public final class WorldRenderScaleSmokeTest {
                     if(g < 16 || g <= r+8 || g <= b+8)
                         throw new AssertionError("Scaled creeper effect did not produce green output");
                 }
-            }
+            } finally { cameraEffects.vulkanmod$setPostEffect(previousEffect); }
             renderer.resetBuffers(); renderer.beginFrame();
             WorldRenderScale.beginCapture(main,0.75);
             try(PostChain chain = new PostChain(minecraft.getTextureManager(), minecraft.getResourceManager(),

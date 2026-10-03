@@ -157,7 +157,9 @@ public final class WorldRenderScale {
         if(target != null) { target.destroyBuffers(); target = null; }
     }
 
-    private static void resizeChains(Minecraft minecraft, int w, int h) {
+    public static void forgetChainExtent(PostChain chain) { chainExtents.remove(chain); }
+
+    static void resizeChains(Minecraft minecraft, int w, int h) {
         var level = (LevelRendererPostChainsAccessor)minecraft.levelRenderer;
         for(PostChain chain : new PostChain[]{((GameRendererPostEffectAccessor)minecraft.gameRenderer).vulkanmod$getPostEffect(),
                 level.vulkanmod$getEntityEffect(), level.vulkanmod$getTransparencyChain()}) {
