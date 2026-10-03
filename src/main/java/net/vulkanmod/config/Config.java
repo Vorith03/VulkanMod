@@ -26,6 +26,12 @@ public class Config {
     public boolean experimentalGpuTerrain = false;
     public boolean uniqueOpaqueLayer = true;
     public boolean entityCulling = true;
+    public boolean conservativeOcclusionCompatibility = true;
+    public String[] occlusionAlwaysVisibleEntities = {
+            "create:contraption", "create:stationary_contraption",
+            "create:carriage_contraption", "create:gantry_contraption"};
+    public String[] occlusionAlwaysVisibleBlockEntities = {
+            "minecraft:beacon", "create:rope_pulley", "create:hose_pulley"};
     public boolean persistentCompilationCache = true;
     public boolean animateOnlyUsedTextures = false;
     public int animationVisibilityGraceMs = 500;

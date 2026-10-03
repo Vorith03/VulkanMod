@@ -8,6 +8,8 @@ mkdir -p run/mods
 
 build_backup="$(mktemp)"
 options_backup="$(mktemp)"
+entity_culling_backup="$(mktemp)"
+entity_culling_existed=0
 init_script="$(mktemp --suffix=.gradle)"
 mods_backup_dir="$(mktemp -d)"
 ci_pack_dir="run/resourcepacks/vulkanmod-ci-selected-pack"
@@ -24,6 +26,10 @@ if [[ -n "$real_base_pack" && -z "$real_overlay_pack" || -z "$real_base_pack" &&
 fi
 
 cp build.gradle "$build_backup"
+if [[ -f run/config/entityculling.json ]]; then
+  cp run/config/entityculling.json "$entity_culling_backup"
+  entity_culling_existed=1
+fi
 if [[ -f run/options.txt ]]; then
   cp run/options.txt "$options_backup"
   options_existed=1
@@ -40,6 +46,11 @@ cleanup() {
   local status=$?
   set +e
   cp "$build_backup" build.gradle
+  if [[ "$entity_culling_existed" -eq 1 ]]; then
+    cp "$entity_culling_backup" run/config/entityculling.json
+  else
+    rm -f run/config/entityculling.json
+  fi
   if [[ "$options_existed" -eq 1 ]]; then
     cp "$options_backup" run/options.txt
   else
@@ -56,7 +67,7 @@ cleanup() {
   done
   shopt -u nullglob
   rm -rf "$mods_backup_dir"
-  rm -f "$build_backup" "$options_backup" "$init_script"
+  rm -f "$build_backup" "$options_backup" "$init_script" "$entity_culling_backup"
   exit "$status"
 }
 trap cleanup EXIT
@@ -91,6 +102,7 @@ dependencies {
     runtimeOnly(fg.deobf('curse.maven:immersive-portals-for-forge-355440:6368524')) { transitive = false }
     runtimeOnly(fg.deobf('me.shedaniel.cloth:cloth-config-forge:11.1.136'))
     runtimeOnly(fg.deobf('curse.maven:distant-horizons-508933:8389142')) { transitive = false }
+    runtimeOnly(fg.deobf('curse.maven:entityculling-448233:5968677')) { transitive = false }
     runtimeOnly fg.deobf('maven.modrinth:Wb5oqrBJ:45EJNtBe')
     runtimeOnly fg.deobf('com.jozufozu.flywheel:flywheel-forge-1.20.1:0.6.11-13')
     runtimeOnly fg.deobf('maven.modrinth:LNytGWDc:6R069CcK')
@@ -129,6 +141,9 @@ EOF
 fi
 
 mkdir -p run
+mkdir -p run/config
+# Render occlusion only: this fixture does not change client simulation ticks.
+printf '%s\n' '{"tickCulling":false}' > run/config/entityculling.json
 touch run/options.txt
 if grep -q '^resourcePacks:' run/options.txt; then
   sed -i "s|^resourcePacks:.*$|$selected_packs|" run/options.txt
@@ -149,7 +164,7 @@ fi
 
 export VK_ICD_FILENAMES="$lvp_icd"
 export LIBGL_ALWAYS_SOFTWARE=1
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true -Dvulkanmod.ciPickupNotifierSmoke=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.ciDistantHorizonsSmoke=true -Dvulkanmod.ciCreateStencilSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true -Dmixin.debug.export.filter=net.minecraft.client.renderer.LevelRenderer -Dmixin.debug.export.decompile=false"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.smokeTest=true -Dvulkanmod.ciFtbLibrarySmoke=true -Dvulkanmod.ciPickupNotifierSmoke=true -Dvulkanmod.ciImmersivePortalsSmoke=true -Dvulkanmod.ciDistantHorizonsSmoke=true -Dvulkanmod.ciCreateStencilSmoke=true -Dvulkanmod.ciEntityCullingSmoke=true -Dvulkanmod.validation=true -Dmixin.debug.export=true -Dmixin.debug.export.filter=net.minecraft.client.renderer.LevelRenderer -Dmixin.debug.export.decompile=false"
 
 rm -rf run/.mixin.out .mixin.out
 timeout "$smoke_timeout" xvfb-run -a ./gradlew --init-script "$init_script" runClient --stacktrace 2>&1 | tee vulkan-smoke-create-chronicles-compat.log
@@ -216,6 +231,7 @@ if global_survivors != 1:
 
 print("Immersive Portals dispatcher rewrite selected only the terrain-override context")
 PY
+python3 scripts/ci/entity-culling-hook-contract.py vulkan-smoke-create-chronicles-compat-levelrenderer.javap
 
 # Every compatibility contract still has its own positive marker. A combined
 # launch is successful only when all of them are observed in the same process.
@@ -232,6 +248,7 @@ grep -F "Distant Horizons Forge afterLevelRenderEvent compatibility target verif
 grep -F "Distant Horizons 3.2.0-b compatibility smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "chat_heads" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel 0.6 compatibility smoke test passed" vulkan-smoke-create-chronicles-compat.log
+grep -F "EntityCulling native compatibility smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Create 0.5.1.j stencil compatibility mixin target loaded" vulkan-smoke-create-chronicles-compat.log
 grep -F "Vulkan smoke test passed" vulkan-smoke-create-chronicles-compat.log

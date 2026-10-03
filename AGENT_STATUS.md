@@ -105,10 +105,14 @@ compatibility failed before Vulkan initialization in Forge early-display
 workaround was added for this non-reproduced startup failure. Native animation
 clock/pixel checks passed both attempts. `3ae78f7f...` adds conservative all-block-atlas
 usage for visible GPU-only terrain and accepts nullable exclusion entries.
-Adaptive chunk scheduling is now implemented off by default, preserving atomic
-publication/backlog ownership. Local deadline/count/pressure/wrap contracts passed;
-real queue/worker native smoke and full CI for the scheduler/fallback remain pending.
-Continue conservative culling and renderer integrations while validation runs. Keep the #946
+Adaptive chunk scheduling `cb2c1a282d2c6c458757cdd47458738a301ddefa` is implemented
+off by default, preserving atomic publication/backlog ownership. Full CI **#950**
+passed (run `37093564695`, job `111118838317`), including real queue/worker native
+smoke and the GPU-only animation fallback. Hardware benefit/tuning remains open.
+The next integration preserves optional EntityCulling cancellation hooks while
+forcing uncertain portal views/custom bounds visible. Pinned Forge 1.7.2 native
+dispatch/hook-order validation is pending; no user installation/version is assumed.
+Continue deployment tooling and renderer integrations while validation runs. Keep the #946
 matched capture as the baseline for separately toggled experiments; no hardware
 gain or accelerated rendering adoption is established by this implementation work.
 
