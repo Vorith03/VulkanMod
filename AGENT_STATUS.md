@@ -109,9 +109,13 @@ Adaptive chunk scheduling `cb2c1a282d2c6c458757cdd47458738a301ddefa` is implemen
 off by default, preserving atomic publication/backlog ownership. Full CI **#950**
 passed (run `37093564695`, job `111118838317`), including real queue/worker native
 smoke and the GPU-only animation fallback. Hardware benefit/tuning remains open.
-The next integration preserves optional EntityCulling cancellation hooks while
-forcing uncertain portal views/custom bounds visible. Pinned Forge 1.7.2 native
-dispatch/hook-order validation is pending; no user installation/version is assumed.
+The optional EntityCulling bridge `1c25d165...` preserves original cancellation hooks
+and forces uncertain portal views/custom bounds visible. CI **#951**
+(run `37094073816`, job `111120285336`) passed the actual Forge 1.7.2 hidden-dispatch
+and forced-visible native checks, but its transformed-bytecode oracle found the
+guard AFTER external cancellation. The correction applies these HEAD guards at
+lower priority 500, so their later insertion precedes existing hooks. Validation
+of corrected order is pending; no user installation/version is assumed.
 Continue deployment tooling and renderer integrations while validation runs. Keep the #946
 matched capture as the baseline for separately toggled experiments; no hardware
 gain or accelerated rendering adoption is established by this implementation work.
