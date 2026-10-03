@@ -15,7 +15,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Latest feature-code executable is `437fff77ef38722de85edd5dd9ec36e802c26935`, fully public-CI green in **#967**, run `37135821753`, job `111240032366`. It qualifies shared-model import, actual legacy Flywheel instance lifecycle/record encoding, normalized light bytes, UINT32 indices above 65535, caller-slice preservation and append-only uploads/shared-mesh retirement. #966 exposed an unsafe JOML heap-buffer write in the actual Flywheel fixture; explicit numeric matrix writes corrected it and #967 passed. Flywheel remains on its working fallback. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
 - Material ownership candidate `ab4a87def00d79f8232f3b1f91d4aedefe157964` is fully public-CI green in **#968**, run `37142141537`, job `111258615844`. Actual MaterialManager/MaterialGroup/Material API, supplier-once/material/layer/state/world-generation caching, owned CPU release, unsupported delegation and origin recreation/stale-handle checks passed. JAR/log uploads succeeded; private packs were skipped. This supplies a callable ownership/delegation layer, not a production engine or qualified fallback renderer. Backend availability is unchanged.
 - Callable CPU-first Engine and actual Batched/Params vertex-consumer fallback `9e7bca9f6d199b60c0d421e5446c31a7d27753c5` are fully public-CI green in **#969**, run `37155602660`, job `111298239954`. Actual emitted ModelType/OrientedType vertices and ownership/origin/task routing passed; JAR/log uploads succeeded. Private packs were skipped. No production InstanceWorld registration, enabled backend, universal custom fallback or GPU material shader qualification is claimed.
-- The next candidate fixes native CPU batching lifetime: lazy private allocation, freeing grown buffers on emission abort and engine retirement, fresh-source recreation and idempotent release. The actual optional fixture tests growth/abort/recreation/stale-builder rejection; follow its live executable CI before adopting this follow-up.
+- Native CPU batching lifetime `5fb3d7024b2f4d0d0f55018e18648debfa319496` is fully public-CI green in **#970**, run `37156114140`, attempt 2, job `111300814405`. Lazy private allocation, grown-buffer release on emission abort/retirement, fresh-source recreation and idempotent/stale-builder checks passed the actual optional fixture. Attempt 1 failed before those checks in Forge early-display union-filesystem class loading (`FileSystemNotFoundException`); one bounded rerun passed without code changes. JAR/log uploads succeeded; private packs were skipped.
+- The current candidate adds the exact pinned transformed/world/block material shader, dynamic world/fog/alpha uniforms and frame-fence pipeline retirement, plus native pixel oracles. It remains pending full CI. The callable Engine is still CPU-first; no InstanceWorld/backend adoption is enabled.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -132,8 +133,9 @@ unavailable because the distribution download is network-blocked. All implementa
 is published and locally synchronized. No CI result is pending for this atomic slice;
 no measured hardware speedup is established.
 
-**Next implementation stage:** qualify the native CPU-batch lifetime follow-up, then
-implement and qualify transformed/lightmap/shading/fog/alpha material pixels before
+**Next implementation stage:** qualify the transformed/lightmap/shading/fog/alpha
+material shader candidate, then integrate exact material state and world-event
+rendering with a qualified fallback before
 any Backend.isOn adoption. Callable CPU-first Engine dispatch and built-in sequential
 quad batching pass #969, but actual world-event rendering and registration remain open. Material-key/world/generation cache identity, CPU-source
 release and origin recreation callbacks now pass #968. The required fallback

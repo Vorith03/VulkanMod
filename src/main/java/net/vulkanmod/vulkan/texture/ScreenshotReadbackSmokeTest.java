@@ -32,6 +32,7 @@ public final class ScreenshotReadbackSmokeTest {
         net.vulkanmod.render.texture.SpriteAnimationSmokeTest.verify();
         net.vulkanmod.render.scale.WorldRenderScaleSmokeTest.verify(minecraft);
         net.vulkanmod.vulkan.shader.InstancedDrawSmokeTest.verify(minecraft);
+        net.vulkanmod.render.instancing.LegacyFlywheelPipelineSmokeTest.verify(minecraft);
         Renderer renderer = Renderer.getInstance();
         RenderTarget main = minecraft.getMainRenderTarget();
         File directory = new File("screenshot-smoke");

@@ -251,4 +251,43 @@ Gradle remains blocked by the distribution download. The CPU Engine/transform sl
 `9e7bca9f6d199b60c0d421e5446c31a7d27753c5` passed full public CI **#969**, run
 `37155602660`, job `111298239954`, including the actual Flywheel fixture and
 JAR/log uploads. Private packs were skipped. The native batch-lifetime follow-up
-described above is a new candidate pending its own full CI.
+`5fb3d7024b2f4d0d0f55018e18648debfa319496` passed full public CI **#970**, run
+`37156114140`, attempt 2, job `111300814405`, including native batch growth/abort/
+recreation/idempotent retirement in the actual Flywheel fixture. Attempt 1 failed
+in Forge early-display union-filesystem class loading before these checks; one
+bounded retry passed unchanged code. JAR/log uploads succeeded; private packs
+were skipped.
+
+## Transformed material shader (candidate; engine still CPU-first)
+
+`LegacyFlywheelPipeline` translates the exact pinned 0.6 GPU shader composition:
+`model.vert`, `InstancingTemplateData.generateFooter`, `core/diffuse.glsl`,
+`block.frag`, `context/world.glsl` and `context/fog.glsl` at upstream commit
+`7ec4a460fb8416c32abe04da6efd8f0965835201`. It uses the existing BLOCK/shared-mesh
+and aligned transformed-instance layouts. Instance RGBA/light replace model
+RGBA/light; normalized transformed normals supply the legacy GPU diffuse formula.
+The fragment shader samples the atlas and both lightmap channels with the legacy
+`255/256 + 1/32` adjustment, multiplies RGB by illumination/diffuse, preserves
+atlas-times-instance alpha independently of lightmap/fog alpha, then applies
+linear cylindrical fog and alpha discard. This is the pinned GPU diffuse contract;
+it does not add the CPU fallback's separate unshaded/constant-ambient rules.
+
+A private 112-byte std140 world block contains ViewProjection, origin-relative
+camera, fog RGB/range and alpha threshold. It validates finite inputs and a positive
+finite fog interval. Each draw copies those bytes through the existing dynamic UBO
+arena, so later updates cannot alter earlier commands. Retiring the owner prevents
+further use, frees the CPU uniform allocation and schedules pipeline/descriptor
+cleanup through MemoryManager's frame-fence operations. Production adds no idle
+wait or host readback. The caller still owns exact atlas/lightmap sampler bindings,
+RenderType blend/depth/cull state, targets, world/origin/event ownership and supported
+material admission; this owner does not install or enable a backend.
+
+The native screenshot fixture uses the actual packaged shader, immutable shared
+quad and transformed instance layout. It checks model/world matrix translations,
+normal normalization/directional diffuse, instance replacement of black/unlit source
+vertices, distinguishable block/sky lightmap channels, legacy light coordinates,
+atlas/light/fog alpha separation, alpha discard, per-draw uniform isolation, mixed-axis
+cylindrical fog, resize/zero count and retirement while commands still reference the
+pipeline. Its waits/readback are test-only. Full native CI is pending. Real world
+and portal rendering, resource reload, custom programs, crumbling, translucent
+state/ordering and engine adoption remain open.
