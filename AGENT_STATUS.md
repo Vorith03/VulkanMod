@@ -11,7 +11,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
   2. `322f8b15e8a62081554321bcb0131b7645386858` — skip repeated same-atlas transition `HashSet` lookups;
   3. `d1da0cc298e6ab46c99f06bb86ec89fcaf8cb26a` — reuse the mapped texture-staging `ByteBuffer` view instead of allocating a wrapper for every subupload.
 - `282d6c00...` was an incomplete attempt to move texture memory-pressure sampling to the outer batch. It was immediately reverted by `4f0f0e0e7a59d95f7282f60d85819610a5dea5fb`; do not treat it as an active optimization.
-- Current executable is `1dc5cf4cf074cc3bb35b726e5ca3d0bf46d2e937`, validated by completed successful CI **#946** / run `37066271693` (live Actions job evidence inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution, with warmup exclusion. Earlier attribution runs #942/#943 failed; signature fixes were validated by #945 and the capture-boundary correction by #946. Hardware validation of this executable remains pending.
+- Matched benchmark candidate is `1dc5cf4cf074cc3bb35b726e5ca3d0bf46d2e937`, validated by completed successful CI **#946** / run `37066271693` (live Actions job evidence inspected 2026-10-02). It retains the three post-#935 optimizations and adds benchmark-only texture outer-batch/copy-flush efficiency and nesting-safe world-render attribution, with warmup exclusion. Earlier attribution runs #942/#943 failed; signature fixes were validated by #945 and the capture-boundary correction by #946. Hardware validation of this executable remains pending.
+- Latest feature-code executable is `9ee1f5fc3ffa25226d4c47c0d2e7ddfb6cf7c667`, fully public-CI green in **#961**, run `37098078519`, job `111131992409`. It includes the implemented performance feature slices below. Private real-resource-pack fixtures were skipped. Hardware adoption remains pending; use #946 for the unchanged-workload comparison.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -92,78 +93,40 @@ The owner requested a plan for investigation and implementation of GPU texture a
 
 ## Next useful action
 
-The owner has now requested implementation of the complete performance feature
-shortlist. `docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md` tracks implemented paths,
-remaining integration work and adoption gates. The first executable slice adds
-persistent compilation caches with a local corruption/identity/admission contract
-and a native shader/pipeline-cache smoke gate; CI **#947** passed every public gate
-(private real-pack fixtures skipped). Usage-driven animation `1bf726af...` is opt-in with
-clock-preserving vanilla refresh and a native all-mip oracle. CI **#948** passed on
-one bounded retry (run `37092662723`, job `111117605940`); first-attempt combined
-compatibility failed before Vulkan initialization in Forge early-display
-`FMLConfig.getBoolConfigValue(EARLY_WINDOW_SQUIR)` with a null Boolean. No production
-workaround was added for this non-reproduced startup failure. Native animation
-clock/pixel checks passed both attempts. `3ae78f7f...` adds conservative all-block-atlas
-usage for visible GPU-only terrain and accepts nullable exclusion entries.
-Adaptive chunk scheduling `cb2c1a282d2c6c458757cdd47458738a301ddefa` is implemented
-off by default, preserving atomic publication/backlog ownership. Full CI **#950**
-passed (run `37093564695`, job `111118838317`), including real queue/worker native
-smoke and the GPU-only animation fallback. Hardware benefit/tuning remains open.
-The optional EntityCulling bridge `1c25d165...` preserves original cancellation hooks
-and forces uncertain portal views/custom bounds visible. CI **#951**
-(run `37094073816`, job `111120285336`) passed the actual Forge 1.7.2 hidden-dispatch
-and forced-visible native checks, but its transformed-bytecode oracle found the
-guard AFTER external cancellation. `addbbf009a0926c36a79595644c5698c85eef78d` applies
-HEAD guards at lower priority 500; CI **#952** (run `37094620682`, job `111121901847`)
-passed all public gates, including corrected transformed hook ordering and real
-external hidden/forced-visible dispatch. Private resource-pack fixtures were skipped.
-No user installation/version or hardware effectiveness is assumed.
-Separate-server/pregeneration tooling is implemented with local synthetic parity,
-Forge version/launch, record-lock, copy/rollback, JVM and bounded-command contracts
-passing. CI **#953** (run `37094935396`, job `111122823816`) stopped at the tooling
-contract because the runner's default Python lacks stdlib `tomllib`; the workflow
-now selects the documented Python 3.11 runtime explicitly. CI **#954**
-(run `37095406659`, job `111124187248`) passed every public gate, including deployment
-contracts and optional-mod compatibility. Private resource-pack fixtures were skipped.
-Actual deployment needs the
-matching installed server distribution, user world and host; none are available.
-World scaling is implemented opt-in (`worldRenderScale=1.0` default), with sampled
-world color/depth, resized vanilla chains, native bilinear composition before GUI,
-separate world-icon timing and failed-render restoration. The camera post effect
-runs after renderLevel, so capture stays active through it and ends before GuiGraphics
-construction; an outer Minecraft render-call wrapper owns final abort cleanup.
-Native attachment/pixel/depth/post-effect tests and transformed boundary oracle are
-pending feature CI. CI **#955** (run `37096310048`, job `111126852288`) failed Java
-compilation because this branch does not include MixinExtras; the two wrappers now
-use the existing Sponge Mixin Redirect facility without a new runtime dependency.
-CI **#956** exposed protected texture-name fields, now read through mapped accessors.
-CI **#957** (run `37096633882`, job `111127792214`) passed the build, startup, indirect
-and ordinary/depth post chains, then rejected the first new composition pixel check.
-DrawUtil's fullscreen projection now uses Vulkan zero-to-one depth (its original
-GL projection clipped the z=0 quad at z=-1). Native qualification remains pending.
-PostChain.resize invalidates cached scale extents; the oracle now checks an external
-native resize followed by the same rounded scale extent, using actual camera fields.
-CI **#958** (run `37096994150`, job `111128835588`, commit `117cfd0b...`) passed the
-complete native scale/resize/pixel/depth/effect/abort suite and transformed GUI
-boundary. The combined IP fixture then failed because IP redirects the same
-GameRenderer.renderLevel call. MixinPlugin now excludes both scale wrappers when
-IPGlobal bytecode is present, without initializing portal classes; a combined
-transformed-hook oracle requires the original IP redirect and absence of scaling
-wrappers. CI **#959** (run `37097480279`, job `111130260527`) rejected the request for
-untransformed bytecode during startup: ModLauncher does not support that API mode.
-Presence detection now uses its supported default bytecode retrieval (no class
-initialization). CI **#960** (run `37097690004`, job `111130874818`) passed startup,
-native scale suite, transformed GUI boundary and actual combined compatibility
-runtime; its final new hook oracle lacked GameRenderer because the existing export
-filter selected only LevelRenderer. The fixture now exports both renderer classes;
-full validation awaits that corrected oracle.
-IP installations conservatively retain native resolution,
-including the current user's pack; loaded-world/reload/hardware adoption is open.
-Continue render-scale CI qualification, then legacy Flywheel and DH numeric
-data adapters, preserving the working fallbacks and recording unimplemented scope.
-Observed graphics-pipeline variant prewarming also remains open. Keep the #946
-matched capture as the baseline for separately toggled experiments; no hardware
-gain or accelerated rendering adoption is established by this implementation work.
+The owner authorized implementation of the complete performance feature shortlist.
+`docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md` tracks actual paths and adoption gates.
+Published slices:
+
+- Persistent SPIR-V and Vulkan driver caches: full public CI **#947** green.
+- Usage-driven animated textures: opt-in, native clock/all-mip oracle **#948** green on one bounded retry; `3ae78f7f...` conservatively marks all block-atlas usage for visible GPU-only terrain. Custom raw-UV consumers and hardware savings remain open.
+- Adaptive chunk scheduling: `cb2c1a282d2c6c458757cdd47458738a301ddefa`, off by default; **#950** green including real queue/worker ownership.
+- Optional EntityCulling bridge: `addbbf009a0926c36a79595644c5698c85eef78d`, **#952** green including actual Forge 1.7.2 dispatch and guard-before-cancellation ordering. User installation/version and full portal/custom-bounds effectiveness are unknown.
+- Separate-server/pregeneration offline tooling: **#954** green. Contracts cover parity, Forge launch/version, record locks, copied staging/rollback, JVM and bounded generation commands. Python 3.11 is explicit in CI. No matching server distribution, user world or host is available; actual deployment/generation has not occurred.
+- World scaling: `worldRenderScale=1.0` defaults native; opt-in 0.5–1.0 bilinear world composition before native GUI. Full public CI **#961** passed native attachments, resized pixels/orientation, native overlay, world-icon timing, camera/transparency effects/depth, external chain resize invalidation and abort restoration. Transformed-bytecode checks passed world/post-effect/GUI order and original IP redirect retention. Both scale wrappers are excluded with IP installed, so the user's portal pack retains native resolution. Production adds no host readback/device-idle wait. User-world/reload/visual quality/hardware adoption remains open.
+
+All feature code is published and locally synchronized. #961's distributable JAR and
+smoke logs were uploaded; no further CI validation is pending for this slice. Private resource-pack fixtures were skipped, not qualified. No new hardware
+speedup is established. Keep #946 as the matched comparison candidate and test
+quality/visibility/scheduling features separately.
+
+**Next implementation stage:** the legacy Create/Flywheel Vulkan adapter. The pinned
+1.20.1/0.6 source boundary and concrete implementation prerequisites are recorded in
+`docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md`. Start with explicit Vulkan instance-data
+input and a native built-in transformed-quad draw oracle. Preserve dirty/removal/
+owner-transfer/origin-rebase semantics and provide unsupported-material/model fallback
+before enabling Backend.isOn; the existing disabled backend preserves working rendering.
+Do not call GL model pools/VAOs or custom Model.createEBO from the Vulkan path.
+
+Observed graphics-pipeline variant prewarming and far-terrain LOD/DH numeric-data
+adapters are still unimplemented. DH suppression smoke is not functional LOD.
+The original GPU-offload investigation/implementation O1–O8 in
+`docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` also remains in scope; existing terrain/
+indirect/hybrid infrastructure and paused Phase 7 gates must be preserved.
+
+This is a completed atomic milestone after several render-scale qualification cycles.
+Recommend a fresh chat before the substantial adapter stage under
+`docs/CHAT_HANDOFF_PROTOCOL.md`; recover via AGENTS.md section 3A and this checkpoint.
+The matched hardware benchmark remains the independent next user-machine gate:
 
 1. Use CI-green build **#946** for the exact same automated stationary RX benchmark contract used for #935.
 2. The latest supplied `08881808-771c-499a-b9bd-81f1db2c468c` capture is the already-recorded #935 evidence, not a post-optimization result; do not mistake it for candidate validation.
