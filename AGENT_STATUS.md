@@ -113,10 +113,18 @@ The optional EntityCulling bridge `1c25d165...` preserves original cancellation 
 and forces uncertain portal views/custom bounds visible. CI **#951**
 (run `37094073816`, job `111120285336`) passed the actual Forge 1.7.2 hidden-dispatch
 and forced-visible native checks, but its transformed-bytecode oracle found the
-guard AFTER external cancellation. The correction applies these HEAD guards at
-lower priority 500, so their later insertion precedes existing hooks. Validation
-of corrected order is pending; no user installation/version is assumed.
-Continue deployment tooling and renderer integrations while validation runs. Keep the #946
+guard AFTER external cancellation. `addbbf009a0926c36a79595644c5698c85eef78d` applies
+HEAD guards at lower priority 500; CI **#952** (run `37094620682`, job `111121901847`)
+passed all public gates, including corrected transformed hook ordering and real
+external hidden/forced-visible dispatch. Private resource-pack fixtures were skipped.
+No user installation/version or hardware effectiveness is assumed.
+Separate-server/pregeneration tooling is implemented with local synthetic parity,
+Forge version/launch, record-lock, copy/rollback, JVM and bounded-command contracts
+passing. Full CI for the tooling remains pending. Actual deployment needs the
+matching installed server distribution, user world and host; none are available.
+Continue world-target/render-scale integration, then legacy Flywheel and DH numeric
+data adapters, preserving the working fallbacks and recording unimplemented scope.
+Observed graphics-pipeline variant prewarming also remains open. Keep the #946
 matched capture as the baseline for separately toggled experiments; no hardware
 gain or accelerated rendering adoption is established by this implementation work.
 

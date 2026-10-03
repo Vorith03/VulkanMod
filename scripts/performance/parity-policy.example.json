@@ -1,0 +1,6 @@
+{
+  "client_only_mods": ["vulkanmod", "entityculling"],
+  "server_only_mods": ["chunky"],
+  "client_only_paths": ["config/vulkanmod_settings.json", "config/entityculling.json"],
+  "server_only_paths": ["config/chunky"]
+}

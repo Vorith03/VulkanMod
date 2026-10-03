@@ -7,10 +7,10 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | Persistent compilation caches | Implemented SPIR-V and Vulkan driver cache persistence | Local contract and full CI #947 pass, including native persistence/reload; hardware hitch measurement pending |
 | Usage-driven animated textures | Implemented opt-in vanilla ticker gating and first-use refresh | Full CI #948 green on bounded retry; native clock/all-mip pixel oracle passed both attempts; GPU-only usage fallback added; custom raw-UV consumers and hardware adoption open |
 | Create/Flywheel Vulkan instancing | Pending legacy API/model/shader adapter | Keep existing working fallback until qualified |
-| Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Pinned Forge 1.7.2 hook/runtime oracle pending; installed user version and hardware effectiveness unknown |
+| Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
 | Adaptive chunk scheduling | Implemented opt-in publication budget, configurable workers and frame-pressure permits | Local Java contract and full CI #950 passed, including real queue/worker smoke; hardware tuning open |
-| World pregeneration tooling | Pending exact Forge 1.20.1 deployment tooling | User-world operation requires world/deployment details |
-| Separate-server tooling | Pending mod/config parity and deployment tooling | No access to desktop/server or user world in this workspace |
+| World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local bounded-command contract passed; qualified Chunky install and actual user-world execution pending |
+| Separate-server tooling | Implemented strict mod/config parity audit and copied deployment staging | Local fixture/lock/launcher contracts passed; matching real server distribution and user-world/host deployment pending |
 | Render scaling/upscaling | Pending world-target/GUI/depth/post-chain contract | Quality profile separate from canonical benchmark |
 | Far-terrain LOD | Pending DH numeric-data/Vulkan rendering adapter | DH currently does not work; suppression is not LOD support |
 
@@ -53,3 +53,7 @@ This integration uses an optional external EntityCulling installation rather tha
 The external mod retains ownership of nametag behavior, renderer shouldRenderOffScreen exclusions and its own whitelist/configuration. This feature does not install EntityCulling into a user instance or prove their installed version. Existing `entityCulling` is VulkanMod's entity batching switch and is distinct from external occlusion. For render-only experiments set EntityCulling's `tickCulling` false; the CI fixture restores any pre-existing config and disables tick culling. No client simulation change is part of this bridge.
 
 The native contract sets real optional-mod culled flags on fresh entity/block-entity instances and invokes the actual transformed dispatch methods, checks cancellation counters and queue isolation, then confirms uncertain-view timeouts admit those same draws. A transformed-bytecode assertion checks guard-before-cancellation ordering for renderEntity. Full portal geometry, moving factories, custom bounds and hardware benefit remain user-world gates.
+
+## Deployment tools
+
+`scripts/performance/deployment.py` implements the separate-server parity/staging and pregeneration command paths. Usage, inputs, exact version/side rules, source-world preservation and adoption checks are in [PERFORMANCE_DEPLOYMENT_TOOLING.md](PERFORMANCE_DEPLOYMENT_TOOLING.md). The tools generate reviewable copies/plans and never launch a server or execute generation. No actual desktop/server/world input is available here; neither deployment nor its performance benefit is claimed.
