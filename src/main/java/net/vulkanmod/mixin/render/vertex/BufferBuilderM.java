@@ -2,6 +2,7 @@ package net.vulkanmod.mixin.render.vertex;
 
 import com.mojang.blaze3d.vertex.*;
 import net.vulkanmod.interfaces.ExtendedVertexBuilder;
+import net.vulkanmod.interfaces.BufferBuilderMemory;
 import net.vulkanmod.interfaces.VertexFormatMixed;
 import net.vulkanmod.render.util.SortUtil;
 import net.vulkanmod.render.vertex.VertexUtil;
@@ -21,7 +22,7 @@ import java.util.function.IntConsumer;
 
 @Mixin(BufferBuilder.class)
 public abstract class BufferBuilderM extends DefaultedVertexConsumer
-        implements BufferVertexConsumer, ExtendedVertexBuilder {
+        implements BufferVertexConsumer, ExtendedVertexBuilder, BufferBuilderMemory {
 
     @Override
     public void putBulkData(PoseStack.Pose pose, net.minecraft.client.renderer.block.model.BakedQuad quad,
@@ -32,6 +33,7 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
     }
 
     @Shadow public abstract void endVertex();
+    @Shadow public abstract void discard();
 
     @Shadow private ByteBuffer buffer;
 
@@ -51,6 +53,26 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
     @Shadow protected abstract it.unimi.dsi.fastutil.ints.IntConsumer intConsumer(int i, VertexFormat.IndexType indexType);
 
     private long bufferPtr;
+
+    @Override
+    public long vulkanmod$retainedBytes() {
+        return this.buffer == null ? 0 : this.buffer.capacity();
+    }
+
+    @Override
+    public void vulkanmod$releaseMemory() {
+        com.mojang.blaze3d.systems.RenderSystem.assertOnRenderThread();
+        if (this.buffer == null) return;
+        this.discard();
+        MemoryUtil.memFree(this.buffer);
+        this.buffer = null;
+        this.bufferPtr = 0L;
+    }
+
+    @Inject(method = "begin", at = @At("HEAD"))
+    private void rejectRetiredBuilder(VertexFormat.Mode mode, VertexFormat format, CallbackInfo ci) {
+        if (this.buffer == null) throw new IllegalStateException("BufferBuilder native allocation is retired");
+    }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void setPtrC(int initialCapacity, CallbackInfo ci) {

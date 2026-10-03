@@ -200,7 +200,7 @@ succeeded; private real-pack fixtures were skipped.
 This candidate does not install an Engine, translate Flywheel's material shaders,
 qualify lightmap/diffuse/fog/alpha/crumbling/translucency or change Backend.isOn.
 
-## CPU engine dispatcher and batching fallback (candidate)
+## CPU engine dispatcher and batching fallback
 
 `LegacyFlywheelEngine` now exposes the pinned Engine/RenderDispatcher interfaces and
 routes MaterialManager defaults through the generation owner. Its currently callable
@@ -211,8 +211,13 @@ rendering and retirement, rejects foreign task/world events, rejects null-layer
 crumbling events and retains camera-distance rebasing with optional fixed-origin
 mode. CPU output copies event.stack and adds the integer origin: InstanceWorld
 already supplies the negative camera translation. The engine owns its BufferSource,
-so finishing a state cannot drain unrelated Minecraft batches. Failed emissions
-reset that source/builder rather than retaining partial batches.
+so finishing a state cannot drain unrelated Minecraft batches. Its private
+`OwnedBufferSource` allocates lazily. Failed emissions retire the partial source and
+free its current native allocation (including a grown allocation), then recreate
+it on the next use. Engine retirement frees it even if material cleanup throws.
+`BufferBuilderMemory` is used only for these privately owned builders after their
+synchronous consumers finish; vanilla/shared builders retain their existing lifetime.
+Release is idempotent, and beginning a batch on a retired builder is rejected.
 
 `LegacyFlywheelCpuFallback` invokes the actual Batched transform into the pinned
 ModelTransformer.Params numeric object. It emits ordinary BLOCK/NEW_ENTITY quads
@@ -237,6 +242,13 @@ The actual optional fixture adds emitted BufferBuilder byte checks for ModelType
 OrientedType pose/origin coordinates, color/alpha, light, UV, normals, ordinary and
 constant-ambient shading; owner transfer/back, removal and wrong-type rejection;
 origin clearing; nonsequential source handoff; and actual Engine default/debug/delete,
-pre-frame task synchronization and foreign-owner rejection. Standalone ownership
+pre-frame task synchronization and foreign-owner rejection. The lifetime fixture
+also grows an actual transformed builder, aborts a partial batch, verifies release,
+recreates a fresh batch and checks repeated retirement and stale-builder rejection.
+Standalone ownership
 contract passes locally, including live-iteration dirty-bit preservation. Full local
-Gradle remains blocked by the distribution download. CI is pending for this slice.
+Gradle remains blocked by the distribution download. The CPU Engine/transform slice
+`9e7bca9f6d199b60c0d421e5446c31a7d27753c5` passed full public CI **#969**, run
+`37155602660`, job `111298239954`, including the actual Flywheel fixture and
+JAR/log uploads. Private packs were skipped. The native batch-lifetime follow-up
+described above is a new candidate pending its own full CI.

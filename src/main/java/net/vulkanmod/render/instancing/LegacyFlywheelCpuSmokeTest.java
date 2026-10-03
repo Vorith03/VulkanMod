@@ -8,6 +8,7 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.interfaces.BufferBuilderMemory;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 
@@ -23,6 +24,7 @@ import java.util.function.Supplier;
 public final class LegacyFlywheelCpuSmokeTest {
     private LegacyFlywheelCpuSmokeTest() {}
     public static void verify(ClassLoader loader) throws ReflectiveOperationException {
+        verifyBatchLifetime();
         Class<?> api=Class.forName("com.jozufozu.flywheel.api.Instancer",false,loader);
         Class<?> dataApi=Class.forName("com.jozufozu.flywheel.api.InstanceData",false,loader);
         Class<?> layerApi=Class.forName("com.jozufozu.flywheel.backend.RenderLayer",false,loader);
@@ -98,16 +100,42 @@ public final class LegacyFlywheelCpuSmokeTest {
             check(syncs.get()==2,"Engine delete synchronized twice");
             reject(() -> engineApi.getMethod("defaultSolid").invoke(proxy));
         } finally { engine.close(); }
-        Initializer.LOGGER.info("Flywheel CPU engine smoke passed: actual ModelType/OrientedType transforms, emitted pose/origin/color/alpha/light/UV/normal/shade vertices, owner transfer/back, removal, custom topology handoff, origin clear, actual Engine default/debug/delete and task isolation; backend remains off");
+        Initializer.LOGGER.info("Flywheel CPU engine smoke passed: actual ModelType/OrientedType transforms, emitted pose/origin/color/alpha/light/UV/normal/shade vertices, owner transfer/back, removal, custom topology handoff, origin clear, actual Engine default/debug/delete and task isolation, native batch growth/abort/recreation/idempotent retirement; backend remains off");
+    }
+    private static void verifyBatchLifetime() {
+        var source=new OwnedBufferSource();
+        try {
+            check(source.retainedBytes()==0,"Unused CPU batch source allocated native memory");
+            BufferBuilder builder=(BufferBuilder)source.getBuffer(RenderType.solid());
+            long initial=source.retainedBytes();
+            for(int i=0;i<128;i++) builder.vertex(i,0,0,1,1,1,1,0,0,0,0,0,1,0);
+            check(source.retainedBytes()>initial,"CPU batch growth fixture did not grow");
+            // A failed emission has a partial building batch. Its allocation and BufferSource state must both retire.
+            source.discard(); source.discard();
+            check(source.retainedBytes()==0 && ((BufferBuilderMemory)builder).vulkanmod$retainedBytes()==0,
+                    "Aborted grown CPU builder retained its native allocation");
+            try { builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.BLOCK); throw new AssertionError("Retired builder reused"); }
+            catch(IllegalStateException expected) {}
+            BufferBuilder replacement=(BufferBuilder)source.getBuffer(RenderType.solid());
+            check(replacement!=builder && source.retainedBytes()>0,"Aborted CPU batch did not recreate a fresh builder");
+            source.close(); source.close();
+            check(source.retainedBytes()==0 && ((BufferBuilderMemory)replacement).vulkanmod$retainedBytes()==0,
+                    "CPU source retirement retained its replacement allocation");
+            try { source.getBuffer(RenderType.solid()); throw new AssertionError("Retired batch source reused"); }
+            catch(IllegalStateException expected) {}
+        } finally { source.close(); }
     }
     private static ByteBuffer render(LegacyFlywheelCpuFallback fallback,Object layer,PoseStack stack,boolean ambient) {
-        BufferBuilder builder=new BufferBuilder(256); builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.BLOCK);
-        fallback.render(layer,RenderType.solid(),stack,builder,ambient);
-        var result=builder.end();
+        BufferBuilder builder=new BufferBuilder(256);
         try {
-            ByteBuffer source=result.vertexBuffer(); ByteBuffer copy=ByteBuffer.allocate(source.remaining()).order(ByteOrder.nativeOrder());
-            return copy.put(source).flip();
-        } finally { result.release(); }
+            builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.BLOCK);
+            fallback.render(layer,RenderType.solid(),stack,builder,ambient);
+            var result=builder.end();
+            try {
+                ByteBuffer source=result.vertexBuffer(); ByteBuffer copy=ByteBuffer.allocate(source.remaining()).order(ByteOrder.nativeOrder());
+                return copy.put(source).flip();
+            } finally { result.release(); }
+        } finally { ((BufferBuilderMemory)builder).vulkanmod$releaseMemory(); }
     }
     private static void setBasic(Object data) throws ReflectiveOperationException {
         Class<?> type=data.getClass();

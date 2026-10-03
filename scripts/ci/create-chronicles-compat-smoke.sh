@@ -258,6 +258,7 @@ grep -F "Distant Horizons 3.2.0-b compatibility smoke passed" vulkan-smoke-creat
 grep -F "chat_heads" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel 0.6 compatibility smoke test passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel CPU adapter smoke passed" vulkan-smoke-create-chronicles-compat.log
+grep -F "Flywheel CPU engine smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "EntityCulling native compatibility smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Create 0.5.1.j stencil compatibility mixin target loaded" vulkan-smoke-create-chronicles-compat.log

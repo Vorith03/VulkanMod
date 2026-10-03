@@ -1,11 +1,9 @@
 package net.vulkanmod.render.instancing;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 
@@ -27,8 +25,7 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
     private final Unsupported unsupported;
     private final Method sync, eventWorld, eventLayer;
     private final Class<?> eventType;
-    private final BufferBuilder builder = new BufferBuilder(256);
-    private MultiBufferSource.BufferSource buffers = MultiBufferSource.immediate(builder);
+    private final OwnedBufferSource buffers = new OwnedBufferSource();
     private final boolean ignoreOrigin;
     private boolean closed;
 
@@ -95,7 +92,7 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
             });
             unsupported.render(tasks,event,origin);
         } catch(ReflectiveOperationException failure) { throw new IllegalStateException("Legacy render event changed",failure); }
-        catch(RuntimeException | Error failure) { resetBuffers(); throw failure; }
+        catch(RuntimeException | Error failure) { buffers.discard(); throw failure; }
     }
     @SuppressWarnings("unchecked") private void addDebugInfo(Object list) {
         ((List<String>)list).add("Vulkan Flywheel CPU fallback (experimental, backend disabled)");
@@ -104,9 +101,8 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
     @Override public void close() {
         RenderSystem.assertOnRenderThread(); if(closed) return;
         invoke(sync,tasks); closed=true;
-        try { materials.close(); } finally { resetBuffers(); }
+        try { materials.close(); } finally { buffers.close(); }
     }
-    private void resetBuffers() { builder.discard(); buffers=MultiBufferSource.immediate(builder); }
     private void requireOpen() { RenderSystem.assertOnRenderThread(); if(closed) throw new IllegalStateException("Flywheel engine is retired"); }
     private static Object invoke(Method method,Object self,Object... args) {
         try { return method.invoke(self,args); }
