@@ -22,6 +22,7 @@ public final class FlywheelCompatSmokeTest {
         }
 
         try {
+            net.vulkanmod.render.instancing.LegacyFlywheelSmokeTest.verify(backendClass.getClassLoader());
             Method isOn = backendClass.getMethod("isOn");
             Method refresh = backendClass.getMethod("refresh");
 

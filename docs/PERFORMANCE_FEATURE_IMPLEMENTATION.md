@@ -79,3 +79,55 @@ Primary MainTarget identity is preserved while its attachment lookups, binds, cl
 Any Immersive Portals installation currently retains native resolution because its multi-view ownership has not been qualified for scaling. This includes the user's existing portal setup. MixinPlugin excludes the capture/cleanup wrappers when IP classes are present, preserving its original world redirect before transformation. Vanilla depth consumers inside the world scope receive scaled depth; native GUI receives the original native depth. Arbitrary third-party post effects and depth consumers outside that scope, loaded-world visual parity, resize/fullscreen, resource reload and hardware benefit remain adoption gates. Scaling is off by default.
 
 The native oracle exercises two scales/resizing, primary attachment identity, red/blue orientation, a sharp one-pixel native overlay, pre-GUI world-icon timing, actual creeper/transparency chains with depth copies, external post-chain resize invalidation, and failed-capture restoration. A transformed-bytecode contract requires capture before camera post processing and composition before native GUI creation. A separate combined IP contract requires its original world redirect and absence of both scaling wrappers. Full CI **#961** (commit `9ee1f5fc3ffa25226d4c47c0d2e7ddfb6cf7c667`, run `37098078519`, job `111131992409`) passed these checks and every public gate; private real-resource-pack fixtures were skipped. The built-in blit shader selects `Framebuffer0`, matching DrawUtil's framebuffer texture binding; DrawUtil's fullscreen projection uses Vulkan zero-to-one depth (the previous GL projection clipped its z=0 quad at z=-1). IP presence detection uses ModLauncher's supported default bytecode retrieval without class initialization; requesting untransformed bytes is unsupported on this loader.
+
+## Legacy CPU model and instance ownership slice (2026-10-03)
+
+The next adapter slice implements owned `ModelGeometry`, optional `LegacyFlywheelModel`
+import of the exact pinned built-in `BlockModel`, `SharedModelBuffer` Vulkan ownership,
+`InstanceGroup` CPU lifecycle, and a real optional `Instancer`/`ModelData` proxy in
+`LegacyFlywheelInstances`. Backend availability remains unchanged. This is a callable
+model/instance path, not an enabled Create engine or a measured performance gain.
+
+The importer never invokes `createEBO`, model pools, GL writers, VAOs or `model.delete`.
+It reads qualified CPU vertex readers, validates their allocation span before unsafe
+numeric reads, and preserves position/color/UV/light/normal plus shade membership.
+Sequential quad suppliers get generated triangle indices; the exact built-in custom
+supplier supplies its still-owned CPU SHORT/INT indices. A custom supplier whose CPU
+indices were already released to GL, other model/reader types and inaccessible API
+fields are explicitly unsupported. Every index is range checked. Indices above 65535
+use UINT32. Model vertices and index input are each limited to 64 MiB; instance groups
+are limited to 16 MiB. Inputs are copied and read-only views cannot modify ownership.
+The caller must hold a live, undeleted Flywheel model during import. No model-name
+cache is introduced; future engine caches must include model/material/reload identity.
+
+The real transformed data is encoded directly from numeric fields, without creating
+a GL VecBuffer or writer. The aligned record has legacy shifted light bytes at 0/1,
+zero padding at 2/3, RGBA at 4, mat4 at 8 and mat3 at 72 (stride 108).
+Light is fetched as UNORM8 on binding 1, preserving the original byte/255 semantics;
+the unused z/w light channels are zero. BLOCK model locations 0–4 reserve transformed
+locations 5–13. This does not qualify Create's actual lightmap/material shader.
+
+Instances retain dirty data, drop deleted/transferred members, compact in stable order,
+and support transfer back before either group compacts. Failed packing retries consumed
+dirty records. Origin clear drops group membership; a future Engine must perform the
+legacy listener/recreation notification after clearing all affected groups. Snapshots
+are detached from older snapshots and future data writes. Calls require the render
+thread after Flywheel task completion; this is not a concurrent update publication API.
+
+Immutable mesh buffers upload once and close idempotently through existing deferred
+frame retirement. The instance draw copies a direct snapshot into Drawer’s append-only
+frame-slot vertex arena. It never overwrites earlier draws in the slot, uses existing
+fence-qualified resets (including failed-acquire behavior), and retires resized buffers
+through the existing owner. It adds no production wait or device-idle call.
+
+Focused Java contracts pass locally for model/index admission, immutable ownership,
+16/32-bit selection, dirty reuse, removal/compaction, transfer/back, failed packing,
+origin clear and close. Full local compilation is unavailable because this workspace
+has no downloaded Gradle distribution and the wrapper download is network-blocked.
+CI additionally runs the actual pinned Forge Flywheel CPU fixture and a native shared
+mesh with indices 65536–65539, normalized light channels, same-frame changing snapshots,
+firstInstance, zero count, resize and ordinary draw isolation. These new gates are
+pending until the published candidate passes CI. Existing private-pack/hardware gates
+remain open. Engine/material routing, unsupported-material fallback, shade/lightmap,
+crumbling, translucency, world/reload/portal ownership and origin listeners are the next
+integration boundary; do not enable Backend.isOn from these prerequisites.

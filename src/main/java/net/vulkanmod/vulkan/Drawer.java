@@ -174,6 +174,32 @@ public class Drawer {
         }
     }
 
+    /** Append-only instance snapshot upload. The existing frame-slot fence owns reuse and resize retirement. */
+    public void drawIndexedInstanced(GraphicsPipeline pipeline, VertexBuffer model, ByteBuffer data,
+                                     IndexBuffer indices, int indexType, int vertexCount, int indexCount,
+                                     int firstInstance, int instanceCount) {
+        RenderSystem.assertOnRenderThread();
+        InstanceVertexFormat format = pipeline.getInstanceFormat();
+        if(format == null || !data.isDirect() || data.remaining() % format.stride() != 0
+                || data.remaining() > net.vulkanmod.render.instancing.InstanceGroup.MAX_BYTES)
+            throw new IllegalArgumentException("Invalid direct instance snapshot");
+        format.validateRange(data.remaining(), firstInstance, instanceCount);
+        if(!Renderer.getInstance().isRecordingFrame() || Renderer.getInstance().getBoundRenderPass() == null)
+            throw new IllegalStateException("Instance upload requires a recording render pass");
+        if(instanceCount == 0 || indexCount == 0) return;
+        VertexBuffer uploaded = vertexBuffers[currentFrame];
+        // Ordinary model formats can leave the shared cursor at a two-byte alignment.
+        int padding = (int)((4 - (uploaded.getUsedBytes() & 3)) & 3);
+        if(padding != 0) {
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                uploaded.copyToVertexBuffer(1, padding, stack.calloc(padding));
+            }
+        }
+        uploaded.copyToVertexBuffer(format.stride(), data.remaining() / format.stride(), data);
+        drawIndexedInstanced(pipeline, model, uploaded, indices, indexType, vertexCount, indexCount,
+                firstInstance, instanceCount);
+    }
+
     private static void validateSlice(Buffer buffer, long bytes, int alignment) {
         long offset = buffer.getOffset();
         if(buffer.getId() == 0 || offset < 0 || offset % alignment != 0 || bytes < 0

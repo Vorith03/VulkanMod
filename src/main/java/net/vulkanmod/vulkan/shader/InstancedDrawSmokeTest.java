@@ -5,6 +5,11 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.instancing.ModelGeometry;
+import net.vulkanmod.render.instancing.LegacyFlywheelInstances;
+import net.vulkanmod.render.instancing.SharedModelBuffer;
+import java.nio.ByteOrder;
+import java.util.BitSet;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
@@ -33,10 +38,11 @@ public final class InstancedDrawSmokeTest {
         int oldColorMask = VRenderSystem.colorMask;
         VertexBuffer model = null, instances = null;
         IndexBuffer indices = null;
-        GraphicsPipeline instanced = null, ordinary = null;
+        SharedModelBuffer shared32 = null;
+        GraphicsPipeline instanced = null, instanced32 = null, ordinary = null;
         TextureTarget target = null;
         ByteBuffer vertices = MemoryUtil.memAlloc(48), data = MemoryUtil.memAlloc(STRIDE * 3);
-        ByteBuffer indexData = MemoryUtil.memAlloc(12);
+        ByteBuffer indexData = MemoryUtil.memAlloc(12), normalizedData = MemoryUtil.memAlloc(STRIDE * 3);
         try {
             VRenderSystem.cull = false; VRenderSystem.depthTest = false;
             VRenderSystem.depthMask = false; VRenderSystem.stencilTest = false;
@@ -49,7 +55,7 @@ public final class InstancedDrawSmokeTest {
             var layout = new InstanceVertexFormat(STRIDE, attributes);
             Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION).setInstanceFormat(layout);
             builder.setUniforms(new ArrayList<>(), List.of());
-            builder.compileShaders("""
+            String vertexShader = """
                     #version 450
                     layout(location=0) in vec3 Position;
                     layout(location=1) in mat4 Model;
@@ -62,8 +68,17 @@ public final class InstancedDrawSmokeTest {
                         float normalFactor = dot(Normal * vec3(0.25, 0.25, 0.5), vec3(1.0));
                         color = Color * vec4(vec3(normalFactor * float(Light.x) / 240.0), 1.0);
                     }
-                    """, fragment());
+                    """;
+            builder.compileShaders(vertexShader, fragment());
             instanced = builder.createGraphicsPipeline();
+            builder = new Pipeline.Builder(DefaultVertexFormat.BLOCK).setInstanceFormat(LegacyFlywheelInstances.format(5));
+            builder.setUniforms(new ArrayList<>(), List.of());
+            builder.compileShaders(vertexShader.replace("location=1) in mat4", "location=5) in mat4")
+                    .replace("location=5) in mat3", "location=9) in mat3")
+                    .replace("location=8) in vec4", "location=12) in vec4")
+                    .replace("location=9) in uvec2", "location=13) in vec4")
+                    .replace("float(Light.x) / 240.0", "min(Light.x, Light.y) * 255.0 / 240.0"), fragment());
+            instanced32 = builder.createGraphicsPipeline();
             builder = new Pipeline.Builder(DefaultVertexFormat.POSITION);
             builder.setUniforms(new ArrayList<>(), List.of());
             builder.compileShaders("""
@@ -87,22 +102,59 @@ public final class InstancedDrawSmokeTest {
             indices = new IndexBuffer(14);
             indices.copyBuffer(indexData.duplicate().limit(2));
             indices.copyBuffer(indexData);
+            byte[] largeVertices = new byte[65540 * ModelGeometry.STRIDE];
+            ByteBuffer packed = ByteBuffer.wrap(largeVertices).order(ByteOrder.nativeOrder());
+            int at = 65536 * ModelGeometry.STRIDE;
+            for(float[] p : new float[][]{{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}}) {
+                for(int component=0; component<3; component++) packed.putFloat(at+component*4,p[component]);
+                at += ModelGeometry.STRIDE;
+            }
+            shared32 = new SharedModelBuffer(new ModelGeometry(largeVertices,
+                    new int[]{65536,65537,65538,65538,65539,65536}, new BitSet()));
+            if(shared32.indexType() != VK_INDEX_TYPE_UINT32) throw new AssertionError("High index was truncated");
             instances = new VertexBuffer(STRIDE);
             putInstance(data, 0, 0, 0, 0, 255, 240, 1); // guard at firstInstance=0: never drawn
             putInstance(data, STRIDE, -0.5f, 255, 0, 0, 240, 0.5f);
             putInstance(data, STRIDE*2, 0.5f, 0, 255, 0, 120, 1);
             instances.copyToVertexBuffer(STRIDE, 1, data.duplicate().limit(STRIDE));
             instances.copyToVertexBuffer(STRIDE, 3, data);
+            normalizedData.put(data.duplicate()).flip();
+            for(int i=0; i<3; i++) {
+                int offset = i * STRIDE;
+                int block = Short.toUnsignedInt(data.getShort(offset)), sky = Short.toUnsignedInt(data.getShort(offset+2));
+                // Swap the second visible record's channels: shader must use both normalized channels.
+                normalizedData.put(offset,(byte)(i == 2 ? sky : block));
+                normalizedData.put(offset+1,(byte)(i == 2 ? block : sky));
+                normalizedData.put(offset+2,(byte)0); normalizedData.put(offset+3,(byte)0);
+            }
             target = new TextureTarget(64, 32, true, Minecraft.ON_OSX);
-            for(int pass = 0; pass < 3; pass++) {
-                if(pass == 1) target.resize(80, 48, Minecraft.ON_OSX);
+            for(int pass = 0; pass < 6; pass++) {
+                int phase = pass % 3;
+                if(phase == 1) target.resize(80, 48, Minecraft.ON_OSX);
                 renderer.resetBuffers(); renderer.beginFrame();
                 target.setClearColor(0,0,0,1); target.clear(Minecraft.ON_OSX); target.bindWrite(true);
                 Renderer.resetScissor(); Renderer.setDepthBias(0,0);
-                int first = pass == 1 ? 2 : 1;
-                int count = pass == 0 ? 2 : pass == 1 ? 1 : 0;
-                Renderer.getDrawer().drawIndexedInstanced(instanced, model, instances, indices,
-                        VK_INDEX_TYPE_UINT16, 4, 6, first, count);
+                int first = phase == 1 ? 2 : 1;
+                int count = phase == 0 ? 2 : phase == 1 ? 1 : 0;
+                if(pass < 3) {
+                    Renderer.getDrawer().drawIndexedInstanced(instanced, model, instances, indices,
+                            VK_INDEX_TYPE_UINT16, 4, 6, first, count);
+                } else {
+                    // Production shared mesh and append-only upload, with indices above the 16-bit range.
+                    Renderer.getDrawer().drawIndexedInstanced(instanced32, shared32.vertices(), normalizedData, shared32.indices(),
+                            shared32.indexType(), shared32.geometry().vertexCount(), 6, first, count);
+                    // Reusing/changing caller memory cannot overwrite already recorded instance draws.
+                    if(phase == 0) {
+                        putInstance(normalizedData, STRIDE, 0, 0, 0, 255, 240, 1);
+                        normalizedData.put(STRIDE,(byte)240); normalizedData.put(STRIDE+1,(byte)240);
+                        normalizedData.put(STRIDE+2,(byte)0); normalizedData.put(STRIDE+3,(byte)0);
+                        Renderer.getDrawer().drawIndexedInstanced(instanced32, shared32.vertices(), normalizedData, shared32.indices(),
+                                shared32.indexType(), shared32.geometry().vertexCount(), 6, 1, 1);
+                        putInstance(normalizedData, STRIDE, -0.5f, 255, 0, 0, 240, 0.5f);
+                        normalizedData.put(STRIDE,(byte)240); normalizedData.put(STRIDE+1,(byte)240);
+                        normalizedData.put(STRIDE+2,(byte)0); normalizedData.put(STRIDE+3,(byte)0);
+                    }
+                }
                 // An ordinary draw immediately after instancing must retain binding-0 semantics.
                 renderer.bindGraphicsPipeline(ordinary); renderer.uploadAndBindUBOs(ordinary);
                 Renderer.getDrawer().drawIndexed(model, indices, 6);
@@ -110,23 +162,27 @@ public final class InstancedDrawSmokeTest {
                 target.unbindWrite(); minecraft.getMainRenderTarget().bindWrite(true);
                 renderer.endFrame();
                 try(NativeImage image = capture.get(10, TimeUnit.SECONDS)) {
-                    expect(image, image.getWidth()/4, image.getHeight()/2, pass == 0 ? 0xFF000080 : 0xFF000000);
-                    expect(image, 3*image.getWidth()/4, image.getHeight()/2, pass < 2 ? 0xFF008000 : 0xFF000000);
+                    expect(image, image.getWidth()/4, image.getHeight()/2, phase == 0 ? 0xFF000080 : 0xFF000000);
+                    expect(image, 3*image.getWidth()/4, image.getHeight()/2, phase < 2 ? 0xFF008000 : 0xFF000000);
                     expect(image, image.getWidth()/2, image.getHeight()/2, 0xFFFFFFFF);
                     expect(image, 1, 1, 0xFF000000);
+                    expect(image, image.getWidth()/2, image.getHeight()/2 + image.getHeight()/10,
+                            pass == 3 ? 0xFFFF0000 : 0xFF000000);
                 }
             }
-            Initializer.LOGGER.info("Vulkan instanced draw smoke passed: model/normal matrices, packed color/light, slice offsets, firstInstance, zero count, target resize, ordinary draw isolation");
+            Initializer.LOGGER.info("Vulkan instanced draw smoke passed: model/normal matrices, packed color/light, slice offsets, firstInstance, zero count, target resize, ordinary draw isolation, 32-bit indices above 65535, normalized legacy light channels, shared mesh retirement and fence-owned append uploads");
         } finally {
             // Oracle only. Future adapter owners must retire through their frame fences.
             Vulkan.waitIdle();
             if(instanced != null) instanced.cleanUp();
+            if(instanced32 != null) instanced32.cleanUp();
             if(ordinary != null) ordinary.cleanUp();
             if(model != null) model.freeBuffer();
             if(instances != null) instances.freeBuffer();
             if(indices != null) indices.freeBuffer();
+            if(shared32 != null) { shared32.close(); shared32.close(); }
             if(target != null) target.destroyBuffers();
-            MemoryUtil.memFree(vertices); MemoryUtil.memFree(data); MemoryUtil.memFree(indexData);
+            MemoryUtil.memFree(vertices); MemoryUtil.memFree(data); MemoryUtil.memFree(indexData); MemoryUtil.memFree(normalizedData);
             VRenderSystem.cull = oldCull; VRenderSystem.depthTest = oldDepth;
             VRenderSystem.depthMask = oldMask; VRenderSystem.stencilTest = oldStencil;
             PipelineState.blendInfo.enabled = oldBlend; VRenderSystem.colorMask = oldColorMask;
