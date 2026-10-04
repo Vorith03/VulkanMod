@@ -17,6 +17,7 @@
     "compatibility.EffectInstanceM",
     "compatibility.PostPassM",
     "compatibility.FlywheelBackendMixin",
+    "compatibility.FlywheelRenderLayerEventMixin",
     "compatibility.EntityCullingLevelRendererMixin",
     "compatibility.EntityCullingBlockEntityMixin",
     "render.WorldRenderScaleMixin",

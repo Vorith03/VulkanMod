@@ -259,6 +259,7 @@ grep -F "chat_heads" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel 0.6 compatibility smoke test passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel CPU adapter smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel CPU engine smoke passed" vulkan-smoke-create-chronicles-compat.log
+grep -F "Flywheel event transform smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Flywheel native material dispatch smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "EntityCulling native compatibility smoke passed" vulkan-smoke-create-chronicles-compat.log
 grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-create-chronicles-compat.log

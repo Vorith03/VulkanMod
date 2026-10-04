@@ -1,7 +1,6 @@
 package net.vulkanmod.render.instancing;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderType;
@@ -29,6 +28,7 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
     private final OwnedBufferSource buffers = new OwnedBufferSource();
     private final boolean ignoreOrigin;
     private final LegacyFlywheelRenderer nativeRenderer;
+    private final LegacyFlywheelEventCapture.Lease capture;
     private boolean closed;
 
     public LegacyFlywheelEngine(ClassLoader loader, Object world, long generation, Object tasks,
@@ -65,6 +65,7 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
                 default -> invoke(method,materials.manager(),args);
             };
         });
+        capture=LegacyFlywheelEventCapture.retain(world);
     }
     public Object engine() { requireOpen(); return proxy; }
     public void addOriginListener(Runnable listener) { requireOpen(); materials.addOriginListener(listener); }
@@ -92,14 +93,13 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
         if(layer==null) throw new UnsupportedOperationException("Crumbling dispatch is not qualified");
         invoke(sync,tasks);
         try {
-            PoseStack stack=(PoseStack)eventType.getField("stack").get(event);
-            PoseStack copied=new PoseStack();
-            copied.last().pose().set(stack.last().pose()); copied.last().normal().set(stack.last().normal());
-            BlockPos origin=origin(); copied.translate(origin.getX(),origin.getY(),origin.getZ());
+            BlockPos origin=origin();
+            double camX=eventType.getField("camX").getDouble(event),camY=eventType.getField("camY").getDouble(event),
+                    camZ=eventType.getField("camZ").getDouble(event);
+            var copied=LegacyFlywheelEventTransforms.cpuStack(event,camX,camY,camZ,origin);
             if(nativeRenderer!=null) {
                 var scene=new LegacyFlywheelRenderer.Scene((Matrix4f)eventType.getField("viewProjection").get(event),
-                        eventType.getField("camX").getDouble(event),eventType.getField("camY").getDouble(event),
-                        eventType.getField("camZ").getDouble(event),origin,ignoreOrigin);
+                        camX,camY,camZ,origin,ignoreOrigin);
                 materials.visitStates(layer,state -> nativeRenderer.draw((RenderType)state,scene,
                         pipeline -> materials.draw(layer,state,pipeline)));
             }
@@ -121,7 +121,9 @@ public final class LegacyFlywheelEngine implements AutoCloseable {
         RenderSystem.assertOnRenderThread(); if(closed) return;
         invoke(sync,tasks); closed=true;
         try { materials.close(); } finally {
-            try { buffers.close(); } finally { if(nativeRenderer!=null) nativeRenderer.close(); }
+            try { buffers.close(); } finally {
+                try { if(nativeRenderer!=null) nativeRenderer.close(); } finally { capture.close(); }
+            }
         }
     }
     private void requireOpen() { RenderSystem.assertOnRenderThread(); if(closed) throw new IllegalStateException("Flywheel engine is retired"); }

@@ -344,3 +344,22 @@ recorded-owner retirement fixture, synchronization validation, existing CPU fall
 checks and every public gate passed. JAR/log uploads succeeded; private packs were
 skipped. There is no CI result pending for this bounded dispatcher slice. Real ClientLevel Engine event dispatch, portal-world ownership, reload, crumbling,
 translucent ordering and universal unsupported rendering remain open.
+
+## Pre-camera CPU event precision (CI pending)
+
+The previous CPU Engine copied InstanceWorld's already camera-translated float
+stack and then added the integer origin. At distant coordinates this cannot recover
+fractional camera components lost by the first conversion, unlike the GPU's
+double-before-float relative camera path. The optional RenderLayerEvent constructor
+now snapshots the original pose and normal only while a callable Engine owns that
+exact world. Reference-counted capture leases retire with the last Engine; normal
+backend-disabled events allocate no matrix snapshots. The event stack stays intact.
+
+The CPU path composes copied pre-camera matrices with origin-minus-camera computed
+in double precision, validates finite inputs and rejects events predating capture
+ownership. Its actual pinned event fixture uses a null world strictly for numeric
+tests: a rotated pose at 30 million blocks exposes the old float precision loss and
+checks fractional translation, normal/caller/copy isolation, missing/nonfinite
+inputs, exact world isolation, two-owner retirement and disabled capture. Focused
+local contracts pass; the new mixin/event fixture requires full CI. This closes
+no loaded ClientLevel or portal gate by itself.

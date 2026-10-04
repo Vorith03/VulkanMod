@@ -25,6 +25,7 @@ public final class LegacyFlywheelCpuSmokeTest {
     private LegacyFlywheelCpuSmokeTest() {}
     public static void verify(ClassLoader loader) throws ReflectiveOperationException {
         verifyBatchLifetime();
+        LegacyFlywheelEventSmokeTest.verify(loader);
         Class<?> api=Class.forName("com.jozufozu.flywheel.api.Instancer",false,loader);
         Class<?> dataApi=Class.forName("com.jozufozu.flywheel.api.InstanceData",false,loader);
         Class<?> layerApi=Class.forName("com.jozufozu.flywheel.backend.RenderLayer",false,loader);
