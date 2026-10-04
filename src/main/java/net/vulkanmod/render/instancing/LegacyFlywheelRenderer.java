@@ -64,8 +64,6 @@ public final class LegacyFlywheelRenderer implements AutoCloseable {
             RenderSystem.enableCull(); RenderSystem.depthMask(true); RenderSystem.colorMask(true,true,true,true);
             RenderSystem.enableDepthTest(); RenderSystem.depthFunc(515); RenderSystem.disableBlend();
             ShaderTextureState.syncFixedSamplers();
-            if(VTextureSelector.getBoundTexture()==null || VTextureSelector.getLightTexture()==null)
-                throw new IllegalStateException("Flywheel atlas/lightmap is missing");
             float[] fog=RenderSystem.getShaderFogColor();
             pipeline.setScene(scene.viewProjection,scene.cameraX,scene.cameraY,scene.cameraZ,
                     fog[0],fog[1],fog[2],RenderSystem.getShaderFogStart(),RenderSystem.getShaderFogEnd(),

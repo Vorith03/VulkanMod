@@ -3,6 +3,7 @@ package net.vulkanmod.render.instancing;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
@@ -60,6 +61,8 @@ public final class LegacyFlywheelPipeline implements AutoCloseable {
     public void draw(SharedModelBuffer mesh,ByteBuffer instances,int firstInstance,int instanceCount) {
         requireOpen();
         if(!sceneReady) throw new IllegalStateException("Flywheel world uniforms are unset");
+        if(VTextureSelector.getBoundTexture()==null || VTextureSelector.getLightTexture()==null)
+            throw new IllegalStateException("Flywheel atlas/lightmap is missing");
         RenderTargetManager.preparePipelineTextures(pipeline);
         Renderer.getDrawer().drawIndexedInstanced(pipeline,mesh.vertices(),instances,mesh.indices(),mesh.indexType(),
                 mesh.geometry().vertexCount(),mesh.geometry().indexCount(),firstInstance,instanceCount);

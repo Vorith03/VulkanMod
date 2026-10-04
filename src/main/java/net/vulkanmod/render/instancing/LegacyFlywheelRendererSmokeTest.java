@@ -89,6 +89,10 @@ public final class LegacyFlywheelRendererSmokeTest {
                     target.unbindWrite(); minecraft.getMainRenderTarget().bindWrite(true); renderer.endFrame(); Vulkan.waitIdle();
                     try(NativeImage image=capture.read()) {
                         expect(image,20,24,pass>=2 ? new int[]{0,0,0,255} : new int[]{22,47,6,64});
+                        // Edge/gap witnesses detect losing the fractional camera component at 30 million blocks.
+                        expect(image,10,24,pass>=2 ? new int[]{0,0,0,255} : new int[]{22,47,6,64});
+                        expect(image,34,24,new int[]{0,0,0,255});
+                        expect(image,50,24,pass==4 ? new int[]{0,0,0,255} : new int[]{188,22,50,128});
                         expect(image,60,24,pass==4 ? new int[]{0,0,0,255} : new int[]{188,22,50,128});
                     }
                 }
