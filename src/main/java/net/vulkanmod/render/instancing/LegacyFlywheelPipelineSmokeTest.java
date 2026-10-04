@@ -123,6 +123,7 @@ public final class LegacyFlywheelPipelineSmokeTest {
                 }
                 if(instances.position()!=0 || instances.limit()!=instances.capacity()) throw new AssertionError("Material draw changed caller snapshot");
             }
+            LegacyFlywheelRendererSmokeTest.verify(minecraft,mesh,instances,atlas,light);
             Initializer.LOGGER.info("Vulkan Flywheel material shader smoke passed: transformed model/normalized normals, instance color/light override, both lightmap channels and legacy half-texel shift, atlas/light alpha separation, cylindrical linear fog, alpha discard, per-draw uniform isolation, resize/zero count, fence-deferred pipeline retirement; backend remains off");
         } finally {
             Vulkan.waitIdle(); // Test-only readback/cleanup boundary.
@@ -142,7 +143,7 @@ public final class LegacyFlywheelPipelineSmokeTest {
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,4,false,true);
     }
     /** Test-only raw transfer. Production screenshot opacity and asynchronous lifetime remain unchanged. */
-    private record RawCapture(long buffer,long allocation,int width,int height,int format) implements AutoCloseable {
+    record RawCapture(long buffer,long allocation,int width,int height,int format) implements AutoCloseable {
         static RawCapture record(TextureTarget target) {
             VulkanImage image=GlTexture.getVulkanImage(target.getColorTextureId());
             if(image==null || (image.format!=VK_FORMAT_R8G8B8A8_UNORM && image.format!=VK_FORMAT_B8G8R8A8_UNORM))

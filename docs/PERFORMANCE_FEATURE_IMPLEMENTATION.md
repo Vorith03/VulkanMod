@@ -300,3 +300,37 @@ were skipped. No shader/lifetime CI remains pending. This qualifies the bounded
 material shader and owner, not an installed engine or performance gain. Real world
 and portal rendering, resource reload, custom programs, crumbling, translucent
 state/ordering and engine adoption remain open.
+
+## Experimental transformed state/event dispatcher (qualification pending)
+
+The callable Engine has an explicit transformed-rendering constructor option; its
+existing constructor remains CPU-first. Exact ModelType/TRANSFORMED, owned BlockModel
+geometry, and matching SOLID/solid or CUTOUT/cutout/cutoutMipped identities are the
+only native states admitted. Admission precedes supplier consumption, and declined
+states/types/models retain the real Batched CPU fallback or explicit unsupported
+owner. No Backend or InstanceWorld registration changes.
+
+LegacyFlywheelRenderer applies the exact vanilla RenderType, explicitly establishes
+positive cull/depth/write defaults, reconciles fixed atlas/lightmap samplers after
+lightmap setup, and restores caller shader/sampler/active-unit/blend/depth/cull/write
+state in finally, including failed drawing. Applied post/mod shader owners are
+rejected rather than allowing globally overridden descriptors. Stencil/scissor and
+the active target remain caller-owned. CUTOUT uses the pinned GPU alpha threshold
+0.1. CPU shading remains distinct from the pinned GPU diffuse contract.
+
+Scene composition copies RenderLayerEvent.viewProjection (captured before
+InstanceWorld translates its stack), subtracts integer origin from double camera
+coordinates before float conversion, then multiplies the event matrix by that
+relative camera translation. Ignore-origin contexts preserve the event matrix.
+The Engine checks exact task/world ownership and synchronizes before drawing;
+material entries lazily own shared meshes and serialize their actual ModelData into
+the existing append-only instance arena. Retirement uses existing frame fences.
+
+Focused instance/ownership/fixture/shell contracts pass locally. New native fixtures
+exercise six raw pixel frames for distant coordinates, nonzero event translation,
+ignore-origin, all three admitted states, alpha, depth, backface cull, sampler repair
+and caller/failure restoration; the actual optional Flywheel fixture additionally
+draws MaterialManager -> Material -> ModelData -> lazy shared mesh -> textured pixel,
+retiring both owners while commands reference them. These new cases are pending full
+CI. Real ClientLevel Engine event dispatch, portal-world ownership, reload, crumbling,
+translucent ordering and universal unsupported rendering remain open.

@@ -67,6 +67,16 @@ public final class LegacyFlywheelInstances implements AutoCloseable {
                     0, nativeData.remaining()/STRIDE);
         } finally { MemoryUtil.memFree(nativeData); }
     }
+    public void draw(SharedModelBuffer mesh, LegacyFlywheelPipeline pipeline) {
+        RenderSystem.assertOnRenderThread();
+        ByteBuffer snapshot=snapshot();
+        if(!snapshot.hasRemaining()) return;
+        ByteBuffer nativeData=MemoryUtil.memAlloc(snapshot.remaining());
+        try {
+            nativeData.put(snapshot).flip();
+            pipeline.draw(mesh,nativeData,0,nativeData.remaining()/STRIDE);
+        } finally { MemoryUtil.memFree(nativeData); }
+    }
     public Object owner() { return owner; }
     public void clearForOriginShift() { group.clear(); }
     @Override public void close() { group.close(); }

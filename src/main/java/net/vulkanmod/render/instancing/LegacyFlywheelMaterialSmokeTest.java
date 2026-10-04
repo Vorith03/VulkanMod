@@ -109,6 +109,22 @@ public final class LegacyFlywheelMaterialSmokeTest {
             reject(() -> model.invoke(mat, "shared", factory));
             reject(() -> create.invoke(instancer));
         } finally { owner.close(); }
+        // State admission happens before the supplier: unsupported states retain the original CPU ownership.
+        var declined=new Fallback(loader);
+        try(var limited=new LegacyFlywheelMaterials(loader,new Object(),10,declined,
+                (layer,type) -> layer==solid && type==RenderType.solid())) {
+            Object unsupportedState=material.invoke(state.invoke(limited.manager(),solid,RenderType.translucent()),spec);
+            Supplier<?> source=() -> unknownModel(loader,modelApi);
+            model.invoke(unsupportedState,"translucent",source);
+            check(declined.calls==1 && declined.renderType==RenderType.translucent(),"Unsupported state bypassed fallback");
+            AtomicInteger nativeStates=new AtomicInteger(); limited.visitStates(solid,type -> nativeStates.incrementAndGet());
+            check(nativeStates.get()==0,"Delegated state was exposed as native");
+            Object accepted=material.invoke(state.invoke(limited.manager(),solid,RenderType.solid()),spec);
+            create.invoke(model.invoke(accepted,"native",factory));
+            limited.visitStates(solid,type -> { check(type==RenderType.solid(),"Wrong native state"); nativeStates.incrementAndGet(); });
+            check(nativeStates.get()==1,"Accepted native state absent");
+        }
+        LegacyFlywheelNativeSmokeTest.verify(loader);
         Initializer.LOGGER.info("Flywheel material ownership smoke passed: actual manager/group/material APIs, key/material/layer/state/world generation isolation, owned CPU release, failed import retry, unsupported delegation, origin clear/recreation, stale handles; engine remains off");
     }
 
@@ -148,6 +164,11 @@ public final class LegacyFlywheelMaterialSmokeTest {
                     .newInstance(vertices,indices,state,2,"material cache CPU fixture");
         } catch(ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
         finally { MemoryUtil.memFree(vertices); MemoryUtil.memFree(indices); }
+    }
+    private static Object unknownModel(ClassLoader loader,Class<?> modelApi) {
+        return Proxy.newProxyInstance(loader,new Class<?>[]{modelApi},(self,method,args) -> {
+            throw new AssertionError("Declined state touched model");
+        });
     }
     private interface Action { void run() throws ReflectiveOperationException; }
     private static void reject(Action action) throws ReflectiveOperationException {

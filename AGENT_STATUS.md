@@ -4,6 +4,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current executable / CI state
 
+- Current continuation adds an explicitly callable experimental transformed Engine option, exact solid/cutout RenderType admission, origin-relative event scene composition and caller-state restoration. Native state/event pixels and actual pinned MaterialManager-to-native draw/retirement fixtures are implemented; focused local contracts pass, full CI pending the next executable commit. The ordinary constructor remains CPU-first and Backend/InstanceWorld remain unchanged. Detailed contract: docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md, final section.
+
 - Latest hardware-validated executable is build **#935**, commit `48b0f06b4c36b01ead161b05c18da8688d8a637f`.
 - #935 is fully CI-green and completed the canonical RX 6900 XT / RADV 180-second stationary benchmark.
 - Current performance candidate adds three benchmark-driven optimizations after #935:

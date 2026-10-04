@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 
 /**
  * Optional legacy MaterialManager ownership, scoped to one world/reload generation.
@@ -40,7 +42,7 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
     private final Method getProgram;
     private final Object transformedProgram;
     private final Fallback fallback;
-    private final boolean transformedEnabled;
+    private final BiPredicate<Object, Object> transformedState;
     private final Object manager;
     private final Map<Object, IdentityHashMap<Object, Group>> layers = new IdentityHashMap<>();
     private final List<WeakReference<Runnable>> listeners = new ArrayList<>();
@@ -57,11 +59,15 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
     }
     public LegacyFlywheelMaterials(ClassLoader loader, Object worldIdentity, long generation, Fallback fallback,
                                    boolean transformedEnabled) throws ReflectiveOperationException {
+        this(loader, worldIdentity, generation, fallback, (layer, state) -> transformedEnabled);
+    }
+    public LegacyFlywheelMaterials(ClassLoader loader, Object worldIdentity, long generation, Fallback fallback,
+                                   BiPredicate<Object, Object> transformedState) throws ReflectiveOperationException {
         this.loader = loader;
         this.worldIdentity = Objects.requireNonNull(worldIdentity);
         this.generation = generation;
         this.fallback = Objects.requireNonNull(fallback);
-        this.transformedEnabled = transformedEnabled;
+        this.transformedState = Objects.requireNonNull(transformedState);
         Class<?> managerApi = Class.forName("com.jozufozu.flywheel.api.MaterialManager", false, loader);
         groupApi = Class.forName("com.jozufozu.flywheel.api.MaterialGroup", false, loader);
         materialApi = Class.forName("com.jozufozu.flywheel.api.Material", false, loader);
@@ -122,7 +128,7 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
         boolean creating;
         Material(Group group, Object spec) {
             this.group = group; this.spec = spec;
-            qualified = transformedEnabled && spec.getClass() == modelType && transformedProgram.equals(invoke(getProgram, spec));
+            qualified = transformedState.test(group.layer, group.renderType) && spec.getClass() == modelType && transformedProgram.equals(invoke(getProgram, spec));
             proxy = proxy(materialApi, (self, method, args) -> {
                 if(method.getName().equals("model")) {
                     Object key = args[0];
@@ -178,6 +184,18 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
         for(Entry entry : entries) if(entry.instances != null) visitor.accept(entry.geometry, entry.instances);
     }
 
+    /** Snapshot native states only; delegated entries are rendered by their fallback owner. */
+    public void visitStates(Object layer, Consumer<Object> visitor) {
+        requireOpen(); Objects.requireNonNull(visitor);
+        var groups=layers.get(layer);
+        if(groups==null) return;
+        var states=new ArrayList<Object>();
+        for(Group group : groups.values())
+            if(group.materials.values().stream().anyMatch(material -> material.models.values().stream()
+                    .anyMatch(entry -> entry.instances!=null))) states.add(group.renderType);
+        states.forEach(visitor);
+    }
+
     private static final class Entry {
         final Object owner;
         final LegacyFlywheelInstances instances;
@@ -204,6 +222,19 @@ public final class LegacyFlywheelMaterials implements AutoCloseable {
                 if(entry.mesh == null) entry.mesh = new SharedModelBuffer(entry.geometry);
                 entry.instances.draw(entry.mesh, pipeline);
             }
+        }
+    }
+
+    /** Textured transformed draw; the renderer must have applied the exact admitted state and scene. */
+    public void draw(Object layer, Object renderType, LegacyFlywheelPipeline pipeline) {
+        requireOpen();
+        var groups=layers.get(layer);
+        Group group=groups==null ? null : groups.get(renderType);
+        if(group==null) return;
+        for(Material material : group.materials.values()) for(Entry entry : material.models.values()) {
+            if(entry.instances==null || entry.geometry.indexCount()==0) continue;
+            if(entry.mesh==null) entry.mesh=new SharedModelBuffer(entry.geometry);
+            entry.instances.draw(entry.mesh,pipeline);
         }
     }
 
