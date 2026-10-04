@@ -4,7 +4,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Current executable / CI state
 
-- Current continuation adds an explicitly callable experimental transformed Engine option, exact solid/cutout RenderType admission, origin-relative event scene composition and caller-state restoration. Native state/event pixels and actual pinned MaterialManager-to-native draw/retirement fixtures are implemented; focused local contracts pass, full CI pending the next executable commit. The ordinary constructor remains CPU-first and Backend/InstanceWorld remain unchanged. Detailed contract: docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md, final section.
+- Latest feature-code executable `2a7fc3391ae6e11f5c5598d1f4127d78b64cd12f` is fully public-CI green in **#974**, run `37183077787`, job `111379372847`. Implementation `eadbe477e068d8c131c40df5a3fbd1ec5b9bea9d` adds an explicitly callable transformed Engine option, exact matching solid/cutout RenderType admission, origin-relative event scene composition and caller-state restoration. Six native state/event frames (including edge/gap witnesses at 30 million blocks), actual pinned MaterialManager -> ModelData -> lazy shared mesh -> native RGBA pixels, recorded-owner retirement, CPU fallback and every existing public gate passed. No validation errors/SYNC hazards were reported; JAR/log uploads succeeded; private packs were skipped. #973 compiled but its startup fixture checked world atlas/lightmap availability before supplying synthetic images; the follow-up checks missing textures at actual descriptor-consuming draws. The ordinary constructor remains CPU-first and Backend/InstanceWorld remain unchanged. Details: docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md, final section. No CI is pending for this atomic slice.
 
 - Latest hardware-validated executable is build **#935**, commit `48b0f06b4c36b01ead161b05c18da8688d8a637f`.
 - #935 is fully CI-green and completed the canonical RX 6900 XT / RADV 180-second stationary benchmark.
@@ -18,7 +18,7 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 - Material ownership `ab4a87def00d79f8232f3b1f91d4aedefe157964` is fully public-CI green in **#968**, run `37142141537`, job `111258615844`. Actual MaterialManager/MaterialGroup/Material API, supplier-once/material/layer/state/world-generation caching, owned CPU release, unsupported delegation and origin recreation/stale-handle checks passed. JAR/log uploads succeeded; private packs were skipped. This supplies a callable ownership/delegation layer, not a production engine or qualified fallback renderer. Backend availability is unchanged.
 - Callable CPU-first Engine and actual Batched/Params vertex-consumer fallback `9e7bca9f6d199b60c0d421e5446c31a7d27753c5` are fully public-CI green in **#969**, run `37155602660`, job `111298239954`. Actual emitted ModelType/OrientedType vertices and ownership/origin/task routing passed; JAR/log uploads succeeded. Private packs were skipped. This CPU slice does not register InstanceWorld, enable the backend or qualify universal custom fallback rendering; GPU shader qualification is the separate #972 gate.
 - Native CPU batching lifetime `5fb3d7024b2f4d0d0f55018e18648debfa319496` is fully public-CI green in **#970**, run `37156114140`, attempt 2, job `111300814405`. Lazy private allocation, grown-buffer release on emission abort/retirement, fresh-source recreation and idempotent/stale-builder checks passed the actual optional fixture. Attempt 1 failed before those checks in Forge early-display union-filesystem class loading (`FileSystemNotFoundException`); one bounded rerun passed without code changes. JAR/log uploads succeeded; private packs were skipped.
-- Latest feature-code executable `f6400db90f81a4e33dd681e81ad141816c45090e` is fully public-CI green in **#972**, run `37157165558`, job `111302811813`. It qualifies the pinned transformed/world/block shader, instance color/light override, normalized XYZ diffuse, atlas/light/fog alpha separation, alpha discard, model/world matrices, mixed-axis cylindrical linear fog, per-draw dynamic UBO isolation, resize/zero count and frame-fence pipeline retirement. All nine raw attachment pixel cases and Vulkan synchronization validation passed, together with actual Flywheel CPU/lifetime checks and every existing public gate. JAR/log uploads succeeded; private packs were skipped. #971 used the deliberately opaque screenshot API in an alpha oracle; a test-only raw transfer corrected that fixture without changing production screenshots. Dynamic world/material rendering is still not adopted by the CPU-first Engine, and no InstanceWorld/backend adoption is enabled. No CI result remains pending for this atomic slice.
+- Prior shader qualification executable `f6400db90f81a4e33dd681e81ad141816c45090e` is fully public-CI green in **#972**, run `37157165558`, job `111302811813`. It qualifies the pinned transformed/world/block shader, instance color/light override, normalized XYZ diffuse, atlas/light/fog alpha separation, alpha discard, model/world matrices, mixed-axis cylindrical linear fog, per-draw dynamic UBO isolation, resize/zero count and frame-fence pipeline retirement. All nine raw attachment pixel cases and Vulkan synchronization validation passed, together with actual Flywheel CPU/lifetime checks and every existing public gate. JAR/log uploads succeeded; private packs were skipped. #971 used the deliberately opaque screenshot API in an alpha oracle; a test-only raw transfer corrected that fixture without changing production screenshots. This shader qualification is now integrated by the experimental constructor in #974; the default Engine remains CPU-first and no InstanceWorld/backend adoption is enabled. No CI result remains pending for this atomic slice.
 - Focused benchmark/optimization evidence: `docs/PERFORMANCE_BENCHMARK_OPTIMIZATION_2026-10-02.md`.
 - Previous mip-copy batching design/evidence: `docs/PERFORMANCE_TEXTURE_UPLOAD_BATCHING_2026-10-01.md`.
 
@@ -135,14 +135,17 @@ unavailable because the distribution download is network-blocked. All implementa
 is published and locally synchronized. No CI result is pending for this atomic slice;
 no measured hardware speedup is established.
 
-**Next implementation stage:** integrate the qualified transformed material pipeline
-with exact RenderType/sampler/depth/cull/blend state and origin-relative world-event
-matrices, retaining the actual CPU fallback and an explicit unsupported-case owner.
-Use the callable Engine/material APIs; do not enable Backend.isOn or register an
-InstanceWorld engine until world/event rendering and complete fallback coverage
-qualify. #968 covers material/source/origin ownership, #969 callable CPU transforms,
-#970 native CPU batch lifetime, and #972 transformed material pixels. The native
-pipeline remains separate from the CPU-first Engine.
+**Next implementation stage:** qualify actual ClientLevel/event rendering of the
+experimental transformed + CPU Engine, including exact world/task/origin ownership
+and mixed native/CPU material routing. The bounded native state/scene/material draw
+is green in #974; its pixel fixtures use synthetic atlas/lightmap images after real
+RenderType setup and do not establish loaded-world or portal rendering. Preserve the
+ordinary CPU-first constructor and existing working fallback. Do not enable
+Backend.isOn or register an InstanceWorld engine until world/event rendering and
+complete fallback coverage qualify. #968 covers material/source/origin ownership,
+#969 callable CPU transforms, #970 native CPU batch lifetime, #972 transformed
+shader pixels and #974 native state/event composition plus actual material drawing.
+Resource reload/re-entry remains deferred by the user, not completed by these fixtures.
 
 The CPU fallback qualifies exact owned built-in BlockModels with sequential quad
 topology and Batched numeric transforms. Its external unsupported interface has
@@ -160,8 +163,8 @@ The original GPU-offload investigation/implementation O1–O8 in
 `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` also remains in scope; existing terrain/
 indirect/hybrid infrastructure and paused Phase 7 gates must be preserved.
 
-The instance-input, ownership, callable CPU-engine/lifetime and native material
-shader slices are completed atomic milestones; no CI result is pending for these slices. Continue under AGENTS.md section 3A and this checkpoint. The full feature
+The instance-input, ownership, callable CPU-engine/lifetime, native material
+shader and experimental state/event dispatcher slices are completed atomic milestones; no CI result is pending for these slices. Continue under AGENTS.md section 3A and this checkpoint. The full feature
 request remains unfinished; do not convert prerequisite qualification into backend adoption.
 The matched hardware benchmark remains the independent next user-machine gate:
 

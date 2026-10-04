@@ -6,7 +6,7 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | --- | --- | --- |
 | Persistent compilation caches | Implemented SPIR-V and Vulkan driver cache persistence | Local contract and full CI #947 pass, including native persistence/reload; hardware hitch measurement pending |
 | Usage-driven animated textures | Implemented opt-in vanilla ticker gating and first-use refresh | Full CI #948 green on bounded retry; native clock/all-mip pixel oracle passed both attempts; GPU-only usage fallback added; custom raw-UV consumers and hardware adoption open |
-| Create/Flywheel Vulkan instancing | Input, shared-model import and transformed instance ownership implemented; engine/material/fallback routing pending | Full public CI #967 passed actual Flywheel CPU and native high-index/light/upload/retirement oracles; existing fallback remains active |
+| Create/Flywheel Vulkan instancing | Callable CPU Engine and experimental transformed material/state/event dispatch implemented; global adoption pending | Full public CI #974 passed actual material-to-native pixels and state/scene/lifetime checks; existing fallback remains active |
 | Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
 | Adaptive chunk scheduling | Implemented opt-in publication budget, configurable workers and frame-pressure permits | Local Java contract and full CI #950 passed, including real queue/worker smoke; hardware tuning open |
 | World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local contracts and full CI #954 passed; qualified Chunky install and actual user-world execution pending |
@@ -301,7 +301,7 @@ material shader and owner, not an installed engine or performance gain. Real wor
 and portal rendering, resource reload, custom programs, crumbling, translucent
 state/ordering and engine adoption remain open.
 
-## Experimental transformed state/event dispatcher (qualification pending)
+## Qualified experimental transformed state/event dispatcher (adoption pending)
 
 The callable Engine has an explicit transformed-rendering constructor option; its
 existing constructor remains CPU-first. Exact ModelType/TRANSFORMED, owned BlockModel
@@ -331,6 +331,16 @@ exercise six raw pixel frames for distant coordinates, nonzero event translation
 ignore-origin, all three admitted states, alpha, depth, backface cull, sampler repair
 and caller/failure restoration; the actual optional Flywheel fixture additionally
 draws MaterialManager -> Material -> ModelData -> lazy shared mesh -> textured pixel,
-retiring both owners while commands reference them. These new cases are pending full
-CI. Real ClientLevel Engine event dispatch, portal-world ownership, reload, crumbling,
+retiring both owners while commands reference them. #973 compiled/packaged and passed existing startup/indirect/post gates, but its
+new state fixture stopped before drawing because startup lacks the world atlas/lightmap.
+The follow-up validates those textures at the actual descriptor-consuming draw;
+missing production textures still reject, while the fixture supplies explicit
+synthetic images after real RenderType setup. Edge/gap probes additionally reject
+loss of distant fractional camera coordinates. Corrected executable
+`2a7fc3391ae6e11f5c5598d1f4127d78b64cd12f` passed full public **#974**, run
+`37183077787`, job `111379372847`: all six new native state/event frames, the actual
+pinned MaterialManager -> ModelData -> lazy shared mesh -> raw RGBA pixel and
+recorded-owner retirement fixture, synchronization validation, existing CPU fallback
+checks and every public gate passed. JAR/log uploads succeeded; private packs were
+skipped. There is no CI result pending for this bounded dispatcher slice. Real ClientLevel Engine event dispatch, portal-world ownership, reload, crumbling,
 translucent ordering and universal unsupported rendering remain open.
