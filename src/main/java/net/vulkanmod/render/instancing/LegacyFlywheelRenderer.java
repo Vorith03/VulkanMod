@@ -82,7 +82,7 @@ public final class LegacyFlywheelRenderer implements AutoCloseable {
     }
 
     /** Only fields touched by the admitted vanilla states; stencil/scissor/target ownership stays with caller. */
-    private static final class State {
+    static final class State {
         final boolean cull=VRenderSystem.cull, depth=VRenderSystem.depthTest, mask=VRenderSystem.depthMask;
         final int depthFunction=VRenderSystem.depthFun, colorMask=VRenderSystem.colorMask;
         final PipelineState.BlendInfo blend=PipelineState.blendInfo;

@@ -345,7 +345,7 @@ checks and every public gate passed. JAR/log uploads succeeded; private packs we
 skipped. There is no CI result pending for this bounded dispatcher slice. Real ClientLevel Engine event dispatch, portal-world ownership, reload, crumbling,
 translucent ordering and universal unsupported rendering remain open.
 
-## Pre-camera CPU event precision (CI pending)
+## Qualified pre-camera CPU event precision
 
 The previous CPU Engine copied InstanceWorld's already camera-translated float
 stack and then added the integer origin. At distant coordinates this cannot recover
@@ -361,5 +361,39 @@ ownership. Its actual pinned event fixture uses a null world strictly for numeri
 tests: a rotated pose at 30 million blocks exposes the old float precision loss and
 checks fractional translation, normal/caller/copy isolation, missing/nonfinite
 inputs, exact world isolation, two-owner retirement and disabled capture. Focused
-local contracts pass; the new mixin/event fixture requires full CI. This closes
-no loaded ClientLevel or portal gate by itself.
+local contracts pass. Executable `3e71a7eda3d3edd3dc40a9afdc425dcf2a6eda38`
+passed full public CI #975, run `37220910466`, job `111490885523`, including the
+actual optional constructor/mixin and numeric fixture, all existing native pixels,
+combined compatibility and distributable/log uploads. Private packs were skipped.
+This closes no loaded ClientLevel or portal gate by itself.
+
+## Opt-in loaded-world Engine probe (runtime evidence pending)
+
+`-Dvulkanmod.flywheelWorldProbe=true` enables one ClientTick END probe after a real
+ClientLevel/player and solid shader are ready, between renderer frames. It creates
+an explicitly callable transformed + CPU Engine scoped to the actual level, loads
+exact ModelType and OrientedType through its MaterialManager defaults and draws two
+isolated offscreen frames. A synthetic camera at 30 million blocks and a second
+origin 201 blocks away test fractional GPU/CPU alignment and recreation listeners.
+The real pinned RenderLayerEvent is constructed before InstanceWorld's camera-stack
+translation is reproduced. Foreign task/world and crumbling events reject before
+drawing; caller pose/view-projection and routing counters are checked.
+
+The probe uses synthetic white atlas/lightmap images under the actual loaded
+texture identities, retaining/restoring the original images and caller shader,
+fixed sampler, blend/depth/cull/write, stencil enable, projection/model-view, fog,
+shader color and chunk offset state. Its expected raw RGBA pixels distinguish GPU
+ModelData from real CPU Batched OrientedData, including constant-ambient shading.
+The test alone waits for GPU completion and performs raw readback. Normal gameplay
+has a constant false property guard and never enters this path. It does not change
+player position, world contents, Backend availability or InstanceWorld registration.
+A pass establishes this bounded Engine/event/mixed-routing case; real atlas model
+parity, portals, reload, crumbling, translucency and custom programs remain separate.
+
+To collect the new runtime evidence, add `-Dvulkanmod.flywheelWorldProbe=true
+-Dvulkanmod.validation=true` to JVM arguments and open an existing world with
+Flywheel 0.6 installed. After about one second of world ticks, two test frames run
+and ordinary play resumes. Search latest.log for `Flywheel loaded-world probe
+passed` or `Flywheel loaded-world probe failed`, and retain both latest.log and
+debug.log. This probe is not run by startup-only CI; compilation/default startup
+checks do not constitute a loaded-world pass. Full CI for this addition is pending.

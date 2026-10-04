@@ -86,10 +86,11 @@ public final class LegacyFlywheelNativeSmokeTest {
         }
         Initializer.LOGGER.info("Flywheel native material dispatch smoke passed: actual manager/material/model supplier, ModelData numeric snapshot, lazily uploaded shared mesh, textured native pixels and recorded-owner retirement; backend remains off");
     }
-    private static Object model(ClassLoader loader) {
+    static Object model(ClassLoader loader) { return model(loader,1,1); }
+    static Object model(ClassLoader loader,float halfWidth,float halfHeight) {
         ByteBuffer vertices=MemoryUtil.memCalloc(128),indices=MemoryUtil.memAlloc(24);
         try {
-            float[][] positions={{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}};
+            float[][] positions={{-halfWidth,-halfHeight,0},{halfWidth,-halfHeight,0},{halfWidth,halfHeight,0},{-halfWidth,halfHeight,0}};
             for(int v=0;v<4;v++) {
                 for(int axis=0;axis<3;axis++) vertices.putFloat(v*32+axis*4,positions[v][axis]);
                 vertices.putFloat(v*32+16,0.5f); vertices.putFloat(v*32+20,0.5f); vertices.put(v*32+29,(byte)127);
