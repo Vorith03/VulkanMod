@@ -82,7 +82,7 @@ final class PipelineVariantPrewarmer {
             Variant variant = Variant.capture(state, topology, depthClamp);
             if(!variant.valid()) return;
             int old = observed.indexOf(variant);
-            if(old == observed.size() - 1) return;
+            if(old >= 0 && old == observed.size() - 1) return;
             if(old >= 0) observed.remove(old);
             else if(observed.size() >= MAX_VARIANTS) observed.remove(0);
             observed.add(variant);

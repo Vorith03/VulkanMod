@@ -5,6 +5,7 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | Feature | Implementation state | Validation/adoption |
 | --- | --- | --- |
 | Persistent compilation caches | Implemented SPIR-V and Vulkan driver cache persistence | Local contract and full CI #947 pass, including native persistence/reload; hardware hitch measurement pending |
+| Observed graphics pipeline prewarming | Implemented opt-in bounded history and compatible native replay | Baseline full public CI #984 green; cold-recording fix and required native replay/pixel gate pending full CI; hardware hitch measurement open |
 | Usage-driven animated textures | Implemented opt-in vanilla ticker gating and first-use refresh | Full CI #948 green on bounded retry; native clock/all-mip pixel oracle passed both attempts; GPU-only usage fallback added; custom raw-UV consumers and hardware adoption open |
 | Create/Flywheel Vulkan instancing | Callable CPU Engine and experimental transformed material/state/event dispatch implemented; global adoption pending | Full public CI #974 passed actual material-to-native pixels and state/scene/lifetime checks; existing fallback remains active |
 | Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
@@ -24,7 +25,52 @@ Vulkan pipeline persistence includes vendor/device, driver/API version and pipel
 
 Cache entries carry a version, embedded key, byte length and SHA-256 checksum; writes use temporary files and atomic replacement when supported. Per-process admission caps: SPIR-V 4 MiB/entry, 64 MiB/2048 entries; driver cache 32 MiB/entry, 64 MiB/16 entries. A full cache refuses new entries rather than evicting while rendering. Separate game processes can race admission; these are application admission limits, not a global filesystem quota. Cache I/O failure warns once and uses ordinary compilation. No quality or simulation changes occur.
 
-This slice does not yet prewarm graphics pipeline variants: persistence alone does not reconstruct render-pass/descriptor/state identities. That requires observed-variant ownership and reload-safe replay. It does not claim measured startup/hitch/FPS gains.
+Persistent compilation caching alone does not reconstruct graphics pipeline variants.
+The separate observed-state implementation below supplies opt-in replay. Neither
+feature has measured hardware startup/hitch/FPS gains.
+
+## Observed graphics pipeline prewarming
+
+The implementation through `e56837a6c14fd9219f4834470c3c5124513c0b5e` passed full
+public CI #984, run `37247832350`, job `111569282360`. Private real-pack gates were
+skipped. It defaults off; enable with `-Dvulkanmod.pipelineVariantPrewarm=true`.
+`persistentCompilationCache=false` also disables history. Disabled production draws
+do not record variants or sample the prewarming clock.
+
+Each history is identified by both effective SPIR-V byte streams and the complete
+vertex/instance layouts. It records at most 32 used pipeline states, including
+topology, depth clamp, cull, blend, depth, logic, color mask, stencil and attachment
+formats. The versioned/checksummed disk cache has 8 KiB entry and 4 MiB/512 entry
+admission caps. No native handle survives serialization. Replay uses the live
+compatible render pass and requires matching cull/depth-clamp boundaries. The lazy
+requested pipeline remains authoritative; optional replay failure warns once.
+
+`pipelineVariantPrewarmMaxVariants` defaults 4 (clamped 1–16);
+`pipelineVariantPrewarmBudgetMs` defaults 2 (clamped 0.1–20). This is an admission
+budget checked between synchronous driver calls; one pipeline compilation can
+exceed it. It is not a guaranteed frame-time deadline. Only the newest matching
+bounded subset is attempted per compatibility boundary. History is persisted at
+pipeline cleanup, outside the per-draw recording path.
+
+Continuation review exposed a cold-history bug: `indexOf` returned -1 and the last
+index of an empty history was also -1, causing the first observation to be skipped.
+The fix requires an existing index before taking the already-newest early return.
+The Java 17 contract now passes cold disk persistence, exact state/hash replay,
+shader/layout identity and cursor isolation, live-pass replacement, cull/depth-clamp/
+format boundaries, 32-record/4-replay bounds, malformed codec records, disk corruption
+and disabled admission. It runs actual prewarmer/state/cache code with only external
+loader/device surroundings stubbed. Local Gradle remains unavailable because the
+distribution download is network-blocked; no local packaged/native pass is claimed.
+
+The screenshot CI launch explicitly enables prewarming and a 20 ms admission
+budget. Its new required fixture seeds red-mask/line/ordinary variants, persists
+them, recreates the pipeline, and checks that native handles exist before those
+alternative states are requested. Exact subsequent keys must reuse those handles;
+red/white attachment pixels and compatible target resize must remain correct.
+Codec/identity/bounds are also checked against actual loaded types. Full CI for this
+fix/oracle is pending. General public startup success alone does not prove replay.
+Representative RX hitch measurements, loaded-world/reload adoption and pipeline
+compile-time scheduling remain open. The feature stays off by default.
 
 ## Usage-driven animated textures
 
@@ -396,4 +442,6 @@ Flywheel 0.6 installed. After about one second of world ticks, two test frames r
 and ordinary play resumes. Search latest.log for `Flywheel loaded-world probe
 passed` or `Flywheel loaded-world probe failed`, and retain both latest.log and
 debug.log. This probe is not run by startup-only CI; compilation/default startup
-checks do not constitute a loaded-world pass. Full CI for this addition is pending.
+checks do not constitute a loaded-world pass. Compilation and public default
+startup for the Camera method-name correction and this addition passed #984;
+loaded-world probe evidence remains pending.
