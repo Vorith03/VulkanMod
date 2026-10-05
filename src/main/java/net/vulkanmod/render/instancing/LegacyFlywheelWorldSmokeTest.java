@@ -132,7 +132,7 @@ public final class LegacyFlywheelWorldSmokeTest {
             var camera=new ProbeCamera();
             for(int pass=0;pass<2;pass++) {
                 double x=30_000_000.25-pass*201,y=-299.5,z=-29_999_999.875;
-                camera.move(x,y,z); engine.beginFrame(camera);
+                camera.position(x,y,z); engine.beginFrame(camera);
                 PoseStack stack=new PoseStack();
                 Object event=eventConstructor.newInstance(minecraft.level,RenderType.solid(),stack,minecraft.renderBuffers(),x,y,z);
                 Matrix4f preCamera=new Matrix4f(stack.last().pose()); stack.translate(-x,-y,-z);
@@ -188,5 +188,5 @@ public final class LegacyFlywheelWorldSmokeTest {
         for(int i=0;i<4;i++) if(Math.abs((actual >>> (i*8) & 255)-expected[i])>1)
             throw new AssertionError(String.format("World Engine pixel expected %s got %08x",java.util.Arrays.toString(expected),actual));
     }
-    private static final class ProbeCamera extends Camera { void move(double x,double y,double z) { setPosition(x,y,z); } }
+    private static final class ProbeCamera extends Camera { void position(double x,double y,double z) { setPosition(x,y,z); } }
 }
