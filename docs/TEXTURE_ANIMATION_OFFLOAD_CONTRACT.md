@@ -13,7 +13,11 @@ select upload paths, advance a game ticker, or authorize a custom source.
 `animation-oracle-contract.py` checks explicit alpha/rounding/clock/mip vectors.
 `SpriteAnimationSmokeTest` runs the actual transformed Forge ticker and compares
 both ordinary uploads and hidden/first-use refresh against independent numeric
-pixels, clocks and staging cadence. Qualification is pending the next CI run.
+pixels, clocks and staging cadence. Full public CI #988 passed on its first attempt (run `37372339264`, executable
+`3d01d50a6e73fc84f0daec067d248000f65d3d16`). Every existing public gate and
+JAR/log upload passed; private real-pack fixtures were skipped. Local boundary
+vectors also reject deliberately interpolated alpha, integer lerp and late frame
+transition implementations.
 
 Cases cover reordered/repeated indices and mixed durations; discrete and
 interpolated tickers; a rectangular sheet with odd tile width and multiple rows;
@@ -22,7 +26,8 @@ mip; Forge zero-extent mip guards; and a subclass that must keep CPU uploads.
 Source mip pixels are authoritative inputs, so passing this oracle does not
 qualify replacing Forge's mip-generation algorithm.
 
-Expected pinned behavior to verify in generated source and runtime:
+Pinned behavior confirmed by the actual runtime oracle and inspected transformed
+SpriteContents/Ticker/InterpolationData bytecode:
 
 - Frame position is the ordinal in the resolved metadata list, not the sheet
   index. Each call increments subFrame once. At its duration boundary, advance
@@ -46,9 +51,21 @@ Expected pinned behavior to verify in generated source and runtime:
   materializes the current frame/subframe without advancing that clock.
   Custom subclasses and non-null Forge texture metadata stay on the CPU path.
 
-CI records available Forge-generated SpriteContents source with a SHA256 and
-archives transformed SpriteContents/Ticker/InterpolationData bytecode. The
-source hash identifies evidence, not an optimization eligibility certificate.
+CI attempts to record available Forge-generated SpriteContents source with a
+SHA256 and archives transformed SpriteContents/Ticker/InterpolationData bytecode.
+The generated source archive was unavailable in #988. Its downloaded smoke-log
+artifact includes all three bytecode dumps, which were inspected directly:
+metadata filtering/default enumeration; tick increment/duration comparison and
+wrapping; shifted base-frame mip offsets/positive-size guards; current alpha;
+double multiply/add followed by d2i truncation; and the exact-class/Forge metadata
+exclusion. The InterpolationData javap SHA256 is
+`340af8fd13b1238abb298f23e6f55d29539acd1dd70aaca2958445913054b1e9`.
+
+Qualification is confined to the render thread. The pinned ticker queues a
+RenderSystem render call when interpolation is invoked off-thread; that call
+uses the ticker at execution time. An offload adapter must establish equivalent
+thread/clock ownership before claiming to replace that route. The numeric
+reference does not qualify off-thread timing or third-party ticker mixins.
 
 ## Source eligibility and lifetime
 

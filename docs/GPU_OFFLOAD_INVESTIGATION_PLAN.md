@@ -109,7 +109,9 @@ Implement a versioned bounded numeric state buffer, spawn/removal protocol and i
 | O7 | Existing hybrid meshing RX qualification, then measured adapters | O6 where dependent; model/output ownership contracts |
 | O8 | Particle owner/cost report, then one qualified rendering/simulation pilot | Particle evidence selects target; no generic simulation replacement |
 
-O1/O2 are the next actions. Texture O3/O4 may be accepted independently; O4 is not required if resident copies resolve the bottleneck. Terrain and particles are conditional tracks. No calendar or numerical speedup promise is attached to this plan.
+O2 bounded numeric-reference and ownership-contract work is qualified in full public CI **#988** (executable `3d01d50a6e73fc84f0daec067d248000f65d3d16`). `TEXTURE_ANIMATION_OFFLOAD_CONTRACT.md` records exact transformed Forge behavior, seven native cases and inspected bytecode. Source immutability/admission and the production copy/compute ABI remain unimplemented; no renderer default or hardware adoption gate changed.
+
+O1 is the next hardware action; O2 production source admission remains open. Texture O3/O4 may be accepted independently; O4 is not required if resident copies resolve the bottleneck. Terrain and particles are conditional tracks. No calendar or numerical speedup promise is attached to this plan.
 
 ## Primary Vulkan references checked 2026-10-02
 

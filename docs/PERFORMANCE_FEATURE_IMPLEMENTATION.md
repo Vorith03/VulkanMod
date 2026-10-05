@@ -13,6 +13,7 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | World pregeneration tooling | Implemented offline dimension/region command generation and review plan | Local contracts and full CI #954 passed; qualified Chunky install and actual user-world execution pending |
 | Separate-server tooling | Implemented strict mod/config parity audit and copied deployment staging | Local contracts and full CI #954 passed; matching real server distribution and user-world/host deployment pending |
 | Render scaling/upscaling | Implemented opt-in bilinear world scaling with native GUI | Full CI #961 passed native pixel/depth/effect and transformed boundary checks, plus original IP redirect preservation; loaded-world/hardware adoption pending |
+| GPU texture animation | O2 diagnostic numeric reference and source ownership contract | Full public CI #988 passed seven exact Forge/native cases; resident copies/compute remain unimplemented; matched RX O1 gate open |
 | Far-terrain LOD | Pending DH numeric-data/Vulkan rendering adapter | DH currently does not work; suppression is not LOD support |
 
 ## Compilation caches
