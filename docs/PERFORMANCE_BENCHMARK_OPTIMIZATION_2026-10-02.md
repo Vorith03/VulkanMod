@@ -4,7 +4,7 @@
 
 This pass is based on the user's fixed 180-second RX 6900 XT / RADV automated benchmark of build #935, executable commit `48b0f06b4c36b01ead161b05c18da8688d8a637f`.
 
-The run preserved the canonical stationary contract: fixed world/camera, stable framebuffer, render distance 16 / simulation distance 12, FPS cap 260, vsync off, and the same profiler/terrain configuration used for build #932.
+The run preserved the canonical stationary contract: fixed world/camera, stable framebuffer, render distance 16 / simulation distance 12, Max Framerate Unlimited (raw option value 260), vsync off, and the same profiler/terrain configuration used for build #932.
 
 Final benchmark aggregates:
 

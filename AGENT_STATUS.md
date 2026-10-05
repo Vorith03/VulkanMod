@@ -29,6 +29,8 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Build #935 RX benchmark — authoritative current performance evidence
 
+Frame-limit provenance correction (2026-10-05): the user has never enabled a 260 FPS cap. `config/Options.java` maps raw value **260** to **Unlimited**. The historical profiler field `fps_cap` prints `options.framerateLimit().get()` directly, so `fps_cap=260` records the Unlimited option and must not be interpreted as an active cap. The #825/#932/#935 comparison settings and next #946 capture remain **Unlimited**, with VSync off. Preserve the user’s existing setting; prior notes describing a 260 FPS cap were corrected. No executable or benchmark measurement changed.
+
 The fixed automated stationary benchmark completed cleanly for **180.003 s** on the user's RX 6900 XT / RADV Create Chronicles setup with unchanged camera/framebuffer and the canonical benchmark configuration.
 
 Final aggregates:

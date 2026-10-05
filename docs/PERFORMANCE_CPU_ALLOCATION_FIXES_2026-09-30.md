@@ -68,8 +68,8 @@ smokes do not exercise in-world neighbor arrival/unload scheduling.
 ## Next measurement
 
 Use one new automated stationary capture containing both these fixes and #830's
-tick leaf attribution, with the same #825 world/view/framebuffer/settings and 260
-FPS cap. Inspect leaf wall time/allocation first; separately compare terrain
+tick leaf attribution, with the same #825 world/view/framebuffer/settings and Max Framerate
+Unlimited (raw option value 260). Inspect leaf wall time/allocation first; separately compare terrain
 scheduling growth and tick-local versus outside-tick allocation. Preserve the
 formal Phase 5 matched-baseline gates and do not infer pooled percentiles from
 window summaries. Entity behavior, callback skipping, texture animation rates,

@@ -73,7 +73,7 @@ The defaults still target world `VulkanMod Benchmark`, Overworld position `0 192
 
 Return the generated `logs/vulkanmod-performance-benchmark-*.log`. `latest.log` is needed only if automation aborts or another runtime problem appears.
 
-This is still a diagnostic run, not the formal matched Phase 5 OpenGL/Vulkan baseline. The #825 capture used a 260 FPS cap and does not establish complete baseline provenance; preserve its settings for this attribution rerun rather than silently converting the experiment into a different benchmark.
+This is still a diagnostic run, not the formal matched Phase 5 OpenGL/Vulkan baseline. The #825 capture used Max Framerate Unlimited (raw option value 260) and does not establish complete baseline provenance; preserve its settings for this attribution rerun rather than silently converting the experiment into a different benchmark.
 
 ## Decision tree after the capture
 
