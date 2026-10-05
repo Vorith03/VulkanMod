@@ -167,10 +167,16 @@ public final class PipelineVariantPrewarmSmokeTest {
         // A bad enum skips only that record; valid neighbors survive.
         corrupt=bytes.clone(); ByteBuffer.wrap(corrupt).order(ByteOrder.LITTLE_ENDIAN).putInt(12+5*4,Integer.MAX_VALUE);
         check(((List<?>)decode.invoke(null,(Object)corrupt)).size()==31,"Bad topology poisoned valid history");
-        check(session.replays(state,true).isEmpty(),"Depth-clamp boundary crossed");
-        var replays=session.replays(state,false);
+        // Replay reads the immutable history loaded at session creation, never this
+        // session's newly recorded observations. Reconstruct the decoded session
+        // without persisting the codec-only states into the native oracle's key.
+        var constructor=session.getClass().getDeclaredConstructor(byte[].class,List.class);
+        constructor.setAccessible(true);
+        var restored=(PipelineVariantPrewarmer.Session)constructor.newInstance(identity,decode.invoke(null,(Object)bytes));
+        check(restored.replays(state,true).isEmpty(),"Depth-clamp boundary crossed");
+        var replays=restored.replays(state,false);
         check(!replays.isEmpty() && replays.size()<=4,"Replay count is not bounded");
-        check(session.replays(state,false).isEmpty(),"Boundary replayed twice");
+        check(restored.replays(state,false).isEmpty(),"Boundary replayed twice");
         for(var replay:replays) check(replay.state().renderPass==state.renderPass,"Retired render-pass owner replayed");
         // This independent codec session is never persisted into the native oracle's key.
     }
