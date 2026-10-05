@@ -69,10 +69,11 @@ public class GraphicsPipeline extends Pipeline {
             PipelineState defaultState = new PipelineState(
                     DEFAULT_BLEND_STATE, DEFAULT_DEPTH_STATE, DEFAULT_LOGICOP_STATE,
                     DEFAULT_COLORMASK, builder.renderPass, DEFAULT_STENCIL_STATE);
+            boolean depthClamp = DepthClampState.isEnabled();
             graphicsPipelines.computeIfAbsent(
-                    new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, DepthClampState.isEnabled()),
+                    new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, depthClamp),
                     this::createGraphicsPipeline);
-            variantHistory.observe(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+            variantHistory.observe(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, depthClamp);
         }
 
         createDescriptorSets(Vulkan.getSwapChainImages().size());
@@ -105,14 +106,14 @@ public class GraphicsPipeline extends Pipeline {
             handle = createGraphicsPipeline(key);
             graphicsPipelines.put(key, handle);
             // Recording is cold-path only: never allocate/search history on ordinary cache hits.
-            variantHistory.observe(state, topology);
+            variantHistory.observe(state, topology, depthClamp);
         }
 
         if(prewarmEnabled && System.nanoTime() - startNanos < PipelineVariantPrewarmer.prewarmBudgetNanos()) {
             int replayed = 0;
-            for(PipelineVariantPrewarmer.Replay replay : variantHistory.replays(state)) {
+            for(PipelineVariantPrewarmer.Replay replay : variantHistory.replays(state, depthClamp)) {
                 if(System.nanoTime() - startNanos >= PipelineVariantPrewarmer.prewarmBudgetNanos()) break;
-                PipelineKey replayKey = new PipelineKey(replay.state(), replay.topology(), depthClamp);
+                PipelineKey replayKey = new PipelineKey(replay.state(), replay.topology(), replay.depthClamp());
                 if(graphicsPipelines.containsKey(replayKey)) continue;
                 try {
                     graphicsPipelines.put(replayKey, createGraphicsPipeline(replayKey));
