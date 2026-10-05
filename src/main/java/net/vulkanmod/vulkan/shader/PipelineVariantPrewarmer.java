@@ -55,12 +55,13 @@ final class PipelineVariantPrewarmer {
 
     static Session open(ByteBuffer vertexSpirv, ByteBuffer fragmentSpirv,
                         VertexFormat vertexFormat, InstanceVertexFormat instanceFormat) {
+        // The experimental feature owns all history work. Disabled production paths do
+        // not hash shader inputs, touch the filesystem, or allocate a history session.
+        if(!PREWARM_ENABLED || !CompilationCache.enabled()) return null;
         byte[] key = identity(vertexSpirv, fragmentSpirv, vertexFormat, instanceFormat);
-        List<Variant> loaded = CompilationCache.enabled() ? read(key) : List.of();
-        return new Session(key, loaded);
+        return new Session(key, read(key));
     }
 
-    static boolean prewarmEnabled() { return PREWARM_ENABLED; }
     static long prewarmBudgetNanos() { return PREWARM_BUDGET_NANOS; }
 
     static final class Session {
@@ -89,8 +90,7 @@ final class PipelineVariantPrewarmer {
         }
 
         List<Replay> replays(PipelineState current, boolean depthClamp) {
-            if(!PREWARM_ENABLED || loaded.isEmpty() || current == null || current.renderPass == null)
-                return List.of();
+            if(loaded.isEmpty() || current == null || current.renderPass == null) return List.of();
             Pass pass = Pass.capture(current);
             ReplayBoundary boundary = new ReplayBoundary(pass, current.cullState, depthClamp);
             if(!attempted.add(boundary)) return List.of();
