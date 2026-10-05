@@ -227,6 +227,9 @@ case "$mode" in
     python3 scripts/ci/render-scale-hook-contract.py vulkan-render-scale-gamerenderer.javap
     grep -F "Packed texture upload Vulkan smoke passed" vulkan-screenshot-smoke.log
     grep -F "Sprite usage animation smoke passed" vulkan-screenshot-smoke.log
+    for animation_type in SpriteContents 'SpriteContents$Ticker' 'SpriteContents$InterpolationData'; do
+      javap -c -p "run/.mixin.out/class/net/minecraft/client/renderer/texture/${animation_type}.class" > "vulkan-animation-${animation_type}.javap"
+    done
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-screenshot-smoke.log; then
       echo "Screenshot readback smoke produced invalid Vulkan" >&2
       exit 1
