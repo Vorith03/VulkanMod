@@ -33,6 +33,7 @@ public class GraphicsPipeline extends Pipeline {
     private final Map<PipelineKey, Long> graphicsPipelines = new HashMap<>();
     private final VertexFormat vertexFormat;
     private final InstanceVertexFormat instanceFormat;
+    private final PipelineVariantPrewarmer.Session variantHistory;
 
     private long vertShaderModule = 0;
     private long fragShaderModule = 0;
@@ -53,6 +54,9 @@ public class GraphicsPipeline extends Pipeline {
         this.pushConstants = builder.pushConstants;
         this.vertexFormat = builder.vertexFormat;
         this.instanceFormat = builder.instanceFormat;
+        this.variantHistory = PipelineVariantPrewarmer.open(
+                builder.vertShaderSPIRV.bytecode(), builder.fragShaderSPIRV.bytecode(),
+                this.vertexFormat, this.instanceFormat);
 
         // Reject unsupported instance input before creating any owned native resource.
         if(instanceFormat != null) validateInstanceFormat();
@@ -90,9 +94,35 @@ public class GraphicsPipeline extends Pipeline {
     public long getHandle(PipelineState state) {
         int topology = REQUESTED_TOPOLOGY.get();
         REQUESTED_TOPOLOGY.set(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        return graphicsPipelines.computeIfAbsent(
-                new PipelineKey(state, topology, DepthClampState.isEnabled()),
-                this::createGraphicsPipeline);
+        boolean depthClamp = DepthClampState.isEnabled();
+        PipelineKey key = new PipelineKey(state, topology, depthClamp);
+        long startNanos = System.nanoTime();
+
+        Long handle = graphicsPipelines.get(key);
+        if(handle == null) {
+            handle = createGraphicsPipeline(key);
+            graphicsPipelines.put(key, handle);
+        }
+
+        variantHistory.observe(state, topology);
+        if(PipelineVariantPrewarmer.prewarmEnabled()
+                && System.nanoTime() - startNanos < PipelineVariantPrewarmer.prewarmBudgetNanos()) {
+            int replayed = 0;
+            for(PipelineVariantPrewarmer.Replay replay : variantHistory.replays(state)) {
+                if(System.nanoTime() - startNanos >= PipelineVariantPrewarmer.prewarmBudgetNanos()) break;
+                PipelineKey replayKey = new PipelineKey(replay.state(), replay.topology(), depthClamp);
+                if(graphicsPipelines.containsKey(replayKey)) continue;
+                try {
+                    graphicsPipelines.put(replayKey, createGraphicsPipeline(replayKey));
+                    replayed++;
+                } catch(RuntimeException failure) {
+                    variantHistory.replayFailed(failure);
+                    break;
+                }
+            }
+            variantHistory.replayed(replayed);
+        }
+        return handle;
     }
 
     private long createGraphicsPipeline(PipelineKey key) {
@@ -425,6 +455,8 @@ public class GraphicsPipeline extends Pipeline {
     }
 
     public void cleanUp() {
+        variantHistory.persist();
+
         vkDestroyShaderModule(Device.device, vertShaderModule, null);
         vkDestroyShaderModule(Device.device, fragShaderModule, null);
 
