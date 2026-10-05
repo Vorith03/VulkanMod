@@ -5,7 +5,7 @@ The owner authorized implementation of the complete research shortlist on 2026-1
 | Feature | Implementation state | Validation/adoption |
 | --- | --- | --- |
 | Persistent compilation caches | Implemented SPIR-V and Vulkan driver cache persistence | Local contract and full CI #947 pass, including native persistence/reload; hardware hitch measurement pending |
-| Observed graphics pipeline prewarming | Implemented opt-in bounded history and compatible native replay; immutable retirement-safe state keys | Baseline full public CI #984 green; cold-recording/resize fixes and required native replay/pixel gate pending #987; hardware hitch measurement open |
+| Observed graphics pipeline prewarming | Implemented opt-in bounded history and compatible native replay; immutable retirement-safe state keys | Full public CI #987 attempt 2 passed cold persistence, exact native keys, replayed pixels and resize reuse; hardware hitch measurement open |
 | Usage-driven animated textures | Implemented opt-in vanilla ticker gating and first-use refresh | Full CI #948 green on bounded retry; native clock/all-mip pixel oracle passed both attempts; GPU-only usage fallback added; custom raw-UV consumers and hardware adoption open |
 | Create/Flywheel Vulkan instancing | Callable CPU Engine and experimental transformed material/state/event dispatch implemented; global adoption pending | Full public CI #974 passed actual material-to-native pixels and state/scene/lifetime checks; existing fallback remains active |
 | Entity/block-entity occlusion | Optional EntityCulling bridge preserves original cancellation and uncertain-view visibility | Full CI #952 passed pinned Forge 1.7.2 native dispatch and corrected hook-order oracle; installed user version and hardware effectiveness unknown |
@@ -81,7 +81,14 @@ RenderPass representative for subsequent native creation. It fixes ordinary lazy
 pipeline caching as well as experimental replay. Local Java checks pass stable
 hash/equality and HashMap handle reuse after retirement; the same regression oracle
 fails against the former PipelineState. Full public CI **#987**, run `37356098042`,
-is pending for the corrected slice. General public startup success alone does not prove replay.
+attempt 2, job `111922107549`, passed the corrected slice: Java contracts, persisted
+native replay/exact mask/topology handles, red/white pixels and compatible resize,
+synchronization validation, every existing public gate and JAR/log uploads.
+Private real-pack fixtures were skipped. Attempt 1 emitted successful depth
+rendering/submission markers, then timed out after the pass with exit 124; one
+bounded unchanged rerun passed. No native backtrace establishes the post-pass stall's
+cause, and this does not resolve the independent #801 shutdown/native abort.
+No CI remains pending for this atomic slice. General public startup success alone does not prove replay.
 Representative RX hitch measurements, loaded-world/reload adoption and pipeline
 compile-time scheduling remain open. The feature stays off by default.
 
