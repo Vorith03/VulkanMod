@@ -30,15 +30,15 @@ import static org.lwjgl.vulkan.VK10.*;
  * smoke-test launches enable replay so CI can exercise cached-state reconstruction.</p>
  */
 final class PipelineVariantPrewarmer {
-    private static final int MAGIC = 0x56505631; // VPV1
-    private static final int VERSION = 1;
+    private static final int MAGIC = 0x56505632; // VPV2
+    private static final int VERSION = 2;
     private static final int MAX_VARIANTS = 32;
-    private static final int RECORD_INTS = 27;
+    private static final int RECORD_INTS = 28;
     private static final int HEADER_BYTES = 12;
     private static final int RECORD_BYTES = RECORD_INTS * Integer.BYTES;
     private static final int MAX_ENTRY_BYTES = HEADER_BYTES + MAX_VARIANTS * RECORD_BYTES;
     private static final BoundedDiskCache CACHE = new BoundedDiskCache(
-            FMLPaths.GAMEDIR.get().resolve("cache/vulkanmod/pipeline-variants-v1"),
+            FMLPaths.GAMEDIR.get().resolve("cache/vulkanmod/pipeline-variants-v2"),
             8 * 1024, 4L * 1024 * 1024, 512);
     private static final AtomicBoolean WARNED_IO = new AtomicBoolean();
     private static final AtomicBoolean WARNED_REPLAY = new AtomicBoolean();
@@ -76,9 +76,9 @@ final class PipelineVariantPrewarmer {
             this.observed = new ArrayList<>(loaded);
         }
 
-        void observe(PipelineState state, int topology) {
+        void observe(PipelineState state, int topology, boolean depthClamp) {
             if(!CompilationCache.enabled() || state == null || state.renderPass == null) return;
-            Variant variant = Variant.capture(state, topology);
+            Variant variant = Variant.capture(state, topology, depthClamp);
             if(!variant.valid()) return;
             int old = observed.indexOf(variant);
             if(old == observed.size() - 1) return;
@@ -88,19 +88,20 @@ final class PipelineVariantPrewarmer {
             dirty = true;
         }
 
-        List<Replay> replays(PipelineState current) {
+        List<Replay> replays(PipelineState current, boolean depthClamp) {
             if(!PREWARM_ENABLED || loaded.isEmpty() || current == null || current.renderPass == null)
                 return List.of();
             Pass pass = Pass.capture(current);
-            ReplayBoundary boundary = new ReplayBoundary(pass, current.cullState);
+            ReplayBoundary boundary = new ReplayBoundary(pass, current.cullState, depthClamp);
             if(!attempted.add(boundary)) return List.of();
 
             ArrayList<Replay> result = new ArrayList<>(Math.min(PREWARM_MAX, loaded.size()));
             for(int i = loaded.size() - 1; i >= 0 && result.size() < PREWARM_MAX; --i) {
                 Variant variant = loaded.get(i);
-                if(variant.cull != current.cullState || !variant.pass.equals(pass)) continue;
+                if(variant.depthClamp != depthClamp || variant.cull != current.cullState
+                        || !variant.pass.equals(pass)) continue;
                 PipelineState state = variant.replay(current);
-                if(state != null) result.add(new Replay(state, variant.topology));
+                if(state != null) result.add(new Replay(state, variant.topology, variant.depthClamp));
             }
             return result;
         }
@@ -108,8 +109,7 @@ final class PipelineVariantPrewarmer {
         void persist() {
             if(!dirty || !CompilationCache.enabled() || observed.isEmpty()) return;
             try {
-                CACHE.write(key, encode(observed));
-                dirty = false;
+                if(CACHE.write(key, encode(observed))) dirty = false;
             } catch(IOException | RuntimeException failure) {
                 warnIo(failure);
             }
@@ -127,8 +127,8 @@ final class PipelineVariantPrewarmer {
         }
     }
 
-    record Replay(PipelineState state, int topology) {}
-    private record ReplayBoundary(Pass pass, boolean cull) {}
+    record Replay(PipelineState state, int topology, boolean depthClamp) {}
+    private record ReplayBoundary(Pass pass, boolean cull, boolean depthClamp) {}
 
     private record Pass(boolean hasColor, int colorFormat, boolean hasDepth, int depthFormat,
                         boolean hasStencil) {
@@ -149,7 +149,7 @@ final class PipelineVariantPrewarmer {
     }
 
     private record Variant(
-            Pass pass, int topology, boolean cull,
+            Pass pass, int topology, boolean depthClamp, boolean cull,
             boolean blendEnabled, int srcRgb, int dstRgb, int srcAlpha, int dstAlpha, int blendOp,
             boolean depthTest, boolean depthMask, int depthFunction,
             boolean logicEnabled, int logicOp, int colorMask,
@@ -157,8 +157,8 @@ final class PipelineVariantPrewarmer {
             int stencilCompareMask, int stencilWriteMask, int stencilFailOp,
             int stencilDepthFailOp, int stencilPassOp) {
 
-        static Variant capture(PipelineState state, int topology) {
-            return new Variant(Pass.capture(state), topology, state.cullState,
+        static Variant capture(PipelineState state, int topology, boolean depthClamp) {
+            return new Variant(Pass.capture(state), topology, depthClamp, state.cullState,
                     state.blendState.enabled, state.blendState.srcRgbFactor, state.blendState.dstRgbFactor,
                     state.blendState.srcAlphaFactor, state.blendState.dstAlphaFactor, state.blendState.blendOp,
                     state.depthState.depthTest, state.depthState.depthMask, state.depthState.function,
@@ -226,6 +226,7 @@ final class PipelineVariantPrewarmer {
             putBoolean(out, value.pass.hasDepth).putInt(value.pass.depthFormat);
             putBoolean(out, value.pass.hasStencil);
             out.putInt(value.topology);
+            putBoolean(out, value.depthClamp);
             putBoolean(out, value.cull);
             putBoolean(out, value.blendEnabled).putInt(value.srcRgb).putInt(value.dstRgb)
                     .putInt(value.srcAlpha).putInt(value.dstAlpha).putInt(value.blendOp);
@@ -249,7 +250,7 @@ final class PipelineVariantPrewarmer {
             ArrayList<Variant> variants = new ArrayList<>(count);
             for(int i = 0; i < count; ++i) {
                 Pass pass = new Pass(getBoolean(in), in.getInt(), getBoolean(in), in.getInt(), getBoolean(in));
-                Variant value = new Variant(pass, in.getInt(), getBoolean(in),
+                Variant value = new Variant(pass, in.getInt(), getBoolean(in), getBoolean(in),
                         getBoolean(in), in.getInt(), in.getInt(), in.getInt(), in.getInt(), in.getInt(),
                         getBoolean(in), getBoolean(in), in.getInt(),
                         getBoolean(in), in.getInt(), in.getInt(),
@@ -276,7 +277,7 @@ final class PipelineVariantPrewarmer {
     private static byte[] identity(ByteBuffer vertexSpirv, ByteBuffer fragmentSpirv,
                                    VertexFormat vertexFormat, InstanceVertexFormat instanceFormat) {
         MessageDigest digest = BoundedDiskCache.sha256();
-        update(digest, "graphics-pipeline-variants-v1");
+        update(digest, "graphics-pipeline-variants-v2");
         update(digest, vertexSpirv);
         update(digest, fragmentSpirv);
         update(digest, vertexFormat.toString());
