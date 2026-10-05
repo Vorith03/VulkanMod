@@ -72,6 +72,7 @@ public class GraphicsPipeline extends Pipeline {
             graphicsPipelines.computeIfAbsent(
                     new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, DepthClampState.isEnabled()),
                     this::createGraphicsPipeline);
+            variantHistory.observe(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         }
 
         createDescriptorSets(Vulkan.getSwapChainImages().size());
@@ -96,17 +97,18 @@ public class GraphicsPipeline extends Pipeline {
         REQUESTED_TOPOLOGY.set(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         boolean depthClamp = DepthClampState.isEnabled();
         PipelineKey key = new PipelineKey(state, topology, depthClamp);
-        long startNanos = System.nanoTime();
+        boolean prewarmEnabled = PipelineVariantPrewarmer.prewarmEnabled();
+        long startNanos = prewarmEnabled ? System.nanoTime() : 0L;
 
         Long handle = graphicsPipelines.get(key);
         if(handle == null) {
             handle = createGraphicsPipeline(key);
             graphicsPipelines.put(key, handle);
+            // Recording is cold-path only: never allocate/search history on ordinary cache hits.
+            variantHistory.observe(state, topology);
         }
 
-        variantHistory.observe(state, topology);
-        if(PipelineVariantPrewarmer.prewarmEnabled()
-                && System.nanoTime() - startNanos < PipelineVariantPrewarmer.prewarmBudgetNanos()) {
+        if(prewarmEnabled && System.nanoTime() - startNanos < PipelineVariantPrewarmer.prewarmBudgetNanos()) {
             int replayed = 0;
             for(PipelineVariantPrewarmer.Replay replay : variantHistory.replays(state)) {
                 if(System.nanoTime() - startNanos >= PipelineVariantPrewarmer.prewarmBudgetNanos()) break;
