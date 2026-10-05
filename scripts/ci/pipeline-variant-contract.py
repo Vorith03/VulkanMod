@@ -35,9 +35,12 @@ stubs = {
     'net/vulkanmod/vulkan/shader/cache/CompilationCache.java': '''package net.vulkanmod.vulkan.shader.cache;
         public class CompilationCache { public static boolean enabled=true; public static boolean enabled() { return enabled; } }''',
     'net/vulkanmod/vulkan/framebuffer/Framebuffer.java': '''package net.vulkanmod.vulkan.framebuffer;
-        public record Framebuffer(int format,int depthFormat,boolean stencil) {
-        public Object getColorAttachment() { return format==0 ? null : this; }
-        public Object getDepthAttachment() { return depthFormat==0 ? null : this; }
+        public class Framebuffer {
+        private final int format,depthFormat; private final boolean stencil; private boolean retired;
+        public Framebuffer(int format,int depthFormat,boolean stencil) { this.format=format; this.depthFormat=depthFormat; this.stencil=stencil; }
+        public void retire() { retired=true; }
+        public Object getColorAttachment() { return retired || format==0 ? null : this; }
+        public Object getDepthAttachment() { return retired || depthFormat==0 ? null : this; }
         public int getFormat() { return format; } public int getDepthFormat() { return depthFormat; }
         public boolean hasStencilAttachment() { return stencil; } }''',
     'net/vulkanmod/vulkan/framebuffer/RenderPass.java': '''package net.vulkanmod.vulkan.framebuffer;
@@ -88,6 +91,13 @@ public class VariantContract {
   check(first.get(0).state().hashCode()==state(resized,7).hashCode(),"Replay hash differs");
   check(first.get(0).state().renderPass==resized,"Stale native pass retained");
   check(restored.replays(state(resized,0),false).isEmpty(),"Boundary replayed twice");
+  var retiringPass=new RenderPass(new Framebuffer(37,129,true));
+  var retiringState=state(retiringPass,7);
+  var handles=new HashMap<PipelineState,Long>(); handles.put(retiringState,123L);
+  int stableHash=retiringState.hashCode(); retiringPass.getFramebuffer().retire();
+  check(retiringState.hashCode()==stableHash,"Framebuffer retirement mutated pipeline-key hash");
+  check(retiringState.equals(state(resized,7)),"Framebuffer retirement mutated pipeline-key equality");
+  check(Objects.equals(handles.get(state(resized,7)),123L),"Compatible resize lost cached pipeline handle");
   check(vertex.position()==1 && vertex.limit()==5 && fragment.position()==0,"Shader cursor consumed");
   check(open(fragment,vertex).replays(state(pass,0),false).isEmpty(),"Shader identity collision");
   check(PipelineVariantPrewarmer.open(vertex,fragment,new VertexFormat("block"),null).replays(state(pass,0),false).isEmpty(),"Vertex layout collision");

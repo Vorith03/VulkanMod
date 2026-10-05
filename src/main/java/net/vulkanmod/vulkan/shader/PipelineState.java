@@ -59,6 +59,7 @@ public class PipelineState {
     final StencilState stencilState;
     final boolean cullState;
     final RenderPass renderPass;
+    private final PassCompatibility renderPassCompatibility;
 
     public PipelineState(BlendState blendState, DepthState depthState, LogicOpState logicOpState,
                          ColorMask colorMask, RenderPass renderPass) {
@@ -73,11 +74,12 @@ public class PipelineState {
         this.stencilState = stencilState;
         this.colorMask = colorMask;
         this.renderPass = renderPass;
+        this.renderPassCompatibility = PassCompatibility.capture(renderPass);
         this.cullState = VRenderSystem.cull;
     }
 
     private boolean matchesCurrentState(RenderPass renderPass, int colorMask) {
-        return renderPassesCompatible(this.renderPass, renderPass)
+        return renderPassesCompatible(renderPass)
                 && this.cullState == VRenderSystem.cull
                 && this.colorMask.colorMask == colorMask
                 && this.blendState.matches(blendInfo)
@@ -89,40 +91,31 @@ public class PipelineState {
                 && this.logicOpState.equals(currentLogicOpState);
     }
 
-    private static boolean renderPassesCompatible(RenderPass first, RenderPass second) {
-        if(first == second)
+    private boolean renderPassesCompatible(RenderPass other) {
+        if(this.renderPass == other)
             return true;
-        if(first == null || second == null)
+        if(this.renderPassCompatibility == null || other == null)
             return false;
-
-        Framebuffer firstFramebuffer = first.getFramebuffer();
-        Framebuffer secondFramebuffer = second.getFramebuffer();
-
-        boolean firstHasColor = firstFramebuffer.getColorAttachment() != null;
-        boolean secondHasColor = secondFramebuffer.getColorAttachment() != null;
-        if(firstHasColor != secondHasColor)
-            return false;
-        if(firstHasColor && firstFramebuffer.getFormat() != secondFramebuffer.getFormat())
-            return false;
-
-        boolean firstHasDepth = firstFramebuffer.getDepthAttachment() != null;
-        boolean secondHasDepth = secondFramebuffer.getDepthAttachment() != null;
-        if(firstHasDepth != secondHasDepth)
-            return false;
-
-        return !firstHasDepth || firstFramebuffer.getDepthFormat() == secondFramebuffer.getDepthFormat();
+        return this.renderPassCompatibility.matches(other.getFramebuffer());
     }
 
-    private static int renderPassCompatibilityHash(RenderPass renderPass) {
-        if(renderPass == null)
-            return 0;
-
-        Framebuffer framebuffer = renderPass.getFramebuffer();
-        int colorFormat = framebuffer.getColorAttachment() != null
-                ? framebuffer.getFormat() : VK_FORMAT_UNDEFINED;
-        int depthFormat = framebuffer.getDepthAttachment() != null
-                ? framebuffer.getDepthFormat() : VK_FORMAT_UNDEFINED;
-        return 31 * (31 + colorFormat) + depthFormat;
+    /** Framebuffer cleanup clears attachment references. Map keys must outlive that mutation. */
+    private record PassCompatibility(int colorFormat, int depthFormat) {
+        static PassCompatibility capture(RenderPass pass) {
+            if(pass == null) return null;
+            Framebuffer framebuffer = pass.getFramebuffer();
+            return new PassCompatibility(colorFormat(framebuffer), depthFormat(framebuffer));
+        }
+        boolean matches(Framebuffer framebuffer) {
+            return colorFormat == colorFormat(framebuffer) && depthFormat == depthFormat(framebuffer);
+        }
+        int compatibilityHash() { return 31 * (31 + colorFormat) + depthFormat; }
+        private static int colorFormat(Framebuffer framebuffer) {
+            return framebuffer.getColorAttachment() == null ? VK_FORMAT_UNDEFINED : framebuffer.getFormat();
+        }
+        private static int depthFormat(Framebuffer framebuffer) {
+            return framebuffer.getDepthAttachment() == null ? VK_FORMAT_UNDEFINED : framebuffer.getDepthFormat();
+        }
     }
 
     @Override
@@ -132,7 +125,7 @@ public class PipelineState {
         PipelineState that = (PipelineState) o;
         return blendState.equals(that.blendState) && depthState.equals(that.depthState)
                 && stencilState.equals(that.stencilState)
-                && renderPassesCompatible(this.renderPass, that.renderPass)
+                && Objects.equals(this.renderPassCompatibility, that.renderPassCompatibility)
                 && logicOpState.equals(that.logicOpState) && (cullState == that.cullState) && colorMask.equals(that.colorMask);
     }
 
@@ -145,7 +138,7 @@ public class PipelineState {
         hash = 31 * hash + Objects.hashCode(stencilState);
         hash = 31 * hash + Objects.hashCode(logicOpState);
         hash = 31 * hash + Boolean.hashCode(cullState);
-        hash = 31 * hash + renderPassCompatibilityHash(renderPass);
+        hash = 31 * hash + (renderPassCompatibility == null ? 0 : renderPassCompatibility.compatibilityHash());
         return 31 * hash + colorMask.colorMask;
     }
 
