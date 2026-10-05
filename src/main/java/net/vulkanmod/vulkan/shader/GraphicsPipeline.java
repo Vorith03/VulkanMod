@@ -73,7 +73,8 @@ public class GraphicsPipeline extends Pipeline {
             graphicsPipelines.computeIfAbsent(
                     new PipelineKey(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, depthClamp),
                     this::createGraphicsPipeline);
-            variantHistory.observe(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, depthClamp);
+            if(variantHistory != null)
+                variantHistory.observe(defaultState, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, depthClamp);
         }
 
         createDescriptorSets(Vulkan.getSwapChainImages().size());
@@ -98,15 +99,15 @@ public class GraphicsPipeline extends Pipeline {
         REQUESTED_TOPOLOGY.set(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         boolean depthClamp = DepthClampState.isEnabled();
         PipelineKey key = new PipelineKey(state, topology, depthClamp);
-        boolean prewarmEnabled = PipelineVariantPrewarmer.prewarmEnabled();
+        boolean prewarmEnabled = variantHistory != null;
         long startNanos = prewarmEnabled ? System.nanoTime() : 0L;
 
         Long handle = graphicsPipelines.get(key);
         if(handle == null) {
             handle = createGraphicsPipeline(key);
             graphicsPipelines.put(key, handle);
-            // Recording is cold-path only: never allocate/search history on ordinary cache hits.
-            variantHistory.observe(state, topology, depthClamp);
+            // Recording is cold-path only and exists only for explicit prewarm sessions.
+            if(variantHistory != null) variantHistory.observe(state, topology, depthClamp);
         }
 
         if(prewarmEnabled && System.nanoTime() - startNanos < PipelineVariantPrewarmer.prewarmBudgetNanos()) {
@@ -458,7 +459,7 @@ public class GraphicsPipeline extends Pipeline {
     }
 
     public void cleanUp() {
-        variantHistory.persist();
+        if(variantHistory != null) variantHistory.persist();
 
         vkDestroyShaderModule(Device.device, vertShaderModule, null);
         vkDestroyShaderModule(Device.device, fragShaderModule, null);
