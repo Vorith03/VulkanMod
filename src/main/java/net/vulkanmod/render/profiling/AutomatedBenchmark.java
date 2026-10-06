@@ -30,7 +30,15 @@ public final class AutomatedBenchmark {
     private static final double Z = coordinate("benchmarkZ", 0.0D);
     private static final float YAW = angle("benchmarkYaw", -90.0F, -360.0F, 360.0F);
     private static final float PITCH = angle("benchmarkPitch", 30.0F, -90.0F, 90.0F);
+    // SETTLE_NANOS is now the minimum warmup, not permission to start measuring
+    // while RD32 terrain is still converging. After the minimum we require a
+    // continuous quiet window with no worker/backlog/scheduling/nonempty-section
+    // change. This keeps the stress workload while excluding first-population work.
     private static final long SETTLE_NANOS = seconds("benchmarkSettleSeconds", 60.0D, 0.0D, 600.0D);
+    private static final long SETTLE_QUIET_NANOS = seconds("benchmarkQuietSeconds", 10.0D, 1.0D, 120.0D);
+    private static final long MAX_SETTLE_NANOS = Math.max(SETTLE_NANOS,
+            seconds("benchmarkMaxSettleSeconds", 300.0D, 10.0D, 900.0D));
+    private static final long SETTLE_SAMPLE_NANOS = 1_000_000_000L;
     private static final long CAPTURE_NANOS = seconds("durationSeconds", 180.0D, 10.0D, 3600.0D);
     private static final long AFTER_CAP_NANOS = seconds("benchmarkAfterStagingCapSeconds", 60.0D, 0.0D, 600.0D);
     private static final long TELEPORT_TIMEOUT_NANOS = 30_000_000_000L;
@@ -41,6 +49,11 @@ public final class AutomatedBenchmark {
     private static volatile String teleportFailure;
     private static long teleportRequestedAt;
     private static long terrainAppearedAt;
+    private static long terrainQuietSince;
+    private static long nextSettleSampleAt;
+    private static long lastSettleScheduled = -1L;
+    private static int lastSettlePublished = -1;
+    private static int lastSettleNonEmpty = -1;
     private static long captureStartedAt;
     private static long capReachedAt;
     private static long nextStagingSampleAt;
@@ -102,22 +115,77 @@ public final class AutomatedBenchmark {
             if (renderer != null && renderer.getLevel() == minecraft.level
                     && renderer.performanceCounters().nonEmptySections() > 0) {
                 terrainAppearedAt = now;
+                terrainQuietSince = 0L;
+                nextSettleSampleAt = 0L;
+                lastSettleScheduled = -1L;
+                lastSettlePublished = -1;
+                lastSettleNonEmpty = -1;
                 state = State.SETTLING;
-                Initializer.LOGGER.info("VulkanMod benchmark terrain visible; settling for {} seconds",
-                        SETTLE_NANOS / 1_000_000_000.0D);
+                Initializer.LOGGER.info(
+                        "VulkanMod benchmark terrain visible; warming for at least {} seconds, then requiring {} seconds of terrain convergence (max {} seconds)",
+                        SETTLE_NANOS / 1_000_000_000.0D,
+                        SETTLE_QUIET_NANOS / 1_000_000_000.0D,
+                        MAX_SETTLE_NANOS / 1_000_000_000.0D);
             } else if (now - teleportRequestedAt > 120_000_000_000L) {
                 abort("no terrain appeared at the target view within 120 seconds of teleport");
             }
             return;
         }
-        if (state == State.SETTLING && now - terrainAppearedAt >= SETTLE_NANOS) {
+        if (state == State.SETTLING) {
+            long settlingNanos = now - terrainAppearedAt;
+            if (settlingNanos >= MAX_SETTLE_NANOS) {
+                abort(String.format(Locale.ROOT,
+                        "terrain did not converge within %.0f seconds (last scheduled=%d published=%d nonempty=%d)",
+                        MAX_SETTLE_NANOS / 1_000_000_000.0D,
+                        lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty));
+                return;
+            }
+            if (settlingNanos < SETTLE_NANOS || now < nextSettleSampleAt) {
+                return;
+            }
+
+            nextSettleSampleAt = now + SETTLE_SAMPLE_NANOS;
+            WorldRenderer renderer = WorldRenderer.getInstance();
+            if (renderer == null || renderer.getLevel() != minecraft.level) {
+                terrainQuietSince = 0L;
+                lastSettleScheduled = -1L;
+                lastSettlePublished = -1;
+                lastSettleNonEmpty = -1;
+                return;
+            }
+
+            WorldRenderer.PerformanceCounters counters = renderer.performanceCounters();
+            var workers = counters.workers();
+            boolean quiet = terrainQuietSample(
+                    counters.scheduled(), counters.nonEmptySections(),
+                    workers.published(), workers.active(), workers.publicationWaiters(),
+                    workers.queuedHigh(), workers.queuedLow(), workers.publicationQueue(),
+                    lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty);
+            lastSettleScheduled = counters.scheduled();
+            lastSettlePublished = workers.published();
+            lastSettleNonEmpty = counters.nonEmptySections();
+
+            if (!quiet) {
+                terrainQuietSince = 0L;
+                return;
+            }
+            if (terrainQuietSince == 0L) {
+                terrainQuietSince = now;
+                return;
+            }
+            if (now - terrainQuietSince < SETTLE_QUIET_NANOS) {
+                return;
+            }
+
             captureWidth = minecraft.getWindow().getWidth();
             captureHeight = minecraft.getWindow().getHeight();
             captureStartedAt = now;
             state = State.CAPTURING;
             GpuTimestampProfiler.armAutomatedCapture();
             PerformanceProfiler.armAutomatedCapture();
-            Initializer.LOGGER.info("VulkanMod benchmark capture starting in world '{}' at {}, {}, {} yaw {} pitch {}",
+            Initializer.LOGGER.info(
+                    "VulkanMod benchmark terrain converged after {} seconds; capture starting in world '{}' at {}, {}, {} yaw {} pitch {}",
+                    (now - terrainAppearedAt) / 1_000_000_000.0D,
                     WORLD_NAME, X, Y, Z, YAW, PITCH);
         }
     }
@@ -169,8 +237,20 @@ public final class AutomatedBenchmark {
         return switch (state) {
             case WAITING -> "VulkanMod benchmark: waiting for " + WORLD_NAME;
             case TELEPORTING, WAIT_TERRAIN -> "VulkanMod benchmark: placing camera / loading terrain";
-            case SETTLING -> "VulkanMod benchmark: settling "
-                    + Math.max(0L, (terrainAppearedAt + SETTLE_NANOS - now + 999_999_999L) / 1_000_000_000L) + "s";
+            case SETTLING -> {
+                long elapsed = Math.max(0L, now - terrainAppearedAt);
+                if (elapsed < SETTLE_NANOS) {
+                    yield "VulkanMod benchmark: warming terrain "
+                            + Math.max(0L, (terrainAppearedAt + SETTLE_NANOS - now + 999_999_999L)
+                            / 1_000_000_000L) + "s";
+                }
+                long quiet = terrainQuietSince == 0L ? 0L
+                        : Math.max(0L, now - terrainQuietSince);
+                yield "VulkanMod benchmark: waiting for terrain convergence "
+                        + Math.min(SETTLE_QUIET_NANOS / 1_000_000_000L,
+                        quiet / 1_000_000_000L) + "/"
+                        + SETTLE_QUIET_NANOS / 1_000_000_000L + "s";
+            }
             case CAPTURING -> "VulkanMod benchmark: recording "
                     + Math.max(0L, (captureEndAt(captureStartedAt, capReachedAt, CAPTURE_NANOS, AFTER_CAP_NANOS)
                     - now + 999_999_999L)
@@ -183,9 +263,14 @@ public final class AutomatedBenchmark {
 
     public static String captureMetadata() {
         return String.format(Locale.ROOT,
-                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true camera=first_person_local_player focus_required=true framebuffer_locked=true",
+                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f settle_mode=terrain_quiet settle_quiet_s=%.3f settle_max_s=%.3f settle_actual_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true camera=first_person_local_player focus_required=true framebuffer_locked=true",
                 WORLD_NAME.replace(' ', '_'), X, Y, Z, YAW, PITCH,
-                SETTLE_NANOS / 1_000_000_000.0D, CAPTURE_NANOS / 1_000_000_000.0D,
+                SETTLE_NANOS / 1_000_000_000.0D,
+                SETTLE_QUIET_NANOS / 1_000_000_000.0D,
+                MAX_SETTLE_NANOS / 1_000_000_000.0D,
+                captureStartedAt > terrainAppearedAt
+                        ? (captureStartedAt - terrainAppearedAt) / 1_000_000_000.0D : -1.0D,
+                CAPTURE_NANOS / 1_000_000_000.0D,
                 AFTER_CAP_NANOS / 1_000_000_000.0D);
     }
 
@@ -269,6 +354,25 @@ public final class AutomatedBenchmark {
         return Math.max(start + duration, cap == 0L ? 0L : Math.max(start, cap) + afterCap);
     }
 
+    private static boolean terrainQuietSample(
+            long scheduled, int nonEmpty, int published,
+            int active, int publicationWaiters, int queuedHigh, int queuedLow,
+            int publicationQueue, long previousScheduled,
+            int previousPublished, int previousNonEmpty) {
+        return nonEmpty > 0
+                && active == 0
+                && publicationWaiters == 0
+                && queuedHigh == 0
+                && queuedLow == 0
+                && publicationQueue == 0
+                && previousScheduled >= 0L
+                && previousPublished >= 0
+                && previousNonEmpty >= 0
+                && scheduled == previousScheduled
+                && published == previousPublished
+                && nonEmpty == previousNonEmpty;
+    }
+
     /** Command syntax and staging deadline oracles without executing against a world. */
     public static void verifyForCi() {
         ClientTickBreakdown.verifyForCi();
@@ -298,6 +402,13 @@ public final class AutomatedBenchmark {
                 || captureEndAt(100L, 150L, 200L, 60L) != 300L
                 || captureEndAt(100L, 50L, 10L, 60L) != 160L) {
             throw new IllegalStateException("Automated benchmark capture deadline is invalid");
+        }
+        if (terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 9L, 20, 100)
+                || terrainQuietSample(10L, 100, 20, 1, 0, 0, 0, 0, 10L, 20, 100)
+                || terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 10L, 19, 100)
+                || terrainQuietSample(10L, 101, 20, 0, 0, 0, 0, 0, 10L, 20, 100)
+                || !terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 10L, 20, 100)) {
+            throw new IllegalStateException("Automated benchmark terrain convergence oracle is invalid");
         }
     }
 

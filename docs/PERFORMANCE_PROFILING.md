@@ -63,7 +63,9 @@ The target defaults to `VulkanMod Benchmark` in the Overworld. VulkanMod asks th
 - yaw `-90`;
 - pitch `30`.
 
-It waits for the client pose and visible terrain, settles for 60 seconds, then starts a new measured capture. Default measurement is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, measurement continues for at least 60 seconds after the first cap observation.
+It waits for the client pose and visible terrain, warms for at least 60 seconds, and then requires a continuous 10-second terrain-convergence window before measurement starts. A convergence sample requires no active terrain workers, no queued high/low build work, no publication waiters/backlog, no newly scheduled or published sections, and a stable non-empty section count. This keeps high-render-distance stress while preventing first-population work from contaminating the steady capture. If convergence is not reached within 300 seconds after terrain first appears, the formal benchmark aborts instead of silently measuring an unstable workload.
+
+Default measurement is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, measurement continues for at least 60 seconds after the first cap observation.
 
 On successful completion VulkanMod emits the final CPU/tick/GPU aggregates, closes the capture, follows Minecraft's normal single-player disconnect/save path, waits for the integrated server to stop, and closes the client. The HUD shows the automation phase; no F3 or manual `/tp` is required.
 
@@ -77,6 +79,8 @@ Optional benchmark controls:
 -Dvulkanmod.performanceProfiler.benchmarkYaw=-90
 -Dvulkanmod.performanceProfiler.benchmarkPitch=30
 -Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
+-Dvulkanmod.performanceProfiler.benchmarkQuietSeconds=10
+-Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=300
 -Dvulkanmod.performanceProfiler.durationSeconds=180
 -Dvulkanmod.performanceProfiler.benchmarkAfterStagingCapSeconds=60
 ```
@@ -88,6 +92,7 @@ Use a copied/pristine formal benchmark world because the normal save path persis
 During measurement the automated run aborts rather than accepting a contaminated capture if:
 
 - the target world changes;
+- terrain fails to reach the configured quiet/convergence window before the maximum settle deadline;
 - player pose/camera changes;
 - a screen opens;
 - focus is lost;
