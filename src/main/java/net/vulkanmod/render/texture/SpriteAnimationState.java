@@ -15,15 +15,15 @@ public final class SpriteAnimationState {
     private boolean materialize = true;
     private boolean refreshing;
     private String spriteId;
-    private boolean discreteResidentCandidate;
+    private boolean residentCandidate;
     private boolean residentAttempted;
     private boolean residentDisabled;
     private GpuAnimatedTextureResidency residentFrames;
 
-    public void attach(SpriteAnimationTicker ticker, String spriteId, boolean discreteResidentCandidate) {
+    public void attach(SpriteAnimationTicker ticker, String spriteId) {
         this.ticker = ticker;
         this.spriteId = spriteId;
-        this.discreteResidentCandidate = discreteResidentCandidate;
+        this.residentCandidate = true;
     }
     public boolean materialize() { return materialize; }
     public void beginTick(int x, int y) {
@@ -45,7 +45,7 @@ public final class SpriteAnimationState {
     public boolean tryResidentUpload(int x, int y, int sourceX, int sourceY,
                                      com.mojang.blaze3d.platform.NativeImage[] images,
                                      int frameWidth, int frameHeight) {
-        if(!discreteResidentCandidate || residentDisabled || !GpuAnimatedTextureResidency.enabled()
+        if(!residentCandidate || residentDisabled || !GpuAnimatedTextureResidency.enabled()
                 || !Device.getGraphicsQueue().hasActiveUploadBatch()) {
             return false;
         }
@@ -60,7 +60,8 @@ public final class SpriteAnimationState {
                 return false;
             }
             residentAttempted = true;
-            residentFrames = GpuAnimatedTextureResidency.tryCreate(spriteId, images);
+            residentFrames = GpuAnimatedTextureResidency.tryCreate(
+                    spriteId, images, frameWidth, frameHeight);
             if(residentFrames == null) {
                 residentDisabled = true;
                 return false;
@@ -75,8 +76,44 @@ public final class SpriteAnimationState {
         }
 
         this.atlas = target;
+        visibility.refreshed();
         return true;
     }
+
+    public boolean tryGpuInterpolation(int x, int y,
+                                       int currentIndex, int nextIndex,
+                                       int subFrame, int duration) {
+        if(!residentCandidate || residentDisabled || !materialize
+                || residentFrames == null
+                || !GpuAnimatedTextureResidency.interpolationEnabled()
+                || !Device.getGraphicsQueue().hasActiveUploadBatch()) {
+            return false;
+        }
+
+        VulkanImage target = VTextureSelector.getBoundTexture();
+        if(target == null) {
+            return false;
+        }
+
+        if(!residentFrames.sourcesValid()) {
+            residentFrames.noteSourceInvalidated();
+            residentFrames.close();
+            residentFrames = null;
+            residentDisabled = true;
+            return false;
+        }
+
+        if(!residentFrames.interpolateToAtlas(
+                target, x, y, currentIndex, nextIndex, subFrame, duration)) {
+            return false;
+        }
+
+        SpriteUtil.addTransitionedLayout(target);
+        this.atlas = target;
+        visibility.refreshed();
+        return true;
+    }
+
     public void use() {
         visibility.use(System.nanoTime());
         refreshIfNeeded();

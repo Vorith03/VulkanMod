@@ -36,6 +36,7 @@ public class Device {
     static PresentQueue presentQueue;
     static TransferQueue transferQueue;
     static ComputeQueue computeQueue;
+    private static boolean shaderFloat64Enabled;
 
     static void pickPhysicalDevice(VkInstance instance) {
 
@@ -124,6 +125,9 @@ public class Device {
                 deviceFeatures.features().samplerAnisotropy(true);
             if(deviceInfo.availableFeatures.features().logicOp())
                 deviceFeatures.features().logicOp(true);
+            shaderFloat64Enabled = deviceInfo.availableFeatures.features().shaderFloat64();
+            if(shaderFloat64Enabled)
+                deviceFeatures.features().shaderFloat64(true);
             // Core shaders from compatibility mods such as Immersive Portals may
             // use gl_ClipDistance. Enable the Vulkan core feature whenever the
             // selected device exposes it; shaders that do not use clip distance
@@ -344,6 +348,7 @@ public class Device {
         }
 
         DepthClampState.initialize(false);
+        shaderFloat64Enabled = false;
         vkDestroyDevice(device, null);
     }
 
@@ -361,6 +366,10 @@ public class Device {
 
     public static ComputeQueue getComputeQueue() {
         return computeQueue;
+    }
+
+    public static boolean isShaderFloat64Enabled() {
+        return shaderFloat64Enabled;
     }
 
     public static SurfaceProperties querySurfaceProperties(VkPhysicalDevice device, MemoryStack stack) {

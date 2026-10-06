@@ -1,0 +1,65 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) readonly buffer AnimationSource {
+    uint words[];
+} sourceData;
+
+layout(set = 0, binding = 1, std430) buffer AnimationOutput {
+    uint words[];
+} outputData;
+
+layout(push_constant) uniform InterpolationPushConstants {
+    uint sourceBaseWord;
+    uint sheetWidth;
+    uint currentX;
+    uint currentY;
+    uint nextX;
+    uint nextY;
+    uint width;
+    uint height;
+    uint outputBaseWord;
+    uint subFrame;
+    uint duration;
+    uint reserved;
+} pc;
+
+/*
+ * Mirror Java 17 SpriteContents.InterpolationData exactly:
+ *   weight = 1.0D - (double)subFrame / duration
+ *   (int)(weight * current + (1.0D - weight) * next)
+ *
+ * "precise" requests SPIR-V NoContraction for the arithmetic chain so FMA or
+ * reassociation cannot silently change the truncation boundary. Alpha is copied
+ * from the current frame unchanged, matching the Forge 1.20.1 implementation.
+ */
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint pixelCount = pc.width * pc.height;
+    if(index >= pixelCount || pc.duration == 0u)
+        return;
+
+    uint x = index % pc.width;
+    uint y = index / pc.width;
+    uint current = sourceData.words[
+            pc.sourceBaseWord + (pc.currentY + y) * pc.sheetWidth + pc.currentX + x];
+    uint next = sourceData.words[
+            pc.sourceBaseWord + (pc.nextY + y) * pc.sheetWidth + pc.nextX + x];
+
+    precise double fraction = double(pc.subFrame) / double(pc.duration);
+    precise double currentWeight = 1.0 - fraction;
+    precise double nextWeight = 1.0 - currentWeight;
+
+    uint mixed = current & 0xff000000u;
+    for(uint shift = 0u; shift < 24u; shift += 8u) {
+        uint a = (current >> shift) & 255u;
+        uint b = (next >> shift) & 255u;
+        precise double currentTerm = currentWeight * double(a);
+        precise double nextTerm = nextWeight * double(b);
+        precise double value = currentTerm + nextTerm;
+        mixed |= (uint(value) & 255u) << shift;
+    }
+
+    outputData.words[pc.outputBaseWord + index] = mixed;
+}

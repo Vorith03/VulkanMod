@@ -5,4 +5,5 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(SpriteContents.FrameInfo.class)
 public interface SpriteAnimationFrameAccessor {
     @Accessor("index") int vulkanmod$frameIndex();
+    @Accessor("time") int vulkanmod$frameTime();
 }

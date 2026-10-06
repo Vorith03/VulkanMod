@@ -75,7 +75,7 @@ public final class SpriteAnimationSmokeTest {
                     new SpriteAnimationOracle.Frame[] {frame(2,3),frame(0,2)}));
             verify(explicit("custom_cpu", 2, 2, 2, 2, 1, true, true,
                     frame(3,3),frame(0,2),frame(2,1)));
-            Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, Forge zero-extent guards, custom CPU exclusion)");
+            Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/double-truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, GPU resident copies/interpolation when qualified, Forge zero-extent guards, custom CPU exclusion)");
         } finally {
             Initializer.CONFIG.animateOnlyUsedTextures = oldEnabled;
             Initializer.CONFIG.animationVisibilityGraceMs = oldGrace;
@@ -84,6 +84,7 @@ public final class SpriteAnimationSmokeTest {
         }
     }
     private static void verify(Case test) {
+        long interpolationCallsBefore = GpuAnimatedTextureResidency.stats().interpolationCalls();
         // Align both destinations at every tested mip, including zero sprite extents.
         int half = 1;
         while(half < test.width || half < (1 << test.mips)) half <<= 1;
@@ -190,6 +191,18 @@ public final class SpriteAnimationSmokeTest {
                     });
                 }
             }
+            if(test.interpolate && !test.custom
+                    && GpuAnimatedTextureResidency.interpolationEnabled()) {
+                GpuAnimatedTextureResidency.Stats interpolationAfter =
+                        GpuAnimatedTextureResidency.stats();
+                if(interpolationAfter.interpolationCalls() <= interpolationCallsBefore)
+                    throw new AssertionError(
+                            "GPU texture interpolation path was not exercised: " + test.name);
+                Initializer.LOGGER.info(
+                        "GPU texture interpolation smoke passed: {} (exact CPU oracle pixels/all mips, CPU clock ownership, device-local compute-to-atlas path)",
+                        test.name);
+            }
+
             if("discrete".equals(test.name) && GpuAnimatedTextureResidency.enabled()) {
                 GpuAnimatedTextureResidency.Stats beforeMutation = GpuAnimatedTextureResidency.stats();
                 NativeImage base = candidate.byMipLevel[0];

@@ -244,14 +244,15 @@ public abstract class VTextureSelector {
             VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.callocStack(1, stack);
             barrier.sType(VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER);
             barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
-            barrier.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+            barrier.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
             barrier.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
             barrier.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
             barrier.buffer(destination.getId());
             barrier.offset(0L);
             barrier.size(size);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                     0, null, barrier, null);
         }
 
@@ -350,6 +351,14 @@ public abstract class VTextureSelector {
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
             return regionCount;
         }
+    }
+
+    /**
+     * Emit any CPU-backed atlas regions before an operation that records its own
+     * transfer/compute commands into the same texture-tick command buffer.
+     */
+    public static void flushPendingSpriteUploadCopies() {
+        flushSpriteUploadCopies();
     }
 
     public static void beginSpriteUploadBatch() {

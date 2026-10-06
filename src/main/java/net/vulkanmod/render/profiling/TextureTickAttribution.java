@@ -54,6 +54,10 @@ public final class TextureTickAttribution {
     private static long residentCopyCalls;
     private static long residentCopyRegions;
     private static long residentCopyBytes;
+    private static long residentInterpolationCalls;
+    private static long residentInterpolationDispatches;
+    private static long residentInterpolationPixels;
+    private static long residentInterpolationBytes;
     private static long residentCurrentBytes;
     private static long residentPeakBytes;
     private static long residentAdmitted;
@@ -126,6 +130,14 @@ public final class TextureTickAttribution {
         residentCopyCalls++;
         residentCopyRegions += regions;
         residentCopyBytes += bytes;
+    }
+
+    public static void recordResidentInterpolation(int dispatches, long pixels, long bytes) {
+        if(!ENABLED || !tickActive || dispatches <= 0 || pixels <= 0L || bytes < 0L) return;
+        residentInterpolationCalls++;
+        residentInterpolationDispatches += dispatches;
+        residentInterpolationPixels += pixels;
+        residentInterpolationBytes += bytes;
     }
 
     public static void residentAdmitted(long bytes) {
@@ -215,6 +227,11 @@ public final class TextureTickAttribution {
                 .append(" resident_copy_regions=").append(residentCopyRegions)
                 .append(" resident_copy_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentCopyBytes / 1024.0D))
+                .append(" resident_interpolation_calls=").append(residentInterpolationCalls)
+                .append(" resident_interpolation_dispatches=").append(residentInterpolationDispatches)
+                .append(" resident_interpolation_pixels=").append(residentInterpolationPixels)
+                .append(" resident_interpolation_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentInterpolationBytes / 1024.0D))
                 .append(" resident_current_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentCurrentBytes / 1024.0D))
                 .append(" resident_peak_kib=")
@@ -259,6 +276,8 @@ public final class TextureTickAttribution {
         copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
         residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
+        residentInterpolationCalls = residentInterpolationDispatches =
+                residentInterpolationPixels = residentInterpolationBytes = 0L;
         Arrays.fill(currentPhaseNanos, 0L);
         Arrays.fill(phaseSums, 0L);
         Arrays.fill(phaseCalls, 0L);

@@ -216,7 +216,7 @@ case "$mode" in
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
-    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
+    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.gpuAnimatedTextureInterpolation=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
     grep -F "Graphics pipeline prewarm smoke passed" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
     grep -F "World render scale native smoke passed" vulkan-screenshot-smoke.log
@@ -228,6 +228,7 @@ case "$mode" in
     grep -F "Packed texture upload Vulkan smoke passed" vulkan-screenshot-smoke.log
     grep -F "Sprite usage animation smoke passed" vulkan-screenshot-smoke.log
     grep -F "GPU resident animation smoke passed" vulkan-screenshot-smoke.log
+    grep -F "GPU texture interpolation smoke passed" vulkan-screenshot-smoke.log
     for animation_type in SpriteContents 'SpriteContents$Ticker' 'SpriteContents$InterpolationData'; do
       javap -c -p "run/.mixin.out/class/net/minecraft/client/renderer/texture/${animation_type}.class" > "vulkan-animation-${animation_type}.javap"
     done
