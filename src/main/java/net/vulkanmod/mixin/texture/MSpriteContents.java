@@ -210,18 +210,15 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
     @Inject(method = "upload", at = @At("RETURN"))
     private void vulkanmod$finishPerformanceUpload(int i, int j, int k, int l, NativeImage[] nativeImages, CallbackInfo ci) {
-        if(this.vulkanmod$performanceUploadStartNanos == 0L) {
-            this.vulkanmod$performanceUploadBatchStarted = false;
-            return;
-        }
-
         try {
             if(this.vulkanmod$performanceUploadBatchStarted) {
                 VTextureSelector.endSpriteUploadBatch();
             }
         } finally {
             this.vulkanmod$performanceUploadBatchStarted = false;
-            ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
+            if(this.vulkanmod$performanceUploadStartNanos != 0L) {
+                ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
+            }
             this.vulkanmod$performanceUploadStartNanos = 0L;
         }
     }
