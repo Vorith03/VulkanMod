@@ -15,8 +15,16 @@ public final class SpriteAnimationState {
     private boolean materialize = true;
     private boolean refreshing;
     private String spriteId;
+    private boolean discreteResidentCandidate;
+    private boolean residentAttempted;
+    private boolean residentDisabled;
+    private GpuAnimatedTextureResidency residentFrames;
 
-    public void attach(SpriteAnimationTicker ticker, String spriteId) { this.ticker = ticker; this.spriteId = spriteId; }
+    public void attach(SpriteAnimationTicker ticker, String spriteId, boolean discreteResidentCandidate) {
+        this.ticker = ticker;
+        this.spriteId = spriteId;
+        this.discreteResidentCandidate = discreteResidentCandidate;
+    }
     public boolean materialize() { return materialize; }
     public void beginTick(int x, int y) {
         if(!SpriteAnimationUsage.enabled()) { materialize = true; return; }
@@ -33,6 +41,42 @@ public final class SpriteAnimationState {
         if(materialize && SpriteUtil.shouldUpload()) refreshIfNeeded();
     }
     public void uploaded() { visibility.refreshed(); }
+
+    public boolean tryResidentUpload(int x, int y, int sourceX, int sourceY,
+                                     com.mojang.blaze3d.platform.NativeImage[] images,
+                                     int frameWidth, int frameHeight) {
+        if(!discreteResidentCandidate || residentDisabled || !GpuAnimatedTextureResidency.enabled()
+                || !Device.getGraphicsQueue().hasActiveUploadBatch()) {
+            return false;
+        }
+
+        VulkanImage target = VTextureSelector.getBoundTexture();
+        if(target == null) {
+            return false;
+        }
+
+        if(residentFrames == null) {
+            if(residentAttempted) {
+                return false;
+            }
+            residentAttempted = true;
+            residentFrames = GpuAnimatedTextureResidency.tryCreate(spriteId, images);
+            if(residentFrames == null) {
+                residentDisabled = true;
+                return false;
+            }
+        }
+
+        if(!residentFrames.copyToAtlas(target, x, y, sourceX, sourceY, frameWidth, frameHeight, images)) {
+            residentFrames.close();
+            residentFrames = null;
+            residentDisabled = true;
+            return false;
+        }
+
+        this.atlas = target;
+        return true;
+    }
     public void use() {
         visibility.use(System.nanoTime());
         refreshIfNeeded();
@@ -66,5 +110,13 @@ public final class SpriteAnimationState {
             }
         }
     }
-    public void close() { visibility.close(); atlas = null; ticker = null; }
+    public void close() {
+        visibility.close();
+        if(residentFrames != null) {
+            residentFrames.close();
+            residentFrames = null;
+        }
+        atlas = null;
+        ticker = null;
+    }
 }

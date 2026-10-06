@@ -29,6 +29,8 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
     @Shadow public abstract IntStream getUniqueFrames();
     @Shadow public abstract void increaseMipLevel(int mipmapLevels);
+    @Shadow public abstract int width();
+    @Shadow public abstract int height();
 
     @Unique private boolean vulkanmod$staticSpriteClassified;
     @Unique private boolean vulkanmod$staticSprite;
@@ -37,6 +39,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
     @Unique private int vulkanmod$deferredMipLevel = -1;
     @Unique private long vulkanmod$deferredMipBytes;
     @Unique private long vulkanmod$performanceUploadStartNanos;
+    @Unique private boolean vulkanmod$performanceUploadBatchStarted;
     @Unique private net.vulkanmod.render.texture.SpriteAnimationState vulkanmod$animationState;
 
     @Override
@@ -184,19 +187,40 @@ public abstract class MSpriteContents implements VSpriteContentsI {
 
         this.vulkanmod$performanceUploadStartNanos = ClientTickBreakdown.beginTextureSpriteUpload(
                 nativeImages != null ? nativeImages.length : 0);
+
+        if(vulkanmod$animationState != null
+                && vulkanmod$animationState.tryResidentUpload(
+                        i, j, k, l, nativeImages, this.width(), this.height())) {
+            SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
+            ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
+            this.vulkanmod$performanceUploadStartNanos = 0L;
+            this.vulkanmod$performanceUploadBatchStarted = false;
+            ci.cancel();
+            return;
+        }
+
         SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
         // One SpriteContents upload normally emits one NativeImage upload per mip.
         // Keep every staged copy, but let VTextureSelector combine those mip copy
         // regions into one vkCmdCopyBufferToImage while the texture tick owns its
         // shared graphics command buffer.
         VTextureSelector.beginSpriteUploadBatch();
+        this.vulkanmod$performanceUploadBatchStarted = true;
     }
 
     @Inject(method = "upload", at = @At("RETURN"))
     private void vulkanmod$finishPerformanceUpload(int i, int j, int k, int l, NativeImage[] nativeImages, CallbackInfo ci) {
+        if(this.vulkanmod$performanceUploadStartNanos == 0L) {
+            this.vulkanmod$performanceUploadBatchStarted = false;
+            return;
+        }
+
         try {
-            VTextureSelector.endSpriteUploadBatch();
+            if(this.vulkanmod$performanceUploadBatchStarted) {
+                VTextureSelector.endSpriteUploadBatch();
+            }
         } finally {
+            this.vulkanmod$performanceUploadBatchStarted = false;
             ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
             this.vulkanmod$performanceUploadStartNanos = 0L;
         }

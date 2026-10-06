@@ -10,12 +10,16 @@ import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
+import net.vulkanmod.vulkan.memory.TextureResidentBuffer;
 import net.vulkanmod.vulkan.memory.StagingBufferSmokeTest;
+import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.shader.EffectRenderState;
 import net.vulkanmod.vulkan.shader.ShaderRenderState;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VkBufferCopy;
 import org.lwjgl.vulkan.VkBufferImageCopy;
+import org.lwjgl.vulkan.VkBufferMemoryBarrier;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
@@ -175,6 +179,169 @@ public abstract class VTextureSelector {
 
     public static void bindFramebufferTexture2(VulkanImage texture) {
         framebufferTexture2 = texture;
+    }
+
+    /**
+     * Seed one immutable device-local animation source while the texture tick owns
+     * the shared graphics upload command buffer. This is a one-time host copy;
+     * steady frame changes copy directly from the resident buffer into the atlas.
+     */
+    public static boolean uploadTextureResidentSource(TextureResidentBuffer destination, ByteBuffer source) {
+        if(destination == null || source == null || source.remaining() <= 0) {
+            return false;
+        }
+
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        if(!graphicsQueue.hasActiveUploadBatch()) {
+            return false;
+        }
+
+        int size = source.remaining();
+        if(size > TEXTURE_STAGING_BATCH_LIMIT || destination.getBufferSize() < size) {
+            return false;
+        }
+
+        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer(Renderer.getCurrentFrame());
+        if(stagingBuffer.wouldExceedUsageLimit(size, 4, TEXTURE_STAGING_BATCH_LIMIT)) {
+            // Pending sprite regions point at the current staging allocation.
+            // Record them before the normal bounded reset/reuse sequence.
+            flushSpriteUploadCopies();
+            graphicsQueue.endRecordingAndSubmit();
+
+            if(AreaUploadManager.INSTANCE != null) {
+                AreaUploadManager.INSTANCE.waitAllUploads();
+            }
+            Vulkan.waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+
+            stagingBuffer.reset();
+            stagingReuseCount++;
+            resetStagingSubmissionWindow();
+            graphicsQueue.startRecording();
+        }
+
+        stagingBuffer.setGrowthLimit(TEXTURE_STAGING_BATCH_LIMIT);
+        try {
+            stagingBuffer.align(4);
+            stagingBuffer.copyBuffer(size, source, TEXTURE_STAGING_BATCH_LIMIT);
+        } finally {
+            stagingBuffer.setGrowthLimit(Integer.MAX_VALUE);
+        }
+
+        long sourceOffset = stagingBuffer.getOffset();
+        CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkBufferCopy.Buffer copy = VkBufferCopy.callocStack(1, stack);
+            copy.srcOffset(sourceOffset);
+            copy.dstOffset(0L);
+            copy.size(size);
+            vkCmdCopyBuffer(commandBuffer.getHandle(), stagingBuffer.getId(), destination.getId(), copy);
+
+            VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.callocStack(1, stack);
+            barrier.sType(VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER);
+            barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+            barrier.dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT);
+            barrier.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+            barrier.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+            barrier.buffer(destination.getId());
+            barrier.offset(0L);
+            barrier.size(size);
+            vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, null, barrier, null);
+        }
+
+        stagingBatchSourceBytes += size;
+        stagingBatchStagedBytes += size;
+        stagingBatchLogicalBytes += size;
+        return true;
+    }
+
+    /**
+     * Copy one discrete frame from immutable resident source sheets to an atlas.
+     * All source/destination ranges are validated before any layout transition or
+     * command emission so rejection can cleanly retain the CPU fallback.
+     */
+    public static int copyResidentSpriteFrame(TextureResidentBuffer source, VulkanImage texture,
+                                               int[] mipOffsets, int[] sourceWidths, int[] sourceHeights,
+                                               int destX, int destY, int sourceX, int sourceY,
+                                               int frameWidth, int frameHeight) {
+        if(source == null || texture == null || mipOffsets == null
+                || sourceWidths == null || sourceHeights == null) {
+            return -1;
+        }
+
+        GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        if(!graphicsQueue.hasActiveUploadBatch() || texture.formatSize != 4) {
+            return -1;
+        }
+
+        int levels = Math.min(texture.mipLevels,
+                Math.min(mipOffsets.length, Math.min(sourceWidths.length, sourceHeights.length)));
+        if(levels <= 0 || frameWidth <= 0 || frameHeight <= 0) {
+            return -1;
+        }
+
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkBufferImageCopy.Buffer regions = VkBufferImageCopy.callocStack(levels, stack);
+            int regionCount = 0;
+
+            for(int mip = 0; mip < levels; ++mip) {
+                int width = frameWidth >> mip;
+                int height = frameHeight >> mip;
+                if(width <= 0 || height <= 0) {
+                    continue;
+                }
+
+                int sheetWidth = sourceWidths[mip];
+                int sheetHeight = sourceHeights[mip];
+                int srcX = sourceX >> mip;
+                int srcY = sourceY >> mip;
+                int dstX = destX >> mip;
+                int dstY = destY >> mip;
+                int atlasWidth = Math.max(1, texture.width >> mip);
+                int atlasHeight = Math.max(1, texture.height >> mip);
+
+                if(sheetWidth <= 0 || sheetHeight <= 0 || srcX < 0 || srcY < 0
+                        || dstX < 0 || dstY < 0
+                        || srcX > sheetWidth - width || srcY > sheetHeight - height
+                        || dstX > atlasWidth - width || dstY > atlasHeight - height) {
+                    return -1;
+                }
+
+                long rowStart = (long)srcY * sheetWidth + srcX;
+                long lastPixelExclusive = ((long)srcY + height - 1L) * sheetWidth + srcX + width;
+                long bufferOffset = (long)mipOffsets[mip] + rowStart * texture.formatSize;
+                long bufferEnd = (long)mipOffsets[mip] + lastPixelExclusive * texture.formatSize;
+                if(bufferOffset < 0L || bufferEnd > source.getBufferSize()
+                        || (bufferOffset & 3L) != 0L) {
+                    return -1;
+                }
+
+                VkBufferImageCopy region = regions.get(regionCount++);
+                region.bufferOffset(bufferOffset);
+                region.bufferRowLength(sheetWidth);
+                region.bufferImageHeight(sheetHeight);
+                region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
+                region.imageSubresource().mipLevel(mip);
+                region.imageSubresource().baseArrayLayer(0);
+                region.imageSubresource().layerCount(1);
+                region.imageOffset().set(dstX, dstY, 0);
+                region.imageExtent().set(width, height, 1);
+            }
+
+            if(regionCount <= 0) {
+                return -1;
+            }
+
+            CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
+            texture.transferDstLayout(commandBuffer);
+            regions.position(0);
+            regions.limit(regionCount);
+            vkCmdCopyBufferToImage(commandBuffer.getHandle(), source.getId(), texture.getId(),
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+            return regionCount;
+        }
     }
 
     public static void beginSpriteUploadBatch() {

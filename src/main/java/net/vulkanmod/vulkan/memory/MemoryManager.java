@@ -311,10 +311,11 @@ public class MemoryManager {
             traceBuffer("enqueued from " + buffer.getClass().getSimpleName() +
                     " in frame slot " + currentFrame, bufferInfo.id());
 
-        if(buffer instanceof StagingBuffer) {
+        if(buffer instanceof StagingBuffer || buffer instanceof TextureResidentBuffer) {
             // Uploads may be submitted after this slot's last frame fence, or
             // still be recorded in a shared atlas batch. That fence alone does
-            // not prove a resized staging buffer is safe to destroy.
+            // not prove a resized staging buffer or resident animation source is
+            // safe to destroy.
             freeableStagingBuffers[currentFrame].add(bufferInfo);
         } else {
             freeableBuffers[currentFrame].add(bufferInfo);

@@ -1,5 +1,7 @@
 package net.vulkanmod.render.profiling;
 
+import net.vulkanmod.render.texture.GpuAnimatedTextureResidency;
+
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -51,6 +53,9 @@ public final class TextureTickAttribution {
     private static long copyRegions;
     private static long outerCopyFlushes;
     private static long outerCopyRegions;
+    private static long residentCopyCalls;
+    private static long residentCopyRegions;
+    private static long residentCopyBytes;
 
     private TextureTickAttribution() {
     }
@@ -111,6 +116,13 @@ public final class TextureTickAttribution {
         }
     }
 
+    public static void recordResidentCopy(int regions, long bytes) {
+        if(!ENABLED || !tickActive || regions <= 0 || bytes < 0L) return;
+        residentCopyCalls++;
+        residentCopyRegions += regions;
+        residentCopyBytes += bytes;
+    }
+
     public static void endTick(long startNanos) {
         if (!ENABLED || !tickActive || startNanos == 0L) return;
         long elapsed = Math.max(0L, System.nanoTime() - startNanos);
@@ -166,6 +178,20 @@ public final class TextureTickAttribution {
                 millis(copyFlushNanosSum / ticks), millis(percentile(copyFlushSamples, sampledTicks, 0.95D)),
                 outerCopyFlushes, outerCopyRegions, millis(outerCopyFlushNanosSum / ticks),
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
+        GpuAnimatedTextureResidency.Stats resident = GpuAnimatedTextureResidency.stats();
+        line.append(" resident_copy_calls=").append(residentCopyCalls)
+                .append(" resident_copy_regions=").append(residentCopyRegions)
+                .append(" resident_copy_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentCopyBytes / 1024.0D))
+                .append(" resident_current_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", resident.currentBytes() / 1024.0D))
+                .append(" resident_peak_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", resident.peakBytes() / 1024.0D))
+                .append(" resident_admitted=").append(resident.admitted())
+                .append(" resident_capacity_rejected=").append(resident.capacityRejected())
+                .append(" resident_source_rejected=").append(resident.sourceRejected())
+                .append(" resident_staging_rejected=").append(resident.stagingRejected())
+                .append(" resident_invalidated=").append(resident.sourceInvalidated());
         for (Phase phase : PHASES) {
             int ordinal = phase.ordinal();
             line.append(' ').append(phase.label).append("_calls=").append(phaseCalls[ordinal]);
@@ -200,6 +226,7 @@ public final class TextureTickAttribution {
         currentCopyFlushes = currentCopyRegions = currentOuterCopyFlushes = currentOuterCopyRegions = 0;
         copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
+        residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
         Arrays.fill(currentPhaseNanos, 0L);
         Arrays.fill(phaseSums, 0L);
         Arrays.fill(phaseCalls, 0L);

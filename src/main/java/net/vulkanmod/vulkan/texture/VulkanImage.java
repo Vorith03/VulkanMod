@@ -190,7 +190,7 @@ public class VulkanImage {
         return (this.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
     }
 
-    private void transferDstLayout(CommandPool.CommandBuffer commandBuffer) {
+    public void transferDstLayout(CommandPool.CommandBuffer commandBuffer) {
         if (this.currentLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
             return;
 

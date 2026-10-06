@@ -117,7 +117,12 @@ public final class SpriteAnimationSmokeTest {
             Device.getGraphicsQueue().startRecording();
             try {
                 Initializer.CONFIG.animateOnlyUsedTextures = false;
-                reference.uploadFirstFrame(0,0);
+                GpuAnimatedTextureResidency.setCiForceCpuPath(true);
+                try {
+                    reference.uploadFirstFrame(0,0);
+                } finally {
+                    GpuAnimatedTextureResidency.setCiForceCpuPath(false);
+                }
                 candidate.uploadFirstFrame(candidateX,0);
             } finally {
                 SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
@@ -131,7 +136,12 @@ public final class SpriteAnimationSmokeTest {
                 try {
                     Initializer.CONFIG.animateOnlyUsedTextures = false;
                     long beforeReference = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
-                    referenceTicker.tickAndUpload(0, 0);
+                    GpuAnimatedTextureResidency.setCiForceCpuPath(true);
+                    try {
+                        referenceTicker.tickAndUpload(0, 0);
+                    } finally {
+                        GpuAnimatedTextureResidency.setCiForceCpuPath(false);
+                    }
                     boolean stagedReference = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes() != beforeReference;
                     if(stagedReference != (update != SpriteAnimationOracle.Update.NONE))
                         throw new AssertionError("Upload cadence differs: " + test.name + " tick " + tick);
@@ -180,8 +190,36 @@ public final class SpriteAnimationSmokeTest {
                     });
                 }
             }
+            if("discrete".equals(test.name) && GpuAnimatedTextureResidency.enabled()) {
+                GpuAnimatedTextureResidency.Stats beforeMutation = GpuAnimatedTextureResidency.stats();
+                NativeImage base = candidate.byMipLevel[0];
+                base.setPixelRGBA(0, 0, base.getPixelRGBA(0, 0) ^ 0x00010101);
+
+                Device.getGraphicsQueue().startRecording();
+                VTextureSelector.beginSpriteUploadBatch();
+                long beforeFallbackStaging = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
+                try {
+                    candidate.uploadFirstFrame(candidateX, 0);
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                    SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                    Device.getGraphicsQueue().endRecordingAndSubmit();
+                }
+                Vulkan.waitIdle();
+
+                GpuAnimatedTextureResidency.Stats afterMutation = GpuAnimatedTextureResidency.stats();
+                if(afterMutation.totalCopyCalls() <= 0L)
+                    throw new AssertionError("Resident animation copy path was not exercised");
+                if(afterMutation.sourceInvalidated() <= beforeMutation.sourceInvalidated())
+                    throw new AssertionError("Resident animation source mutation did not invalidate");
+                if(Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes() == beforeFallbackStaging)
+                    throw new AssertionError("Resident mutation did not fall back to CPU staging");
+                Initializer.LOGGER.info("GPU resident animation smoke passed (discrete all-mip raw pixels, CPU clock ownership, mutation invalidation and staging fallback)");
+            }
+
             Initializer.LOGGER.info("Animation oracle case passed: {}", test.name);
         } finally {
+            GpuAnimatedTextureResidency.setCiForceCpuPath(false);
             Vulkan.waitIdle();
             if(buffer != 0) MemoryManager.freeBuffer(buffer, allocation);
             atlas.doFree();

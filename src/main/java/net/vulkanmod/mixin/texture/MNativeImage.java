@@ -44,10 +44,75 @@ public abstract class MNativeImage implements VNativeImageI {
     private long vulkanmod$trackedNativeBytes;
     @Unique
     private boolean vulkanmod$nativeMemoryReleased;
+    @Unique
+    private long vulkanmod$mutationGeneration;
+    @Unique
+    private boolean vulkanmod$trackMutations;
 
     @Override
     public long vulkanmod$getTrackedNativeBytes() {
         return this.vulkanmod$nativeMemoryReleased ? 0L : this.vulkanmod$trackedNativeBytes;
+    }
+
+    @Override
+    public ByteBuffer vulkanmod$getReadOnlyBuffer() {
+        ByteBuffer buffer = this.vulkanmod$buffer;
+        if(this.pixels == 0L || buffer == null) {
+            return null;
+        }
+        ByteBuffer view = buffer.asReadOnlyBuffer();
+        view.clear();
+        return view;
+    }
+
+    @Override
+    public long vulkanmod$getMutationGeneration() {
+        // Source construction can perform millions of writes. Start the mutation
+        // counter only once the experimental resident-copy path admits this image.
+        this.vulkanmod$trackMutations = true;
+        return this.vulkanmod$mutationGeneration;
+    }
+
+    @Override
+    public boolean vulkanmod$isRgba() {
+        return this.format == NativeImage.Format.RGBA;
+    }
+
+    @Unique
+    private void vulkanmod$markMutation() {
+        if(this.vulkanmod$trackMutations) {
+            this.vulkanmod$mutationGeneration++;
+        }
+    }
+
+    @Inject(method = "setPixelRGBA", at = @At("HEAD"))
+    private void vulkanmod$trackSetPixel(int x, int y, int color, CallbackInfo ci) {
+        this.vulkanmod$markMutation();
+    }
+
+    @Inject(method = "blendPixel(III)V", at = @At("HEAD"), require = 0)
+    private void vulkanmod$trackBlendPixel(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
+    }
+
+    @Inject(method = "fillRect(IIIII)V", at = @At("HEAD"), require = 0)
+    private void vulkanmod$trackFillRect(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
+    }
+
+    @Inject(method = "copyRect(IIIIIIZZ)V", at = @At("HEAD"), require = 0)
+    private void vulkanmod$trackCopyRect(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
+    }
+
+    @Inject(method = "copyFrom(Lcom/mojang/blaze3d/platform/NativeImage;)V", at = @At("HEAD"), require = 0)
+    private void vulkanmod$trackCopyFrom(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
+    }
+
+    @Inject(method = "flipY()V", at = @At("HEAD"), require = 0)
+    private void vulkanmod$trackFlipY(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
     }
 
     @Inject(method = "<init>(Lcom/mojang/blaze3d/platform/NativeImage$Format;IIZ)V", at = @At("RETURN"))
@@ -98,6 +163,7 @@ public abstract class MNativeImage implements VNativeImageI {
 
     @Inject(method = "close", at = @At("HEAD"))
     private void vulkanmod$trackNativeClose(CallbackInfo ci) {
+        this.vulkanmod$markMutation();
         // The vanilla close path zeros/frees the native pointer after this hook.
         // Drop VulkanMod's direct ByteBuffer view immediately so a stale/closed
         // NativeImage can never upload from a freed address through our _upload

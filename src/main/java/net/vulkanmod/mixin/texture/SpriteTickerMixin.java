@@ -23,7 +23,7 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
         // Subclasses/custom Forge loaders retain their original pixel/ticker behavior.
         if(owner.getClass() == SpriteContents.class && owner.forgeMeta == null) {
             vulkanmod$state = ((VSpriteContentsI)owner).vulkanmod$animationState();
-            vulkanmod$state.attach(this, owner.name().toString());
+            vulkanmod$state.attach(this, owner.name().toString(), interpolation == null);
         }
     }
     @Inject(method = "tickAndUpload", at = @At("HEAD"))
