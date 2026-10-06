@@ -213,6 +213,7 @@ public final class PerformanceProfiler {
         if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return false;
         TextureTickAttribution.emitSummary();
         WorldRenderAttribution.emitSummary();
+        ParticleAttribution.emitSummary();
         long now = System.nanoTime();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,

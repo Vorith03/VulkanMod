@@ -55,6 +55,8 @@ jobs:
         run: python3 scripts/ci/gpu-profiler-contract.py
       - name: Validate automated attribution capture boundaries
         run: python3 scripts/ci/attribution-capture-contract.py
+      - name: Validate bounded particle attribution
+        run: python3 scripts/ci/particle-attribution-contract.py
       - name: Validate compilation cache corruption and identity contracts
         run: python3 scripts/ci/compilation-cache-contract.py
       - name: Validate observed pipeline history and replay contracts

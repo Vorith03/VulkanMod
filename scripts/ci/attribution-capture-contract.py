@@ -11,6 +11,7 @@ profiler = (root / "src/main/java" / package / "PerformanceProfiler.java").read_
 finish = profiler.split("public static boolean finishAutomatedCapture(String reason) {", 1)[1].split("public static void abortAutomatedCapture", 1)[0]
 assert finish.index("return false;") < finish.index("TextureTickAttribution.emitSummary()")
 assert finish.index("return false;") < finish.index("WorldRenderAttribution.emitSummary()")
+assert finish.index("return false;") < finish.index("ParticleAttribution.emitSummary()")
 assert "return active && frameActive;" in profiler
 assert "return isFrameCapturing() && clientTickActive;" in profiler
 
