@@ -72,7 +72,7 @@ public class ParticleEnginePerformanceMixin {
 
     @Inject(method = "add(Lnet/minecraft/client/particle/Particle;)V", at = @At("HEAD"))
     private void vulkanmod$recordParticleAdd(Particle particle, CallbackInfo ci) {
-        ParticleAttribution.recordAdded(particle);
+        ParticleAttribution.recordAdded(particle, particle == null ? null : particle.getRenderType());
     }
 
     @Inject(

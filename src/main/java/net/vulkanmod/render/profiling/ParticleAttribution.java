@@ -47,15 +47,10 @@ public final class ParticleAttribution {
     private static final long[] sourceMismatches = ENABLED ? new long[MAX_CLASSES] : null;
     private static final long[] providerMismatches = ENABLED ? new long[MAX_CLASSES] : null;
     private static final long[] renderTypeMismatches = ENABLED ? new long[MAX_CLASSES] : null;
-    private static final long[] renderCalls = ENABLED ? new long[MAX_CLASSES] : null;
-    private static final long[] renderSamples = ENABLED ? new long[MAX_CLASSES] : null;
-    private static final long[] renderSampleNanos = ENABLED ? new long[MAX_CLASSES] : null;
-
     private static int classCount;
     private static long engineTicks;
     private static long renderPasses;
     private static long overflowTickCalls;
-    private static long overflowRenderCalls;
     private static long overflowAdditions;
     private static long overflowCreations;
 
@@ -115,36 +110,7 @@ public final class ParticleAttribution {
         }
     }
 
-    public static int beginParticleRender(Object particle, Object renderType) {
-        if(!ENABLED || !PerformanceProfiler.isFrameCapturing() || particle == null) {
-            return 0;
-        }
-
-        int slot = slotFor(particle.getClass(), true);
-        if(slot < 0) {
-            overflowRenderCalls++;
-            return 0;
-        }
-        rememberRenderType(slot, renderType);
-
-        long call = ++renderCalls[slot];
-        int token = slot + 1;
-        return ((call - 1L) & (SAMPLE_STRIDE - 1L)) == 0L ? token : -token;
-    }
-
-    public static void endParticleRender(int token, long elapsedNanos) {
-        if(!ENABLED || token <= 0) {
-            return;
-        }
-        int slot = token - 1;
-        if(slot < 0 || slot >= classCount) {
-            return;
-        }
-        renderSamples[slot]++;
-        renderSampleNanos[slot] += Math.max(0L, elapsedNanos);
-    }
-
-    public static void recordAdded(Object particle) {
+    public static void recordAdded(Object particle, Object renderType) {
         if(!ENABLED || !PerformanceProfiler.isClientTickCapturing() || particle == null) {
             return;
         }
@@ -154,6 +120,7 @@ public final class ParticleAttribution {
             return;
         }
         additions[slot]++;
+        rememberRenderType(slot, renderType);
     }
 
     public static void recordCreated(Object particle, Object sourceKey, Object provider) {
@@ -193,23 +160,19 @@ public final class ParticleAttribution {
         }
 
         long totalTickCalls = sum(tickCalls, classCount) + overflowTickCalls;
-        long totalRenderCalls = sum(renderCalls, classCount) + overflowRenderCalls;
         long totalAdditions = sum(additions, classCount) + overflowAdditions;
         long totalCreations = sum(creations, classCount) + overflowCreations;
         long totalRemovals = sum(removals, classCount);
         long totalTickSamples = sum(tickSamples, classCount);
-        long totalRenderSamples = sum(renderSamples, classCount);
         long sampledTickNanos = sum(tickSampleNanos, classCount);
-        long sampledRenderNanos = sum(renderSampleNanos, classCount);
         long sampledAllocBytes = sum(tickSampleAllocatedBytes, classCount);
 
         PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
-                "particle_attribution engine_ticks=%d render_passes=%d class_slots=%d class_cap=%d sample_stride=%d allocation_available=%s tick_calls=%d tick_samples=%d render_calls=%d render_samples=%d additions=%d creations=%d removals=%d overflow_tick_calls=%d overflow_render_calls=%d overflow_additions=%d overflow_creations=%d sampled_tick_ms=%.3f sampled_render_ms=%.3f sampled_tick_allocation_kib=%.3f",
+                "particle_attribution engine_ticks=%d render_passes=%d class_slots=%d class_cap=%d sample_stride=%d allocation_available=%s tick_calls=%d tick_samples=%d additions=%d creations=%d removals=%d overflow_tick_calls=%d overflow_additions=%d overflow_creations=%d sampled_tick_ms=%.3f sampled_tick_allocation_kib=%.3f render_cost_scope=aggregate_world_attribution",
                 engineTicks, renderPasses, classCount, MAX_CLASSES, SAMPLE_STRIDE, ALLOCATION_SUPPORTED,
-                totalTickCalls, totalTickSamples, totalRenderCalls, totalRenderSamples,
-                totalAdditions, totalCreations, totalRemovals,
-                overflowTickCalls, overflowRenderCalls, overflowAdditions, overflowCreations,
-                millis(sampledTickNanos), millis(sampledRenderNanos), sampledAllocBytes / 1024.0D));
+                totalTickCalls, totalTickSamples, totalAdditions, totalCreations, totalRemovals,
+                overflowTickCalls, overflowAdditions, overflowCreations,
+                millis(sampledTickNanos), sampledAllocBytes / 1024.0D));
 
         Integer[] order = new Integer[classCount];
         for(int i = 0; i < classCount; ++i) order[i] = i;
@@ -219,23 +182,17 @@ public final class ParticleAttribution {
         for(int rank = 0; rank < reportCount; ++rank) {
             int slot = order[rank];
             long tickEstimate = estimate(tickSampleNanos[slot], tickCalls[slot], tickSamples[slot]);
-            long renderEstimate = estimate(renderSampleNanos[slot], renderCalls[slot], renderSamples[slot]);
             double tickMsPerEngineTick = engineTicks == 0L ? 0.0D
                     : tickEstimate / (double)engineTicks / 1_000_000.0D;
-            double renderMsPerPass = renderPasses == 0L ? 0.0D
-                    : renderEstimate / (double)renderPasses / 1_000_000.0D;
             double tickUsPerSample = tickSamples[slot] == 0L ? 0.0D
                     : tickSampleNanos[slot] / (double)tickSamples[slot] / 1_000.0D;
-            double renderUsPerSample = renderSamples[slot] == 0L ? 0.0D
-                    : renderSampleNanos[slot] / (double)renderSamples[slot] / 1_000.0D;
             double allocKiBPerSample = tickSamples[slot] == 0L ? 0.0D
                     : tickSampleAllocatedBytes[slot] / (double)tickSamples[slot] / 1024.0D;
 
             PerformanceProfiler.benchmarkEvent(String.format(Locale.ROOT,
-                    "particle_class rank=%d class=%s tick_calls=%d tick_samples=%d tick_ms_per_engine_tick_est=%.3f tick_us_per_sample=%.3f tick_alloc_kib_per_sample=%.3f render_calls=%d render_samples=%d render_ms_per_pass_est=%.3f render_us_per_sample=%.3f additions=%d creations=%d removals=%d source=%s provider=%s render_type=%s source_mismatches=%d provider_mismatches=%d render_type_mismatches=%d",
+                    "particle_class rank=%d class=%s tick_calls=%d tick_samples=%d tick_ms_per_engine_tick_est=%.3f tick_us_per_sample=%.3f tick_alloc_kib_per_sample=%.3f additions=%d creations=%d removals=%d source=%s provider=%s render_type=%s source_mismatches=%d provider_mismatches=%d render_type_mismatches=%d",
                     rank + 1, token(classes[slot]), tickCalls[slot], tickSamples[slot],
                     tickMsPerEngineTick, tickUsPerSample, allocKiBPerSample,
-                    renderCalls[slot], renderSamples[slot], renderMsPerPass, renderUsPerSample,
                     additions[slot], creations[slot], removals[slot],
                     token(sourceKeys[slot]), token(providerClasses[slot]), token(renderTypes[slot]),
                     sourceMismatches[slot], providerMismatches[slot], renderTypeMismatches[slot]));
@@ -282,9 +239,7 @@ public final class ParticleAttribution {
     private static double score(int slot) {
         double tick = engineTicks == 0L ? 0.0D
                 : estimate(tickSampleNanos[slot], tickCalls[slot], tickSamples[slot]) / (double)engineTicks;
-        double render = renderPasses == 0L ? 0.0D
-                : estimate(renderSampleNanos[slot], renderCalls[slot], renderSamples[slot]) / (double)renderPasses;
-        return tick + render;
+        return tick;
     }
 
     private static long sum(long[] values, int count) {
@@ -315,7 +270,7 @@ public final class ParticleAttribution {
     private static void reset() {
         classCount = 0;
         engineTicks = renderPasses = 0L;
-        overflowTickCalls = overflowRenderCalls = overflowAdditions = overflowCreations = 0L;
+        overflowTickCalls = overflowAdditions = overflowCreations = 0L;
         Arrays.fill(hashKeys, null);
         Arrays.fill(hashSlots, 0);
         Arrays.fill(classes, null);
@@ -332,8 +287,5 @@ public final class ParticleAttribution {
         Arrays.fill(sourceMismatches, 0L);
         Arrays.fill(providerMismatches, 0L);
         Arrays.fill(renderTypeMismatches, 0L);
-        Arrays.fill(renderCalls, 0L);
-        Arrays.fill(renderSamples, 0L);
-        Arrays.fill(renderSampleNanos, 0L);
     }
 }

@@ -40,13 +40,13 @@ public class ParticleAttributionContract {
         ProviderB providerB = new ProviderB();
 
         ParticleAttribution.recordCreated(a, "minecraft:test_a", providerA);
-        ParticleAttribution.recordAdded(a);
+        ParticleAttribution.recordAdded(a, "particle_sheet_translucent");
         int aTick = ParticleAttribution.beginParticleTick(a);
         check(aTick > 0, "first A tick should be sampled");
         ParticleAttribution.endParticleTick(aTick, 8_000L, 1_024L, false);
 
         ParticleAttribution.recordCreated(b, "testmod:test_b", providerB);
-        ParticleAttribution.recordAdded(b);
+        ParticleAttribution.recordAdded(b, "custom");
         int bTick = ParticleAttribution.beginParticleTick(b);
         check(bTick > 0, "first B tick should be sampled");
         ParticleAttribution.endParticleTick(bTick, 20_000L, 4_096L, true);
@@ -59,11 +59,6 @@ public class ParticleAttributionContract {
         }
 
         ParticleAttribution.beginRenderPass();
-        int aRender = ParticleAttribution.beginParticleRender(a, "particle_sheet_translucent");
-        int bRender = ParticleAttribution.beginParticleRender(b, "custom");
-        check(aRender > 0 && bRender > 0, "first renders should be sampled");
-        ParticleAttribution.endParticleRender(aRender, 15_000L);
-        ParticleAttribution.endParticleRender(bRender, 30_000L);
 
         PerformanceProfiler.frame = PerformanceProfiler.tick = false;
         ParticleAttribution.emitSummary();
@@ -72,7 +67,7 @@ public class ParticleAttributionContract {
     public static void main(String[] args) {
         // Warmup/out-of-capture calls must not contaminate the capture.
         ParticleAttribution.beginEngineTick();
-        ParticleAttribution.recordAdded(new ParticleA());
+        ParticleAttribution.recordAdded(new ParticleA(), "warmup");
         ParticleAttribution.emitSummary();
         check(PerformanceProfiler.lines.isEmpty(), "warmup contamination");
 
@@ -81,9 +76,9 @@ public class ParticleAttributionContract {
         String summary = PerformanceProfiler.lines.get(0);
         check(summary.contains("engine_ticks=1 "), summary);
         check(summary.contains("render_passes=1 "), summary);
+        check(summary.contains("render_cost_scope=aggregate_world_attribution"), summary);
         check(summary.contains("class_slots=2 "), summary);
         check(summary.contains("tick_calls=10 "), summary);
-        check(summary.contains("render_calls=2 "), summary);
         check(summary.contains("additions=2 "), summary);
         check(summary.contains("creations=2 "), summary);
         check(summary.contains("removals=1 "), summary);
@@ -105,7 +100,7 @@ public class ParticleAttributionContract {
         oneCapture();
         check(PerformanceProfiler.lines.size() == 6, "second capture lost or leaked state");
         check(PerformanceProfiler.lines.get(3).contains("engine_ticks=1 "), "prior capture leaked");
-        System.out.println("Particle attribution contract passed: capture scope, bounded slots, sampled cost, churn, source/provider/render identity, reset");
+        System.out.println("Particle attribution contract passed: capture scope, bounded slots, sampled tick cost/allocation, churn, source/provider/render identity, aggregate render boundary, reset");
     }
 }
 '''
