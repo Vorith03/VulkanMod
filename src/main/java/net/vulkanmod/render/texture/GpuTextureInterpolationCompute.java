@@ -13,6 +13,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkBufferImageCopy;
 import org.lwjgl.vulkan.VkBufferMemoryBarrier;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
+import org.lwjgl.vulkan.VkImageMemoryBarrier;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolCreateInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolSize;
@@ -387,6 +388,33 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     0, null, afterCompute, null);
 
             atlas.transferDstLayout(commandBuffer);
+
+            // The texture tick may have written another sprite (or the CPU
+            // reference half of the native oracle) in this same atlas immediately
+            // before this interpolation. Remaining in TRANSFER_DST does not itself
+            // create a memory dependency. Serialize prior transfer writes before
+            // this compute result writes any atlas subresource again.
+            VkImageMemoryBarrier.Buffer atlasWriteBarrier =
+                    VkImageMemoryBarrier.calloc(1, stack);
+            atlasWriteBarrier.get(0)
+                    .sType$Default()
+                    .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+                    .newLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .image(atlas.getId());
+            atlasWriteBarrier.get(0).subresourceRange()
+                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                    .baseMipLevel(0)
+                    .levelCount(atlas.mipLevels)
+                    .baseArrayLayer(0)
+                    .layerCount(1);
+            vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, null, null, atlasWriteBarrier);
+
             VkBufferImageCopy.Buffer regions = VkBufferImageCopy.calloc(regionCount, stack);
             int region = 0;
             for(int mip = 0; mip < levels; ++mip) {
