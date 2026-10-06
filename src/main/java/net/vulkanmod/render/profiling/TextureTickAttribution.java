@@ -1,7 +1,5 @@
 package net.vulkanmod.render.profiling;
 
-import net.vulkanmod.render.texture.GpuAnimatedTextureResidency;
-
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -56,6 +54,13 @@ public final class TextureTickAttribution {
     private static long residentCopyCalls;
     private static long residentCopyRegions;
     private static long residentCopyBytes;
+    private static long residentCurrentBytes;
+    private static long residentPeakBytes;
+    private static long residentAdmitted;
+    private static long residentCapacityRejected;
+    private static long residentSourceRejected;
+    private static long residentStagingRejected;
+    private static long residentInvalidated;
 
     private TextureTickAttribution() {
     }
@@ -123,6 +128,34 @@ public final class TextureTickAttribution {
         residentCopyBytes += bytes;
     }
 
+    public static void residentAdmitted(long bytes) {
+        if(!ENABLED || bytes <= 0L) return;
+        residentCurrentBytes += bytes;
+        residentPeakBytes = Math.max(residentPeakBytes, residentCurrentBytes);
+        residentAdmitted++;
+    }
+
+    public static void residentReleased(long bytes) {
+        if(!ENABLED || bytes <= 0L) return;
+        residentCurrentBytes = Math.max(0L, residentCurrentBytes - bytes);
+    }
+
+    public static void residentCapacityRejected() {
+        if(ENABLED) residentCapacityRejected++;
+    }
+
+    public static void residentSourceRejected() {
+        if(ENABLED) residentSourceRejected++;
+    }
+
+    public static void residentStagingRejected() {
+        if(ENABLED) residentStagingRejected++;
+    }
+
+    public static void residentInvalidated() {
+        if(ENABLED) residentInvalidated++;
+    }
+
     public static void endTick(long startNanos) {
         if (!ENABLED || !tickActive || startNanos == 0L) return;
         long elapsed = Math.max(0L, System.nanoTime() - startNanos);
@@ -178,20 +211,19 @@ public final class TextureTickAttribution {
                 millis(copyFlushNanosSum / ticks), millis(percentile(copyFlushSamples, sampledTicks, 0.95D)),
                 outerCopyFlushes, outerCopyRegions, millis(outerCopyFlushNanosSum / ticks),
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
-        GpuAnimatedTextureResidency.Stats resident = GpuAnimatedTextureResidency.stats();
         line.append(" resident_copy_calls=").append(residentCopyCalls)
                 .append(" resident_copy_regions=").append(residentCopyRegions)
                 .append(" resident_copy_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentCopyBytes / 1024.0D))
                 .append(" resident_current_kib=")
-                .append(String.format(Locale.ROOT, "%.3f", resident.currentBytes() / 1024.0D))
+                .append(String.format(Locale.ROOT, "%.3f", residentCurrentBytes / 1024.0D))
                 .append(" resident_peak_kib=")
-                .append(String.format(Locale.ROOT, "%.3f", resident.peakBytes() / 1024.0D))
-                .append(" resident_admitted=").append(resident.admitted())
-                .append(" resident_capacity_rejected=").append(resident.capacityRejected())
-                .append(" resident_source_rejected=").append(resident.sourceRejected())
-                .append(" resident_staging_rejected=").append(resident.stagingRejected())
-                .append(" resident_invalidated=").append(resident.sourceInvalidated());
+                .append(String.format(Locale.ROOT, "%.3f", residentPeakBytes / 1024.0D))
+                .append(" resident_admitted=").append(residentAdmitted)
+                .append(" resident_capacity_rejected=").append(residentCapacityRejected)
+                .append(" resident_source_rejected=").append(residentSourceRejected)
+                .append(" resident_staging_rejected=").append(residentStagingRejected)
+                .append(" resident_invalidated=").append(residentInvalidated);
         for (Phase phase : PHASES) {
             int ordinal = phase.ordinal();
             line.append(' ').append(phase.label).append("_calls=").append(phaseCalls[ordinal]);

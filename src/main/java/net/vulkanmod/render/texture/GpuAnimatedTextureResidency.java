@@ -81,12 +81,14 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             NativeImage image = images[mip];
             if(image == null) {
                 sourceRejected++;
+                TextureTickAttribution.residentSourceRejected();
                 return null;
             }
 
             VNativeImageI nativeImage = (VNativeImageI)(Object)image;
             if(!nativeImage.vulkanmod$isRgba()) {
                 sourceRejected++;
+                TextureTickAttribution.residentSourceRejected();
                 return null;
             }
 
@@ -94,6 +96,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             int height = image.getHeight();
             if(width <= 0 || height <= 0) {
                 sourceRejected++;
+                TextureTickAttribution.residentSourceRejected();
                 return null;
             }
 
@@ -102,16 +105,19 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                 bytes = Math.multiplyExact(Math.multiplyExact((long)width, height), 4L);
                 if(total > Integer.MAX_VALUE || bytes > Integer.MAX_VALUE - total) {
                     capacityRejected++;
+                    TextureTickAttribution.residentCapacityRejected();
                     return null;
                 }
             } catch(ArithmeticException overflow) {
                 capacityRejected++;
+                TextureTickAttribution.residentCapacityRejected();
                 return null;
             }
 
             ByteBuffer view = nativeImage.vulkanmod$getReadOnlyBuffer();
             if(view == null || view.remaining() < bytes) {
                 sourceRejected++;
+                TextureTickAttribution.residentSourceRejected();
                 return null;
             }
 
@@ -124,6 +130,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
 
         if(total <= 0L || total > LIMIT_BYTES || currentBytes > LIMIT_BYTES - total) {
             capacityRejected++;
+            TextureTickAttribution.residentCapacityRejected();
             return null;
         }
 
@@ -142,6 +149,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                 ByteBuffer view = nativeImage.vulkanmod$getReadOnlyBuffer();
                 if(view == null) {
                     sourceRejected++;
+                    TextureTickAttribution.residentSourceRejected();
                     return null;
                 }
                 int bytes = Math.multiplyExact(Math.multiplyExact(widths[mip], heights[mip]), 4);
@@ -153,10 +161,12 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             buffer = new TextureResidentBuffer(residentBytes);
             if(!VTextureSelector.uploadTextureResidentSource(buffer, packed)) {
                 stagingRejected++;
+                TextureTickAttribution.residentStagingRejected();
                 return null;
             }
 
             admitted++;
+            TextureTickAttribution.residentAdmitted(residentBytes);
             TextureResidentBuffer owned = buffer;
             buffer = null;
             reserved = false;
@@ -164,6 +174,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                     images, generations, offsets, widths, heights, owned, residentBytes);
         } catch(OutOfMemoryError | RuntimeException failure) {
             sourceRejected++;
+            TextureTickAttribution.residentSourceRejected();
             return null;
         } finally {
             if(packed != null) {
@@ -183,6 +194,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         if(this.closed || atlas == null || !this.matches(currentImages)) {
             if(!this.closed) {
                 sourceInvalidated++;
+                TextureTickAttribution.residentInvalidated();
             }
             return false;
         }
@@ -192,6 +204,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                 destX, destY, sourceX, sourceY, frameWidth, frameHeight);
         if(regions <= 0) {
             sourceInvalidated++;
+            TextureTickAttribution.residentInvalidated();
             return false;
         }
 
@@ -233,7 +246,10 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         }
         this.closed = true;
         final int releaseBytes = this.residentBytes;
-        this.buffer.retire(() -> currentBytes = Math.max(0L, currentBytes - releaseBytes));
+        this.buffer.retire(() -> {
+            currentBytes = Math.max(0L, currentBytes - releaseBytes);
+            TextureTickAttribution.residentReleased(releaseBytes);
+        });
     }
 
     public static Stats stats() {
