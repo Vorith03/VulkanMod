@@ -1,5 +1,7 @@
 package net.vulkanmod.vulkan.memory;
 
+import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
+
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
@@ -10,6 +12,9 @@ import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
  * already-submitted frame fence.
  */
 public final class TextureResidentBuffer extends Buffer {
+    private static final Long2ReferenceOpenHashMap<Runnable> RETIREMENT_CALLBACKS =
+            new Long2ReferenceOpenHashMap<>();
+
     private boolean retirementScheduled;
 
     public TextureResidentBuffer(int size) {
@@ -25,10 +30,21 @@ public final class TextureResidentBuffer extends Buffer {
             return;
         }
         this.retirementScheduled = true;
-        MemoryManager manager = MemoryManager.getInstance();
-        manager.addToFreeable(this);
         if(afterFree != null) {
-            manager.addFrameOp(afterFree);
+            synchronized(RETIREMENT_CALLBACKS) {
+                RETIREMENT_CALLBACKS.put(this.id, afterFree);
+            }
+        }
+        MemoryManager.getInstance().addToFreeable(this);
+    }
+
+    static void onFreed(long bufferId) {
+        Runnable callback;
+        synchronized(RETIREMENT_CALLBACKS) {
+            callback = RETIREMENT_CALLBACKS.remove(bufferId);
+        }
+        if(callback != null) {
+            callback.run();
         }
     }
 }

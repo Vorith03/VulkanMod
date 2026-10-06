@@ -196,6 +196,10 @@ public abstract class VTextureSelector {
             return false;
         }
 
+        // Preserve atlas-copy order when this resident source is seeded between
+        // CPU-backed sprite uploads in the outer texture-tick batch.
+        flushSpriteUploadCopies();
+
         int size = source.remaining();
         if(size > TEXTURE_STAGING_BATCH_LIMIT || destination.getBufferSize() < size) {
             return false;
@@ -333,6 +337,10 @@ public abstract class VTextureSelector {
             if(regionCount <= 0) {
                 return -1;
             }
+
+            // Prior CPU-backed regions were staged earlier in this same logical
+            // texture tick; emit them before this direct resident copy.
+            flushSpriteUploadCopies();
 
             CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
             texture.transferDstLayout(commandBuffer);

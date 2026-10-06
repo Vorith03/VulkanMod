@@ -260,6 +260,7 @@ public class MemoryManager {
         vmaDestroyBuffer(allocator, buffer, allocation);
 
         buffers.remove(buffer);
+        TextureResidentBuffer.onFreed(buffer);
     }
 
     private static void freeBuffer(Buffer.BufferInfo bufferInfo) {
@@ -278,6 +279,7 @@ public class MemoryManager {
         }
 
         buffers.remove(bufferInfo.id());
+        TextureResidentBuffer.onFreed(bufferInfo.id());
     }
 
     public static synchronized void freeImage(long image, long allocation) {
