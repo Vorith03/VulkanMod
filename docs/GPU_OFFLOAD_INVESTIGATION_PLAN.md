@@ -113,6 +113,42 @@ O2 bounded numeric-reference and ownership-contract work is qualified in full pu
 
 O1 is the next hardware action; O2 production source admission remains open. Texture O3/O4 may be accepted independently; O4 is not required if resident copies resolve the bottleneck. Terrain and particles are conditional tracks. No calendar or numerical speedup promise is attached to this plan.
 
+## Current execution status — 2026-10-06
+
+The owner's current priority is to move safely transferable renderer work off the
+CPU wherever exact semantics and fallback can be preserved. This is an explicit
+detour within the existing roadmap, not permission to replace arbitrary Forge
+callbacks or gameplay logic with approximate GPU behavior.
+
+- **O2:** exact transformed ticker/interpolation contract remains qualified.
+- **O3:** implemented and native-qualified. Exact-class standard animations can
+  use bounded immutable device-local source residency and GPU frame copies.
+- **O4:** implemented and native-qualified in full public CI **#998** at
+  `f1ddc72397ed132dab16b5e953db369ba76a6ed3`. Same-graphics-queue compute
+  interpolation requires `shaderFloat64`, preserves CPU schedule/clock
+  ownership, uses device-local scratch and falls back before skipping CPU work.
+  #997 established exact pixel equivalence but exposed a Vulkan transfer-write
+  hazard; #998 adds explicit atlas transfer-write ordering and is validation-clean.
+- **O5:** now the immediate texture gate. Collect matched RX performance,
+  residency/compute coverage, fallback/memory counters and real modpack behavior.
+  Default promotion remains blocked on hardware/lifecycle evidence.
+- **O8 attribution prerequisite:** implemented and CI-qualified through #995.
+  Per-class tick timing/allocation/churn and source/provider/render-type identity
+  are bounded; per-particle render redirection was deliberately rejected because
+  it conflicts with Immersive Portals. Existing aggregate render attribution
+  remains authoritative until a non-invasive GPU adapter boundary is proven.
+- **O6/O7:** existing GPU selection/indirect/hybrid code remains the implementation
+  base. Do not duplicate it. The next meaningful gates are RX movement/portal
+  correctness and dirty mixed-section rebuild evidence.
+- **Vulkan Flywheel engine:** transformed GPU instancing prerequisites and native
+  state/event pixels are already qualified, but backend activation remains blocked
+  on the existing loaded-world probe and complete fallback coverage.
+
+A future standard-animation scheduler may move CPU ticker iteration/dispatch
+bookkeeping to a bulk GPU job table only if O5 shows that work remains material
+after O3/O4. Keep the CPU-visible clock or establish an explicit compatibility
+boundary before such a scheduler suppresses Java ticker progression.
+
 ## Primary Vulkan references checked 2026-10-02
 
 - [Storage images and texel buffers](https://docs.vulkan.org/guide/latest/storage_image_and_texel_buffers.html): query format support and image usage/view requirements before selecting a storage-image design.

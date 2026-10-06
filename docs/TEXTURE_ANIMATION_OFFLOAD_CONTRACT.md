@@ -110,11 +110,49 @@ arithmetic, a renderer-wide cap (initial plan: 128 MiB), peak reload accounting
 and admission failure before bypassing uploads. Do not preload all pack sources
 or synchronously evict per tick.
 
+## O3/O4 implementation qualification
+
+O3/O4 are now implemented as opt-in production candidates rather than only a
+numeric reference. Full public CI **#998** (commit
+`f1ddc72397ed132dab16b5e953db369ba76a6ed3`, run `37447468935`, job
+`112215647015`) qualifies the following bounded path:
+
+- exact vanilla `SpriteContents` identity with absent Forge metadata is the
+  admission boundary; custom/dynamic behavior retains the CPU path;
+- every source mip is snapshotted once into bounded device-local RGBA storage,
+  with original CPU images retained for fallback;
+- source `NativeImage` mutation generation invalidates residency and forces CPU
+  staging before stale GPU bytes can replace the atlas;
+- discrete changes use device-local buffer-to-image copies;
+- interpolation requires an enabled device `shaderFloat64` feature and uses
+  same-graphics-queue compute into bounded device-local scratch followed by the
+  existing transfer-destination atlas path;
+- CPU retains the resolved frame schedule, `frame/subFrame` clock, visibility
+  gating and off-render-thread deferral semantics;
+- residency plus interpolation scratch are charged against the 128 MiB pilot
+  cap, allocation/admission failures fall back, and retirement is delayed through
+  the renderer's upload-safe queue;
+- mixed CPU/GPU sprite ordering, transfer-write ordering and final sampled-read
+  transitions are explicit. #997 passed exact pixel comparisons but Vulkan sync
+  validation found missing atlas write-after-write ordering; #998 added the
+  transfer-write dependency and passes validation cleanly.
+
+The validation-enabled native oracle compares the GPU candidate directly against
+the transformed CPU ticker for reordered/repeated/implicit/filtered schedules,
+odd rectangular frames, zero-extent mips, hidden/first-use refresh, exact alpha
+and Java-double truncation across every positive mip. Existing post-chain,
+screenshot, indirect, Create Chronicles and Crash Assistant gates also pass.
+
 ## Remaining gates
 
-A passing synthetic oracle closes bounded numeric behavior only. Production
-source admission, custom mixin ownership, resource-pressure/stale-generation
-fallback, resident copies, compute dispatch and helper-queue timestamps remain
-unimplemented. Pack/portal/lifecycle and paired RX adoption gates remain open.
-The user's deferred reload/re-entry check remains deferred. No hardware speedup
-or default promotion follows from this work.
+O3/O4 still need matched RX 6900 XT / RADV performance and real-pack/lifecycle
+adoption evidence before either path can become a default. The user's deferred
+manual reload/re-entry gate remains open. The accelerated path also deliberately
+does not move arbitrary mod ticker callbacks or the CPU-visible animation clock.
+
+Future texture work should first measure #998-class residency/compute coverage,
+CPU time removed, GPU copy/compute cost, fallback rate and memory peak. If
+standard ticker iteration remains material after pixel work is removed, a
+separate bulk GPU animation-job scheduler may be investigated with its own
+CPU-visible clock/compatibility contract; it is not implicitly authorized by
+O3/O4 correctness.

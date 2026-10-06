@@ -183,6 +183,8 @@ Vanilla Minecraft post effects are core correctness and belong in Phase 3. Full 
 
 **Status: ACTIVE MEASUREMENT PRIORITY; CONTRACT PRESENT; COMPARABLE RUNS OPEN**
 
+**Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
+
 Goal: create apples-to-apples measurements so optimization claims have evidence.
 
 Mandatory gates:

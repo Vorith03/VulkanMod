@@ -521,7 +521,7 @@ public final class PerformanceProfiler {
         String deviceName = Vulkan.getDeviceInfo() == null ? "unknown"
                 : Vulkan.getDeviceInfo().deviceName.replace(' ', '_');
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] environment java=%s os=%s cpus=%d vulkan_gpu=%s voxel_staging=%s gpu_mesher_prop=%s cpu_bypass_prop=%s draw_handoff_prop=%s hybrid_prop=%s",
+                "[VulkanModPerf] environment java=%s os=%s cpus=%d vulkan_gpu=%s voxel_staging=%s gpu_mesher_prop=%s cpu_bypass_prop=%s draw_handoff_prop=%s hybrid_prop=%s gpu_texture_resident_prop=%s gpu_texture_interpolation_prop=%s shader_float64_enabled=%s",
                 System.getProperty("java.version", "unknown"),
                 System.getProperty("os.name", "unknown").replace(' ', '_'),
                 Runtime.getRuntime().availableProcessors(), deviceName,
@@ -529,7 +529,10 @@ public final class PerformanceProfiler {
                 Boolean.getBoolean("vulkanmod.experimentalGpuTerrainMesher"),
                 Boolean.getBoolean("vulkanmod.experimentalGpuTerrainCpuBypass"),
                 Boolean.getBoolean("vulkanmod.experimentalGpuTerrainDrawHandoff"),
-                Boolean.getBoolean("vulkanmod.experimentalGpuTerrainHybrid")));
+                Boolean.getBoolean("vulkanmod.experimentalGpuTerrainHybrid"),
+                Boolean.getBoolean("vulkanmod.gpuAnimatedTextureCopies"),
+                Boolean.getBoolean("vulkanmod.gpuAnimatedTextureInterpolation"),
+                net.vulkanmod.vulkan.Device.isShaderFloat64Enabled()));
         flushOutput();
         return active;
     }
