@@ -1,6 +1,6 @@
 # GPU offload investigation and implementation plan
 
-Requested 2026-10-02. This is an engineering plan, not implemented functionality or a speedup claim. Follow AGENTS.md section 3A and the live Phase 5 checkpoint before each executable slice.
+Requested 2026-10-02. This plan records proposed tracks and their current qualification below; it is not a hardware speedup claim. Follow AGENTS.md section 3A and the live Phase 5 checkpoint before each executable slice.
 
 ## Objective and current evidence
 
@@ -109,9 +109,9 @@ Implement a versioned bounded numeric state buffer, spawn/removal protocol and i
 | O7 | Existing hybrid meshing RX qualification, then measured adapters | O6 where dependent; model/output ownership contracts |
 | O8 | Particle owner/cost report, then one qualified rendering/simulation pilot | Particle evidence selects target; no generic simulation replacement |
 
-O2 bounded numeric-reference and ownership-contract work is qualified in full public CI **#988** (executable `3d01d50a6e73fc84f0daec067d248000f65d3d16`). `TEXTURE_ANIMATION_OFFLOAD_CONTRACT.md` records exact transformed Forge behavior, seven native cases and inspected bytecode. Source immutability/admission and the production copy/compute ABI remain unimplemented; no renderer default or hardware adoption gate changed.
+O2 bounded numeric-reference and ownership-contract work qualified in full public CI **#988** (executable `3d01d50a6e73fc84f0daec067d248000f65d3d16`). `TEXTURE_ANIMATION_OFFLOAD_CONTRACT.md` records exact transformed Forge behavior, seven native cases and inspected bytecode. Later O3/O4 source admission and production copy/compute are now implemented and qualified as recorded below; renderer defaults and hardware adoption gates remain unchanged.
 
-O1 is the next hardware action; O2 production source admission remains open. Texture O3/O4 may be accepted independently; O4 is not required if resident copies resolve the bottleneck. Terrain and particles are conditional tracks. No calendar or numerical speedup promise is attached to this plan.
+O5 is now the immediate hardware action; the older matched #946 plan is historical. Texture O3/O4 may be accepted independently; O4 is not required if resident copies resolve the bottleneck. Terrain and particles are conditional tracks. No calendar or numerical speedup promise is attached to this plan.
 
 ## Current execution status — 2026-10-06
 
@@ -148,6 +148,19 @@ A future standard-animation scheduler may move CPU ticker iteration/dispatch
 bookkeeping to a bulk GPU job table only if O5 shows that work remains material
 after O3/O4. Keep the CPU-visible clock or establish an explicit compatibility
 boundary before such a scheduler suppresses Java ticker progression.
+
+The next controlled hardware capture is
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Convergence logic is fully public-CI
+green in #1000 (`74472d1cefd16ed91a94b2bd794ca187fcca34c6`). The separate
+graphics texture-upload batch timestamp scope is native-qualified in #1001
+(`1080620979a5d38a5a609cd464f76adfa451e305`), including validation-enabled
+O3/O4 batches, 64-pending-query overflow and completion-qualified query reuse.
+Full public CI #1002 is green at
+`9d333487613e1a466e94f8562cb5ce5b403ad36c`, run `37454136840`, job
+`112237469104`. It additionally records CPU/GPU upload/interpolation route
+denominators and source/allocated-scratch payload peaks. Private real-pack
+fixtures skipped; representative RX coverage is the next gate. These probes establish measurement
+mechanisms, not a new renderer default or measured speedup.
 
 ## Primary Vulkan references checked 2026-10-02
 

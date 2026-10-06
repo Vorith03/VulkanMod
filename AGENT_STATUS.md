@@ -2,7 +2,55 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Current executable / CI state
+## Immediate continuation — O5 hardware qualification
+
+This section supersedes the historical #946-only benchmark and Flywheel-first
+next-action notes below. The owner explicitly requests safe GPU-first renderer
+work and one controlled RD32 O3/O4 capture before selecting the next adapter.
+
+- Recovered branch at `74472d1cefd16ed91a94b2bd794ca187fcca34c6`, the sole
+  executable delta after checkpoint `db71db61e446490395cf6eea6cf6875e1130ac7c`.
+  Its terrain-convergence settling logic is fully public-CI green in **#1000**,
+  run `37448951240`, job `112220508518`. The prior checkpoint #999 also passed.
+  Minimum warmup 60 s, continuous terrain quiet 10 s, maximum settle 300 s;
+  nonconvergence aborts and actual settling appears in provenance.
+- `1080620979a5d38a5a609cd464f76adfa451e305` is fully public-CI green in
+  **#1001**, run `37453506436`, job `112235430128`. Adds separate bounded GPU
+  timing for explicit graphics texture-upload batches, covering CPU-staged/O3
+  copies, O4 compute and atlas dependencies, without a steady-state wait. The
+  validation-enabled native animation oracle now requires real query results,
+  64-pending-range overflow and completed-query reuse. All public/native and
+  compatibility gates plus JAR/log uploads passed. Private real-pack tests skipped.
+- Latest executable `9d333487613e1a466e94f8562cb5ce5b403ad36c` is fully
+  public-CI green in **#1002**, run `37454136840`, job `112237469104`. It adds captured CPU/GPU upload-route denominators,
+  standard distinct-frame interpolation coverage and separate admitted-source /
+  allocated-scratch payload peaks. Local Java query-ownership and attribution
+  contracts pass, including warmup, delayed availability, failed-read quarantine,
+  capture reset, route counters and retirement/peak accounting. Full local Gradle
+  remains unavailable because its distribution download is network-blocked.
+  Java/Forge compilation, distributable packaging, validation-enabled animation
+  and query oracles, both startup paths, indirect, post/depth chains, combined
+  Create Chronicles, Crash Assistant and JAR/log uploads all passed. Private
+  real-pack fixtures skipped. No executable CI remains pending for this slice.
+- Next user-machine action is `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Keep
+  RD32 and the existing packs/settings; request only O3/O4 with profiling and
+  convergence. No unrelated terrain/hybrid/indirect/Flywheel activation or
+  deferred reload/re-entry test. Return the new UUID benchmark log + latest.log
+  and any animation artifacts. No new hardware performance/adoption evidence
+  has been collected, and both O3/O4 defaults remain off.
+- Main-graphics timestamps still exclude helper uploads. New `texture_upload_gpu`
+  is a whole-batch graphics-queue span including dependencies; never sum it with
+  main graphics as a total GPU frame. CPU route denominators exclude hidden/no-op
+  updates; custom/disabled CPU routes are coverage limits, not necessarily GPU
+  failures. Memory fields include warmup/pending retirement and count payload,
+  not allocator overhead. See `docs/PERFORMANCE_PROFILING.md`.
+- Once the controlled capture exists, choose measured particle adapter(s), bulk
+  texture job/copy preparation, remaining texture CPU work or another measured
+  subsystem. Preserve CPU-visible clocks and arbitrary Forge/mod callbacks.
+  Do not preselect a particle family, replace tick semantics or reopen the
+  Immersive Portals-conflicting per-particle render redirect.
+
+## Prior qualified executable / CI milestones
 
 - Current GPU-offload candidate `f1ddc72397ed132dab16b5e953db369ba76a6ed3` is fully public-CI green in **#998**, run `37447468935`, job `112215647015`, first attempt. O3 now keeps exact-class/Forge-metadata-free animated source mips in bounded device-local residency and performs discrete frame changes with GPU buffer-to-image copies. O4 adds opt-in same-graphics-queue compute interpolation using `shaderFloat64`, device-local scratch and compute-to-transfer atlas writes while Forge retains CPU clock/frame ownership. The validation-enabled native oracle passed reordered/repeated/implicit/filtered metadata, odd/rectangular and zero-extent mips, exact ABGR/alpha/Java-double-truncation pixels, hidden/first-use refresh, source-mutation fallback and all existing public Vulkan/compatibility gates. #997 proved the exact pixels but exposed missing transfer-write ordering; #998 adds the required transfer-write -> transfer-write dependency and is validation-clean. Properties remain opt-in: `vulkanmod.gpuAnimatedTextureCopies` and `vulkanmod.gpuAnimatedTextureInterpolation`; no hardware speedup/default-adoption claim exists yet.
 - Bounded particle owner/cost attribution is also qualified through **#995** after removing a per-particle render redirect that conflicted with Immersive Portals. Automated captures now report bounded per-class tick timing/allocation, creation/add/removal churn, source/provider identity and render type; render CPU time remains the existing aggregate world attribution to preserve portal semantics. This evidence is intended to select one narrow GPU particle adapter rather than replace arbitrary Java particle behavior.
@@ -105,9 +153,9 @@ A follow-up source review found that the #945 helpers admitted warmup texture/wo
 
 ## GPU offload investigation plan
 
-The owner requested a plan for investigation and implementation of GPU texture animation, terrain visibility/indirect commands, hybrid meshing and qualified particle work. `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` defines O1–O8, eligibility/ownership/oracles, GPU timing scope, bounded memory, fallback and adoption gates. O1 is the matched #946 comparison; O2 is the exact Forge animation contract/oracle and can proceed while hardware evidence is pending. No offload implementation/default or Phase 7 gate changed.
+The owner requested investigation and implementation of GPU texture animation, terrain visibility/indirect commands, hybrid meshing and qualified particle work. `docs/GPU_OFFLOAD_INVESTIGATION_PLAN.md` defines O1–O8, eligibility/ownership/oracles, GPU timing scope, bounded memory, fallback and adoption gates. O3/O4 and O8 attribution now qualify as described above; O5 RD32 hardware measurement is immediate. No accelerated default or Phase 7 gate changed.
 
-## Next useful action
+## Other qualified features and open adoption gates
 
 The owner authorized implementation of the complete performance feature shortlist.
 `docs/PERFORMANCE_FEATURE_IMPLEMENTATION.md` tracks actual paths and adoption gates.
@@ -145,7 +193,7 @@ unavailable because the distribution download is network-blocked. All implementa
 is published and locally synchronized. No CI result is pending for this atomic slice;
 no measured hardware speedup is established.
 
-**Next implementation stage:** qualify actual ClientLevel/event rendering of the
+**Flywheel-only next stage (not the immediate offload priority):** qualify actual ClientLevel/event rendering of the
 experimental transformed + CPU Engine, including exact world/task/origin ownership
 and mixed native/CPU material routing. The bounded native state/scene/material draw
 is green in #974; its pixel fixtures use synthetic atlas/lightmap images after real
@@ -177,7 +225,8 @@ indirect/hybrid infrastructure and paused Phase 7 gates must be preserved.
 The instance-input, ownership, callable CPU-engine/lifetime, native material
 shader and experimental state/event dispatcher slices are completed atomic milestones; no CI result is pending for these slices. Continue under AGENTS.md section 3A and this checkpoint. The full feature
 request remains unfinished; do not convert prerequisite qualification into backend adoption.
-The matched hardware benchmark remains the independent next user-machine gate:
+The historical matched #946 benchmark plan is retained as comparison context;
+the immediate user-machine gate is now the O5 RD32 capture above:
 
 1. Use CI-green build **#946** for the exact same automated stationary RX benchmark contract used for #935.
 2. The latest supplied `08881808-771c-499a-b9bd-81f1db2c468c` capture is the already-recorded #935 evidence, not a post-optimization result; do not mistake it for candidate validation.

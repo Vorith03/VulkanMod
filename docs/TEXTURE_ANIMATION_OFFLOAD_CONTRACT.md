@@ -1,9 +1,10 @@
 # Texture animation offload reference — O2
 
-Target: Minecraft 1.20.1, Forge 47.3.0, Java 17. This is a numeric reference and
-ownership contract, not an enabled resident-frame or compute implementation.
-Follow `GPU_OFFLOAD_INVESTIGATION_PLAN.md`; the matched #946 RX result remains
-O1 and is required before selecting a production offload experiment.
+Target: Minecraft 1.20.1, Forge 47.3.0, Java 17. This contains the O2 numeric
+reference/ownership contract and the later opt-in O3/O4 implementation evidence
+below. Follow `GPU_OFFLOAD_INVESTIGATION_PLAN.md`; the next hardware gate is
+the O5 RD32 qualification in `GPU_TEXTURE_RD32_HARDWARE_TEST.md`, with defaults
+and adoption still gated on representative hardware/lifecycle evidence.
 
 ## Reference and qualification
 
