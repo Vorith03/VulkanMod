@@ -85,6 +85,7 @@ public final class SpriteAnimationState {
                                        int subFrame, int duration) {
         if(!residentCandidate || residentDisabled || !materialize
                 || residentFrames == null
+                || !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()
                 || !GpuAnimatedTextureResidency.interpolationEnabled()
                 || !Device.getGraphicsQueue().hasActiveUploadBatch()) {
             return false;

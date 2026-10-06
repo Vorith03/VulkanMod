@@ -71,9 +71,14 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         if(!graphicsQueueSupportsCompute())
             throw new UnsupportedOperationException("graphics queue does not support compute");
 
-        this.createDescriptorResources();
-        this.createPipelineLayout();
-        this.createPipeline();
+        try {
+            this.createDescriptorResources();
+            this.createPipelineLayout();
+            this.createPipeline();
+        } catch(RuntimeException | Error failure) {
+            this.close();
+            throw failure;
+        }
     }
 
     public static boolean requested() {
@@ -97,10 +102,10 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                 instance = new GpuTextureInterpolationCompute();
             }
             return instance.allocateBinding(source, scratchBytes);
-        } catch(RuntimeException failure) {
+        } catch(RuntimeException | OutOfMemoryError failure) {
             unavailable = true;
             Initializer.LOGGER.warn(
-                    "Disabling GPU animated-texture interpolation after compute initialization failure",
+                    "Disabling GPU animated-texture interpolation after compute initialization/allocation failure",
                     failure);
             return null;
         }
