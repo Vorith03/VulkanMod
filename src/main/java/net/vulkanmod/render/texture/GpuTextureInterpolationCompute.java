@@ -1,6 +1,7 @@
 package net.vulkanmod.render.texture;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.memory.TextureResidentBuffer;
 import net.vulkanmod.vulkan.queue.CommandPool;
@@ -144,6 +145,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         boolean success = false;
         try {
             scratch = new TextureResidentBuffer(scratchBytes);
+            TextureTickAttribution.residentScratchAllocated(scratchBytes);
             this.updateDescriptorSet(descriptorSet, source, scratch);
             this.liveBindings++;
             success = true;
@@ -151,7 +153,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         } finally {
             if(!success) {
                 if(scratch != null) {
-                    scratch.retire(null);
+                    scratch.retire(() -> TextureTickAttribution.residentScratchReleased(scratchBytes));
                 }
                 if(descriptorSet != VK_NULL_HANDLE) {
                     this.freeDescriptorSet(descriptorSet);
@@ -654,7 +656,10 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             }
             this.retired = true;
             long set = this.descriptorSet;
-            this.scratch.retire(() -> this.owner.freeDescriptorSet(set));
+            this.scratch.retire(() -> {
+                this.owner.freeDescriptorSet(set);
+                TextureTickAttribution.residentScratchReleased(this.scratchBytes);
+            });
         }
     }
 }

@@ -65,6 +65,30 @@ public final class TextureTickAttribution {
     private static long residentSourceRejected;
     private static long residentStagingRejected;
     private static long residentInvalidated;
+    private static long residentSourceBytes;
+    private static long residentSourcePeakBytes;
+    private static long residentScratchBytes;
+    private static long residentScratchPeakBytes;
+    private static long spriteUploadRequests;
+    private static long cpuSpriteUploads;
+    private static long gpuSpriteUploads;
+    private static long standardInterpolationUpdates;
+    private static long standardInterpolationGpuUpdates;
+
+    /** Materialized upload routes only; hidden/catch-up suppression is not a fallback. */
+    public static void recordSpriteUploadRoute(boolean gpu) {
+        if (!ENABLED || !tickActive) return;
+        spriteUploadRequests++;
+        if (gpu) gpuSpriteUploads++;
+        else cpuSpriteUploads++;
+    }
+
+    /** Standard ticker, distinct resolved frame indices, positive interpolation progress only. */
+    public static void recordStandardInterpolationRoute(boolean gpu) {
+        if (!ENABLED || !tickActive) return;
+        standardInterpolationUpdates++;
+        if (gpu) standardInterpolationGpuUpdates++;
+    }
 
     private TextureTickAttribution() {
     }
@@ -152,6 +176,26 @@ public final class TextureTickAttribution {
         residentCurrentBytes = Math.max(0L, residentCurrentBytes - bytes);
     }
 
+    public static void residentSourceAdmitted(long bytes) {
+        if (!ENABLED || bytes <= 0L) return;
+        residentSourceBytes += bytes;
+        residentSourcePeakBytes = Math.max(residentSourcePeakBytes, residentSourceBytes);
+    }
+
+    public static void residentSourceReleased(long bytes) {
+        if (ENABLED && bytes > 0L) residentSourceBytes = Math.max(0L, residentSourceBytes - bytes);
+    }
+
+    public static void residentScratchAllocated(long bytes) {
+        if (!ENABLED || bytes <= 0L) return;
+        residentScratchBytes += bytes;
+        residentScratchPeakBytes = Math.max(residentScratchPeakBytes, residentScratchBytes);
+    }
+
+    public static void residentScratchReleased(long bytes) {
+        if (ENABLED && bytes > 0L) residentScratchBytes = Math.max(0L, residentScratchBytes - bytes);
+    }
+
     public static void residentCapacityRejected() {
         if(ENABLED) residentCapacityRejected++;
     }
@@ -223,7 +267,14 @@ public final class TextureTickAttribution {
                 millis(copyFlushNanosSum / ticks), millis(percentile(copyFlushSamples, sampledTicks, 0.95D)),
                 outerCopyFlushes, outerCopyRegions, millis(outerCopyFlushNanosSum / ticks),
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
-        line.append(" resident_copy_calls=").append(residentCopyCalls)
+        line.append(" sprite_upload_requests=").append(spriteUploadRequests)
+                .append(" gpu_sprite_uploads=").append(gpuSpriteUploads)
+                .append(" cpu_sprite_uploads=").append(cpuSpriteUploads)
+                .append(" standard_interpolation_updates=").append(standardInterpolationUpdates)
+                .append(" standard_interpolation_gpu_updates=").append(standardInterpolationGpuUpdates)
+                .append(" standard_interpolation_cpu_updates=")
+                .append(standardInterpolationUpdates - standardInterpolationGpuUpdates)
+                .append(" resident_copy_calls=").append(residentCopyCalls)
                 .append(" resident_copy_regions=").append(residentCopyRegions)
                 .append(" resident_copy_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentCopyBytes / 1024.0D))
@@ -236,6 +287,15 @@ public final class TextureTickAttribution {
                 .append(String.format(Locale.ROOT, "%.3f", residentCurrentBytes / 1024.0D))
                 .append(" resident_peak_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentPeakBytes / 1024.0D))
+                .append(" resident_memory_scope=renderer_lifetime_including_warmup_and_pending_retirement")
+                .append(" resident_source_current_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentSourceBytes / 1024.0D))
+                .append(" resident_source_peak_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentSourcePeakBytes / 1024.0D))
+                .append(" resident_scratch_current_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentScratchBytes / 1024.0D))
+                .append(" resident_scratch_peak_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", residentScratchPeakBytes / 1024.0D))
                 .append(" resident_admitted=").append(residentAdmitted)
                 .append(" resident_capacity_rejected=").append(residentCapacityRejected)
                 .append(" resident_source_rejected=").append(residentSourceRejected)
@@ -276,6 +336,8 @@ public final class TextureTickAttribution {
         copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
         residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
+        spriteUploadRequests = cpuSpriteUploads = gpuSpriteUploads = 0L;
+        standardInterpolationUpdates = standardInterpolationGpuUpdates = 0L;
         residentInterpolationCalls = residentInterpolationDispatches =
                 residentInterpolationPixels = residentInterpolationBytes = 0L;
         Arrays.fill(currentPhaseNanos, 0L);

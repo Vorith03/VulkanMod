@@ -184,6 +184,29 @@ Interpretation:
 
 Do not subtract unrelated percentiles; the non-upload p95 is calculated from per-tick remainder samples.
 
+The `texture_outer_batch_attribution` summary also counts materialized sprite
+upload routes (`sprite_upload_requests = gpu_sprite_uploads + cpu_sprite_uploads`).
+This denominator includes CPU-only/custom uploads; it is coverage of actual
+upload calls, not a count of unique sprites. Standard ticker interpolation with
+distinct frame indices and positive progress has its own
+`standard_interpolation_updates = standard_interpolation_gpu_updates +
+standard_interpolation_cpu_updates`. Hidden uploads and repeated-frame no-op
+interpolation are excluded. GPU interpolation bypasses `SpriteContents.upload`,
+so do not divide interpolation successes by sprite-upload requests. A CPU route
+can mean a disabled/unsupported GPU path as well as an admission/dispatch
+fallback; correlate the request/float64 environment fields and residency
+rejection counters before attributing a cause.
+
+Residency admission/rejection and memory fields explicitly describe renderer
+lifetime, including warmup and pending retirement. `resident_current_kib` and
+`resident_peak_kib` charge admitted source data plus reserved interpolation
+scratch against the pilot budget. Separate `resident_source_current_kib/peak_kib`
+and `resident_scratch_current_kib/peak_kib` describe admitted source payload and
+actually allocated scratch payload. They count retired buffers until actual
+release and exclude VMA allocation overhead and retained CPU images. Memory
+peaks are not reset at capture boundaries; route/copy/interpolation update
+counts cover only measured texture ticks.
+
 ## Optional Vulkan GPU timestamps
 
 Enable with the CPU profiler using:

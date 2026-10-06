@@ -32,6 +32,10 @@ public class AttributionCaptureContract {
     }
     static void textureTick() {
         long tick = TextureTickAttribution.beginTick();
+        TextureTickAttribution.recordSpriteUploadRoute(true);
+        TextureTickAttribution.recordSpriteUploadRoute(false);
+        TextureTickAttribution.recordStandardInterpolationRoute(true);
+        TextureTickAttribution.recordStandardInterpolationRoute(false);
         long phase = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
         long copy = TextureTickAttribution.beginSpriteCopyFlush();
         TextureTickAttribution.endSpriteCopyFlush(copy, 3);
@@ -55,7 +59,11 @@ public class AttributionCaptureContract {
         WorldRenderAttribution.emitSummary();
     }
     public static void main(String[] args) {
-        // Warmup must produce neither counters nor a summary.
+        // Memory includes warmup allocations until their real retirement; work samples do not.
+        TextureTickAttribution.residentAdmitted(3072);
+        TextureTickAttribution.residentSourceAdmitted(2048);
+        TextureTickAttribution.residentScratchAllocated(512);
+        // Warmup work must produce neither captured counters nor a summary.
         textureTick(); world(); emit();
         check(PerformanceProfiler.lines.isEmpty(), "warmup contamination");
         PerformanceProfiler.frame = true;
@@ -71,6 +79,11 @@ public class AttributionCaptureContract {
         check(PerformanceProfiler.lines.size() == 2, "missing measured summaries");
         String texture = PerformanceProfiler.lines.get(0);
         check(texture.contains("ticks=1 "), texture);
+        check(texture.contains("sprite_upload_requests=2 gpu_sprite_uploads=1 cpu_sprite_uploads=1 "), texture);
+        check(texture.contains("standard_interpolation_updates=2 standard_interpolation_gpu_updates=1 standard_interpolation_cpu_updates=1 "), texture);
+        check(texture.contains("resident_current_kib=3.000 resident_peak_kib=3.000 "), texture);
+        check(texture.contains("resident_source_current_kib=2.000 resident_source_peak_kib=2.000 "), texture);
+        check(texture.contains("resident_scratch_current_kib=0.500 resident_scratch_peak_kib=0.500 "), texture);
         check(texture.contains("copy_flushes=1 copy_regions=3 "), texture);
         check(texture.contains("outer_copy_flushes=1 outer_copy_regions=3 "), texture);
         String world = PerformanceProfiler.lines.get(1);
@@ -81,10 +94,17 @@ public class AttributionCaptureContract {
         check(world.contains("entity_render_calls=0 "), world);
         emit();
         check(PerformanceProfiler.lines.size() == 2, "duplicate summary after reset");
+        TextureTickAttribution.residentReleased(3072);
+        TextureTickAttribution.residentSourceReleased(2048);
+        TextureTickAttribution.residentScratchReleased(512);
         PerformanceProfiler.frame = PerformanceProfiler.tick = true;
         textureTick(); world(); emit();
         check(PerformanceProfiler.lines.size() == 4, "second capture lost");
         check(PerformanceProfiler.lines.get(2).contains("ticks=1 "), "prior tick leaked");
+        check(PerformanceProfiler.lines.get(2).contains("sprite_upload_requests=2 gpu_sprite_uploads=1 cpu_sprite_uploads=1 "), "prior upload route leaked");
+        check(PerformanceProfiler.lines.get(2).contains("standard_interpolation_updates=2 standard_interpolation_gpu_updates=1 standard_interpolation_cpu_updates=1 "), "prior interpolation route leaked");
+        check(PerformanceProfiler.lines.get(2).contains("resident_source_current_kib=0.000 resident_source_peak_kib=2.000 "), "source retirement/peak lost");
+        check(PerformanceProfiler.lines.get(2).contains("resident_scratch_current_kib=0.000 resident_scratch_peak_kib=0.500 "), "scratch retirement/peak lost");
         check(PerformanceProfiler.lines.get(3).contains("world_calls=1 "), "prior world leaked");
         System.out.println("Attribution capture contract passed: warmup, parent scope, nested/overflow world, copy counters, reset");
     }

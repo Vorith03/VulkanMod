@@ -250,6 +250,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
 
             admitted++;
             TextureTickAttribution.residentAdmitted(chargeBytes);
+            TextureTickAttribution.residentSourceAdmitted(sourceBytes);
             TextureResidentBuffer owned = buffer;
             buffer = null;
             reserved = false;
@@ -398,6 +399,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         this.buffer.retire(() -> {
             currentBytes = Math.max(0L, currentBytes - releaseBytes);
             TextureTickAttribution.residentReleased(releaseBytes);
+            TextureTickAttribution.residentSourceReleased(this.sourceBytes);
         });
     }
 

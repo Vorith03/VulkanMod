@@ -4,6 +4,7 @@ import net.minecraft.client.renderer.texture.SpriteContents;
 import net.vulkanmod.interfaces.SpriteAnimationTicker;
 import net.vulkanmod.interfaces.VSpriteContentsI;
 import net.vulkanmod.render.texture.SpriteAnimationState;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -61,9 +62,11 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
             return false;
         }
 
-        return vulkanmod$state.tryGpuInterpolation(
+        boolean gpu = vulkanmod$state.tryGpuInterpolation(
                 x, y, currentIndex, nextIndex,
                 subFrame, current.vulkanmod$frameTime());
+        TextureTickAttribution.recordStandardInterpolationRoute(gpu);
+        return gpu;
     }
     @Override public void vulkanmod$refreshFrame(int x, int y) {
         SpriteAnimationInfoAccessor info = (SpriteAnimationInfoAccessor)animationInfo;

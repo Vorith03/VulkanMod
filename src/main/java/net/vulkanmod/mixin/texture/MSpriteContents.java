@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.texture.SpriteContents;
 import net.vulkanmod.interfaces.VNativeImageI;
 import net.vulkanmod.interfaces.VSpriteContentsI;
 import net.vulkanmod.render.profiling.ClientTickBreakdown;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
 import net.vulkanmod.render.texture.SpriteMipMemoryTracker;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
@@ -191,6 +192,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
         if(vulkanmod$animationState != null
                 && vulkanmod$animationState.tryResidentUpload(
                         i, j, k, l, nativeImages, this.width(), this.height())) {
+            TextureTickAttribution.recordSpriteUploadRoute(true);
             SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
             ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
             this.vulkanmod$performanceUploadStartNanos = 0L;
@@ -199,6 +201,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
             return;
         }
 
+        TextureTickAttribution.recordSpriteUploadRoute(false);
         SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
         // One SpriteContents upload normally emits one NativeImage upload per mip.
         // Keep every staged copy, but let VTextureSelector combine those mip copy

@@ -68,7 +68,19 @@ After entering the pristine benchmark world:
 
 Do not adjust spectator flight speed. Wait 60 seconds without moving the camera before starting the stationary capture. The fixed elevated/downward view is intentional: it avoids collision/terrain-height dependence while keeping a broad opaque/cutout/distant-chunk workload in view.
 
-For a Vulkan-only unattended stationary diagnostic, `docs/PERFORMANCE_PROFILING.md` documents an opt-in named-world mode that performs this teleport, waits for visible terrain and the same 60-second settle period, measures a configurable duration, then saves and exits. It is not an OpenGL comparison capture and does not replace the matched A/B settings or the pristine-world-copy requirement.
+For a Vulkan-only unattended stationary diagnostic, `docs/PERFORMANCE_PROFILING.md` documents an opt-in named-world mode that performs this teleport, waits for visible terrain, warms for at least 60 seconds and then requires a continuous terrain-quiet window (default 10 seconds, bounded maximum settle 300 seconds). It measures a configurable duration, then saves and exits. It is not an OpenGL comparison capture and does not replace the matched A/B settings or the pristine-world-copy requirement.
+
+The owner-directed O3/O4 hardware qualification uses a **separately labeled RD32
+stationary stress case**, retaining render distance 32 rather than lowering its
+terrain workload to the RD16 baseline above. Preserve the previous RD32 modpack,
+packs, camera, framebuffer, simulation distance and graphics settings. Enable
+only the requested O3/O4 texture paths alongside the existing profiling options;
+leave unrelated experimental terrain/indirect/hybrid/Flywheel options unchanged
+and disabled. The earlier fixed-settle RD32 capture includes terrain population
+and cannot support a whole-run steady-state speedup claim against the converged
+capture. One new run qualifies hardware/coverage and selects the next target;
+paired offload-disabled/enabled captures under this same convergence policy are
+still required for adoption/performance claims.
 
 ### Fixed traversal route
 
