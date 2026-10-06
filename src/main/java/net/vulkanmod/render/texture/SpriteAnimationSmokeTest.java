@@ -199,6 +199,13 @@ public final class SpriteAnimationSmokeTest {
                 VTextureSelector.beginSpriteUploadBatch();
                 long beforeFallbackStaging = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
                 try {
+                    // The visibility test intentionally leaves the candidate hidden
+                    // with materialize=false. Re-enter the ordinary ungated ticker
+                    // once so this mutation probe reaches SpriteContents.upload();
+                    // That tick may itself invalidate residency if it changes frame;
+                    // the explicit first-frame upload below then proves CPU fallback.
+                    Initializer.CONFIG.animateOnlyUsedTextures = false;
+                    candidateTicker.tickAndUpload(candidateX, 0);
                     candidate.uploadFirstFrame(candidateX, 0);
                 } finally {
                     VTextureSelector.endSpriteUploadBatch();
