@@ -163,6 +163,10 @@ public final class GpuTimestampProfiler {
         return active;
     }
 
+    static boolean capturing() {
+        return active && captureActive;
+    }
+
     /**
      * Arm exactly when the automated CPU capture is armed. Startup/menu/settling frames
      * are deliberately excluded so the final GPU distribution describes the same measured
@@ -239,6 +243,7 @@ public final class GpuTimestampProfiler {
         }
 
         active = true;
+        TextureUploadGpuProfiler.create(timestampValidBits, timestampPeriodNanos);
         status = "active";
         Initializer.LOGGER.info(
                 "VulkanMod GPU timestamp profiler enabled: scope={} frameSlots={} validBits={} timestampPeriodNs={} coarsePasses=true maxTerrainSegments={}",
@@ -351,6 +356,7 @@ public final class GpuTimestampProfiler {
      * non-blocking: the fence is the proof that all timestamp writes have completed.
      */
     public static void retireFrame(int slot) {
+        TextureUploadGpuProfiler.collect(false);
         if (!usable(slot) || !pending[slot]) return;
         readSlot(slot, false);
     }
@@ -362,6 +368,7 @@ public final class GpuTimestampProfiler {
     public static void emitCaptureSummary() {
         if (!REQUESTED) return;
         resolvePending(true);
+        TextureUploadGpuProfiler.emitSummary();
 
         long avg = average(samples, sampledFrames);
         long max = maximum(samples, sampledFrames);
@@ -405,6 +412,7 @@ public final class GpuTimestampProfiler {
     }
 
     public static void verifyForCi() {
+        TextureUploadGpuProfiler.verifyForCi();
         if (!initialCaptureActive(true, false)
                 || initialCaptureActive(true, true)
                 || initialCaptureActive(false, false)
@@ -505,6 +513,7 @@ public final class GpuTimestampProfiler {
     }
 
     private static void resetMeasurements() {
+        TextureUploadGpuProfiler.resetMeasurements();
         sampledFrames = 0;
         measuredFrames = 0L;
         droppedSamples = 0L;
@@ -523,6 +532,7 @@ public final class GpuTimestampProfiler {
     }
 
     private static void resolvePending(boolean wait) {
+        TextureUploadGpuProfiler.collect(wait);
         if (!active || pending == null) return;
         for (int slot = 0; slot < pending.length; slot++) {
             if (pending[slot]) readSlot(slot, wait);
@@ -765,6 +775,7 @@ public final class GpuTimestampProfiler {
     }
 
     private static void destroyPools() {
+        TextureUploadGpuProfiler.destroy();
         long[] pools = queryPools;
         queryPools = null;
         armed = null;

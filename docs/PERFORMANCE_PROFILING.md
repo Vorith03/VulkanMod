@@ -230,6 +230,36 @@ Unsupported timestamp bits, invalid timestamp period, query-pool creation failur
 
 Automated GPU sampling remains dormant through menu/teleport/terrain-load/settling and resets/arms at the same transition as the CPU measured capture. CPU/tick/GPU aggregates therefore cover the same stationary interval.
 
+### Texture upload/copy/compute GPU scope
+
+The same GPU-timestamp option also emits `benchmark texture_upload_gpu`. Its
+separate scope is `explicit_graphics_texture_upload_batches`: the command buffers
+owned by `GraphicsQueue.startRecording()` / `endRecordingAndSubmit()`. These
+include texture-tick CPU-staged copies, O3 resident copies, O4 interpolation and
+atlas layout dependencies. A staging-limit split records separate batches;
+first-use refresh batches are included when they occur inside capture. Unbatched
+helper submissions, the main graphics buffer and presentation are excluded.
+
+Each batch has one TOP_OF_PIPE/BOTTOM_OF_PIPE pair. This measures the whole batch
+execution span, including its dependencies, rather than isolated shader time or
+CPU staging/recording time. The summary reports submitted/measured/unresolved
+batches, average/p95/max/summed batch duration, a 64-pending-batch limit,
+capacity drops, an 8192-sample percentile limit, sample drops and read failures.
+Do not add these spans to main-graphics timing as a total GPU frame: their scope,
+sampling unit and possible execution overlap differ. Copy/interpolation coverage
+comes from `texture_outer_batch_attribution`, not from interpreting this timer as
+an interpolation-only duration.
+
+Pending query ranges remain owned until successful nonblocking readback.
+Collection runs once at the existing frame-retirement boundary, without adding
+a fence/device-idle/query wait. A full query table skips profiling that batch and
+preserves its rendering. Failed reads quarantine the range until device-idle
+destruction; old capture epochs cannot contribute to new aggregates. Only final
+submitted tail queries may wait outside the measured interval. The
+validation-enabled animation smoke exercises real copy/compute timestamps,
+pending-capacity overflow and retired-range reuse; the Java contract separately
+tests warmup exclusion, NOT_READY, epochs and failed-read quarantine.
+
 ## Coarse GPU pass breakdown
 
 The same query pool carries fixed high-level markers. The final line:

@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.queue;
 
+import net.vulkanmod.render.profiling.TextureUploadGpuProfiler;
 import net.vulkanmod.vulkan.Synchronization;
 import org.lwjgl.system.MemoryStack;
 
@@ -9,6 +10,7 @@ public class GraphicsQueue extends Queue {
     public static GraphicsQueue INSTANCE;
 
     private static volatile CommandPool.CommandBuffer currentCmdBuffer;
+    private int uploadTimestampToken = -1;
 
     public GraphicsQueue(MemoryStack stack, int familyIndex) {
         super(stack, familyIndex);
@@ -36,6 +38,7 @@ public class GraphicsQueue extends Queue {
             throw new IllegalStateException("Graphics upload batch already recording");
 
         currentCmdBuffer = beginCommands();
+        uploadTimestampToken = TextureUploadGpuProfiler.begin(currentCmdBuffer.getHandle());
     }
 
     public synchronized void endRecordingAndSubmit() {
@@ -46,7 +49,11 @@ public class GraphicsQueue extends Queue {
         // Release ownership before submission so submitCommands() can distinguish
         // the batch owner from an accidental leaf submission.
         currentCmdBuffer = null;
+        int token = uploadTimestampToken;
+        uploadTimestampToken = -1;
+        TextureUploadGpuProfiler.end(commandBuffer.getHandle(), token);
         submitCommands(commandBuffer);
+        TextureUploadGpuProfiler.submitted(token);
     }
 
     public synchronized CommandPool.CommandBuffer getCommandBuffer() {

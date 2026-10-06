@@ -9,6 +9,7 @@ import net.minecraft.client.resources.metadata.animation.FrameSize;
 import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.SpriteAnimationTicker;
+import net.vulkanmod.render.profiling.TextureUploadGpuProfiler;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
@@ -75,6 +76,7 @@ public final class SpriteAnimationSmokeTest {
                     new SpriteAnimationOracle.Frame[] {frame(2,3),frame(0,2)}));
             verify(explicit("custom_cpu", 2, 2, 2, 2, 1, true, true,
                     frame(3,3),frame(0,2),frame(2,1)));
+            TextureUploadGpuProfiler.verifyNativeForCi();
             Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/double-truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, GPU resident copies/interpolation when qualified, Forge zero-extent guards, custom CPU exclusion)");
         } finally {
             Initializer.CONFIG.animateOnlyUsedTextures = oldEnabled;

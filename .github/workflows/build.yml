@@ -53,6 +53,8 @@ jobs:
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
       - name: Validate GPU profiler hook contract
         run: python3 scripts/ci/gpu-profiler-contract.py
+      - name: Validate texture upload GPU query ownership
+        run: python3 scripts/ci/texture-upload-gpu-contract.py
       - name: Validate automated attribution capture boundaries
         run: python3 scripts/ci/attribution-capture-contract.py
       - name: Validate bounded particle attribution
