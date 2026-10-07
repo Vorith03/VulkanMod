@@ -51,6 +51,9 @@ public final class AutomatedBenchmark {
     private static long terrainAppearedAt;
     private static long terrainQuietSince;
     private static long nextSettleSampleAt;
+    private static long nextSettleLogAt;
+    private static String settleDetails;
+    private static String abortReason;
     private static long lastSettleScheduled = -1L;
     private static int lastSettlePublished = -1;
     private static int lastSettleNonEmpty = -1;
@@ -137,7 +140,8 @@ public final class AutomatedBenchmark {
                 abort(String.format(Locale.ROOT,
                         "terrain did not converge within %.0f seconds (last scheduled=%d published=%d nonempty=%d)",
                         MAX_SETTLE_NANOS / 1_000_000_000.0D,
-                        lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty));
+                        lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty)
+                        + "; " + settleDetails);
                 return;
             }
             if (settlingNanos < SETTLE_NANOS || now < nextSettleSampleAt) {
@@ -161,6 +165,21 @@ public final class AutomatedBenchmark {
                     workers.published(), workers.active(), workers.publicationWaiters(),
                     workers.queuedHigh(), workers.queuedLow(), workers.publicationQueue(),
                     lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty);
+            long scheduledDelta = lastSettleScheduled < 0 ? -1 : counters.scheduled() - lastSettleScheduled;
+            int publishedDelta = lastSettlePublished < 0 ? -1 : workers.published() - lastSettlePublished;
+            int nonEmptyDelta = lastSettleNonEmpty < 0 ? -1 : counters.nonEmptySections() - lastSettleNonEmpty;
+            settleDetails = String.format(Locale.ROOT,
+                    "sections=%d delta=%d scheduled_delta=%d published_delta=%d active=%d high=%d low=%d waiters=%d backlog=%d",
+                    counters.nonEmptySections(), nonEmptyDelta, scheduledDelta, publishedDelta,
+                    workers.active(), workers.queuedHigh(), workers.queuedLow(),
+                    workers.publicationWaiters(), workers.publicationQueue());
+            if (now >= nextSettleLogAt) {
+                Initializer.LOGGER.info("VulkanMod benchmark settling: elapsed_s={} quiet_s={} quiet={} scheduled={} published={} {}",
+                        settlingNanos / 1_000_000_000L,
+                        quiet && terrainQuietSince != 0 ? (now - terrainQuietSince) / 1_000_000_000L : 0L,
+                        quiet, counters.scheduled(), workers.published(), settleDetails);
+                nextSettleLogAt = now + 5_000_000_000L;
+            }
             lastSettleScheduled = counters.scheduled();
             lastSettlePublished = workers.published();
             lastSettleNonEmpty = counters.nonEmptySections();
@@ -249,16 +268,21 @@ public final class AutomatedBenchmark {
                 yield "VulkanMod benchmark: waiting for terrain convergence "
                         + Math.min(SETTLE_QUIET_NANOS / 1_000_000_000L,
                         quiet / 1_000_000_000L) + "/"
-                        + SETTLE_QUIET_NANOS / 1_000_000_000L + "s";
+                        + SETTLE_QUIET_NANOS / 1_000_000_000L + "s (timeout in "
+                        + Math.max(0L, (MAX_SETTLE_NANOS - elapsed + 999_999_999L) / 1_000_000_000L) + "s)";
             }
             case CAPTURING -> "VulkanMod benchmark: recording "
                     + Math.max(0L, (captureEndAt(captureStartedAt, capReachedAt, CAPTURE_NANOS, AFTER_CAP_NANOS)
                     - now + 999_999_999L)
                     / 1_000_000_000L) + "s";
             case SAVING, STOPPING -> "VulkanMod benchmark: saving and exiting";
-            case ABORTED -> "VulkanMod benchmark stopped; see latest.log";
+            case ABORTED -> "VulkanMod benchmark stopped: " + abortReason;
             case FINISHED -> null;
         };
+    }
+
+    public static String terrainStatusLine() {
+        return state == State.SETTLING || state == State.ABORTED ? settleDetails : null;
     }
 
     public static String captureMetadata() {
@@ -344,6 +368,7 @@ public final class AutomatedBenchmark {
 
     private static void abort(String reason) {
         state = State.ABORTED;
+        abortReason = reason.startsWith("terrain did not converge") ? "terrain convergence timed out; see latest.log" : reason;
         ClientTickBreakdown.emitSummary();
         PerformanceProfiler.benchmarkEvent("aborted reason=" + reason.replace(' ', '_'));
         PerformanceProfiler.abortAutomatedCapture();

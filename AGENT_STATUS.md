@@ -32,6 +32,16 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   and query oracles, both startup paths, indirect, post/depth chains, combined
   Create Chronicles, Crash Assistant and JAR/log uploads all passed. Private
   real-pack fixtures skipped. No executable CI remains pending for this slice.
+- Owner #1002 runtime attempt **did not capture**: terrain warming began
+  2026-10-06 19:30:50.905 and strict convergence timed out at 19:35:50.935.
+  Last scheduled/published/nonempty counts 28419/28371/6559 do not identify the
+  blocker. Missing HUD is a confirmed Forge lifecycle defect: vanilla Gui.render
+  hook was bypassed by ForgeGui. Replacement uses a registered Forge overlay,
+  wrapped diagnostics/abort status and five-second settling logs. Focused Java
+  callback contract passes; executable CI qualification of this fix is pending.
+  Next controlled hardware retry uses the corrected build and max settle 900 s
+  with the same 60 s minimum/10 s quiet and O3/O4-only workload. Timeout remains
+  strict. Detailed timestamps/log hashes: docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md.
 - Next user-machine action is `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Keep
   RD32 and the existing packs/settings; request only O3/O4 with profiling and
   convergence. No unrelated terrain/hybrid/indirect/Flywheel activation or

@@ -8,6 +8,35 @@ Install its distributable artifact
 `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1002-g9d333487-all.jar`. Replace
 the existing VulkanMod JAR; do not leave two versions installed.
 
+## Failed #1002 attempt and retry
+
+The owner reported no benchmark HUD. The supplied `latest(6).log` and
+`debug(3).log` prove automation did start warming at **2026-10-06 19:30:50.905**,
+then aborted at **19:35:50.935** because terrain never met the 10-second quiet
+condition before the 300-second deadline. Last sample: scheduled 28419,
+published 28371, non-empty 6559. No capture started, so this attempt supplies no
+O3/O4 hardware performance or route-coverage evidence. These cumulative counts
+do not identify whether the final blocker was workers, queues or recurring work.
+World-generation/server backlog appears in the same log but is not sufficient
+to attribute the last failed quiet sample.
+
+The status drawing was still hooked into vanilla Gui.render, which ForgeGui
+fully overrides. The fix uses the pinned Forge 47.3.0 RegisterGuiOverlaysEvent
+API, preserves the keyboard profiler overlay, and adds bounded settling logs
+and visible counters/abort reason. A focused callback contract exercises warmup,
+timeout, hidden/menu/disabled guards and the profiler toggle. New build/CI
+qualification must be recorded before using the fix as a replacement candidate.
+
+For the next diagnostic retry, use the corrected build with the same flags and
+workload below, changing only `benchmarkMaxSettleSeconds=900` to allow up to
+15 minutes of settling. Keep minimum warmup 60 and quiet window 10. A timeout
+still rejects the capture; return latest.log even when no capture exists. Do not
+shorten the quiet window or enable unrelated terrain experiments to force it.
+
+Evidence SHA256:
+- latest(6).log: `5200be84c39dab0e9fcfa99e835f404b0fd28294668d15ae53c3fde3687269c7`
+- debug(3).log: `b52980722f6a0b8c5970f6b6986bc0eb506b1122afa718ab022ee854c16b413d`
+
 ## One controlled capture
 
 1. Keep the previous RD32 stationary workload: the same world copy, modpack,

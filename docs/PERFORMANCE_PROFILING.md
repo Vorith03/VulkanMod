@@ -67,6 +67,16 @@ It waits for the client pose and visible terrain, warms for at least 60 seconds,
 
 Default measurement is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, measurement continues for at least 60 seconds after the first cap observation.
 
+The automation/status HUD is a registered Forge overlay, not an injection into
+vanilla `Gui.render()` (ForgeGui bypasses that implementation). It includes the
+quiet-window and timeout countdown plus the latest section/schedule/publication
+deltas and worker/queue counts. Long lines wrap to the scaled window width.
+After minimum warmup, `latest.log` records these settling counters every five
+seconds; a timeout includes the final sample. Counters remain diagnostics, and
+the strict convergence/abort rule above is unchanged. The optional maximum is
+bounded at 900 seconds; a larger deadline permits more loading time without
+accepting an unstable capture.
+
 On successful completion VulkanMod emits the final CPU/tick/GPU aggregates, closes the capture, follows Minecraft's normal single-player disconnect/save path, waits for the integrated server to stop, and closes the client. The HUD shows the automation phase; no F3 or manual `/tp` is required.
 
 Optional benchmark controls:
