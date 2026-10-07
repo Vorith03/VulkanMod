@@ -21,7 +21,7 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   validation-enabled native animation oracle now requires real query results,
   64-pending-range overflow and completed-query reuse. All public/native and
   compatibility gates plus JAR/log uploads passed. Private real-pack tests skipped.
-- Latest executable `9d333487613e1a466e94f8562cb5ce5b403ad36c` is fully
+- Coverage executable `9d333487613e1a466e94f8562cb5ce5b403ad36c` is fully
   public-CI green in **#1002**, run `37454136840`, job `112237469104`. It adds captured CPU/GPU upload-route denominators,
   standard distinct-frame interpolation coverage and separate admitted-source /
   allocated-scratch payload peaks. Local Java query-ownership and attribution
@@ -43,7 +43,8 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   Forge HUD callback routing, Java/Forge compilation, startup, native validation
   animation/screenshot oracles, Create Chronicles and Crash Assistant all passed,
   with JAR/log upload success. Private pack fixtures skipped. No executable CI
-  is pending; visible HUD and convergence/O3/O4 capture remain owner-machine gates.
+  is pending for that HUD slice. The #1003 owner attempt confirms the visible HUD;
+  convergence/O3/O4 capture remains the owner-machine gate.
 - Owner #1003 attempt also **did not capture**: latest(7).log/debug(4).log
   show warming at 2026-10-07 01:52:12.465 and timeout at 02:07:12.476 (900 s).
   Non-empty count reached 6559 around 80 s and remained stable; recurrent builds
@@ -52,8 +53,14 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   task admission through publication/worker failure/cancelled-work retirement, rejects epoch changes,
   and aborts if initial population resumes during capture. Maintenance remains
   measured and world/mod semantics unchanged. Local ownership/race/teardown,
-  maintenance regression, HUD and attribution contracts pass. New executable CI
-  qualification pending. Return to max settle 300 s; do not repeat #1003 or keep
+  maintenance regression, HUD and attribution contracts pass. Latest executable
+  `50a92891b45121d73a9271138387e48effba12dc` is fully public-CI green in **#1005**,
+  run `37600141289`, job `112722310635`. New ownership/HUD contracts, Java/Forge
+  compilation, packaging, both startup paths, indirect/post/depth, validation-enabled
+  animation/screenshot oracles, Create Chronicles, Crash Assistant and artifact
+  uploads passed; private packs skipped. No executable CI is pending. Owner-world
+  initial-population convergence and actual O3/O4 measurement remain uncollected.
+  Return to max settle 300 s; do not repeat #1003 or keep
   increasing its timeout. Evidence: docs/BENCHMARK_TERRAIN_CONVERGENCE_2026-10-07.md.
 - Next user-machine action is `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Keep
   RD32 and the existing packs/settings; request only O3/O4 with profiling and

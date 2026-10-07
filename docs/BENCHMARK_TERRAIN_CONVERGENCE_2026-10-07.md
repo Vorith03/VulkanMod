@@ -37,8 +37,10 @@ whose RenderSection is UNCOMPILED at BuildTask construction. One ticket owns its
 entire queued/building/publication lifetime, also for empty section results.
 Ownership begins at async admission or synchronous execution; unqueued task
 construction does not create outstanding work.
-Synchronous builds use the same construction/worker path. Cancellation requests keep running/publishing work owned until retirement;
-failed/cancelled worker exits or queue removal retire ownership; successful handoff keeps it until publication. The task's
+Synchronous builds use the same construction/worker path. Cancellation requests
+keep running/publishing work owned until retirement; failed/cancelled worker exits
+or queue removal retire ownership. Successful handoff keeps it until publication.
+The task's
 existing cancellation flag still decides whether publication is accepted. Ticket
 retirement is idempotent under cancellation/completion races. Dispatcher teardown
 resets the epoch after workers stop and results are discarded; old completions
@@ -67,9 +69,16 @@ duplicate retirement, cancellation, 100 completion/cancellation races, stale
 epoch rejection, dispatcher reset, growing visible population, resumed population
 capture rejection and a constant-6559 repeated-maintenance trace that reaches a
 stable window. Existing HUD, attribution and chunk frame budget contracts pass.
-Full local Gradle remains unavailable; new executable CI qualification is pending.
+Full local Gradle remains unavailable. Final executable
+`50a92891b45121d73a9271138387e48effba12dc` is fully public-CI green in #1005,
+run `37600141289`, job `112722310635`: new population/HUD contracts, Java/Forge
+compilation and distributable, both startup paths, indirect/post/depth, native
+validation animation/screenshot oracles, Create Chronicles, Crash Assistant and
+JAR/log uploads. Private real-pack fixtures skipped. This qualifies the tracker
+contracts and preserves existing native gates; owner-world automatic convergence
+and the resulting O3/O4 performance capture remain uncollected.
 
-After CI is green, repeat the same O3/O4-only RD32 hardware capture using the
+Next, repeat the same O3/O4-only RD32 hardware capture using the
 corrected JAR and maximum settle 300 seconds. Keep minimum 60, stability 10,
 capture 180; do not change modpack/world/settings or enable unrelated terrain/
 Flywheel options. If initial counters still increase after apparent visual

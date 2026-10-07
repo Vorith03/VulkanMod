@@ -2,10 +2,10 @@
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Use fully public-CI-green
-`f45aa7ceb8512ea3bfe90a8f1632cfe5d9a4c49f`, build **#1003**:
-[build #1003](https://github.com/Vorith03/VulkanMod/actions/runs/37564306133).
+`50a92891b45121d73a9271138387e48effba12dc`, build **#1005**:
+[build #1005](https://github.com/Vorith03/VulkanMod/actions/runs/37600141289).
 Install its distributable artifact
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1003-gf45aa7ce-all.jar`. Replace
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1005-g50a92891-all.jar`. Replace
 the existing VulkanMod JAR; do not leave two versions installed.
 
 ## Failed #1002 attempt and retry
@@ -37,8 +37,12 @@ rule is superseded by initial-population ownership; see
 BENCHMARK_TERRAIN_CONVERGENCE_2026-10-07.md. This still blocks queued/building/
 publishing initial sections and rejects resumed population during capture, while
 including normal already-compiled-section updates in the measured workload.
-Use the corrected candidate after its new CI qualification; that qualification
-is pending. Maximum settle returns to 300 seconds; 60-second minimum and
+The corrected candidate #1005 is fully public-CI green (run `37600141289`,
+job `112722310635`), including the new initial ownership/HUD contracts, Java/Forge
+compilation, packaged startup, native Vulkan validation, Create Chronicles,
+Crash Assistant and JAR/log upload. Private packs skipped. Owner-world convergence
+and O3/O4 performance still require the new capture. Maximum settle returns to
+300 seconds; 60-second minimum and
 10-second stability window stay unchanged. Do not rerun #1003 or extend its timeout.
 
 Evidence SHA256:

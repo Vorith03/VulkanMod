@@ -68,9 +68,11 @@ and requires a continuous 10-second **initial-population stability** window.
 A sample requires a stable non-empty render-graph count, no outstanding initial
 section-build tickets, and unchanged initial scheduling/publication counts and
 dispatcher epoch. Initial means the section has `CompiledSection.UNCOMPILED`
-when its build task is constructed. Ownership starts at async queue admission or synchronous execution and lasts
+when its build task is constructed. Ownership starts at async queue admission
+or synchronous execution and lasts
 through accepted render-thread publication, including builds of empty sections.
-Cancelled work retains ownership until worker/publication retirement or queue removal; a cancelled task is never counted
+Cancelled work retains ownership until worker/publication retirement or queue
+removal; a cancelled task is never counted
 as an accepted publication. Dispatcher teardown invalidates old tickets.
 
 Rebuilds of already-compiled sections and transparency sorting remain ordinary
@@ -94,16 +96,6 @@ every five seconds; timeout includes the final sample. The supported maximum
 settling override is 900 seconds, without bypassing the stability requirement.
 
 Default measurement is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, measurement continues for at least 60 seconds after the first cap observation.
-
-The automation/status HUD is a registered Forge overlay, not an injection into
-vanilla `Gui.render()` (ForgeGui bypasses that implementation). It includes the
-quiet-window and timeout countdown plus the latest section/schedule/publication
-deltas and worker/queue counts. Long lines wrap to the scaled window width.
-After minimum warmup, `latest.log` records these settling counters every five
-seconds; a timeout includes the final sample. Counters remain diagnostics, and
-the strict convergence/abort rule above is unchanged. The optional maximum is
-bounded at 900 seconds; a larger deadline permits more loading time without
-accepting an unstable capture.
 
 On successful completion VulkanMod emits the final CPU/tick/GPU aggregates, closes the capture, follows Minecraft's normal single-player disconnect/save path, waits for the integrated server to stop, and closes the client. The HUD shows the automation phase; no F3 or manual `/tp` is required.
 
