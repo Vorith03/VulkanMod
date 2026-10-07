@@ -38,7 +38,12 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   blocker. Missing HUD is a confirmed Forge lifecycle defect: vanilla Gui.render
   hook was bypassed by ForgeGui. Replacement uses a registered Forge overlay,
   wrapped diagnostics/abort status and five-second settling logs. Focused Java
-  callback contract passes; executable CI qualification of this fix is pending.
+  callback contract passes. Fix `f45aa7ceb8512ea3bfe90a8f1632cfe5d9a4c49f` is
+  fully public-CI green in **#1003**, run `37564306133`, job `112608412286`:
+  Forge HUD callback routing, Java/Forge compilation, startup, native validation
+  animation/screenshot oracles, Create Chronicles and Crash Assistant all passed,
+  with JAR/log upload success. Private pack fixtures skipped. No executable CI
+  is pending; visible HUD and convergence/O3/O4 capture remain owner-machine gates.
   Next controlled hardware retry uses the corrected build and max settle 900 s
   with the same 60 s minimum/10 s quiet and O3/O4-only workload. Timeout remains
   strict. Detailed timestamps/log hashes: docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md.

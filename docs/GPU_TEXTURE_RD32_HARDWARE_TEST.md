@@ -2,10 +2,10 @@
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Use fully public-CI-green
-`9d333487613e1a466e94f8562cb5ce5b403ad36c`, build **#1002**:
-[build #1002](https://github.com/Vorith03/VulkanMod/actions/runs/37454136840).
+`f45aa7ceb8512ea3bfe90a8f1632cfe5d9a4c49f`, build **#1003**:
+[build #1003](https://github.com/Vorith03/VulkanMod/actions/runs/37564306133).
 Install its distributable artifact
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1002-g9d333487-all.jar`. Replace
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1003-gf45aa7ce-all.jar`. Replace
 the existing VulkanMod JAR; do not leave two versions installed.
 
 ## Failed #1002 attempt and retry
@@ -24,11 +24,14 @@ The status drawing was still hooked into vanilla Gui.render, which ForgeGui
 fully overrides. The fix uses the pinned Forge 47.3.0 RegisterGuiOverlaysEvent
 API, preserves the keyboard profiler overlay, and adds bounded settling logs
 and visible counters/abort reason. A focused callback contract exercises warmup,
-timeout, hidden/menu/disabled guards and the profiler toggle. New build/CI
-qualification must be recorded before using the fix as a replacement candidate.
+timeout, hidden/menu/disabled guards and the profiler toggle. Build #1003 passed the
+new Forge HUD contract, Java/Forge compilation, packaged startup, native
+validation animation/screenshot tests, Create Chronicles, Crash Assistant and
+JAR/log uploads. Private pack fixtures skipped. Visible HUD and representative
+convergence/offload measurement still require the owner-machine retry.
 
 For the next diagnostic retry, use the corrected build with the same flags and
-workload below, changing only `benchmarkMaxSettleSeconds=900` to allow up to
+workload below, with `benchmarkMaxSettleSeconds=900` to allow up to
 15 minutes of settling. Keep minimum warmup 60 and quiet window 10. A timeout
 still rejects the capture; return latest.log even when no capture exists. Do not
 shorten the quiet window or enable unrelated terrain experiments to force it.
@@ -53,7 +56,7 @@ Evidence SHA256:
    -Dvulkanmod.performanceProfiler.gpuTimestamps=true
    -Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
    -Dvulkanmod.performanceProfiler.benchmarkQuietSeconds=10
-   -Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=300
+   -Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=900
    -Dvulkanmod.performanceProfiler.durationSeconds=180
    -Dvulkanmod.gpuAnimatedTextureCopies=true
    -Dvulkanmod.gpuAnimatedTextureInterpolation=true
@@ -67,7 +70,7 @@ Evidence SHA256:
    resize, open F3/screens or change settings. The HUD handles placement,
    minimum warmup, terrain convergence and 180-second measurement. A successful
    run saves and exits automatically. If convergence has not been reached after
-   300 seconds, or another guard aborts, the game remains open; report the abort
+   900 seconds, or another guard aborts, the game remains open; report the abort
    rather than changing the workload to force a result.
 
 Return the newest `logs/vulkanmod-performance-benchmark-<UUID>.log` and
