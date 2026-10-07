@@ -63,7 +63,35 @@ The target defaults to `VulkanMod Benchmark` in the Overworld. VulkanMod asks th
 - yaw `-90`;
 - pitch `30`.
 
-It waits for the client pose and visible terrain, warms for at least 60 seconds, and then requires a continuous 10-second terrain-convergence window before measurement starts. A convergence sample requires no active terrain workers, no queued high/low build work, no publication waiters/backlog, no newly scheduled or published sections, and a stable non-empty section count. This keeps high-render-distance stress while preventing first-population work from contaminating the steady capture. If convergence is not reached within 300 seconds after terrain first appears, the formal benchmark aborts instead of silently measuring an unstable workload.
+It waits for the client pose and visible terrain, warms for at least 60 seconds,
+and requires a continuous 10-second **initial-population stability** window.
+A sample requires a stable non-empty render-graph count, no outstanding initial
+section-build tickets, and unchanged initial scheduling/publication counts and
+dispatcher epoch. Initial means the section has `CompiledSection.UNCOMPILED`
+when its build task is constructed. Ownership starts before queueing and lasts
+through accepted render-thread publication, including builds of empty sections.
+Cancellation/failure retires ownership once; a cancelled task is never counted
+as an accepted publication. Dispatcher teardown invalidates old tickets.
+
+Rebuilds of already-compiled sections and transparency sorting remain ordinary
+measured workload. Their worker/queue activity is logged but does not reset
+initial-population stability. The #1003 RX run held 6,559 non-empty sections from
+about 80 seconds to the 900-second timeout while recurrent builds kept resetting
+the previous zero-all-work rule. See BENCHMARK_TERRAIN_CONVERGENCE_2026-10-07.md.
+This correction does not freeze the world or suppress renderer/game callbacks.
+
+If initial population does not stabilize within the configured maximum (default
+300 seconds after terrain first appears), the benchmark aborts. If new initial
+population is admitted, published, or the dispatcher is recreated during capture,
+the capture aborts as interrupted rather than accepting first-population work.
+The guard runs after the measured frame with no snapshot allocation.
+
+The HUD is a registered Forge overlay (ForgeGui bypasses vanilla Gui.render).
+It shows the stable-window/timeout countdown and initial ownership alongside
+section/scheduling/publication deltas and worker/queue counts. Wrapped text is
+cached once per second. After minimum warmup, latest.log records the counters
+every five seconds; timeout includes the final sample. The supported maximum
+settling override is 900 seconds, without bypassing the stability requirement.
 
 Default measurement is 180 seconds. If the 2048-entry voxel staging cap is observed during settling or capture, measurement continues for at least 60 seconds after the first cap observation.
 
@@ -102,7 +130,8 @@ Use a copied/pristine formal benchmark world because the normal save path persis
 During measurement the automated run aborts rather than accepting a contaminated capture if:
 
 - the target world changes;
-- terrain fails to reach the configured quiet/convergence window before the maximum settle deadline;
+- initial terrain population fails to stabilize before the maximum settle deadline;
+- initial population resumes or the dispatcher is recreated during capture;
 - player pose/camera changes;
 - a screen opens;
 - focus is lost;

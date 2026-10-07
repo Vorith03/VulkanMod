@@ -58,6 +58,10 @@ public class TaskDispatcher {
     private final AtomicLong publicationQueueNanos = new AtomicLong();
     private final AtomicLong publicationWorkNanos = new AtomicLong();
     private long earlyPublicationWakeups;
+    private final TerrainPopulationTracker terrainPopulation = new TerrainPopulationTracker();
+
+    public TerrainPopulationTracker terrainPopulation() { return terrainPopulation; }
+
     private final ConcurrentMap<ChunkTask, Long> scheduledAt = new ConcurrentHashMap<>();
     private final Set<UploadBuffer> pendingUploadBuffers = ConcurrentHashMap.newKeySet();
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
@@ -263,6 +267,7 @@ public class TaskDispatcher {
         this.toUpload.clear();
         this.pendingUploadBuffers.forEach(UploadBuffer::release);
         this.pendingUploadBuffers.clear();
+        this.terrainPopulation.reset();
     }
 
     public boolean uploadAllPendingUploads() {
@@ -340,6 +345,7 @@ public class TaskDispatcher {
         long queuedAt = System.nanoTime();
         this.pendingUploadBuffers.addAll(uploadBuffers.values());
         this.toUpload.add(() -> {
+            boolean populationPublished = false;
             UploadBuffer stagedUpload = null;
             boolean stagedAppendCpu = false;
             try {
@@ -392,6 +398,7 @@ public class TaskDispatcher {
 
                 this.doSectionUpdate(section, uploadBuffers, preservedLayer);
                 publishResult.run();
+                populationPublished = true;
                 this.acceptedResults.incrementAndGet();
                 this.publishedBuilds.incrementAndGet();
                 long publicationEnd = System.nanoTime();
@@ -409,6 +416,7 @@ public class TaskDispatcher {
                 }
                 throw error;
             } finally {
+                task.completePopulation(populationPublished);
                 if(stagedUpload != null) {
                     stagedUpload.release();
                     this.pendingUploadBuffers.remove(stagedUpload);

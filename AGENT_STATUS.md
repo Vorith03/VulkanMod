@@ -44,9 +44,17 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   animation/screenshot oracles, Create Chronicles and Crash Assistant all passed,
   with JAR/log upload success. Private pack fixtures skipped. No executable CI
   is pending; visible HUD and convergence/O3/O4 capture remain owner-machine gates.
-  Next controlled hardware retry uses the corrected build and max settle 900 s
-  with the same 60 s minimum/10 s quiet and O3/O4-only workload. Timeout remains
-  strict. Detailed timestamps/log hashes: docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md.
+- Owner #1003 attempt also **did not capture**: latest(7).log/debug(4).log
+  show warming at 2026-10-07 01:52:12.465 and timeout at 02:07:12.476 (900 s).
+  Non-empty count reached 6559 around 80 s and remained stable; recurrent builds
+  reset zero-work quiet even after worker/queue drain. Initial-population ownership
+  now distinguishes UNCOMPILED tasks from compiled-section maintenance. It spans
+  task creation through publication/cancellation/failure, rejects epoch changes,
+  and aborts if initial population resumes during capture. Maintenance remains
+  measured and world/mod semantics unchanged. Local ownership/race/teardown,
+  maintenance regression, HUD and attribution contracts pass. New executable CI
+  qualification pending. Return to max settle 300 s; do not repeat #1003 or keep
+  increasing its timeout. Evidence: docs/BENCHMARK_TERRAIN_CONVERGENCE_2026-10-07.md.
 - Next user-machine action is `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Keep
   RD32 and the existing packs/settings; request only O3/O4 with profiling and
   convergence. No unrelated terrain/hybrid/indirect/Flywheel activation or

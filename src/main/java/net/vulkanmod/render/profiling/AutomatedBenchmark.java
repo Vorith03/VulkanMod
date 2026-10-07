@@ -14,6 +14,7 @@ import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.WorldRenderer;
+import net.vulkanmod.render.chunk.build.TerrainPopulationTracker;
 import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 
 import java.util.Locale;
@@ -32,8 +33,9 @@ public final class AutomatedBenchmark {
     private static final float PITCH = angle("benchmarkPitch", 30.0F, -90.0F, 90.0F);
     // SETTLE_NANOS is now the minimum warmup, not permission to start measuring
     // while RD32 terrain is still converging. After the minimum we require a
-    // continuous quiet window with no worker/backlog/scheduling/nonempty-section
-    // change. This keeps the stress workload while excluding first-population work.
+    // continuous stable initial-population window. Ordinary compiled-section
+    // rebuilds remain in the workload; requiring zero maintenance work prevented
+    // a visually populated live world from ever starting the capture.
     private static final long SETTLE_NANOS = seconds("benchmarkSettleSeconds", 60.0D, 0.0D, 600.0D);
     private static final long SETTLE_QUIET_NANOS = seconds("benchmarkQuietSeconds", 10.0D, 1.0D, 120.0D);
     private static final long MAX_SETTLE_NANOS = Math.max(SETTLE_NANOS,
@@ -57,6 +59,9 @@ public final class AutomatedBenchmark {
     private static long lastSettleScheduled = -1L;
     private static int lastSettlePublished = -1;
     private static int lastSettleNonEmpty = -1;
+    private static TerrainPopulationTracker.Snapshot lastPopulation;
+    private static TerrainPopulationTracker.Snapshot capturePopulation;
+    private static TerrainPopulationTracker capturePopulationTracker;
     private static long captureStartedAt;
     private static long capReachedAt;
     private static long nextStagingSampleAt;
@@ -123,6 +128,7 @@ public final class AutomatedBenchmark {
                 lastSettleScheduled = -1L;
                 lastSettlePublished = -1;
                 lastSettleNonEmpty = -1;
+                lastPopulation = null;
                 state = State.SETTLING;
                 Initializer.LOGGER.info(
                         "VulkanMod benchmark terrain visible; warming for at least {} seconds, then requiring {} seconds of terrain convergence (max {} seconds)",
@@ -155,22 +161,23 @@ public final class AutomatedBenchmark {
                 lastSettleScheduled = -1L;
                 lastSettlePublished = -1;
                 lastSettleNonEmpty = -1;
+                lastPopulation = null;
                 return;
             }
 
             WorldRenderer.PerformanceCounters counters = renderer.performanceCounters();
             var workers = counters.workers();
-            boolean quiet = terrainQuietSample(
-                    counters.scheduled(), counters.nonEmptySections(),
-                    workers.published(), workers.active(), workers.publicationWaiters(),
-                    workers.queuedHigh(), workers.queuedLow(), workers.publicationQueue(),
-                    lastSettleScheduled, lastSettlePublished, lastSettleNonEmpty);
+            TerrainPopulationTracker tracker = renderer.getTaskDispatcher().terrainPopulation();
+            TerrainPopulationTracker.Snapshot population = tracker.snapshot();
+            boolean quiet = TerrainPopulationTracker.stable(population, lastPopulation,
+                    counters.nonEmptySections(), lastSettleNonEmpty);
             long scheduledDelta = lastSettleScheduled < 0 ? -1 : counters.scheduled() - lastSettleScheduled;
             int publishedDelta = lastSettlePublished < 0 ? -1 : workers.published() - lastSettlePublished;
             int nonEmptyDelta = lastSettleNonEmpty < 0 ? -1 : counters.nonEmptySections() - lastSettleNonEmpty;
             settleDetails = String.format(Locale.ROOT,
-                    "sections=%d delta=%d scheduled_delta=%d published_delta=%d active=%d high=%d low=%d waiters=%d backlog=%d",
-                    counters.nonEmptySections(), nonEmptyDelta, scheduledDelta, publishedDelta,
+                    "sections=%d delta=%d initial_scheduled=%d initial_published=%d initial_pending=%d scheduled_delta=%d published_delta=%d active=%d high=%d low=%d waiters=%d backlog=%d",
+                    counters.nonEmptySections(), nonEmptyDelta, population.scheduled(), population.published(),
+                    population.pending(), scheduledDelta, publishedDelta,
                     workers.active(), workers.queuedHigh(), workers.queuedLow(),
                     workers.publicationWaiters(), workers.publicationQueue());
             if (now >= nextSettleLogAt) {
@@ -180,6 +187,7 @@ public final class AutomatedBenchmark {
                         quiet, counters.scheduled(), workers.published(), settleDetails);
                 nextSettleLogAt = now + 5_000_000_000L;
             }
+            lastPopulation = population;
             lastSettleScheduled = counters.scheduled();
             lastSettlePublished = workers.published();
             lastSettleNonEmpty = counters.nonEmptySections();
@@ -199,6 +207,8 @@ public final class AutomatedBenchmark {
             captureWidth = minecraft.getWindow().getWidth();
             captureHeight = minecraft.getWindow().getHeight();
             captureStartedAt = now;
+            capturePopulation = population;
+            capturePopulationTracker = tracker;
             state = State.CAPTURING;
             GpuTimestampProfiler.armAutomatedCapture();
             PerformanceProfiler.armAutomatedCapture();
@@ -223,6 +233,13 @@ public final class AutomatedBenchmark {
         String invalid = invalidView(minecraft);
         if (invalid != null) {
             abort(invalid);
+            return;
+        }
+        WorldRenderer renderer = WorldRenderer.getInstance();
+        if (renderer == null || renderer.getLevel() != minecraft.level
+                || renderer.getTaskDispatcher().terrainPopulation() != capturePopulationTracker
+                || !capturePopulationTracker.unchanged(capturePopulation)) {
+            abort("initial terrain population resumed during capture");
             return;
         }
         long now = System.nanoTime();
@@ -265,7 +282,7 @@ public final class AutomatedBenchmark {
                 }
                 long quiet = terrainQuietSince == 0L ? 0L
                         : Math.max(0L, now - terrainQuietSince);
-                yield "VulkanMod benchmark: waiting for terrain convergence "
+                yield "VulkanMod benchmark: waiting for initial terrain population "
                         + Math.min(SETTLE_QUIET_NANOS / 1_000_000_000L,
                         quiet / 1_000_000_000L) + "/"
                         + SETTLE_QUIET_NANOS / 1_000_000_000L + "s (timeout in "
@@ -287,7 +304,7 @@ public final class AutomatedBenchmark {
 
     public static String captureMetadata() {
         return String.format(Locale.ROOT,
-                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f settle_mode=terrain_quiet settle_quiet_s=%.3f settle_max_s=%.3f settle_actual_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true camera=first_person_local_player focus_required=true framebuffer_locked=true",
+                "[VulkanModPerf] benchmark_config world=%s dimension=minecraft:overworld xyz=%.3f,%.3f,%.3f yaw=%.2f pitch=%.2f spectator=true settle_s=%.3f settle_mode=initial_population_stable settle_quiet_s=%.3f settle_max_s=%.3f settle_actual_s=%.3f capture_s=%.3f after_cap_s=%.3f auto_save_exit=true camera=first_person_local_player focus_required=true framebuffer_locked=true maintenance_rebuilds_included=true initial_epoch=%d initial_scheduled=%d initial_published=%d initial_pending=%d",
                 WORLD_NAME.replace(' ', '_'), X, Y, Z, YAW, PITCH,
                 SETTLE_NANOS / 1_000_000_000.0D,
                 SETTLE_QUIET_NANOS / 1_000_000_000.0D,
@@ -295,7 +312,11 @@ public final class AutomatedBenchmark {
                 captureStartedAt > terrainAppearedAt
                         ? (captureStartedAt - terrainAppearedAt) / 1_000_000_000.0D : -1.0D,
                 CAPTURE_NANOS / 1_000_000_000.0D,
-                AFTER_CAP_NANOS / 1_000_000_000.0D);
+                AFTER_CAP_NANOS / 1_000_000_000.0D,
+                capturePopulation == null ? -1L : capturePopulation.epoch(),
+                capturePopulation == null ? -1L : capturePopulation.scheduled(),
+                capturePopulation == null ? -1L : capturePopulation.published(),
+                capturePopulation == null ? -1 : capturePopulation.pending());
     }
 
     private static boolean readyInTargetWorld(Minecraft minecraft, IntegratedServer server) {
@@ -379,25 +400,6 @@ public final class AutomatedBenchmark {
         return Math.max(start + duration, cap == 0L ? 0L : Math.max(start, cap) + afterCap);
     }
 
-    private static boolean terrainQuietSample(
-            long scheduled, int nonEmpty, int published,
-            int active, int publicationWaiters, int queuedHigh, int queuedLow,
-            int publicationQueue, long previousScheduled,
-            int previousPublished, int previousNonEmpty) {
-        return nonEmpty > 0
-                && active == 0
-                && publicationWaiters == 0
-                && queuedHigh == 0
-                && queuedLow == 0
-                && publicationQueue == 0
-                && previousScheduled >= 0L
-                && previousPublished >= 0
-                && previousNonEmpty >= 0
-                && scheduled == previousScheduled
-                && published == previousPublished
-                && nonEmpty == previousNonEmpty;
-    }
-
     /** Command syntax and staging deadline oracles without executing against a world. */
     public static void verifyForCi() {
         ClientTickBreakdown.verifyForCi();
@@ -428,12 +430,13 @@ public final class AutomatedBenchmark {
                 || captureEndAt(100L, 50L, 10L, 60L) != 160L) {
             throw new IllegalStateException("Automated benchmark capture deadline is invalid");
         }
-        if (terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 9L, 20, 100)
-                || terrainQuietSample(10L, 100, 20, 1, 0, 0, 0, 0, 10L, 20, 100)
-                || terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 10L, 19, 100)
-                || terrainQuietSample(10L, 101, 20, 0, 0, 0, 0, 0, 10L, 20, 100)
-                || !terrainQuietSample(10L, 100, 20, 0, 0, 0, 0, 0, 10L, 20, 100)) {
-            throw new IllegalStateException("Automated benchmark terrain convergence oracle is invalid");
+        TerrainPopulationTracker.Snapshot population = new TerrainPopulationTracker.Snapshot(1, 10, 10, 0);
+        if (!TerrainPopulationTracker.stable(population, population, 100, 100)
+                || TerrainPopulationTracker.stable(population, population, 101, 100)
+                || TerrainPopulationTracker.stable(new TerrainPopulationTracker.Snapshot(1, 11, 10, 1), population, 100, 100)
+                || TerrainPopulationTracker.stable(new TerrainPopulationTracker.Snapshot(1, 11, 11, 0), population, 100, 100)
+                || TerrainPopulationTracker.stable(new TerrainPopulationTracker.Snapshot(2, 10, 10, 0), population, 100, 100)) {
+            throw new IllegalStateException("Automated benchmark initial population oracle is invalid");
         }
     }
 

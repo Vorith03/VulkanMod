@@ -30,11 +30,16 @@ validation animation/screenshot tests, Create Chronicles, Crash Assistant and
 JAR/log uploads. Private pack fixtures skipped. Visible HUD and representative
 convergence/offload measurement still require the owner-machine retry.
 
-For the next diagnostic retry, use the corrected build with the same flags and
-workload below, with `benchmarkMaxSettleSeconds=900` to allow up to
-15 minutes of settling. Keep minimum warmup 60 and quiet window 10. A timeout
-still rejects the capture; return latest.log even when no capture exists. Do not
-shorten the quiet window or enable unrelated terrain experiments to force it.
+The subsequent #1003 attempt also timed out at 900 seconds, despite a constant
+6,559 non-empty render-graph count from about 80 seconds onward. It revealed
+recurrent scheduling/publication after queues had drained. The zero-all-work
+rule is superseded by initial-population ownership; see
+BENCHMARK_TERRAIN_CONVERGENCE_2026-10-07.md. This still blocks queued/building/
+publishing initial sections and rejects resumed population during capture, while
+including normal already-compiled-section updates in the measured workload.
+Use the corrected candidate after its new CI qualification; that qualification
+is pending. Maximum settle returns to 300 seconds; 60-second minimum and
+10-second stability window stay unchanged. Do not rerun #1003 or extend its timeout.
 
 Evidence SHA256:
 - latest(6).log: `5200be84c39dab0e9fcfa99e835f404b0fd28294668d15ae53c3fde3687269c7`
@@ -56,7 +61,7 @@ Evidence SHA256:
    -Dvulkanmod.performanceProfiler.gpuTimestamps=true
    -Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
    -Dvulkanmod.performanceProfiler.benchmarkQuietSeconds=10
-   -Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=900
+   -Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=300
    -Dvulkanmod.performanceProfiler.durationSeconds=180
    -Dvulkanmod.gpuAnimatedTextureCopies=true
    -Dvulkanmod.gpuAnimatedTextureInterpolation=true
@@ -70,7 +75,7 @@ Evidence SHA256:
    resize, open F3/screens or change settings. The HUD handles placement,
    minimum warmup, terrain convergence and 180-second measurement. A successful
    run saves and exits automatically. If convergence has not been reached after
-   900 seconds, or another guard aborts, the game remains open; report the abort
+   300 seconds, or another guard aborts, the game remains open; report the abort
    rather than changing the workload to force a result.
 
 Return the newest `logs/vulkanmod-performance-benchmark-<UUID>.log` and
@@ -81,7 +86,7 @@ terrain/Flywheel test is part of this capture.
 ## What the capture decides
 
 - Confirm both offload request flags and enabled `shaderFloat64` provenance.
-- Check `settle_mode=terrain_quiet`, actual settling time and successful completion.
+- Check `settle_mode=initial_population_stable`, actual settling time and successful completion.
   Examine terrain windows for any remaining population/churn before interpreting
   steady performance.
 - Read client/texture tick mean and p95, allocations, sprite-upload work,

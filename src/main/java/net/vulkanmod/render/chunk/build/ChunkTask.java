@@ -59,7 +59,12 @@ public class ChunkTask {
 
     public CompletableFuture<Result> doTask(ThreadBuilderPack builderPack) { return null; }
 
-    public void cancel() { this.cancelled.set(true); }
+    public void cancel() {
+        this.cancelled.set(true);
+        this.completePopulation(false);
+    }
+
+    public void completePopulation(boolean acceptedPublication) {}
 
     public static class BuildTask extends ChunkTask {
         private static final AtomicBoolean SPARSE_LIGHTING_ACTIVE_LOGGED = new AtomicBoolean();
@@ -81,6 +86,8 @@ public class ChunkTask {
         //debug
         private float buildTime;
         private boolean submitted = false;
+        private final TerrainPopulationTracker.Ticket populationTicket;
+        private boolean populationHandedOff;
 
         public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, BlockPos origin,
                          boolean highPriority, TaskDispatcher taskDispatcher) {
@@ -105,11 +112,25 @@ public class ChunkTask {
                     && (!this.gpuTerrainCpuRecoveryRequired
                     || this.gpuTerrainHadReadyAppendFallback);
             this.highPriority = highPriority;
+            this.populationTicket = taskDispatcher.terrainPopulation().begin(!renderSection.isCompiled());
         }
 
         public String name() { return "rend_chk_rebuild"; }
 
+        @Override
+        public void completePopulation(boolean acceptedPublication) {
+            if (populationTicket != null) populationTicket.finish(acceptedPublication);
+        }
+
         public CompletableFuture<Result> doTask(ThreadBuilderPack chunkBufferBuilderPack) {
+            try {
+                return build(chunkBufferBuilderPack);
+            } finally {
+                if (!populationHandedOff) completePopulation(false);
+            }
+        }
+
+        private CompletableFuture<Result> build(ThreadBuilderPack chunkBufferBuilderPack) {
             this.submitted = true;
             long startTime = System.nanoTime();
 
@@ -178,6 +199,7 @@ public class ChunkTask {
                                 compileResults.sparseLighting, this.voxelGeneration);
                     });
 
+                    this.populationHandedOff = true;
                     this.buildTime = (System.nanoTime() - startTime) * 0.000001f;
                     return CompletableFuture.completedFuture(Result.SUCCESSFUL);
                 }
