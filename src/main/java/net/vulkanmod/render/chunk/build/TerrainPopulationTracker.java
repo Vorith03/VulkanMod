@@ -15,7 +15,9 @@ public final class TerrainPopulationTracker {
 
     TerrainPopulationTracker(boolean enabled) { this.enabled = enabled; }
 
-    /** Called at task construction, before queueing; ownership extends through publication. */
+    public boolean enabled() { return enabled; }
+
+    /** Called at task admission, before queueing; ownership extends through publication. */
     public Ticket begin(boolean initialBuild) {
         if (!enabled || !initialBuild) return null;
         synchronized (this) {

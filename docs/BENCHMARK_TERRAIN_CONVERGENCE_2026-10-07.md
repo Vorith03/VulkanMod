@@ -35,8 +35,10 @@ Evidence SHA256:
 `TerrainPopulationTracker` belongs to a TaskDispatcher. An initial build is one
 whose RenderSection is UNCOMPILED at BuildTask construction. One ticket owns its
 entire queued/building/publication lifetime, also for empty section results.
-Synchronous builds use the same construction/worker path. Failed/cancelled worker
-exits retire ownership; successful handoff keeps it until publication. The task's
+Ownership begins at async admission or synchronous execution; unqueued task
+construction does not create outstanding work.
+Synchronous builds use the same construction/worker path. Cancellation requests keep running/publishing work owned until retirement;
+failed/cancelled worker exits or queue removal retire ownership; successful handoff keeps it until publication. The task's
 existing cancellation flag still decides whether publication is accepted. Ticket
 retirement is idempotent under cancellation/completion races. Dispatcher teardown
 resets the epoch after workers stop and results are discarded; old completions

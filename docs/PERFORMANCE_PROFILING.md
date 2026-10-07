@@ -68,9 +68,9 @@ and requires a continuous 10-second **initial-population stability** window.
 A sample requires a stable non-empty render-graph count, no outstanding initial
 section-build tickets, and unchanged initial scheduling/publication counts and
 dispatcher epoch. Initial means the section has `CompiledSection.UNCOMPILED`
-when its build task is constructed. Ownership starts before queueing and lasts
+when its build task is constructed. Ownership starts at async queue admission or synchronous execution and lasts
 through accepted render-thread publication, including builds of empty sections.
-Cancellation/failure retires ownership once; a cancelled task is never counted
+Cancelled work retains ownership until worker/publication retirement or queue removal; a cancelled task is never counted
 as an accepted publication. Dispatcher teardown invalidates old tickets.
 
 Rebuilds of already-compiled sections and transparency sorting remain ordinary

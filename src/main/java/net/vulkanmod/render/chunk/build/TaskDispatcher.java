@@ -198,6 +198,7 @@ public class TaskDispatcher {
         if(chunkTask == null)
             return;
 
+        chunkTask.preparePopulation();
         this.scheduledAt.put(chunkTask, System.nanoTime());
 
         if (chunkTask.highPriority) {
@@ -502,6 +503,7 @@ public class TaskDispatcher {
             if (chunkTask != null) {
                 this.scheduledAt.remove(chunkTask);
                 chunkTask.cancel();
+                chunkTask.completePopulation(false);
             }
         }
 
@@ -510,6 +512,7 @@ public class TaskDispatcher {
             if (chunkTask != null) {
                 this.scheduledAt.remove(chunkTask);
                 chunkTask.cancel();
+                chunkTask.completePopulation(false);
             }
         }
 

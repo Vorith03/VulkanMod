@@ -49,7 +49,7 @@ work and one controlled RD32 O3/O4 capture before selecting the next adapter.
   Non-empty count reached 6559 around 80 s and remained stable; recurrent builds
   reset zero-work quiet even after worker/queue drain. Initial-population ownership
   now distinguishes UNCOMPILED tasks from compiled-section maintenance. It spans
-  task creation through publication/cancellation/failure, rejects epoch changes,
+  task admission through publication/worker failure/cancelled-work retirement, rejects epoch changes,
   and aborts if initial population resumes during capture. Maintenance remains
   measured and world/mod semantics unchanged. Local ownership/race/teardown,
   maintenance regression, HUD and attribution contracts pass. New executable CI

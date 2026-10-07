@@ -42,7 +42,10 @@ public class PopulationContract {
             populated=current;
         }
         check(stableSeconds>=10, "live-world rebuild churn prevented convergence");
-        var cancelled=tracker.begin(true); cancelled.finish(false);
+        var cancelled=tracker.begin(true);
+        // Cancellation request alone cannot admit capture while a worker still owns a build.
+        check(tracker.snapshot().pending()==1 && !tracker.unchanged(populated), "cancelled running build disappeared");
+        cancelled.finish(false);
         check(tracker.snapshot().pending()==0 && tracker.snapshot().published()==1, "cancel counted as publication");
         var stale=tracker.begin(true); tracker.reset();
         var afterReset=tracker.snapshot(); stale.finish(true);
@@ -68,10 +71,13 @@ public class PopulationContract {
 task = (root / 'src/main/java' / package / 'ChunkTask.java').read_text()
 dispatcher = (root / 'src/main/java' / package / 'TaskDispatcher.java').read_text()
 controller = (root / 'src/main/java/net/vulkanmod/render/profiling/AutomatedBenchmark.java').read_text()
-assert 'begin(!renderSection.isCompiled())' in task
+assert 'enabled() && !renderSection.isCompiled()' in task
+assert 'preparePopulation();\n            try {' in task
+assert 'chunkTask.preparePopulation();' in dispatcher
 assert 'if (!populationHandedOff) completePopulation(false)' in task
 assert 'this.populationHandedOff = true;' in task
-assert 'this.cancelled.set(true);\n        this.completePopulation(false);' in task
+assert 'public void cancel() { this.cancelled.set(true); }' in task
+assert dispatcher.count('chunkTask.completePopulation(false);') == 2
 assert 'task.completePopulation(populationPublished);' in dispatcher
 assert 'this.terrainPopulation.reset();' in dispatcher
 assert 'TerrainPopulationTracker.stable(' in controller

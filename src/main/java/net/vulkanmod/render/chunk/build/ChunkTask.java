@@ -59,10 +59,9 @@ public class ChunkTask {
 
     public CompletableFuture<Result> doTask(ThreadBuilderPack builderPack) { return null; }
 
-    public void cancel() {
-        this.cancelled.set(true);
-        this.completePopulation(false);
-    }
+    public void cancel() { this.cancelled.set(true); }
+
+    public void preparePopulation() {}
 
     public void completePopulation(boolean acceptedPublication) {}
 
@@ -86,7 +85,8 @@ public class ChunkTask {
         //debug
         private float buildTime;
         private boolean submitted = false;
-        private final TerrainPopulationTracker.Ticket populationTicket;
+        private final boolean initialPopulation;
+        private volatile TerrainPopulationTracker.Ticket populationTicket;
         private boolean populationHandedOff;
 
         public BuildTask(RenderSection renderSection, RenderChunkRegion renderChunkRegion, BlockPos origin,
@@ -112,10 +112,18 @@ public class ChunkTask {
                     && (!this.gpuTerrainCpuRecoveryRequired
                     || this.gpuTerrainHadReadyAppendFallback);
             this.highPriority = highPriority;
-            this.populationTicket = taskDispatcher.terrainPopulation().begin(!renderSection.isCompiled());
+            this.initialPopulation = taskDispatcher.terrainPopulation().enabled() && !renderSection.isCompiled();
         }
 
         public String name() { return "rend_chk_rebuild"; }
+
+        @Override
+        public void preparePopulation() {
+            if (!initialPopulation || populationTicket != null) return;
+            synchronized (this) {
+                if (populationTicket == null) populationTicket = taskDispatcher.terrainPopulation().begin(true);
+            }
+        }
 
         @Override
         public void completePopulation(boolean acceptedPublication) {
@@ -123,6 +131,7 @@ public class ChunkTask {
         }
 
         public CompletableFuture<Result> doTask(ThreadBuilderPack chunkBufferBuilderPack) {
+            preparePopulation();
             try {
                 return build(chunkBufferBuilderPack);
             } finally {
