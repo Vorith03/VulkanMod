@@ -417,7 +417,11 @@ Do not repeatedly poll a newly pushed workflow while it is still too early for t
 - Once the workflow is plausibly at or beyond the relevant gate, polling about every **25–30 seconds** is reasonable.
 - If the active step is known to have a longer runtime or timeout, wait according to that step's observed duration instead of polling every 25 seconds throughout it.
 - Avoid status checks that have negligible chance of producing new evidence.
-- When multiple pushes are intentionally made close together, rely on the workflow's `cancel-in-progress` concurrency behavior and follow the newest run.
+- Batch related edits and focused local corrections into one coherent milestone before pushing. Do not use repeated CI runs as a compiler for microcommits. Cancellation saves remaining time but does not refund elapsed execution. Concurrency is a backstop for superseded work, not a replacement for batching.
+- Run `scripts/ci/agent-check.sh` and focused contracts locally when the environment supports them; retain the existing full renderer/compatibility/packaging gates for executable changes.
+- Documentation-only checkpoints reuse the latest applicable executable CI evidence; the existing workflow already filters Markdown/docs changes. Do not launch another renderer run solely to refresh a handoff.
+- VulkanMod is public and standard Ubuntu hosted runners do not consume private-repository minute allowance. Preserve correctness checks; distinguish runner minutes from artifact/cache storage. See `docs/ACTIONS_EFFICIENCY_2026-10-08.md`.
+- When a runner cannot start because of a known external billing/quota block, record the unverified state and continue useful local/repository work; do not repeatedly rerun unchanged jobs or change billing settings.
 
 ---
 
