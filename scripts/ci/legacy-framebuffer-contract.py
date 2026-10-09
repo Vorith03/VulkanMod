@@ -97,6 +97,25 @@ public class FramebufferContract {
   unsupported(()->GlFramebuffer.bindRenderbuffer(GL_RENDERBUFFER,1)); GlFramebuffer.bindRenderbuffer(GL_RENDERBUFFER,0);
   unsupported(()->GlFramebuffer.glRenderbufferStorage(GL_RENDERBUFFER,0,8,6));
   unsupported(()->GlFramebuffer.glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,0));
+  // Deleting an incomplete bound FBO binds framebuffer zero even without native backing.
+  int empty=GlFramebuffer.genFramebufferId(); GlFramebuffer.bindFramebuffer(GL_FRAMEBUFFER,empty);
+  check(r.pass==null); int mainBinds=RenderTargetManager.mains;
+  GlFramebuffer.deleteFramebuffer(empty);
+  check(GlFramebuffer.getBoundFramebufferId()==0 && RenderTargetManager.mains==mainBinds+1);
+  // An incomplete replacement retired its former backing before deletion as well.
+  int detached=GlFramebuffer.genFramebufferId(); GlFramebuffer.bindFramebuffer(GL_FRAMEBUFFER,detached);
+  attach(GL_COLOR_ATTACHMENT0,1); attach(GL_COLOR_ATTACHMENT0,0); check(r.pass==null);
+  mainBinds=RenderTargetManager.mains; GlFramebuffer.deleteFramebuffer(detached);
+  check(RenderTargetManager.mains==mainBinds+1);
+  // Deleting an unbound incomplete object must not change the caller's target.
+  int unbound=GlFramebuffer.genFramebufferId(); GlFramebuffer.bindFramebuffer(GL_FRAMEBUFFER,0);
+  mainBinds=RenderTargetManager.mains; GlFramebuffer.deleteFramebuffer(unbound);
+  check(RenderTargetManager.mains==mainBinds);
+  // No frame means no attempt to record a swapchain pass.
+  r.recording=false; empty=GlFramebuffer.genFramebufferId(); GlFramebuffer.bindFramebuffer(GL_FRAMEBUFFER,empty);
+  mainBinds=RenderTargetManager.mains; GlFramebuffer.deleteFramebuffer(empty);
+  check(GlFramebuffer.getBoundFramebufferId()==0 && RenderTargetManager.mains==mainBinds);
+  r.recording=true;
   int broken=GlFramebuffer.genFramebufferId(); GlFramebuffer.bindFramebuffer(GL_FRAMEBUFFER,broken); RenderPass.fail=true;
   retired=Framebuffer.retired;
   try { attach(GL_COLOR_ATTACHMENT0,1); throw new AssertionError(); } catch(IllegalStateException expected) {}

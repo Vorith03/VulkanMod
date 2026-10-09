@@ -50,11 +50,17 @@ public final class GlFramebuffer {
     public static void deleteFramebuffer(int id) {
         GlFramebuffer removed = map.remove(id);
         if(removed == null) return;
-        if(removed == boundFramebuffer) {
+        boolean wasBound = removed == boundFramebuffer;
+        if(wasBound) {
             boundId = 0;
             boundFramebuffer = null;
         }
         removed.retireBacking();
+        // Incomplete FBOs have no backing to retire, but deleting the bound
+        // object still binds framebuffer zero. Restore the main pass even when
+        // assembly already ended the previous pass before allocating backing.
+        if(wasBound && Renderer.getInstance().isRecordingFrame())
+            RenderTargetManager.bindMain(false, 0, 0);
     }
 
     /** Invalidate borrowed framebuffers before a texture's storage/view is retired. */

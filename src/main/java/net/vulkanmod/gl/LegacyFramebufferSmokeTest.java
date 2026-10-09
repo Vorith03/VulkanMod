@@ -60,6 +60,22 @@ public final class LegacyFramebufferSmokeTest {
             clear(4, 3, 0, 0, 1);
             var blue = ScreenshotReadback.request(second);
 
+            int incompleteId = GlStateManager.glGenFramebuffers();
+            try {
+                GlStateManager._glBindFramebuffer(GL_FRAMEBUFFER, incompleteId);
+                status(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
+                if(renderer.getBoundRenderPass() != null)
+                    throw new AssertionError("Incomplete FBO retained an active pass");
+                GlStateManager._glDeleteFramebuffers(incompleteId);
+                if(renderer.getBoundRenderPass() == null
+                        || renderer.getBoundRenderPass().getFramebuffer() != Vulkan.getSwapChain()
+                        || GlStateManager.getBoundFramebuffer() != 0)
+                    throw new AssertionError("Deleting incomplete FBO did not restore framebuffer zero");
+            } finally {
+                GlStateManager._glDeleteFramebuffers(incompleteId);
+            }
+
+            GlStateManager._glBindFramebuffer(GL_FRAMEBUFFER, id);
             attach(GL_COLOR_ATTACHMENT0, first.getColorTextureId());
             attach(GL_DEPTH_ATTACHMENT, first.getDepthTextureId());
             first.resize(12, 10, Minecraft.ON_OSX); // Borrowed VkFramebuffer must retire before its views.
