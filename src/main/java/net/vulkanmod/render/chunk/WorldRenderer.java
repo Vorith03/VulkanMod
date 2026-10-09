@@ -28,7 +28,6 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.FrustumMixed;
 import net.vulkanmod.render.chunk.build.ChunkTask;
 import net.vulkanmod.render.chunk.build.TaskDispatcher;
-import net.vulkanmod.render.profiling.Profiler;
 import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import net.vulkanmod.render.chunk.util.AreaSetQueue;
@@ -89,7 +88,6 @@ public class WorldRenderer {
     private VFrustum frustum;
 
     IndirectBuffer[] indirectBuffers;
-//    UniformBuffers uniformBuffers;
 
     int nonEmptyChunks;
     private long performanceScheduledBuilds;
@@ -121,10 +119,7 @@ public class WorldRenderer {
 
         for(int i = 0; i < this.indirectBuffers.length; ++i) {
             this.indirectBuffers[i] = new IndirectBuffer(1000000, MemoryTypes.HOST_MEM);
-//            this.indirectBuffers[i] = new IndirectBuffer(1000000, MemoryTypes.GPU_MEM);
         }
-
-//        uniformBuffers = new UniformBuffers(100000, MemoryTypes.GPU_MEM);
     }
 
     public static WorldRenderer init(LevelRenderer levelRenderer) {
@@ -155,12 +150,8 @@ public class WorldRenderer {
     }
 
     public void setupRenderer(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
-//        Profiler p = Profiler.getProfiler("chunks");
-//        p.start();
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Setup_Renderer");
-
-//        this.frustum = frustum.offsetToFullyIncludeCameraCube(8);
         this.cameraPos = camera.getPosition();
         if (this.minecraft.options.getEffectiveRenderDistance() != this.lastViewDistance) {
             this.allChanged();
@@ -174,25 +165,19 @@ public class WorldRenderer {
         int sectionY = SectionPos.posToSectionCoord(cameraY);
         int sectionZ = SectionPos.posToSectionCoord(cameraZ);
 
-        Profiler p2 = Profiler.getProfiler("camera");
         profiler.push("reposition");
 
         if (this.lastCameraSectionX != sectionX || this.lastCameraSectionY != sectionY || this.lastCameraSectionZ != sectionZ) {
 
-            p2.start();
             this.lastCameraSectionX = sectionX;
             this.lastCameraSectionY = sectionY;
             this.lastCameraSectionZ = sectionZ;
             this.sectionGrid.repositionCamera(cameraX, cameraZ);
-            p2.pushMilestone("end-reposition");
-            p2.round();
         }
         profiler.pop();
 
         double entityDistanceScaling = this.minecraft.options.entityDistanceScaling().get();
         Entity.setViewScale(Mth.clamp((double)this.minecraft.options.getEffectiveRenderDistance() / 8.0D, 1.0D, 2.5D) * entityDistanceScaling);
-
-//        this.chunkRenderDispatcher.setCamera(cameraPos);
         this.level.getProfiler().popPush("cull");
         this.minecraft.getProfiler().popPush("culling");
         BlockPos blockpos = camera.getBlockPosition();
@@ -222,8 +207,6 @@ public class WorldRenderer {
                 this.lastCamRotX = camera.getXRot();
                 this.lastCamRotY = camera.getYRot();
 
-//                p2.pushMilestone("frustum");
-
                 this.minecraft.getProfiler().push("partial_update");
 
                 this.chunkQueue.clear();
@@ -243,14 +226,10 @@ public class WorldRenderer {
                 this.minecraft.getProfiler().pop();
 
             }
-
-//            p.pushMilestone("update");
-//            p.round();
         }
 
         this.indirectBuffers[Renderer.getCurrentFrame()].reset();
         RegionBatchStats.reset();
-//        this.uniformBuffers.reset();
 
         this.minecraft.getProfiler().pop();
         profiler.pop();
@@ -314,8 +293,6 @@ public class WorldRenderer {
 
     private void updateRenderChunks(RenderRegionCache renderRegionCache) {
         int maxDirectionsChanges = Initializer.CONFIG.advCulling;
-
-//        this.initUpdate();
 
         int rebuildLimit = taskDispatcher.getBuildSchedulingCapacity();
 
@@ -461,9 +438,6 @@ public class WorldRenderer {
 
     public void compileSections(Camera camera) {
         this.minecraft.getProfiler().push("populate_chunks_to_compile");
-//        RenderRegionCache renderregioncache = new RenderRegionCache();
-//        BlockPos cameraPos = camera.getBlockPosition();
-//        List<RenderSection> list = Lists.newArrayList();
 
         this.minecraft.getProfiler().popPush("upload");
 
@@ -474,23 +448,6 @@ public class WorldRenderer {
         profiler.pop();
         this.minecraft.getProfiler().popPush("schedule_async_compile");
 
-//        //debug
-//        Profiler p = null;
-//        if(!list.isEmpty()) {
-//            p = Profiler.getProfiler("compileChunks");
-//            p.start();
-//        }
-
-
-//        for(RenderSection renderSection : list) {
-//            renderSection.rebuildChunkAsync(this.taskDispatcher, renderregioncache);
-////            renderSection.rebuildChunkSync(this.taskDispatcher, renderregioncache);
-//            renderSection.setNotDirty();
-//        }
-
-//        if(!list.isEmpty()) {
-//            p.round();
-//        }
         this.minecraft.getProfiler().pop();
     }
 
@@ -566,7 +523,6 @@ public class WorldRenderer {
 
     public void renderSectionLayer(RenderType renderType, PoseStack poseStack, double camX, double camY, double camZ, Matrix4f projection) {
         //debug
-//        Profiler p = Profiler.getProfiler("chunks");
         Profiler2 p = Profiler2.getMainProfiler();
         RenderType solid = RenderType.solid();
         RenderType cutout = RenderType.cutout();
@@ -586,8 +542,6 @@ public class WorldRenderer {
         } else if (translucent.equals(renderType)) {
             layerName = "translucent";
         } else layerName = "unk";
-
-//        p.pushMilestone("layer " + layerName);
         if(layerName.equals("solid"))
             p.push("Opaque_terrain_pass");
         else if(layerName.equals("translucent"))
@@ -595,7 +549,6 @@ public class WorldRenderer {
             p.pop();
             p.push("Translucent_terrain_pass");
         }
-
 
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
@@ -657,7 +610,6 @@ public class WorldRenderer {
 
         if(layerName.equals("cutout") || layerName.equals("tripwire")) {
             indirectBuffers[Renderer.getCurrentFrame()].submitUploads();
-//            uniformBuffers.submitUploads();
         }
         p.pop();
 
@@ -690,27 +642,20 @@ public class WorldRenderer {
         double d0 = camX - this.xTransparentOld;
         double d1 = camY - this.yTransparentOld;
         double d2 = camZ - this.zTransparentOld;
-//        if (d0 * d0 + d1 * d1 + d2 * d2 > 1.0D) {
         if (d0 * d0 + d1 * d1 + d2 * d2 > 2.0D) {
             this.xTransparentOld = camX;
             this.yTransparentOld = camY;
             this.zTransparentOld = camZ;
             int j = 0;
 
-//                for(QueueChunkInfo chunkInfo : this.sectionsInFrustum) {
-//                    if (j < 15 && chunkInfo.chunk.resortTransparency(renderType, this.taskDispatcher)) {
-//                        ++j;
-//                    }
-//                }
-
             Iterator<RenderSection> iterator = this.chunkQueue.iterator(false);
 
             while(iterator.hasNext() && j < 15) {
                 RenderSection section = iterator.next();
 
-                section.resortTransparency(TerrainRenderType.TRANSLUCENT, this.taskDispatcher);
-
-                ++j;
+                // Count admitted sorts, not opaque/empty sections which do no work.
+                if(section.resortTransparency(TerrainRenderType.TRANSLUCENT, this.taskDispatcher))
+                    ++j;
             }
         }
 
@@ -754,8 +699,6 @@ public class WorldRenderer {
             PerformanceProfiler.end(PerformanceProfiler.Stage.BLOCK_ENTITY_RENDER, renderStart);
         }
     }
-
-//    public UniformBuffers getUniformBuffers() { return this.uniformBuffers; }
 
     public void setNeedsUpdate() {
         this.needsUpdate = true;

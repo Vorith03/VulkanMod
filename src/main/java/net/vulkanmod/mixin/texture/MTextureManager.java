@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -66,39 +67,77 @@ public abstract class MTextureManager implements VTextureManagerI {
         // animated sprites before Minecraft.tick() begins. Snapshot that decision so
         // the command-buffer batch has a symmetric start/end lifecycle.
         boolean uploadSprites = SpriteUtil.shouldUpload();
-        if(uploadSprites) {
-            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_START);
-            Device.getGraphicsQueue().startRecording();
-            // SpriteContents keeps its own nested scope. Holding one outer scope for
-            // the whole texture tick lets consecutive animated sprites targeting the
-            // same atlas share vkCmdCopyBufferToImage calls instead of forcing one
-            // Vulkan copy command per sprite. VTextureSelector still flushes on image
-            // changes, staging-buffer growth and the fixed region cap, preserving the
-            // existing ordering and ownership boundaries.
-            VTextureSelector.beginSpriteUploadBatch();
-            TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_START, phaseStart);
+        boolean ownsQueue = uploadSprites && !Device.getGraphicsQueue().hasActiveUploadBatch();
+        int originalDepth = VTextureSelector.spriteUploadBatchDepth();
+        Throwable tickFailure = null;
+        try {
+            if(uploadSprites) {
+                long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_START);
+                try {
+                    if(ownsQueue) Device.getGraphicsQueue().startRecording();
+                    VTextureSelector.beginSpriteUploadBatch();
+                } finally {
+                    TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_START, phaseStart);
+                }
+            }
+
+            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.TICKABLE_LOOP);
+            try {
+                for(Tickable tickable : this.tickableTextures) tickable.tick();
+            } finally {
+                TextureTickAttribution.end(TextureTickAttribution.Phase.TICKABLE_LOOP, phaseStart);
+            }
+        } catch(RuntimeException | Error failure) {
+            tickFailure = failure;
+            throw failure;
+        } finally {
+            try {
+                if(uploadSprites)
+                    this.vulkanmod$finishTickUpload(ownsQueue, originalDepth);
+            } catch(RuntimeException | Error cleanupFailure) {
+                if(tickFailure != null) tickFailure.addSuppressed(cleanupFailure);
+                else throw cleanupFailure;
+            } finally {
+                TextureTickAttribution.endTick(attributionTickStart);
+            }
         }
+    }
 
-        long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.TICKABLE_LOOP);
-        for (Tickable tickable : this.tickableTextures) {
-            tickable.tick();
+    @Unique
+    private void vulkanmod$finishTickUpload(boolean ownsQueue, int originalDepth) {
+        try {
+            long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
+            try {
+                // Unwind a leaf SpriteContents.upload whose RETURN hook did not run.
+                VTextureSelector.endSpriteUploadBatchesTo(originalDepth);
+            } finally {
+                TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_DRAIN, phaseStart);
+            }
+        } finally {
+            // Only the queue owner may transition the complete outer tick and submit.
+            // A nested tick leaves accumulated layouts/copies for its original owner.
+            if(ownsQueue && Device.getGraphicsQueue().hasActiveUploadBatch()) {
+                try {
+                    long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS);
+                    try {
+                        SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                    } finally {
+                        TextureTickAttribution.end(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS, phaseStart);
+                    }
+                } finally {
+                    long phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.QUEUE_SUBMIT);
+                    try {
+                        Device.getGraphicsQueue().endRecordingAndSubmit();
+                    } finally {
+                        TextureTickAttribution.end(TextureTickAttribution.Phase.QUEUE_SUBMIT, phaseStart);
+                    }
+                }
+            } else if(ownsQueue) {
+                // A staging-cap submission/restart can fail after releasing the
+                // queue. Do not create an unowned helper just to clean bookkeeping.
+                SpriteUtil.clearTransitionedLayouts();
+            }
         }
-        TextureTickAttribution.end(TextureTickAttribution.Phase.TICKABLE_LOOP, phaseStart);
-
-        if(uploadSprites) {
-            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
-            VTextureSelector.endSpriteUploadBatch();
-            TextureTickAttribution.end(TextureTickAttribution.Phase.BATCH_DRAIN, phaseStart);
-
-            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS);
-            SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
-            TextureTickAttribution.end(TextureTickAttribution.Phase.LAYOUT_TRANSITIONS, phaseStart);
-
-            phaseStart = TextureTickAttribution.begin(TextureTickAttribution.Phase.QUEUE_SUBMIT);
-            Device.getGraphicsQueue().endRecordingAndSubmit();
-            TextureTickAttribution.end(TextureTickAttribution.Phase.QUEUE_SUBMIT, phaseStart);
-        }
-        TextureTickAttribution.endTick(attributionTickStart);
     }
 
     /**

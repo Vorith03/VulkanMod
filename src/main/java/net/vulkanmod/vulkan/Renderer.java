@@ -289,33 +289,6 @@ public class Renderer {
         this.boundRenderPass = null;
     }
 
-    //TODO
-    public void beginRendering(Framebuffer framebuffer) {
-        if(skipRendering) 
-            return;
-
-        if(this.boundFramebuffer != framebuffer) {
-            this.endRendering();
-
-            try (MemoryStack stack = stackPush()) {
-                //TODO
-//                framebuffer.beginRenderPass(currentCmdBuffer, stack);
-            }
-
-            this.boundFramebuffer = framebuffer;
-        }
-    }
-
-    public void endRendering() {
-        if(skipRendering) 
-            return;
-        
-        this.boundRenderPass.endRenderPass(currentCmdBuffer);
-
-        this.boundFramebuffer = null;
-        this.boundRenderPass = null;
-    }
-
     public void setBoundFramebuffer(Framebuffer framebuffer) {
         this.boundFramebuffer = framebuffer;
     }
@@ -539,6 +512,8 @@ public class Renderer {
     }
 
     public void bindGraphicsPipeline(GraphicsPipeline pipeline) {
+        if(this.boundRenderPass == null)
+            throw new IllegalStateException("Graphics drawing requires a complete, active framebuffer");
         VkCommandBuffer commandBuffer = currentCmdBuffer;
 
         PipelineState currentState = PipelineState.getCurrentPipelineState(boundRenderPass);

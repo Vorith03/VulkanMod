@@ -369,6 +369,18 @@ public abstract class VTextureSelector {
         }
     }
 
+    public static int spriteUploadBatchDepth() { return spriteUploadDepth; }
+
+    /** Record pending regions without consuming an outer scope's ownership. */
+    public static void flushSpriteUploadBatch() { flushSpriteUploadCopies(); }
+
+    /** Restore the owning scope even if a leaf upload threw before its RETURN hook. */
+    public static void endSpriteUploadBatchesTo(int depth) {
+        if(depth < 0 || depth > spriteUploadDepth)
+            throw new IllegalArgumentException("Invalid sprite upload scope depth");
+        while(spriteUploadDepth > depth) endSpriteUploadBatch();
+    }
+
     public static void endSpriteUploadBatch() {
         if(spriteUploadDepth <= 0) {
             return;

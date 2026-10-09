@@ -51,6 +51,10 @@ jobs:
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
       - name: Validate smoke fixture isolation
         run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
+      - name: Validate prebenchmark audit admission and upload error cleanup
+        run: python3 scripts/ci/prebenchmark-audit-contract.py
+      - name: Validate legacy framebuffer routing and ownership
+        run: python3 scripts/ci/legacy-framebuffer-contract.py
       - name: Validate initial terrain population convergence
         run: python3 scripts/ci/terrain-population-contract.py
       - name: Validate Forge benchmark HUD routing

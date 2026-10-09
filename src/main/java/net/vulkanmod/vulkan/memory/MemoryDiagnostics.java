@@ -119,16 +119,21 @@ public final class MemoryDiagnostics {
             return;
 
         try {
-            Map<String, Long> process = readKbValues(Path.of("/proc/self/status"));
-            Map<String, Long> system = readKbValues(Path.of("/proc/meminfo"));
-
-            long rssMiB = kbToMiB(process.get("VmRSS"));
-            long availableMiB = kbToMiB(system.get("MemAvailable"));
-            long totalMiB = kbToMiB(system.get("MemTotal"));
+            SystemMemorySample system = SystemMemorySample.read(Path.of("/proc/meminfo"));
+            long availableMiB = system.availableMiB();
+            long totalMiB = system.totalMiB();
             long reserveMiB = calculateSystemAvailableReserveMiB(totalMiB);
             if(!isSystemMemoryPressure(availableMiB, totalMiB))
                 return;
 
+            // RSS is diagnostic only. Do not read/parse the entire process status
+            // on every healthy quarter-second texture-staging safety sample.
+            long rssMiB = -1L;
+            try {
+                rssMiB = kbToMiB(readKbValues(Path.of("/proc/self/status")).get("VmRSS"));
+            } catch(IOException ignored) {
+                // An unavailable diagnostic must not disable confirmed pressure protection.
+            }
             logSnapshot("system memory safety trip: " + reason);
             throw new OutOfMemoryError(String.format(
                     "VulkanMod stopped resource loading before global OOM: process RSS=%d MiB (diagnostic only), " +

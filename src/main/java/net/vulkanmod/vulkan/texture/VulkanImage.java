@@ -190,6 +190,14 @@ public class VulkanImage {
         return (this.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
     }
 
+    public boolean supportsColorAttachment() {
+        return (this.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0;
+    }
+
+    public boolean supportsDepthAttachment() {
+        return (this.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+    }
+
     public void transferDstLayout(CommandPool.CommandBuffer commandBuffer) {
         if (this.currentLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
             return;

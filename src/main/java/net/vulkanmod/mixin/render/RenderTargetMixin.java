@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.gl.GlTexture;
+import net.vulkanmod.gl.GlFramebuffer;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
@@ -265,6 +266,10 @@ public class RenderTargetMixin {
     }
 
     private void vulkanmod$destroyBacking() {
+        // Retire borrowed legacy VkFramebuffers before the owning target queues
+        // destruction of their attachment views (including resize/reallocation).
+        GlFramebuffer.textureStorageChanged(this.colorTextureId);
+        GlFramebuffer.textureStorageChanged(this.depthBufferId);
         if(this.framebuffer != null) {
             this.framebuffer.cleanUp();
             this.framebuffer = null;

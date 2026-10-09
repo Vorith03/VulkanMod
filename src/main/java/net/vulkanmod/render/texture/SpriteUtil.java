@@ -32,8 +32,14 @@ public abstract class SpriteUtil {
     }
 
     public static void transitionLayouts(CommandPool.CommandBuffer commandBuffer) {
-        transitionedLayouts.forEach(image -> image.readOnlyLayout(commandBuffer));
+        try {
+            transitionedLayouts.forEach(image -> image.readOnlyLayout(commandBuffer));
+        } finally {
+            clearTransitionedLayouts();
+        }
+    }
 
+    public static void clearTransitionedLayouts() {
         transitionedLayouts.clear();
         lastTransitionedLayout = null;
     }

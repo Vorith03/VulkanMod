@@ -47,6 +47,7 @@ public class GlTexture {
     }
 
     public static void glDeleteTextures(int i) {
+        GlFramebuffer.textureStorageChanged(i);
         GlTexture texture = map.remove(i);
 
         for(int unit = 0; unit < boundTextureIds.length; ++unit) {
@@ -102,6 +103,7 @@ public class GlTexture {
         if(texture == null)
             throw new IllegalArgumentException("Unknown texture id: " + id);
 
+        if(texture.vulkanImage != vulkanImage) GlFramebuffer.textureStorageChanged(id);
         texture.vulkanImage = vulkanImage;
         refreshSelectorBindings(id, vulkanImage);
     }
@@ -125,10 +127,15 @@ public class GlTexture {
     }
 
     private void allocateVulkanImage(int width, int height) {
+        GlFramebuffer.textureStorageChanged(this.id);
         if(this.vulkanImage != null)
             this.vulkanImage.free();
 
-        this.vulkanImage = new VulkanImage.Builder(width, height).createVulkanImage();
+        this.vulkanImage = new VulkanImage.Builder(width, height)
+                .setUsage(org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                        | org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_SAMPLED_BIT
+                        | org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                .createVulkanImage();
         refreshSelectorBindings(this.id, this.vulkanImage);
     }
 

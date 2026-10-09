@@ -15,6 +15,7 @@ import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryDiagnostics;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.texture.VulkanImage;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -49,6 +50,8 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
     private boolean vulkanmod$ownsAtlasUploadBatch;
     @Unique
     private long vulkanmod$atlasUploadStartNanos;
+    @Unique
+    private int vulkanmod$atlasUploadOriginalDepth;
 
     @Override
     public void vulkanmod$markAllAnimatedSpritesUsed() {
@@ -155,6 +158,7 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
         // that byte cap is reached, so batching does not trade speed for unbounded
         // host memory. Do not take ownership when another upload scope is active.
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
+        this.vulkanmod$atlasUploadOriginalDepth = VTextureSelector.spriteUploadBatchDepth();
         if(!graphicsQueue.hasActiveUploadBatch()) {
             graphicsQueue.startRecording();
             this.vulkanmod$ownsAtlasUploadBatch = true;
@@ -217,8 +221,15 @@ public class MSpriteAtlasTexture implements VTextureAtlasI {
         // visible as one same-queue dependency. If an outer scope owns the batch,
         // leave submission to that owner after recording the required barrier.
         try {
-            if(image != null && graphicsQueue.hasActiveUploadBatch()) {
-                image.readOnlyLayout(graphicsQueue.getCommandBuffer());
+            try {
+                // A failing SpriteContents upload skips its RETURN hook. Drain
+                // its queued copies before transitioning/submitting this atlas.
+                VTextureSelector.endSpriteUploadBatchesTo(this.vulkanmod$atlasUploadOriginalDepth);
+                VTextureSelector.flushSpriteUploadBatch();
+            } finally {
+                if(image != null && graphicsQueue.hasActiveUploadBatch()) {
+                    image.readOnlyLayout(graphicsQueue.getCommandBuffer());
+                }
             }
         } finally {
             if(ownedBatch) {

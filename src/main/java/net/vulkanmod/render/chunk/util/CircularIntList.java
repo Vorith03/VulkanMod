@@ -1,13 +1,8 @@
 package net.vulkanmod.render.chunk.util;
 
 import org.apache.commons.lang3.Validate;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Spliterator;
-import java.util.function.Consumer;
 
 public class CircularIntList {
     private int[] list;
@@ -16,7 +11,6 @@ public class CircularIntList {
     private int[] previous;
     private int[] next;
 
-    private OwnIterator iterator;
 
     public CircularIntList(int size, int startIndex) {
         this.startIndex = startIndex;
@@ -64,10 +58,6 @@ public class CircularIntList {
 
     public RangeIterator rangeIterator(int startIndex, int endIndex) {
         return new RangeIterator(startIndex, endIndex);
-    }
-
-    public void restartIterator() {
-        this.iterator.restart();
     }
 
     public class OwnIterator implements Iterator<Integer> {

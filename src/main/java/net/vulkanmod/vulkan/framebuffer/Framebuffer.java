@@ -32,6 +32,7 @@ public class Framebuffer {
 
     private VulkanImage colorAttachment;
     protected VulkanImage depthAttachment;
+    private boolean ownsAttachments = true;
     private boolean depthLinearFiltering;
 
     private final ObjectArrayList<RenderPass> renderPasses = new ObjectArrayList<>();
@@ -40,16 +41,26 @@ public class Framebuffer {
 
     //GL compatibility
     public Framebuffer(VulkanImage colorAttachment) {
-        this.width = colorAttachment.width;
-        this.height = colorAttachment.height;
+        this(colorAttachment, null);
+    }
 
+    /** Legacy texture-backed FBOs borrow texture storage; they do not create depth implicitly. */
+    public Framebuffer(VulkanImage colorAttachment, VulkanImage depthAttachment) {
+        VulkanImage extent = colorAttachment != null ? colorAttachment : depthAttachment;
+        if(extent == null) throw new IllegalArgumentException("At least one attachment is required");
+        if(colorAttachment != null && depthAttachment != null
+                && (colorAttachment.width != depthAttachment.width
+                || colorAttachment.height != depthAttachment.height))
+            throw new IllegalArgumentException("Framebuffer attachment dimensions differ");
+        this.width = extent.width;
+        this.height = extent.height;
         this.colorAttachment = colorAttachment;
-
-        this.depthFormat = SwapChain.getDefaultDepthFormat();
-        this.depthAttachment = VulkanImage.createDepthImage(depthFormat, this.width, this.height,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                false, true);
+        this.depthAttachment = depthAttachment;
+        this.hasColorAttachment = colorAttachment != null;
+        this.hasDepthAttachment = depthAttachment != null;
+        this.format = colorAttachment != null ? colorAttachment.format : VK_FORMAT_UNDEFINED;
+        this.depthFormat = depthAttachment != null ? depthAttachment.format : VK_FORMAT_UNDEFINED;
+        this.ownsAttachments = false;
     }
 
     //SwapChain
@@ -90,6 +101,8 @@ public class Framebuffer {
     }
 
     public void resize(int newWidth, int newHeight) {
+        if(!this.ownsAttachments)
+            throw new UnsupportedOperationException("Resize the owning textures of a borrowed framebuffer");
         this.width = newWidth;
         this.height = newHeight;
 
@@ -176,8 +189,8 @@ public class Framebuffer {
     }
 
     public void cleanUp() {
-        final VulkanImage retiredColor = this.colorAttachment;
-        final VulkanImage retiredDepth = this.depthAttachment;
+        final VulkanImage retiredColor = this.ownsAttachments ? this.colorAttachment : null;
+        final VulkanImage retiredDepth = this.ownsAttachments ? this.depthAttachment : null;
         final VkDevice device = Vulkan.getDevice();
         final ObjectArrayList<Long> retiredFramebuffers =
                 new ObjectArrayList<>(this.framebufferIds.size());

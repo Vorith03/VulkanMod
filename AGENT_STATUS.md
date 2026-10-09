@@ -2,6 +2,24 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Prebenchmark audit — 2026-10-09
+
+User requested an adversarial performance/legacy/nonfunctional-code audit before
+another benchmark. Baseline `b5034ac` / executable #1005 is unchanged by the
+intervening documentation. See [audit findings and validation scope](docs/PREBENCHMARK_AUDIT_2026-10-09.md).
+
+Confirmed fixes cover transparency admission/quota, unused camera profiling,
+per-polygon normal allocation, healthy memory-sample work, exceptional texture
+batch cleanup, and falsely successful legacy framebuffer operations. Supported
+mip-0 texture-backed legacy FBOs now use real Vulkan LOAD passes and borrowed
+attachment lifetimes; unsupported renderbuffers fail explicitly. CPU regression
+contracts pass and a transformed/native pixel-lifetime oracle is wired into the
+existing screenshot gate. Full CI is pending for this executable audit slice;
+local Gradle distribution download is network-blocked. O3/O4 defaults and
+benchmark convergence rules remain unchanged. DH LOD and automatic Flywheel
+adoption remain unimplemented/unqualified as documented. Resume by inspecting
+this audit slice's live CI before the owner's next hardware benchmark.
+
 ## Actions efficiency policy — 2026-10-08
 
 VulkanMod remains public on standard Ubuntu hosted runners, so its execution does not use the owner's private-repository minute allowance. Existing docs filters, Gradle cache, concurrency and full renderer/compatibility/packaging gates remain unchanged. AGENTS §16 now requires batching and focused local checks before a milestone push, evidence reuse for docs-only checkpoints and bounded retries for external quota blocks. See [the measured samples and policy](docs/ACTIONS_EFFICIENCY_2026-10-08.md). This is documentation-only work; it adds no renderer/runtime evidence and does not change the O5 hardware gate or defaults.

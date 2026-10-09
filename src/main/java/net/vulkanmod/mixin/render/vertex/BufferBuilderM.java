@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.*;
 import net.vulkanmod.interfaces.ExtendedVertexBuilder;
 import net.vulkanmod.interfaces.BufferBuilderMemory;
 import net.vulkanmod.interfaces.VertexFormatMixed;
-import net.vulkanmod.render.util.SortUtil;
 import net.vulkanmod.render.vertex.VertexUtil;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
@@ -179,9 +178,6 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
 //        }
 //
 ////		IntArrays.mergeSort(is, (ix, jx) -> Floats.compare(distances[jx], distances[ix]));
-////        SortUtil.quickSort(is, (ix, jx) -> Float.compare(distances[jx], distances[ix]));
-//        SortUtil.mergeSort(is, distances);
-////        SortUtil.quickSort2(is, distances);
 //
 //        IntConsumer intConsumer = this.intConsumer(this.nextElementByte, indexType);
 //

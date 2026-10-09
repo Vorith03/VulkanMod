@@ -8,7 +8,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
-import net.vulkanmod.render.profiling.Profiler;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -76,47 +75,11 @@ public class SectionGrid {
     }
 
     public void repositionCamera(double x, double z) {
-//        int i = Mth.ceil(x);
-//        int j = Mth.ceil(z);
-//
-//      int count = 0;
-//      for(int k = 0; k < this.chunkGridSizeX; ++k) {
-//         int l = this.chunkGridSizeX * 16;
-//         int i1 = i - 8 - l / 2;
-//         int j1 = i1 + Math.floorMod(k * 16 - i1, l);
-//
-////         i = i;
-//         for(int k1 = 0; k1 < this.chunkGridSizeZ; ++k1) {
-//            int l1 = this.chunkGridSizeZ * 16;
-//            int i2 = j - 8 - l1 / 2;
-//            int j2 = i2 + Math.floorMod(k1 * 16 - i2, l1);
-//
-//            for(int k2 = 0; k2 < this.chunkGridSizeY; ++k2) {
-//               int l2 = this.level.getMinBuildHeight() + k2 * 16;
-//               RenderSection renderSection = this.chunks[this.getChunkIndex(k, k2, k1)];
-//               BlockPos blockpos = renderSection.getOrigin();
-//               if (j1 != blockpos.getX() || l2 != blockpos.getY() || j2 != blockpos.getZ()) {
-//                  renderSection.setOrigin(j1, l2, j2);
-////                  count++;
-//               }
-//
-//                this.setChunkArea(renderSection, j1, l2, j2);
-////               else {
-////                  i=i;
-////               }
-//            }
-//         }
-//      }
-
-//      count = count;
 
         int i = Mth.floor(x);
         int j = Mth.floor(z);
 
         this.chunkAreaManager.repositionAreas(i, j);
-
-        Profiler p2 = Profiler.getProfiler("camera");
-        p2.pushMilestone("reposition_areas");
 
         int deltaX = Mth.clamp((i >> 4) - this.prevSecX, -this.gridWidth, this.gridWidth);
         int deltaZ = Mth.clamp((j >> 4) - this.prevSecZ, - this.gridWidth, this.gridWidth);
@@ -160,8 +123,6 @@ public class SectionGrid {
         CircularIntList.RangeIterator xRangeIterator = xList.rangeIterator(xRangeStart, xRangeEnd);
         CircularIntList.RangeIterator xComplIterator = xList.rangeIterator(xComplStart, xComplEnd);
         CircularIntList.RangeIterator zRangeIterator = zList.rangeIterator(zRangeStart, zRangeEnd);
-
-        p2.pushMilestone("pre_loop");
 
         xAbsChunkIndex = (i >> 4) - this.gridWidth / 2 + xRangeStart;
         for(int xRelativeIndex; xRangeIterator.hasNext(); xAbsChunkIndex++) {
@@ -222,61 +183,12 @@ public class SectionGrid {
             }
         }
 
-        p2.pushMilestone("post_loop");
-
-//        int i = Mth.ceil(x);
-//        int j = Mth.ceil(z);
-//
-//        int xAbsChunkIndex = (i >> 4) - this.chunkGridSizeX / 2;
-//        int xStart = Math.floorMod(xAbsChunkIndex, this.chunkGridSizeX); // needs positive modulo
-//        int zAbsChunkIndex = (j >> 4) - this.chunkGridSizeZ / 2;
-//        int zStart = Math.floorMod(zAbsChunkIndex, this.chunkGridSizeZ);
-//
-//        CircularIntList xList = new CircularIntList(this.chunkGridSizeX, xStart);
-//        CircularIntList zList = new CircularIntList(this.chunkGridSizeZ, zStart);
-//        CircularIntList.OwnIterator xIterator = xList.iterator();
-//        CircularIntList.OwnIterator zIterator = zList.iterator();
-//
-//        int count = 0;
-//        for(int xRelativeIndex; xIterator.hasNext(); xAbsChunkIndex++) {
-//            xRelativeIndex = xIterator.next();
-//            int x1 = (xAbsChunkIndex << 4);
-//
-//            zIterator.restart();
-//            zAbsChunkIndex = (j >> 4) - (this.chunkGridSizeZ >> 1);
-//
-//            for(int zRelativeIndex; zIterator.hasNext(); zAbsChunkIndex++) {
-//                zRelativeIndex = zIterator.next();
-//                int z1 = (zAbsChunkIndex << 4);
-//
-//                for(int yRel = 0;
-//                    yRel < this.chunkGridSizeY; ++yRel) {
-//                    int y1 = this.level.getMinBuildHeight() + (yRel << 4);
-//                    RenderSection renderSection = this.chunks[this.getChunkIndex(xRelativeIndex, yRel, zRelativeIndex)];
-//                    BlockPos blockpos = renderSection.getOrigin();
-//
-//                    //maybe later no need to check
-//                    if (x1 != blockpos.getX() || y1 != blockpos.getY() || z1 != blockpos.getZ()) {
-//                        renderSection.setOrigin(x1, y1, z1);
-//                        count++;
-//                    }
-//
-//                    this.setNeighbours(renderSection, xList, zList, xIterator.getCurrentIndex(), zIterator.getCurrentIndex(),
-//                            xRelativeIndex, yRel, zRelativeIndex);
-//
-//                    this.setChunkArea(renderSection, x1, y1, z1);
-//
-//                }
-//            }
-//        }
-
         this.prevSecX = i >> 4;
         this.prevSecZ = j >> 4;
     }
 
     private void setNeighbours(RenderSection section, CircularIntList xList, CircularIntList zList,
                                int xIdx, int zIdx, int x, int y, int z) {
-        //TODO: maybe connect neighbours on section compile
 
         int eastX = xList.getNext(xIdx);
         int westX = xList.getPrevious(xIdx);
@@ -311,7 +223,6 @@ public class SectionGrid {
     private void unsetNeighbours(RenderSection section) {
 
         for(Direction dir : Util.XZ_DIRECTIONS) {
-//        for(Direction dir : Util.DIRECTIONS) {
             RenderSection neighbour = section.getNeighbour(dir.ordinal());
             if(neighbour != null)
                 neighbour.setNeighbour(dir.getOpposite().ordinal(), null);
