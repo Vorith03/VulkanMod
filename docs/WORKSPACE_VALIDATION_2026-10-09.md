@@ -134,3 +134,30 @@ branch run was still #1005. A fresh bounded shell push dry-run also lacked an
 authenticated session. This confirms successful publishing with no observed
 new CI trigger; the underlying cause remains unestablished. No older run was
 retried as evidence for this executable state.
+
+## Confirmed CI blocker
+
+On 2026-10-09, the public
+[build Actions page](https://github.com/Vorith03/VulkanMod/actions/workflows/build.yml)
+was retrieved directly after connector/API inspection was inconclusive. Its
+visible warning states: “Workflows aren’t being run on this fork because of its
+GitHub Actions usage. A repository maintainer can re-enable them.” This is the
+observed reason workflows are not starting; the earlier connector/authentication
+suspicion is superseded. The warning does not disclose a numeric usage threshold
+or establish an account billing failure.
+
+Direct unauthenticated REST reads confirmed workflow `350773299` remains `active`,
+the repository is neither archived nor disabled, and the retry commit is published
+with a changed nonignored script and no skip-CI marker. The branch filter still
+includes `forge-1.20.1`; workflow changes since #1005 only add two contract steps.
+A direct exact-SHA runs read also returned zero, ruling out a connector-only run
+listing artifact. The public event feed lacked today's pushes, but GitHub
+documents up to six hours of feed latency, so that absence was not conclusive.
+
+Next action: a repository maintainer must re-enable the fork workflows through
+the signed-in GitHub Actions UI, then trigger a run covering the current
+executable state. The exposed connector has no operation to clear this block.
+Repeated commits, old-run retries, and renderer/workflow code changes are not
+remedies for it. No account settings or billing changes were performed. Local
+compilation/packaging/CPU evidence and the pending native qualification boundary
+remain as documented above.
