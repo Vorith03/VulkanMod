@@ -19,6 +19,7 @@ def method(path, signature):
 
 world = method('net/vulkanmod/render/chunk/WorldRenderer.java', 'private void sortTranslucentSections(')
 section = method('net/vulkanmod/render/chunk/RenderSection.java', 'public boolean resortTransparency(')
+transparency_state = method('net/vulkanmod/render/chunk/build/CompiledSection.java', 'public boolean hasTransparencyState()')
 tick_path = 'net/vulkanmod/mixin/texture/MTextureManager.java'
 tick = method(tick_path, 'public void tick()')
 finish = method(tick_path, 'private void vulkanmod$finishTickUpload(')
@@ -56,6 +57,7 @@ public class AuditContract {
  enum TerrainRenderType { TRANSLUCENT }
  static class CompiledSection {
   Set<TerrainRenderType> renderTypes = new HashSet<>(); Object transparencyState;
+  __TRANSPARENCY_STATE__
  }
  static class ChunkTask {
   static class SortTransparencyTask {
@@ -246,7 +248,7 @@ public class ModelScratchContract {
   System.out.println("Model normal scratch contract passed: one allocation, immutable source normals, packed/fallback parity, reentrant consumer");
  }
 }'''.replace('__COMPILE__', model_compile)
-for name, value in [('SECTION',section),('WORLD',world),('SPRITE',sprite_methods),('SCOPE',scope),('TICK',tick),('FINISH',finish),('ATLAS',atlas_close)]:
+for name, value in [('TRANSPARENCY_STATE',transparency_state),('SECTION',section),('WORLD',world),('SPRITE',sprite_methods),('SCOPE',scope),('TICK',tick),('FINISH',finish),('ATLAS',atlas_close)]:
     sources['AuditContract.java'] = sources['AuditContract.java'].replace("__" + name + "__",value)
 with tempfile.TemporaryDirectory(prefix='vulkanmod-audit-') as folder:
     target = Path(folder)

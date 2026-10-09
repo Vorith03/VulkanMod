@@ -126,7 +126,7 @@ public class RenderSection {
     public boolean resortTransparency(TerrainRenderType renderType, TaskDispatcher taskDispatcher) {
         CompiledSection compiledSection1 = this.getCompiledSection();
         if (!compiledSection1.renderTypes.contains(renderType)
-                || compiledSection1.transparencyState == null) return false;
+                || !compiledSection1.hasTransparencyState()) return false;
         if (this.compileStatus.sortTask != null) this.compileStatus.sortTask.cancel();
         this.compileStatus.sortTask = new ChunkTask.SortTransparencyTask(this, taskDispatcher);
         taskDispatcher.schedule(this.compileStatus.sortTask);

@@ -28,6 +28,10 @@ public class CompiledSection {
     @Nullable
     TerrainBufferBuilder.SortState transparencyState;
 
+    public boolean hasTransparencyState() {
+        return this.transparencyState != null;
+    }
+
     public boolean hasNoRenderableLayers() {
         return this.isCompletelyEmpty;
     }
