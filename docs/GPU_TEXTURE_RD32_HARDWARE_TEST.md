@@ -2,10 +2,11 @@
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Use fully public-CI-green
-`50a92891b45121d73a9271138387e48effba12dc`, build **#1005**:
-[build #1005](https://github.com/Vorith03/VulkanMod/actions/runs/37600141289).
-Install its distributable artifact
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1005-g50a92891-all.jar`. Replace
+`084dc8183ab6612134ddff762fac2ea9b56bf8fd`, build **#1006**:
+[build #1006](https://github.com/Vorith03/VulkanMod/actions/runs/37997041921).
+This artifact includes the now native-verified 2026-10-09 prebenchmark renderer
+audit, including the legacy-FBO pixel/lifetime smoke. Install its distributable
+artifact `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1006-g084dc818-all.jar`. Replace
 the existing VulkanMod JAR; do not leave two versions installed.
 
 ## Failed #1002 attempt and retry

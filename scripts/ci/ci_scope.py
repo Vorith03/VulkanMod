@@ -27,6 +27,10 @@ OFFLINE_PATHS = {'scripts/ci/' + name for name in CONTRACTS} | {
 }
 NATIVE_STEPS = {
     'Build and verify distributable',
+    'Record pinned Forge animation source evidence',
+    'Validate packaged Immersive Portals mixin anchors',
+    'Upload smoke-test logs',
+    'Upload distributable JAR',
     'Smoke-test Forge client Vulkan startup',
     'Smoke-test Forge client Vulkan startup without early splash',
     'Smoke-test persistent GPU indirect shadow commands',
@@ -109,8 +113,10 @@ def api(path):
 def find_baseline(repo, head):
     if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
         raise ValueError('Invalid repository name')
+    # Accommodate extended sequences of successful quick/tooling pushes without
+    # forcing a costly full suite solely because six partial runs accumulated.
     query = urllib.parse.urlencode({'branch': 'forge-1.20.1', 'event': 'push',
-                                   'status': 'success', 'per_page': 6})
+                                   'status': 'success', 'per_page': 30})
     runs = api(f'repos/{repo}/actions/workflows/build.yml/runs?{query}')['workflow_runs']
     for run in runs:
         # A green contracts-only or quick run is NOT a native baseline.

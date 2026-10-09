@@ -18,10 +18,16 @@ bounded. No native fixture was combined or removed. Workflow steps: 40 to 26.
 Local selector/failure/publication/process-lifetime contracts and actionlint pass.
 The live API lookup recognizes #1005 as the native baseline and requires the
 full suite for outstanding audit/CI changes. See the policy for measured local
-CPU timings and final validation. Full hosted CI is still **unverified** because
-GitHub reports a fork-level Actions usage block. Re-enable workflows before
-qualifying this implementation or the audit; another commit alone cannot clear
-that block. Keep the O5 benchmark and accelerated-default gates unchanged.
+CPU timings and final validation. **Full hosted #1006 is green** (run `37997041921`, exact executable
+`084dc8183ab6612134ddff762fac2ea9b56bf8fd`). The previous fork Actions
+usage block is cleared. All 19 contracts, production package, native Vulkan
+fixtures, Create Chronicles, Crash Assistant and qualified JAR upload passed;
+the new legacy-FBO screenshot oracle printed its pass marker. This also
+qualifies the pending prebenchmark audit. A follow-up CI optimization rotates
+the stale immutable Gradle cache key to seed the combined mod fixture, expands
+the full-suite lookup beyond six partial runs and strengthens baseline gate
+checks; validate its controller/CI changes before attributing any speedup.
+Keep O5 benchmarking and accelerated-default gates unchanged.
 
 ## Prebenchmark audit — 2026-10-09
 
@@ -36,21 +42,15 @@ mip-0 texture-backed legacy FBOs now use real Vulkan LOAD passes and borrowed
 attachment lifetimes; unsupported renderbuffers fail explicitly. CPU regression
 contracts pass and a transformed/native pixel-lifetime oracle is wired into the
 existing screenshot gate. Executable audit commit `2eb98ff20118615bcefb9f78b210c339864a598c` is published.
-Full CI is **not started/unverified**: exact-SHA Actions queries after publication
-return zero runs/check suites. **Root cause now observed:** the public Actions
-page says workflows are blocked on this fork because of its GitHub Actions usage
-and a maintainer can re-enable them. Per-workflow REST state still reports
-`active`, so that field alone did not expose the fork-level block. See
-[diagnosis and required next action](docs/WORKSPACE_VALIDATION_2026-10-09.md#confirmed-ci-blocker). Local Gradle
-retrieval was recovered with the environment's current proxy and a complete Java
-17 toolchain; see the follow-up below. Do not use #1005 to qualify this new
-code or start the benchmark until the full build/renderer suite passes. O3/O4 defaults and
-benchmark convergence rules remain unchanged. DH LOD and automatic Flywheel
-adoption remain unimplemented/unqualified as documented. Resume by inspecting
-this audit slice's live CI before the owner's next hardware benchmark. If the
-block remains, a repository maintainer must first re-enable fork workflows in
-GitHub, then trigger full validation for the current executable state. Additional
-commits alone do not resolve this block; do not retry an older SHA's job as audit evidence.
+The original audit commits failed to start Actions because the fork was
+usage-blocked, despite the workflow resource itself appearing `active`.
+[The captured diagnosis](docs/WORKSPACE_VALIDATION_2026-10-09.md#confirmed-ci-blocker)
+remains useful history; **#1006 now fully validates the audit natively**.
+Local Gradle/Java recovery is recorded below. Use #1006 or a newer full-green
+artifact for the next O3/O4 hardware capture, not #1005. O3/O4 defaults and
+benchmark convergence rules remain unchanged; DH LOD and automatic Flywheel
+adoption remain unimplemented/unqualified. RX hardware performance and
+convergence evidence are still pending.
 
 ## Audit follow-up and local build recovery — 2026-10-09
 

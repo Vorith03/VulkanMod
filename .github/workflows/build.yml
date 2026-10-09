@@ -74,6 +74,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: ${{ needs.plan.outputs.gradle == 'true' && 'gradle' || '' }}
+          # Setup-java caches are immutable on a primary hit. Include the
+          # combined modpack fixture so the next key can be seeded by a full run,
+          # not permanently frozen before fg.deobf resolves those dependencies.
+          cache-dependency-path: |
+            build.gradle
+            gradle.properties
+            gradle/wrapper/gradle-wrapper.properties
+            scripts/ci/create-chronicles-compat-smoke.sh
       - name: Make Gradle executable
         run: chmod +x ./gradlew
       - name: Set up Python 3.11 for offline deployment contracts

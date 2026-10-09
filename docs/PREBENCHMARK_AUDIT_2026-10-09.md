@@ -64,3 +64,15 @@ zero runs/check suites after publication: full CI has not started and remains
 unverified. No new-workflow dispatch capability is exposed; existing older-run
 retries would not validate this commit. AGENT_STATUS records the blocking gate. Private pack and owner RD32 evidence remain
 separate from software-Vulkan CI evidence.
+
+## Subsequent complete CI qualification — 2026-10-09
+
+The historical pending-CI paragraph above reflects the original blocked
+publication, not the current gate. The fork Actions restriction cleared and
+full build **#1006**, commit `084dc8183ab6612134ddff762fac2ea9b56bf8fd`,
+run `37997041921`, passed. The combined native screenshot mode printed
+`Legacy framebuffer Vulkan smoke passed`, and all 19 offline contracts,
+production Gradle build/distributable verification, other native renderer
+fixtures, Create Chronicles, Crash Assistant, and distributable artifact upload
+succeeded. This closes the audit's public/native CI gate. Hardware RX 6900 XT
+behavior and measured speedup remain separate, unverified gates.

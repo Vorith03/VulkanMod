@@ -96,7 +96,11 @@ class PlannerContract(unittest.TestCase):
         steps = [dict(name=name, status='completed', conclusion='success')
                  for name in scope.NATIVE_STEPS | {next(iter(scope.COMPAT_STEPS))}]
         def api(path):
-            if '/workflows/' in path: return {'workflow_runs': [partial, full]}
+            if '/workflows/' in path:
+                self.assertIn('per_page=30', path)
+                # More than six successful build-only jobs cannot evict a still
+                # valid native baseline and trigger an expensive redundant full run.
+                return {'workflow_runs': [dict(partial, id=i) for i in range(3, 10)] + [full]}
             return {'jobs': [dict(conclusion='success', steps=steps if '/runs/2/' in path else [])]}
         with patch.object(scope, 'api', side_effect=api), patch.object(scope, 'changed_paths', return_value=[]):
             self.assertEqual(scope.find_baseline('owner/repo', 'c'*40), ('a'*40, 2))
@@ -129,6 +133,7 @@ class PlannerContract(unittest.TestCase):
         blocks = {}
         for block in text.split('      - name: ')[1:]:
             blocks[block.splitlines()[0]] = block
+        self.assertIn('scripts/ci/create-chronicles-compat-smoke.sh', text.split('cache-dependency-path:')[1])
         for name in scope.NATIVE_STEPS | scope.COMPAT_STEPS:
             self.assertIn(name, blocks)
             if name != 'Build and verify distributable':

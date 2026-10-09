@@ -22,7 +22,8 @@ own regression. No inferred Java dependency graph is used to omit native gates.
 
 The planner compares **the whole Git diff from the last successful complete
 native suite**, not just the most recent push. It verifies the successful build,
-all native gate steps and one of the two mutually exclusive Create Chronicles
+all native gate steps, animation/Immersive Portals packaging evidence,
+log/JAR uploads and one of the two mutually exclusive Create Chronicles
 fixtures in GitHub job metadata. A quick/tooling-only green run cannot become
 that baseline. Renames include both removed and added paths. Missing evidence,
 unrelated/rewritten history, unavailable APIs and exhausted bounded lookup all
@@ -88,16 +89,30 @@ locally with Java 17 on PATH.
 
 Workflow steps decrease from **40 to 26**, including the two planner steps;
 the eight full-scope Minecraft launches and required assertions are retained.
-Nine controller regressions cover missing/skipped native baseline gates, deferred runtime changes,
+The controller regressions cover missing/skipped native, packaging and artifact
+baseline gates, a sequence of seven partial successes, deferred runtime changes,
 unknown paths, renames/deletions, quick controls, missing scripts, child-process
 timeouts/cancellation and qualified-artifact publication guards. Official actionlint 1.7.12
 validates the workflow. A public API integration check recognizes #1005/SHA
 `50a92891b45121d73a9271138387e48effba12dc` as the complete baseline and correctly
 requires `full` for the currently unvalidated audit/CI changes.
 
-Full hosted execution is still blocked by GitHub's observed fork Actions usage
-warning. Re-enable those workflows before validating this CI implementation and
-the pending audit natively. No new hosted speedup or native qualification is
-claimed; do not retry #1005 as validation of new code. Public-runner billing and
-fork usage protection are separate facts. No default-branch, billing or account
-setting changes are part of this implementation.
+**The fork-level Actions block cleared.** Full hosted build **#1006**, commit
+`084dc8183ab6612134ddff762fac2ea9b56bf8fd`, run `37997041921`,
+completed green on 2026-10-09. It passed all 19 offline contracts, Forge
+compilation and packaging, native screenshot/animation/legacy-FBO oracle,
+Create Chronicles and Crash Assistant; the qualified JAR upload succeeded.
+This closes the CI and audit validation previously blocked after #1005.
+
+The #1006 job exposed an additional cache inefficiency: a **1.23 GB primary-key
+`setup-java` Gradle cache hit** was restored, and the post action refused to
+save changes. The combined Create Chronicles fixture then spent approximately
+125 seconds with no Gradle progress output between configuration and tasks,
+consistent with additional dependency resolution. The workflow now includes
+that fixture and Gradle properties in `cache-dependency-path`, rotating the
+immutable cache key once so a full run can seed the combined modpack
+transforms. This is a hypothesis to benchmark against the next warm run, not a
+proven 125-second saving; it also costs an initial cold cache fill. A thirty-run
+baseline lookup prevents seven or more successful quick runs from needlessly
+forcing another native job. Production and native gate selection are unchanged.
+Public runner billing and fork usage protection remain separate issues.
