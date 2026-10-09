@@ -219,6 +219,7 @@ case "$mode" in
     run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.gpuAnimatedTextureInterpolation=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
     grep -F "Graphics pipeline prewarm smoke passed" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
+    # The screenshot alone does not prove legacy FBO routing/lifetime checks ran.
     grep -F "Legacy framebuffer Vulkan smoke passed" vulkan-screenshot-smoke.log
     grep -F "World render scale native smoke passed" vulkan-screenshot-smoke.log
     grep -F "Vulkan instanced draw smoke passed" vulkan-screenshot-smoke.log
