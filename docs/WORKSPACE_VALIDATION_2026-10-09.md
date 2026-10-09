@@ -121,3 +121,16 @@ The connector has older-run retries but no new-run dispatch operation; retrying
 branch-only manual-dispatch addition is not an established solution. Default
 branch, repository settings, secrets and billing were not changed. No new
 benchmark or accelerated default is qualified by these local checks.
+
+## Explicit connector retry
+
+At the owner's request, a fresh Contents API commit
+`644a6b0a96d4fcb0754bb1b90cff92cc090af8bf` added a comment explaining the
+mandatory legacy-framebuffer completion marker in `scripts/ci/vulkan-smoke.sh`.
+Renderer code and gate behavior were unchanged. The commit published and was
+fetched back successfully; Bash syntax and `git diff --check` passed. Subsequent
+exact-SHA queries returned zero workflow runs and zero check suites. The latest
+branch run was still #1005. A fresh bounded shell push dry-run also lacked an
+authenticated session. This confirms successful publishing with no observed
+new CI trigger; the underlying cause remains unestablished. No older run was
+retried as evidence for this executable state.
