@@ -27,10 +27,6 @@ OFFLINE_PATHS = {'scripts/ci/' + name for name in CONTRACTS} | {
 }
 NATIVE_STEPS = {
     'Build and verify distributable',
-    'Record pinned Forge animation source evidence',
-    'Validate packaged Immersive Portals mixin anchors',
-    'Upload smoke-test logs',
-    'Upload distributable JAR',
     'Smoke-test Forge client Vulkan startup',
     'Smoke-test Forge client Vulkan startup without early splash',
     'Smoke-test persistent GPU indirect shadow commands',
@@ -38,6 +34,12 @@ NATIVE_STEPS = {
     'Smoke-test vanilla Vulkan depth post-chain execution',
     'Smoke-test Vulkan screenshot readback',
     'Smoke-test Crash Assistant 1.9.7 compatibility',
+}
+QUALIFICATION_STEPS = {
+    'Record pinned Forge animation source evidence',
+    'Validate packaged Immersive Portals mixin anchors',
+    'Upload smoke-test logs',
+    'Upload distributable JAR',
 }
 COMPAT_STEPS = {
     'Smoke-test Create Chronicles compatibility',
@@ -82,7 +84,7 @@ def fully_validated(run, jobs):
             continue
         passed = {s['name'] for s in job.get('steps', [])
                   if s.get('status') == 'completed' and s.get('conclusion') == 'success'}
-        if NATIVE_STEPS <= passed and COMPAT_STEPS & passed:
+        if NATIVE_STEPS | QUALIFICATION_STEPS <= passed and COMPAT_STEPS & passed:
             return True
     return False
 

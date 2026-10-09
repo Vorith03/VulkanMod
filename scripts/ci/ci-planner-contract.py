@@ -53,7 +53,7 @@ class PlannerContract(unittest.TestCase):
         run = dict(conclusion='success', status='completed', event='push',
                    head_branch='forge-1.20.1', path='.github/workflows/build.yml')
         steps = [dict(name=name, status='completed', conclusion='success')
-                 for name in sorted(scope.NATIVE_STEPS | {next(iter(scope.COMPAT_STEPS))})]
+                 for name in sorted(scope.NATIVE_STEPS | scope.QUALIFICATION_STEPS | {next(iter(scope.COMPAT_STEPS))})]
         job = dict(conclusion='success', steps=steps)
         self.assertTrue(scope.fully_validated(run, [job]))
         for step in steps:
@@ -94,7 +94,7 @@ class PlannerContract(unittest.TestCase):
                     path='.github/workflows/build.yml', head_sha='a'*40, id=2)
         partial = dict(full, id=3, head_sha='b'*40)
         steps = [dict(name=name, status='completed', conclusion='success')
-                 for name in scope.NATIVE_STEPS | {next(iter(scope.COMPAT_STEPS))}]
+                 for name in scope.NATIVE_STEPS | scope.QUALIFICATION_STEPS | {next(iter(scope.COMPAT_STEPS))}]
         def api(path):
             if '/workflows/' in path:
                 self.assertIn('per_page=30', path)
@@ -134,6 +134,8 @@ class PlannerContract(unittest.TestCase):
         for block in text.split('      - name: ')[1:]:
             blocks[block.splitlines()[0]] = block
         self.assertIn('scripts/ci/create-chronicles-compat-smoke.sh', text.split('cache-dependency-path:')[1])
+        for name in scope.QUALIFICATION_STEPS:
+            self.assertIn(name, blocks)
         for name in scope.NATIVE_STEPS | scope.COMPAT_STEPS:
             self.assertIn(name, blocks)
             if name != 'Build and verify distributable':
