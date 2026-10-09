@@ -14,11 +14,17 @@ batch cleanup, and falsely successful legacy framebuffer operations. Supported
 mip-0 texture-backed legacy FBOs now use real Vulkan LOAD passes and borrowed
 attachment lifetimes; unsupported renderbuffers fail explicitly. CPU regression
 contracts pass and a transformed/native pixel-lifetime oracle is wired into the
-existing screenshot gate. Full CI is pending for this executable audit slice;
-local Gradle distribution download is network-blocked. O3/O4 defaults and
+existing screenshot gate. Executable audit commit `2eb98ff20118615bcefb9f78b210c339864a598c` is published.
+Full CI is **not started/unverified**: exact-SHA Actions queries after publication
+return zero runs/check suites. The connector exposes existing-run retries but no
+new workflow dispatch; ordinary Git push lacks shell credentials. Local Gradle
+distribution download is network-blocked. Do not use #1005 to qualify this new
+code or start the benchmark until the full build/renderer suite passes. O3/O4 defaults and
 benchmark convergence rules remain unchanged. DH LOD and automatic Flywheel
 adoption remain unimplemented/unqualified as documented. Resume by inspecting
-this audit slice's live CI before the owner's next hardware benchmark.
+this audit slice's live CI before the owner's next hardware benchmark. If still absent,
+trigger the existing full workflow for this executable state through an authenticated
+push; do not retry an older SHA's job as validation of the audit.
 
 ## Actions efficiency policy — 2026-10-08
 

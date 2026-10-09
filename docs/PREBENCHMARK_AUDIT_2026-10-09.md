@@ -46,7 +46,7 @@ Focused local contracts pass:
   LOAD backing reuse, incomplete isolation, borrowed lifetime/storage replacement,
   deletion, explicit unsupported calls and failed pass creation.
 - Existing terrain-population, chunk-budget, upload-GPU ownership, animation
-  numeric/visibility, attribution-capture and GPU-HUD hook contracts pass.
+  numeric/visibility, attribution-capture, particle-attribution, benchmark HUD and GPU-HUD hook contracts pass.
 - `git diff --check` passes. Local `agent-check.sh` cannot download the Gradle
   distribution (`Network is unreachable`); no local Forge build success is claimed.
 
@@ -54,6 +54,8 @@ Both new CPU contracts are wired into the existing full build workflow. The
 validation-enabled screenshot gate now includes a native pixel/lifetime oracle
 through transformed GlStateManager methods: real color/depth attachments, LOAD
 preservation, mismatched attachments, resize before submission, intercepted
-idempotent deletion and subsequent owner-target use. Full CI result is recorded
-in AGENT_STATUS once available. Private pack and owner RD32 evidence remain
+idempotent deletion and subsequent owner-target use. Executable commit `2eb98ff` is published, but exact-SHA Actions queries return
+zero runs/check suites after publication: full CI has not started and remains
+unverified. No new-workflow dispatch capability is exposed; existing older-run
+retries would not validate this commit. AGENT_STATUS records the blocking gate. Private pack and owner RD32 evidence remain
 separate from software-Vulkan CI evidence.
