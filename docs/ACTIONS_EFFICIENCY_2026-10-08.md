@@ -28,3 +28,13 @@ The existing workflow already ignores Markdown/docs-only push and PR changes, ca
 Keep production JAR and renderer validation evidence distinct from local contracts, compilation and hardware results. Do not enable O3/O4, relax the strict O5 settling/capture gate, or claim RX hardware qualification from this policy update. The current #1005 executable remains the applicable public-CI evidence; this documentation-only commit adds no runtime result.
 
 A self-hosted runner is unnecessary to solve private-minute exhaustion for this already-public repository. It may eventually help hardware qualification, but owner-machine provisioning, isolation and benchmark reproducibility are separate decisions. Repository visibility and billing settings are unchanged.
+
+## Implemented execution pass — 2026-10-09
+
+The owner subsequently requested concrete speed/execution reductions beyond
+batching guidance. [CI scope and qualification](CI_EXECUTION_POLICY.md) records
+the implementation, measured local contract timings, retained native gates and
+explicit partial-result boundaries. New fast scopes reuse only proven full-suite
+evidence; outstanding renderer changes still force the full suite. The observed
+fork-level Actions usage block is distinct from public-runner minute billing,
+and remains unresolved until workflows are re-enabled.

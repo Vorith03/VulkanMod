@@ -7,28 +7,73 @@ on:
       - '**/*.md'
       - 'docs/**'
   pull_request:
+    branches: [forge-1.20.1]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+
+permissions:
+  contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  plan:
+    name: Select validation and coalesce pushes
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+      native: ${{ steps.scope.outputs.native }}
+      gradle: ${{ steps.scope.outputs.gradle }}
+      baseline: ${{ steps.scope.outputs.baseline }}
+    steps:
+      - name: Checkout validation history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select validation from the last passing full suite
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_SETTLE_SECONDS: ${{ vars.VULKANMOD_CI_SETTLE_SECONDS || '45' }}
+        run: python3 scripts/ci/ci_scope.py
+
   build:
+    name: ${{ needs.plan.outputs.scope }} validation
+    needs: plan
+    if: needs.plan.outputs.scope != 'none'
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     env:
       PRIVATE_PACK_TOKEN_CONFIGURED: ${{ secrets.VULKANMOD_PRIVATE_PACK_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Check private resource pack fixture configuration
+        if: needs.plan.outputs.native == 'true' && github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
+        run: |
+          echo 'Configure both VULKANMOD_PRIVATE_PACK_REPO (variable) and VULKANMOD_PRIVATE_PACK_TOKEN (secret), or neither.' >&2
+          exit 1
+      - name: Download private resource pack fixtures
+        if: needs.plan.outputs.native == 'true' && github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.VULKANMOD_PRIVATE_PACK_TOKEN }}
+          PRIVATE_PACK_REPO: ${{ vars.VULKANMOD_PRIVATE_PACK_REPO }}
+        run: |
+          mkdir -p .ci-private-packs
+          gh release download test-packs --repo "$PRIVATE_PACK_REPO" \
+            --pattern base.zip --pattern overlay.zip --dir .ci-private-packs
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
+          cache: ${{ needs.plan.outputs.gradle == 'true' && 'gradle' || '' }}
       - name: Make Gradle executable
         run: chmod +x ./gradlew
       - name: Set up Python 3.11 for offline deployment contracts
@@ -36,6 +81,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Stamp CI build version
+        if: needs.plan.outputs.gradle == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -49,96 +95,80 @@ jobs:
           sed -i "s/^mod_version=.*/mod_version=${ci_version}/" gradle.properties
           echo "CI mod version: ${ci_version}"
           echo "Expected distributable: VulkanMod_Forge_1.20.1-${ci_version}-all.jar"
-      - name: Validate smoke fixture isolation
-        run: bash scripts/ci/vulkan-smoke-fixture-contract.sh
-      - name: Validate prebenchmark audit admission and upload error cleanup
-        run: python3 scripts/ci/prebenchmark-audit-contract.py
-      - name: Validate legacy framebuffer routing and ownership
-        run: python3 scripts/ci/legacy-framebuffer-contract.py
-      - name: Validate initial terrain population convergence
-        run: python3 scripts/ci/terrain-population-contract.py
-      - name: Validate Forge benchmark HUD routing
-        run: python3 scripts/ci/benchmark-hud-contract.py
-
-      - name: Validate GPU profiler hook contract
-        run: python3 scripts/ci/gpu-profiler-contract.py
-      - name: Validate texture upload GPU query ownership
-        run: python3 scripts/ci/texture-upload-gpu-contract.py
-      - name: Validate automated attribution capture boundaries
-        run: python3 scripts/ci/attribution-capture-contract.py
-      - name: Validate bounded particle attribution
-        run: python3 scripts/ci/particle-attribution-contract.py
-      - name: Validate compilation cache corruption and identity contracts
-        run: python3 scripts/ci/compilation-cache-contract.py
-      - name: Validate observed pipeline history and replay contracts
-        run: python3 scripts/ci/pipeline-variant-contract.py
-      - name: Validate animation numeric reference boundaries
-        run: python3 scripts/ci/animation-oracle-contract.py
-      - name: Validate animation visibility lifetime contract
-        run: python3 scripts/ci/animation-visibility-contract.py
-      - name: Validate chunk frame publication budget contract
-        run: python3 scripts/ci/chunk-budget-contract.py
-      - name: Validate offline server and pregeneration tooling
-        run: python3 scripts/ci/deployment-contract.py
-      - name: Validate world render scale dimensions
-        run: python3 scripts/ci/render-scale-contract.py
-      - name: Validate instance vertex input admission
-        run: python3 scripts/ci/instance-input-contract.py
-      - name: Validate Flywheel CPU geometry and instance ownership
-        run: python3 scripts/ci/flywheel-ownership-contract.py
+      - name: Validate offline contracts in parallel
+        run: python3 scripts/ci/run-contracts.py
       - name: Build and verify distributable
+        if: needs.plan.outputs.gradle == 'true'
+        id: package
         run: ./gradlew build --stacktrace
       - name: Record pinned Forge animation source evidence
+        if: needs.plan.outputs.gradle == 'true'
         run: python3 scripts/ci/animation-source-evidence.py
       - name: Validate packaged Immersive Portals mixin anchors
+        if: needs.plan.outputs.gradle == 'true'
         run: python3 scripts/ci/immersive-portals-package-contract.py
       - name: Install software Vulkan smoke-test dependencies
+        if: needs.plan.outputs.native == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xauth mesa-vulkan-drivers vulkan-validationlayers
       - name: Smoke-test Forge client Vulkan startup
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh startup
       - name: Smoke-test Forge client Vulkan startup without early splash
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh no-splash
       - name: Smoke-test persistent GPU indirect shadow commands
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh gpu-indirect-shadow
       - name: Smoke-test vanilla Vulkan post-chain execution
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh post-chain
       - name: Smoke-test vanilla Vulkan depth post-chain execution
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh depth-post-chain
       - name: Smoke-test Vulkan screenshot readback
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh screenshot
-      - name: Check private resource pack fixture configuration
-        if: github.event_name == 'push' && ((vars.VULKANMOD_PRIVATE_PACK_REPO != '') != (env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'))
-        run: |
-          echo 'Configure both VULKANMOD_PRIVATE_PACK_REPO (variable) and VULKANMOD_PRIVATE_PACK_TOKEN (secret), or neither.' >&2
-          exit 1
-      - name: Download private resource pack fixtures
-        if: github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.VULKANMOD_PRIVATE_PACK_TOKEN }}
-          PRIVATE_PACK_REPO: ${{ vars.VULKANMOD_PRIVATE_PACK_REPO }}
-        run: |
-          mkdir -p .ci-private-packs
-          gh release download test-packs --repo "$PRIVATE_PACK_REPO" \
-            --pattern base.zip --pattern overlay.zip --dir .ci-private-packs
       - name: Smoke-test Create Chronicles compatibility
-        if: github.event_name != 'push' || vars.VULKANMOD_PRIVATE_PACK_REPO == '' || env.PRIVATE_PACK_TOKEN_CONFIGURED != 'true'
+        if: needs.plan.outputs.native == 'true' && (github.event_name != 'push' || vars.VULKANMOD_PRIVATE_PACK_REPO == '' || env.PRIVATE_PACK_TOKEN_CONFIGURED != 'true')
         run: bash scripts/ci/create-chronicles-compat-smoke.sh
       - name: Smoke-test Create Chronicles compatibility with real resource packs
-        if: github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
+        if: needs.plan.outputs.native == 'true' && github.event_name == 'push' && vars.VULKANMOD_PRIVATE_PACK_REPO != '' && env.PRIVATE_PACK_TOKEN_CONFIGURED == 'true'
         env:
           VULKANMOD_REAL_BASE_PACK: .ci-private-packs/base.zip
           VULKANMOD_REAL_OVERLAY_PACK: .ci-private-packs/overlay.zip
         run: bash scripts/ci/create-chronicles-compat-smoke.sh
       - name: Smoke-test Crash Assistant 1.9.7 compatibility
+        if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh crash-assistant
+      - name: Record validation scope
+        if: always()
+        env:
+          CI_SCOPE: ${{ needs.plan.outputs.scope }}
+          CI_BASELINE: ${{ needs.plan.outputs.baseline }}
+          CI_JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('.ci-results').mkdir(exist_ok=True)
+          report = {key: os.environ.get(key, '') for key in
+                    ('GITHUB_SHA', 'GITHUB_RUN_ID', 'CI_SCOPE', 'CI_BASELINE', 'CI_JOB_STATUS')}
+          report['native_qualified'] = report['CI_SCOPE'] == 'full' and report['CI_JOB_STATUS'] == 'success'
+          Path('.ci-results/validation.json').write_text(json.dumps(report, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Validation result\n\n```json\n' + json.dumps(report, indent=2) + '\n```\n')
+          PY
       - name: Upload smoke-test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: VulkanMod-Forge-smoke-log-${{ github.run_number }}
+          retention-days: 7
+          include-hidden-files: true
           path: |
+            .ci-results/**
             vulkan-*.log
             run/logs/vulkanmod-performance-ci.log
             run/hs_err_pid*.log
@@ -146,9 +176,10 @@ jobs:
             run/screenshot-smoke/screenshots/*.png
           if-no-files-found: ignore
       - name: Upload distributable JAR
-        if: always()
+        if: success() && needs.plan.outputs.native == 'true' && steps.package.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           path: build/libs/*-all.jar
           archive: false
-          if-no-files-found: ignore
+          retention-days: 14
+          if-no-files-found: error

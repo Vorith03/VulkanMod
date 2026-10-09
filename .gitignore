@@ -31,3 +31,7 @@ bin/
 # fabric
 
 run/
+
+# Local CI reports and Python bytecode
+.ci-results/
+__pycache__/

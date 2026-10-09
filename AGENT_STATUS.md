@@ -2,6 +2,27 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## CI execution optimization — 2026-10-09
+
+The owner requested an aggressive CI speed/execution pass. Implemented
+[scope-aware execution and qualification](docs/CI_EXECUTION_POLICY.md): a one-CPU
+planner coalesces rapid full pushes, compares the entire range from an actual
+successful native ancestor, and allows fast tooling/test scopes or explicit
+`CI-Scope: quick` intermediate feedback. Ready PRs and runtime/build/unknown/CI
+control changes retain all native gates. Partial results cannot publish qualified
+JARs or become full-suite baselines. The 19 offline contracts run with four
+bounded workers, complete per-contract logs and subprocess-group cleanup.
+Private-pack failures now occur before expensive setup; artifact retention is
+bounded. No native fixture was combined or removed. Workflow steps: 40 to 26.
+
+Local selector/failure/publication/process-lifetime contracts and actionlint pass.
+The live API lookup recognizes #1005 as the native baseline and requires the
+full suite for outstanding audit/CI changes. See the policy for measured local
+CPU timings and final validation. Full hosted CI is still **unverified** because
+GitHub reports a fork-level Actions usage block. Re-enable workflows before
+qualifying this implementation or the audit; another commit alone cannot clear
+that block. Keep the O5 benchmark and accelerated-default gates unchanged.
+
 ## Prebenchmark audit — 2026-10-09
 
 User requested an adversarial performance/legacy/nonfunctional-code audit before
