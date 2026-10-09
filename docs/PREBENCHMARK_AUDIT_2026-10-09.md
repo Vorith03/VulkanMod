@@ -47,8 +47,13 @@ Focused local contracts pass:
   deletion, explicit unsupported calls and failed pass creation.
 - Existing terrain-population, chunk-budget, upload-GPU ownership, animation
   numeric/visibility, attribution-capture, particle-attribution, benchmark HUD and GPU-HUD hook contracts pass.
-- `git diff --check` passes. Local `agent-check.sh` cannot download the Gradle
-  distribution (`Network is unreachable`); no local Forge build success is claimed.
+- `git diff --check` passes. The original local attempt could not download Gradle.
+  [The continuation recovered local Java 17/Gradle 8.1.1 validation](WORKSPACE_VALIDATION_2026-10-09.md),
+  repaired a generated Minecraft archive, and caught a real cross-package
+  transparency-state access error missed by the isolated harness. `cbb1983` adds
+  the narrow admission accessor. Main/test Forge compilation, reobfuscated
+  distributable verification and the Gradle-check regressions now pass locally;
+  native rendering and full public CI remain unverified.
 
 Both new CPU contracts are wired into the existing full build workflow. The
 validation-enabled screenshot gate now includes a native pixel/lifetime oracle

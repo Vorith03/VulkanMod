@@ -18,13 +18,51 @@ existing screenshot gate. Executable audit commit `2eb98ff20118615bcefb9f78b210c
 Full CI is **not started/unverified**: exact-SHA Actions queries after publication
 return zero runs/check suites. The connector exposes existing-run retries but no
 new workflow dispatch; ordinary Git push lacks shell credentials. Local Gradle
-distribution download is network-blocked. Do not use #1005 to qualify this new
+retrieval was recovered with the environment's current proxy and a complete Java
+17 toolchain; see the follow-up below. Do not use #1005 to qualify this new
 code or start the benchmark until the full build/renderer suite passes. O3/O4 defaults and
 benchmark convergence rules remain unchanged. DH LOD and automatic Flywheel
 adoption remain unimplemented/unqualified as documented. Resume by inspecting
 this audit slice's live CI before the owner's next hardware benchmark. If still absent,
 trigger the existing full workflow for this executable state through an authenticated
 push; do not retry an older SHA's job as validation of the audit.
+
+## Audit follow-up and local build recovery — 2026-10-09
+
+Published executable `8f4b2fd262aaa7465f339b2c6829feb2e56e31e1` repairs
+bound incomplete legacy-FBO deletion: deleting an object with no native backing
+must still restore framebuffer zero/the main render pass. The CPU regression
+fails against the previous code and now passes for empty, detached, unbound and
+outside-frame deletion. The transformed/native oracle includes this boundary.
+`gradlew` now has its executable bit for the documented local check command.
+`90d9c004c671f7c7f6ebb6de1d47bd532b3abef6` explicitly requires the legacy
+oracle completion marker in the existing screenshot gate. Focused audit/FBO
+and the existing prebuild CPU contracts pass. No accelerated defaults or
+benchmark rules changed.
+
+Real Forge compilation exposed a defect missed by the isolated audit harness:
+`RenderSection` accessed package-private `CompiledSection.transparencyState`
+across package boundaries. Published fix
+`cbb198364d1ddb31f4bd3f65b80fca1073851b74` uses a narrow public
+`hasTransparencyState()` predicate; mutable state retains package ownership.
+The audit harness now extracts that production accessor and passes. Real Java/Forge
+main/test compilation, processed resources/Mixins, JarJar reobfuscation and
+`verifyDistribution` now pass locally, including nested LWJGL module linkage.
+All 21 Gradle-check JavaExec regressions completed across the initial build and
+an explicit remaining-gates run (`BUILD SUCCESSFUL in 25s`, 23 tasks). The initial
+build had no final summary, so its observed completed gates were reconciled with
+the explicit successful remaining-gates run. This is local compilation/packaging/
+CPU-contract evidence, not full native CI or RX qualification.
+
+[Local recovery and validation boundary](docs/WORKSPACE_VALIDATION_2026-10-09.md)
+records the Java 17/Gradle 8.1.1 setup and proxy correction. Native execution
+remains unavailable here: scratch software-Vulkan dependencies resolve, but
+Xvfb cannot establish display sockets on either the ordinary or alternate TCP
+route, before any Minecraft launch. Both publication mechanisms (Git object/ref
+and Contents API) still yielded zero exact-SHA Actions runs. Do not retry an old
+run as validation of this code. An authenticated commit/push or another
+runtime-capable executor is required for the full native suite; leave the default
+`dev` branch and repository/billing settings unchanged.
 
 ## Actions efficiency policy — 2026-10-08
 
