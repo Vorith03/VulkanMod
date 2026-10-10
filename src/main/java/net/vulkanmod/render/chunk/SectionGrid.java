@@ -261,12 +261,26 @@ public class SectionGrid {
         section.setChunkArea(chunkArea);
     }
 
-    public void setDirty(int sectionX, int sectionY, int sectionZ, boolean p_110863_) {
+    public void setDirty(int sectionX, int sectionY, int sectionZ, boolean playerChanged) {
+        // Vertical sections are not a ring: never wrap an out-of-build-height
+        // notification onto another section.
+        int j = sectionY - this.level.getMinSection();
+        if(j < 0 || j >= this.gridHeight)
+            return;
+
         int i = Math.floorMod(sectionX, this.gridWidth);
-        int j = Math.floorMod(sectionY - this.level.getMinSection(), this.gridHeight);
         int k = Math.floorMod(sectionZ, this.gridWidth);
         RenderSection renderSection = this.chunks[this.getChunkIndex(i, j, k)];
-        renderSection.setDirty(p_110863_);
+
+        // X/Z ring slots can alias positions many chunks apart. Only the
+        // section currently owning the exact requested world origin may be
+        // dirtied. Repositioning itself marks newly assigned sections dirty,
+        // so stale remote notifications need not be replayed.
+        if(!SectionRingOwnership.matches(sectionX, sectionY, sectionZ,
+                renderSection.xOffset, renderSection.yOffset, renderSection.zOffset))
+            return;
+
+        renderSection.setDirty(playerChanged);
     }
 
     @Nullable

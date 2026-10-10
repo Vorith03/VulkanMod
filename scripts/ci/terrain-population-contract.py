@@ -280,3 +280,48 @@ with tempfile.TemporaryDirectory(prefix='vulkanmod-cached-graph-') as directory:
     subprocess.run([os.environ.get('JAVAC', 'javac'), '--release', '17',
                     '-d', directory, str(java_source)], check=True, timeout=30)
     subprocess.run(['java', '-cp', directory, 'CachedGraphContract'], check=True, timeout=30)
+
+
+# Compile production ring-slot coordinate validation as Java 17, then exercise
+# aliasing after camera movement, negative Y, and integer overflow. No Forge
+# runtime, Vulkan driver, Gradle build, or distributable JAR is needed.
+grid_source = (root / 'src/main/java/net/vulkanmod/render/chunk/SectionGrid.java').read_text()
+assert 'int j = sectionY - this.level.getMinSection();' in grid_source
+assert 'if(j < 0 || j >= this.gridHeight)' in grid_source
+assert 'SectionRingOwnership.matches(sectionX, sectionY, sectionZ,' in grid_source
+assert 'renderSection.setDirty(playerChanged);' in grid_source
+ring_class = root / 'src/main/java/net/vulkanmod/render/chunk/SectionRingOwnership.java'
+ring_harness = r'''package net.vulkanmod.render.chunk;
+public final class SectionRingOwnershipContract {
+    private static void check(boolean condition, String reason) {
+        if(!condition) throw new AssertionError(reason);
+    }
+
+    public static void main(String[] ignored) {
+        check(SectionRingOwnership.matches(0, -4, 0, 0, -64, 0), "negative Y origin");
+        check(SectionRingOwnership.matches(-20, -4, 47, -320, -64, 752), "negative X and high Z");
+        check(!SectionRingOwnership.matches(-3, -4, 47, -320, -64, 752), "ring X alias");
+        check(!SectionRingOwnership.matches(-20, -4, 30, -320, -64, 752), "ring Z alias");
+        check(!SectionRingOwnership.matches(-20, 20, 47, -320, -64, 752), "vertical modulo alias");
+        check(!SectionRingOwnership.matches(-20, -4, 47, -319, -64, 752), "unaligned X origin");
+        check(!SectionRingOwnership.matches(-20, -4, 47, -320, -65, 752), "wrong Y section");
+        check(SectionRingOwnership.matches(12, 19, -8, 192, 304, -128), "positive ring origin");
+
+        // The new owner is valid; old aliases pointing at the recycled slot aren't.
+        check(!SectionRingOwnership.matches(-3, -4, 47, -320, -64, 752), "old ring owner");
+        check(SectionRingOwnership.matches(-20, -4, 47, -320, -64, 752), "new ring owner");
+        check(!SectionRingOwnership.matches(Integer.MIN_VALUE, -4, 47, 0, -64, 752),
+                "integer-overflow X alias");
+        check(!SectionRingOwnership.matches(-20, Integer.MAX_VALUE, 47, -320, -16, 752),
+                "integer-overflow Y alias");
+        System.out.println("Section ring ownership contract passed");
+    }
+}
+'''
+with tempfile.TemporaryDirectory(prefix='vulkanmod-ring-ownership-') as directory:
+    source = Path(directory) / 'SectionRingOwnershipContract.java'
+    source.write_text(ring_harness)
+    subprocess.run([os.environ.get('JAVAC', 'javac'), '--release', '17',
+                    '-d', directory, str(ring_class), str(source)], check=True, timeout=30)
+    subprocess.run(['java', '-cp', directory,
+                    'net.vulkanmod.render.chunk.SectionRingOwnershipContract'], check=True, timeout=30)

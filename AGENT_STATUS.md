@@ -2,6 +2,24 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Section ring dirty-notice ownership — 2026-10-10
+
+The user explicitly prohibited building any more JARs until the next physical
+hardware test. Keep this and subsequent optimization slices as source-only
+commits with [skip ci]; do not start Gradle, Forge, hosted full validation or a
+JAR-producing workflow during this instruction's scope. Earlier build #1013
+(run 38035000308) passed all native/offline/combined-pack gates at 865d10b0.
+
+A source inspection found SectionGrid.setDirty accepted an X/Z modulus alias
+without checking the live world-section origin and also wrapped Y by height.
+An off-grid or recycled notification could invalidate a different resident
+section and waste mesh work. The fix rejects out-of-height Y coordinates and
+checks exact world origin before dirtying an X/Z ring slot. Camera relocation
+already marks newly assigned sections dirty. A standalone Java 17 contract
+covers negative coordinates, ring recycling, aliased X/Z, unaligned origins
+and overflow. This is not a measured FPS improvement; complete Forge/combined
+qualification remains deferred until the next hardware-test build.
+
 ## Terrain backpressure and benchmark attribution — 2026-10-10
 
 Full native CI #1012 passed at `ab8e3de12b06124d4b3228b5c49009aace52a449`
