@@ -72,7 +72,17 @@ public class WorldRenderer {
 
     private SectionGrid sectionGrid;
 
-    private boolean needsUpdate;
+    private volatile boolean needsUpdate;
+    // Identity-owned pending dirty sections. Worker rejection and incoming
+    // chunk notifications may arrive off the render thread, so admission is
+    // concurrent; draining and graph membership checks run on the render thread.
+    // A dirty section already in the visible graph need not rebuild that graph
+    // just to enqueue another mesh task.
+    private final Set<RenderSection> pendingDirtySections =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final int MAX_CACHED_DIRTY_SECTIONS = 512;
+    private long cachedGraphRebuildSchedules;
+    private long fullGraphTraversals;
     private final Set<BlockEntity> globalBlockEntities = Sets.newHashSet();
 
     private final TaskDispatcher taskDispatcher;
@@ -197,8 +207,17 @@ public class WorldRenderer {
         this.needsUpdate |= cameraX != this.lastCameraX || cameraY != this.lastCameraY || cameraZ != this.lastCameraZ;
 
         if (!isCapturedFrustum) {
+            // Unvisited/newly loaded sections still require the full graph
+            // traversal to discover them. Avoid accidentally scheduling a
+            // section moved by ring reuse into a different area.
+            if(!this.needsUpdate && !this.pendingDirtySections.isEmpty()
+                    && !this.cachedGraphCoversPendingDirty()) {
+                this.needsUpdate = true;
+            }
             if (this.needsUpdate) {
                 this.needsUpdate = false;
+                this.pendingDirtySections.clear();
+                this.fullGraphTraversals++;
 
                 this.frustum = (((FrustumMixed)(frustum)).customFrustum()).offsetToFullyIncludeCameraCube(8);
                 // Dirty sections can require a new BFS even at a stationary
@@ -233,6 +252,8 @@ public class WorldRenderer {
 
                 this.minecraft.getProfiler().pop();
 
+            } else if(!this.pendingDirtySections.isEmpty()) {
+                this.schedulePendingDirtyOnCachedGraph();
             }
         }
 
@@ -241,6 +262,53 @@ public class WorldRenderer {
 
         this.minecraft.getProfiler().pop();
         profiler.pop();
+    }
+
+    private boolean cachedGraphCoversPendingDirty() {
+        if(this.chunkQueue.size() == 0
+                || this.pendingDirtySections.size() > MAX_CACHED_DIRTY_SECTIONS)
+            return false;
+        for(RenderSection section : this.pendingDirtySections) {
+            ChunkArea area = section.getChunkArea();
+            if(area == null || section.getLastFrame() != this.lastFrame
+                    || !area.isGraphVisible(section))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * In-place rebuild admission for the exact graph that was previously
+     * traversed. Graph order, portal views and visible section draw queues are
+     * unchanged until a publication modifies visibility or emptiness.
+     *
+     * Remove each notice BEFORE preparing its task so a concurrent redirty
+     * cannot be erased after submission. Capacity/neighbor failures retain the
+     * notice for a later frame without repeating a full BFS.
+     */
+    private void schedulePendingDirtyOnCachedGraph() {
+        int remaining = this.taskDispatcher.getBuildSchedulingCapacity();
+        if(remaining <= 0)
+            return;
+        RenderRegionCache cache = new RenderRegionCache();
+        for(RenderSection section : this.pendingDirtySections) {
+            if(remaining <= 0)
+                break;
+            if(!this.pendingDirtySections.remove(section))
+                continue;
+            if(!section.isDirty())
+                continue;
+            if(!section.hasXYNeighbours()) {
+                this.pendingDirtySections.add(section);
+                continue;
+            }
+            if(this.scheduleUpdate(section, remaining, cache)) {
+                remaining--;
+                this.cachedGraphRebuildSchedules++;
+            } else if(section.isDirty()) {
+                this.pendingDirtySections.add(section);
+            }
+        }
     }
 
     private void initializeQueueForFullUpdate(Camera camera) {
@@ -490,6 +558,7 @@ public class WorldRenderer {
             // All new coarse areas must receive a fresh classification even
             // if the new world opens at exactly the previous camera pose.
             this.cachedAreaFrustum = null;
+            this.pendingDirtySections.clear();
             this.sectionGrid = new SectionGrid(this, this.level, this.minecraft.options.getEffectiveRenderDistance());
             this.chunkAreaQueue = new AreaSetQueue(this.sectionGrid.chunkAreaManager.size);
 
@@ -505,6 +574,7 @@ public class WorldRenderer {
 
     public void setLevel(@Nullable ClientLevel level) {
         this.cachedAreaFrustum = null;
+        this.pendingDirtySections.clear();
         this.lastCameraX = Float.MIN_VALUE;
         this.lastCameraY = Float.MIN_VALUE;
         this.lastCameraZ = Float.MIN_VALUE;
@@ -719,6 +789,13 @@ public class WorldRenderer {
         this.needsUpdate = true;
     }
 
+    /** Dirty mesh work with no known connectivity change: schedule from the
+     * existing graph, falling back to full traversal for unknown members. */
+    public void requestSectionRebuild(RenderSection section) {
+        if(section != null)
+            this.pendingDirtySections.add(section);
+    }
+
     public void setSectionDirty(int x, int y, int z, boolean flag) {
         if (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled())
             performanceDirtyNotices++;
@@ -754,7 +831,10 @@ public class WorldRenderer {
                 + (TerrainShaderManager.useRegionBatching(RenderType.cutoutMipped()) ? RegionBatchStats.describe() : "")
                 + (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled()
                 ? " | Terrain scheduling: dirtyNotices=" + performanceDirtyNotices
-                + " scheduled=" + performanceScheduledBuilds : "");
+                + " scheduled=" + performanceScheduledBuilds
+                + " graphTraversals=" + fullGraphTraversals
+                + " cachedGraphSchedules=" + cachedGraphRebuildSchedules
+                + " pendingDirty=" + pendingDirtySections.size() : "");
     }
 
     /** Snapshot of section scheduling and async work for a single profiler window. */

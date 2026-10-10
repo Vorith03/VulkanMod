@@ -94,12 +94,23 @@ assert 'cachedAreaFrustum = null;' in render
 assert 'this.frustum.sameCullingVolume(this.cachedAreaFrustum)' in render
 assert 'this.sectionGrid.updateFrustumVisibility(this.frustum);' in render
 assert 'this.taskDispatcher.uploadAllPendingUploads();' in render
+assert 'pendingDirtySections' in render
+assert 'cachedGraphCoversPendingDirty()' in render
+assert 'schedulePendingDirtyOnCachedGraph()' in render
+assert 'section.getLastFrame() != this.lastFrame' in render
+assert '!area.isGraphVisible(section)' in render
+assert 'this.pendingDirtySections.remove(section)' in render
+assert 'if(!section.hasXYNeighbours())' in render
+assert 'this.cachedGraphRebuildSchedules++;' in render
+assert 'this.pendingDirtySections.size() > MAX_CACHED_DIRTY_SECTIONS' in render
+assert 'this.worldRenderer.requestSectionRebuild(this);' in section
+assert 'this.worldRenderer.setNeedsUpdate();' not in section.split('public void setDirty(', 1)[1].split('\\n    }', 1)[0]
 assert 'if(this.taskDispatcher.uploadAllPendingUploads())' not in render
 for signature, predicate in (('setVisibility(long visibility)', 'this.visibility != visibility'),
                              ('setCompletelyEmpty(boolean b)', 'this.completelyEmpty != b')):
     method_body = section.split('public void ' + signature, 1)[1].split('\n    }', 1)[0]
     assert predicate in method_body and 'this.worldRenderer.setNeedsUpdate();' in method_body, signature
-assert 'this.worldRenderer.setNeedsUpdate();' in section.split('public void setDirty(', 1)[1].split('\n    }', 1)[0]
+assert 'this.worldRenderer.requestSectionRebuild(this);' in section.split('public void setDirty(', 1)[1].split('\n    }', 1)[0]
 
 with tempfile.TemporaryDirectory(prefix='vulkanmod-population-') as folder:
     path = Path(folder)

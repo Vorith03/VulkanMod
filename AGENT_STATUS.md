@@ -2,6 +2,26 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Cached-graph dirty rebuild admission — 2026-10-09
+
+Following fully green native/public #1010 at commit
+`ecf7278be54f5cdcdcd7801908ef4cbb5fa8e673`, the next bounded terrain
+slice avoids redundant breadth-first traversal for dirty sections already
+present in the last visible graph. RenderSection now queues dirty notices
+in a concurrent identity set. The render thread checks ring/area traversal
+ownership and a 512-unique-section cap before selecting the cached graph.
+It rebuilds only dirty members using the existing capacity, neighbor-readiness,
+generation, and TaskDispatcher publication contracts. Notices are removed
+before task submission so concurrent redirties remain observable; backpressure
+and missing neighbors retain the pending notice without forcing another BFS.
+
+Camera/frustum/world changes, topology-changing publications, off-graph
+sections and large dirty bursts still take the full graph path. Full traversals,
+cached rebuild admissions and pending queue depth are added to terrain stats
+for RX measurement. No change to existing GPU terrain or particle defaults,
+no claimed speedup prior to matched RX evidence. Full CI validation pending
+for this slice.
+
 ## Bounded particle and terrain CPU pilot — 2026-10-09
 
 The owner explicitly requested both next optimization tracks. The older #988 RX

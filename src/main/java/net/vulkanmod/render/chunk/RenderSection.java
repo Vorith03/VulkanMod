@@ -294,7 +294,7 @@ public class RenderSection {
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
         if(this.worldRenderer != null)
-            this.worldRenderer.setNeedsUpdate();
+            this.worldRenderer.requestSectionRebuild(this);
     }
 
     public synchronized long getVoxelGeneration() { return this.voxelGeneration; }
