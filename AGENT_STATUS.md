@@ -2,6 +2,20 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Animated terrain sprite usage pass coalescing — 2026-10-10
+
+With visible-only animated textures enabled, WorldRenderer.renderSectionLayer
+previously traversed every visible section's animated sprite list again for
+each terrain pass (solid, cutout, translucent, tripwire, etc.), despite all
+passes observing the same current chunk queue. A per-WorldRenderer lightweight
+gate now claims one sprite-usage traversal after each setupRenderer call; the
+gate also resets on allChanged. This preserves ordinary and portal view
+coverage, conservative unknown-sprite fallback, and first-pass timing.
+An isolated Java 17 contract checks once-per-setup and reset semantics.
+No Forge/JAR build was started; qualification remains deferred per owner
+instruction until the physical hardware-test build. Actual CPU reduction
+has not yet been measured.
+
 ## Section ring dirty-notice ownership — 2026-10-10
 
 The user explicitly prohibited building any more JARs until the next physical

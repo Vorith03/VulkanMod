@@ -38,3 +38,37 @@ with tempfile.TemporaryDirectory(prefix='vulkanmod-animation-') as folder:
     compiler = [shutil.which('javac')] if shutil.which('javac') else ['java', 'com.sun.tools.javac.Main']
     subprocess.run([*compiler, '--release', '17', '-d', folder, *map(str,sources.glob('*.java'))], check=True, timeout=30)
     subprocess.run(['java', '-cp', folder, 'net.vulkanmod.render.texture.VisibilityContract'], check=True, timeout=30)
+
+
+# Compile the production once-per-setup gate without Gradle or a JAR and
+# enforce that terrain draw layers only claim it when sprite usage is enabled.
+world_renderer = (root/'src/main/java/net/vulkanmod/render/chunk/WorldRenderer.java').read_text()
+assert '&& this.spriteUsageGate.claim())' in world_renderer
+assert 'this.spriteUsageGate.reset();' in world_renderer
+assert world_renderer.count('this.spriteUsageGate.reset();') >= 2
+assert 'vulkanmod$markAllAnimatedSpritesUsed()' in world_renderer
+gate = root/'src/main/java/net/vulkanmod/render/texture/TerrainSpriteUsageGate.java'
+gate_contract = '''package net.vulkanmod.render.texture;
+public final class TerrainSpriteUsageGateContract {
+    static void check(boolean ok, String why) { if(!ok) throw new AssertionError(why); }
+    public static void main(String[] args) {
+        TerrainSpriteUsageGate gate = new TerrainSpriteUsageGate();
+        check(gate.claim(), "first terrain layer must mark usage");
+        for(int i = 0; i < 6; ++i)
+            check(!gate.claim(), "redundant terrain layer usage traversal");
+        gate.reset();
+        check(gate.claim(), "next renderer setup lost sprite usage");
+        gate.reset();
+        gate.reset();
+        check(gate.claim(), "portal/reload setup lost its first usage");
+        System.out.println("Terrain sprite usage gate contract passed");
+    }
+}
+'''
+with tempfile.TemporaryDirectory(prefix='vulkanmod-sprite-gate-') as folder:
+    path = Path(folder)/'TerrainSpriteUsageGateContract.java'
+    path.write_text(gate_contract)
+    subprocess.run(['javac', '--release', '17', '-d', folder,
+                    str(gate), str(path)], check=True, timeout=30)
+    subprocess.run(['java', '-cp', folder,
+                    'net.vulkanmod.render.texture.TerrainSpriteUsageGateContract'], check=True, timeout=30)

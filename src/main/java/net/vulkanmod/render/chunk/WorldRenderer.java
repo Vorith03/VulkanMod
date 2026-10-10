@@ -84,6 +84,8 @@ public class WorldRenderer {
     private long cachedGraphRebuildSchedules;
     private long fullGraphTraversals;
     private final Set<BlockEntity> globalBlockEntities = Sets.newHashSet();
+    private final net.vulkanmod.render.texture.TerrainSpriteUsageGate spriteUsageGate =
+            new net.vulkanmod.render.texture.TerrainSpriteUsageGate();
 
     private final TaskDispatcher taskDispatcher;
     private boolean closed;
@@ -164,6 +166,10 @@ public class WorldRenderer {
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Setup_Renderer");
         this.cameraPos = camera.getPosition();
+        // setupRender runs for each terrain world/view, including portal views.
+        // Each visible queue needs animation usage marked just once per setup,
+        // not again for solid, cutout, translucent and other draw layers.
+        this.spriteUsageGate.reset();
         if (this.minecraft.options.getEffectiveRenderDistance() != this.lastViewDistance) {
             this.allChanged();
         }
@@ -554,6 +560,9 @@ public class WorldRenderer {
     }
 
     public void allChanged() {
+        // If resources/section ownership change between setup and drawing,
+        // the first subsequent terrain layer must mark the replacement sprites.
+        this.spriteUsageGate.reset();
         if (this.level != null) {
 //            this.graphicsChanged();
             this.level.clearTintCaches();
@@ -656,7 +665,8 @@ public class WorldRenderer {
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
 
-        if(net.vulkanmod.render.texture.SpriteAnimationUsage.enabled()) {
+        if(net.vulkanmod.render.texture.SpriteAnimationUsage.enabled()
+                && this.spriteUsageGate.claim()) {
             boolean unknownUsage = false;
             for(RenderSection section : this.chunkQueue) {
                 unknownUsage |= section.getCompiledSection().unknownAnimatedSpriteUsage;
