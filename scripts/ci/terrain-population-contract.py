@@ -127,8 +127,8 @@ print('Terrain population contract passed: queued/publication ownership, mainten
 
 # Compile and execute the real cached-graph scheduler methods in a minimal
 # Java fixture. This checks behavior, not merely the presence of source anchors.
-def method_body(source, signature):
-    start = source.index('    private ' + signature)
+def method_body(source, signature, visibility='private'):
+    start = source.index('    ' + visibility + ' ' + signature)
     opening = source.index('{', start)
     depth = 0
     for index in range(opening, len(source)):
@@ -314,10 +314,72 @@ public final class SectionRingOwnershipContract {
                 "integer-overflow X alias");
         check(!SectionRingOwnership.matches(-20, Integer.MAX_VALUE, 47, -320, -16, 752),
                 "integer-overflow Y alias");
+
+        // Execute SectionGrid's production setDirty path, including height and
+        // ring indexing, rather than testing only its coordinate predicate.
+        SectionGrid grid = new SectionGrid();
+        RenderSection resident = new RenderSection(-320, -64, 752);
+        grid.chunks[grid.getChunkIndex(0, 0, 2)] = resident;
+        grid.setDirty(-20, -4, 47, true);
+        check(resident.dirtyCalls == 1 && resident.playerChanged,
+                "resident update was dropped or player flag was lost");
+        grid.setDirty(-15, -4, 47, false);
+        grid.setDirty(-20, -4, 42, false);
+        grid.setDirty(-20, -28, 47, false);
+        grid.setDirty(-20, 20, 47, false);
+        grid.setDirty(Integer.MIN_VALUE, -4, 47, false);
+        check(resident.dirtyCalls == 1, "remote/height alias dirtied the resident");
+
+        resident.xOffset = -240; // recycle the same X ring slot to section -15
+        grid.setDirty(-20, -4, 47, true);
+        check(resident.dirtyCalls == 1, "old owner dirtied the recycled resident");
+        grid.setDirty(-15, -4, 47, false);
+        check(resident.dirtyCalls == 2 && !resident.playerChanged,
+                "new owner was rejected or notification flag changed");
+
+        // Every legitimate section throughout the negative-height grid must
+        // still be admitted, independent of X/Z sign or ring index.
+        for(int x = -7; x < -2; x++) {
+            for(int y = -4; y < 20; y++) {
+                for(int z = -2; z < 3; z++) {
+                    RenderSection slot = new RenderSection(x * 16, y * 16, z * 16);
+                    grid.chunks[grid.getChunkIndex(Math.floorMod(x, grid.gridWidth),
+                            y + 4, Math.floorMod(z, grid.gridWidth))] = slot;
+                    grid.setDirty(x, y, z, false);
+                    check(slot.dirtyCalls == 1, "valid grid owner lost notification");
+                }
+            }
+        }
         System.out.println("Section ring ownership contract passed");
+    }
+
+    static final class Level { int getMinSection() { return -4; } }
+    static final class RenderSection {
+        int xOffset, yOffset, zOffset, dirtyCalls;
+        boolean playerChanged;
+        RenderSection(int x, int y, int z) { xOffset=x; yOffset=y; zOffset=z; }
+        void setDirty(boolean player) { dirtyCalls++; playerChanged=player; }
+    }
+    static final class SectionGrid {
+        final Level level = new Level();
+        final int gridWidth = 5, gridHeight = 24;
+        final RenderSection[] chunks = new RenderSection[gridWidth * gridHeight * gridWidth];
+        SectionGrid() {
+            for(int x=0; x<gridWidth; x++)
+                for(int y=0; y<gridHeight; y++)
+                    for(int z=0; z<gridWidth; z++)
+                        chunks[getChunkIndex(x, y, z)] = new RenderSection(x*16, (y-4)*16, z*16);
+        }
+        private int getChunkIndex(int x, int y, int z) {
+            return (z * gridHeight + y) * gridWidth + x;
+        }
+__SET_DIRTY__
     }
 }
 '''
+ring_harness = ring_harness.replace('__SET_DIRTY__', method_body(
+    grid_source, 'void setDirty(int sectionX, int sectionY, int sectionZ, boolean playerChanged)',
+    visibility='public'))
 with tempfile.TemporaryDirectory(prefix='vulkanmod-ring-ownership-') as directory:
     source = Path(directory) / 'SectionRingOwnershipContract.java'
     source.write_text(ring_harness)

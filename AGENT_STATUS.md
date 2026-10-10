@@ -2,6 +2,25 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Final pre-hardware qualification — 2026-10-10
+
+The owner requested continuation until the next physical test is needed. The
+bounded CPU pilot, cached-graph scheduling/backpressure, ring dirty ownership
+and terrain sprite-pass coalescing are now the completed candidate batch.
+Further optimization selection needs the converged RD32 O3/O4 capture; the older
+#988 run cannot establish gains for these changes. The source-only build hold
+has reached its stated exception: perform one full qualification/build for the
+physical test, then request only the existing controlled capture in
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`.
+
+All 19 offline contracts passed locally with Java 17. The terrain contract now
+executes production SectionGrid.setDirty indexing/admission, checking recycled
+slots, height/X/Z aliases, notification flags and all 600 valid fixture owners.
+This supplements the coordinate-helper and actual cached-scheduler contracts;
+it does not prove loaded-world/AMD behavior. Full Forge/native/combined-pack
+qualification for the two source-only slices remains pending. Preserve O3/O4
+defaults off and all existing accelerated-default/reload/re-entry boundaries.
+
 ## Animated terrain sprite usage pass coalescing — 2026-10-10
 
 With visible-only animated textures enabled, WorldRenderer.renderSectionLayer
