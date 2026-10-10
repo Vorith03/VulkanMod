@@ -18,8 +18,19 @@ executes production SectionGrid.setDirty indexing/admission, checking recycled
 slots, height/X/Z aliases, notification flags and all 600 valid fixture owners.
 This supplements the coordinate-helper and actual cached-scheduler contracts;
 it does not prove loaded-world/AMD behavior. Full Forge/native/combined-pack
-qualification for the two source-only slices remains pending. Preserve O3/O4
-defaults off and all existing accelerated-default/reload/re-entry boundaries.
+qualification for the complete candidate passed in **#1014**, run
+`38044340567`, full-validation job `114190874016`, executable
+`e9f8591e2df44486cc504dfbb06bdf759ceed377`. All offline contracts, Forge
+compilation/production packaging, animation-source/portal anchors, both Vulkan
+startup paths, indirect/post/depth/screenshot native gates, combined Create
+Chronicles, Crash Assistant and JAR/log uploads passed. Private real-pack
+fixtures were skipped. The next required evidence is the owner's converged
+RD32 capture; no further executable work is selected before that evidence.
+Preserve O3/O4 defaults off and all existing accelerated-default/reload/re-entry
+boundaries. Install `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1014-ge9f8591e-all.jar`
+using `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`; return the new UUID benchmark
+log and latest.log, plus any animation artifacts or abort reason. No RX
+speedup, convergence or offload-adoption claim is established by CI.
 
 ## Animated terrain sprite usage pass coalescing — 2026-10-10
 
@@ -31,17 +42,17 @@ gate now claims one sprite-usage traversal after each setupRenderer call; the
 gate also resets on allChanged. This preserves ordinary and portal view
 coverage, conservative unknown-sprite fallback, and first-pass timing.
 An isolated Java 17 contract checks once-per-setup and reset semantics.
-No Forge/JAR build was started; qualification remains deferred per owner
-instruction until the physical hardware-test build. Actual CPU reduction
-has not yet been measured.
+This slice was held source-only until the physical hardware-test build.
+Full Forge/native/compatibility qualification is now green in #1014 above.
+Actual CPU reduction has not yet been measured.
 
 ## Section ring dirty-notice ownership — 2026-10-10
 
-The user explicitly prohibited building any more JARs until the next physical
-hardware test. Keep this and subsequent optimization slices as source-only
-commits with [skip ci]; do not start Gradle, Forge, hosted full validation or a
-JAR-producing workflow during this instruction's scope. Earlier build #1013
-(run 38035000308) passed all native/offline/combined-pack gates at 865d10b0.
+The user explicitly prohibited building more JARs until the next physical
+hardware test. These optimization slices were kept source-only with [skip ci].
+The completed candidate reached that test boundary and was built/qualified once
+in #1014 above. Earlier build #1013 (run 38035000308) passed all
+native/offline/combined-pack gates at 865d10b0.
 
 A source inspection found SectionGrid.setDirty accepted an X/Z modulus alias
 without checking the live world-section origin and also wrapped Y by height.
@@ -51,7 +62,7 @@ checks exact world origin before dirtying an X/Z ring slot. Camera relocation
 already marks newly assigned sections dirty. A standalone Java 17 contract
 covers negative coordinates, ring recycling, aliased X/Z, unaligned origins
 and overflow. This is not a measured FPS improvement; complete Forge/combined
-qualification remains deferred until the next hardware-test build.
+qualification is now established by #1014, with RX validation still required.
 
 ## Terrain backpressure and benchmark attribution — 2026-10-10
 

@@ -2,12 +2,22 @@
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Use fully public-CI-green
-`084dc8183ab6612134ddff762fac2ea9b56bf8fd`, build **#1006**:
-[build #1006](https://github.com/Vorith03/VulkanMod/actions/runs/37997041921).
-This artifact includes the now native-verified 2026-10-09 prebenchmark renderer
-audit, including the legacy-FBO pixel/lifetime smoke. Install its distributable
-artifact `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1006-g084dc818-all.jar`. Replace
+`e9f8591e2df44486cc504dfbb06bdf759ceed377`, build **#1014**:
+[build #1014](https://github.com/Vorith03/VulkanMod/actions/runs/38044340567).
+Install its qualified distributable
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1014-ge9f8591e-all.jar`. Replace
 the existing VulkanMod JAR; do not leave two versions installed.
+
+This candidate includes the prebenchmark renderer audit, corrected initial
+population/HUD logic, particle attribution-hook gating, topology-neutral terrain
+graph reuse, exact coarse-frustum caching, cached dirty rebuild admission and
+backpressure, dirty ring ownership, and one terrain sprite-usage scan per setup.
+The last two production changes were held source-only until this hardware gate.
+Full validation job `114190874016` passed all 19 offline contracts, Forge
+compilation/packaging, native Vulkan and combined compatibility gates. JAR and
+log uploads succeeded; private real-pack fixtures were skipped.
+No matched RX speedup is established; this run first qualifies the current
+candidate's owner-world convergence, O3/O4 behavior and route coverage.
 
 ## Failed #1002 attempt and retry
 
@@ -94,6 +104,12 @@ terrain/Flywheel test is part of this capture.
 - Check `settle_mode=initial_population_stable`, actual settling time and successful completion.
   Examine terrain windows for any remaining population/churn before interpreting
   steady performance.
+- Use `terrain_window`'s `graph_traversals_delta`,
+  `cached_graph_schedules_delta`, `pending_dirty`, worker/queue and publication
+  counters to distinguish traversal invalidation from cached rebuild admission
+  and backlog. Only interpret deltas when `delta_valid=true`; a shrinking pending
+  queue is expected when capacity or neighbors recover. Frequent full traversals
+  require their measured context, not an assumed hardware speedup.
 - Read client/texture tick mean and p95, allocations, sprite-upload work,
   tickable-loop and outer batch CPU costs. Do not identify all remaining
   non-upload time as Java clock iteration: GPU interpolation command preparation
@@ -118,8 +134,9 @@ settling policy remain required before adoption or a quantitative speedup claim.
 
 ## Later paired CPU pilot comparison
 
-After collecting the controlled O3/O4 evidence above, the particle profiling
-hook gate and topology-neutral terrain publication changes may be compared
-against a qualified pre-pilot executable with exactly matched settings. The
-older #988 benchmark is not a paired measurement; no FPS gain is asserted
-from it. This pilot must first pass the full Forge/native/compatibility suite.
+After collecting the controlled O3/O4 evidence above, the completed particle
+and terrain CPU pilot may be compared against a qualified pre-pilot executable
+with exactly matched settings and the same initial-population settling policy.
+The older #988 benchmark is not a paired measurement; no FPS gain is asserted
+from it. Full Forge/native/compatibility qualification is required before this
+hardware test; private-pack CI coverage, when skipped, remains unestablished.
