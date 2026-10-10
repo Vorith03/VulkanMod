@@ -11,7 +11,9 @@ present in the last visible graph. RenderSection now queues dirty notices
 in a concurrent identity set. The render thread checks ring/area traversal
 ownership and a 512-unique-section cap before selecting the cached graph.
 It rebuilds only dirty members using the existing capacity, neighbor-readiness,
-generation, and TaskDispatcher publication contracts. Notices are removed
+generation, and TaskDispatcher publication contracts. Both preflight and
+per-notice consumption verify graph/area membership, preventing async additions
+from being submitted against recycled regions. Notices are removed
 before task submission so concurrent redirties remain observable; backpressure
 and missing neighbors retain the pending notice without forcing another BFS.
 

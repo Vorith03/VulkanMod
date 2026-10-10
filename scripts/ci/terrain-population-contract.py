@@ -100,11 +100,13 @@ assert 'schedulePendingDirtyOnCachedGraph()' in render
 assert 'section.getLastFrame() != this.lastFrame' in render
 assert '!area.isGraphVisible(section)' in render
 assert 'this.pendingDirtySections.remove(section)' in render
+assert render.count('!area.isGraphVisible(section)') >= 2, 'must recheck membership when consuming notices'
+assert 'this.pendingDirtySections.clear();' in render
 assert 'if(!section.hasXYNeighbours())' in render
 assert 'this.cachedGraphRebuildSchedules++;' in render
 assert 'this.pendingDirtySections.size() > MAX_CACHED_DIRTY_SECTIONS' in render
 assert 'this.worldRenderer.requestSectionRebuild(this);' in section
-assert 'this.worldRenderer.setNeedsUpdate();' not in section.split('public void setDirty(', 1)[1].split('\\n    }', 1)[0]
+assert 'this.worldRenderer.setNeedsUpdate();' not in section.split('public void setDirty(', 1)[1].split('\n    }', 1)[0]
 assert 'if(this.taskDispatcher.uploadAllPendingUploads())' not in render
 for signature, predicate in (('setVisibility(long visibility)', 'this.visibility != visibility'),
                              ('setCompletelyEmpty(boolean b)', 'this.completelyEmpty != b')):

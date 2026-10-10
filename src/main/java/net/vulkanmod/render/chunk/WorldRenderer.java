@@ -298,6 +298,18 @@ public class WorldRenderer {
                 continue;
             if(!section.isDirty())
                 continue;
+
+            // Check again at consumption, not just during preflight: an
+            // asynchronous dirty notification can join the concurrent set
+            // between preflight and this iteration. Never submit an off-graph
+            // or ring-recycled section through the cached path.
+            ChunkArea area = section.getChunkArea();
+            if(area == null || section.getLastFrame() != this.lastFrame
+                    || !area.isGraphVisible(section)) {
+                this.pendingDirtySections.add(section);
+                this.needsUpdate = true;
+                return;
+            }
             if(!section.hasXYNeighbours()) {
                 this.pendingDirtySections.add(section);
                 continue;
@@ -850,6 +862,7 @@ public class WorldRenderer {
         if(this.closed)
             return;
         this.closed = true;
+        this.pendingDirtySections.clear();
 
         synchronized(INSTANCES) {
             WeakReference<WorldRenderer> current = INSTANCES.get(this.levelRenderer);
