@@ -76,6 +76,7 @@
     "profiling.TextureManagerPerformanceMixin",
     "profiling.TutorialPerformanceMixin",
     "profiling.ParticleEnginePerformanceMixin",
+    "profiling.ParticleEngineAttributionMixin",
     "profiling.MusicManagerPerformanceMixin",
     "profiling.SoundManagerPerformanceMixin",
     "profiling.PerformanceProfilerMixin",

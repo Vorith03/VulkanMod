@@ -2,6 +2,32 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Bounded particle and terrain CPU pilot — 2026-10-09
+
+The owner explicitly requested both next optimization tracks. The older #988 RX
+RD32 benchmark reported particle tick/render attribution near 4.48 ms/tick and
+4.76 ms/frame and terrain setup about 3.8 ms/frame. It used different/earlier
+settings than the new O3/O4 candidate and cannot prove any new speedup.
+
+An implementation now avoids full terrain graph traversal solely after an
+in-place section upload. Published visibility-mask and empty/nonempty changes
+explicitly request graph invalidation; dirty sections, camera/frustum,
+repositioning and world reload retain their existing invalidations. Reuse does
+not suppress worker work, queue ownership, Forge callbacks or changing draws.
+
+The particle slice isolates per-particle creation/add/tick attribution into an
+automated-benchmark-only Mixin. Normal gameplay therefore avoids two expensive
+per-particle injected tick callbacks plus source/add hooks; the coarse tick
+profiler and full automated per-class capture remain intact. No particle
+simulation/tick or rendering logic is rewritten, and the previously conflicting
+Immersive Portals per-particle render redirect remains absent.
+
+Offline production-source contracts accompany both changes. A full hosted
+Forge/Vulkan/combined Create run remains the correctness gate for this pilot,
+and a new paired RX capture is required before claiming gains. The existing
+O5 texture-offload and convergence test remain open; do not enable accelerated
+renderer defaults or ask for an unrelated hardware test based only on this pilot.
+
 ## CI execution optimization — 2026-10-09
 
 The owner requested an aggressive CI speed/execution pass. Implemented

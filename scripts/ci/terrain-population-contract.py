@@ -83,6 +83,18 @@ assert 'this.terrainPopulation.reset();' in dispatcher
 assert 'TerrainPopulationTracker.stable(' in controller
 assert 'capturePopulationTracker.unchanged(capturePopulation)' in controller
 assert '.terrainPopulation() != capturePopulationTracker' in controller
+# Production publication must invalidate traversal only on graph-topology
+# changes: mesh bytes, UVs and existing draw parameters update in place.
+render = (root / 'src/main/java/net/vulkanmod/render/chunk/WorldRenderer.java').read_text()
+section = (root / 'src/main/java/net/vulkanmod/render/chunk/RenderSection.java').read_text()
+assert 'this.taskDispatcher.uploadAllPendingUploads();' in render
+assert 'if(this.taskDispatcher.uploadAllPendingUploads())' not in render
+for signature, predicate in (('setVisibility(long visibility)', 'this.visibility != visibility'),
+                             ('setCompletelyEmpty(boolean b)', 'this.completelyEmpty != b')):
+    method_body = section.split('public void ' + signature, 1)[1].split('\n    }', 1)[0]
+    assert predicate in method_body and 'this.worldRenderer.setNeedsUpdate();' in method_body, signature
+assert 'this.worldRenderer.setNeedsUpdate();' in section.split('public void setDirty(', 1)[1].split('\n    }', 1)[0]
+
 with tempfile.TemporaryDirectory(prefix='vulkanmod-population-') as folder:
     path = Path(folder)
     sources = path / package

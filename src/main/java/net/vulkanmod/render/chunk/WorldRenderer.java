@@ -443,8 +443,11 @@ public class WorldRenderer {
 
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Uploads");
-        if(this.taskDispatcher.uploadAllPendingUploads())
-            this.needsUpdate = true;
+        // Publication already updates the section's draw parameters in place.
+        // An unchanged camera and traversal graph can reuse those references.
+        // Published visibility/emptiness changes explicitly invalidate the graph
+        // in RenderSection; dirty/camera/reposition paths still invalidate it.
+        this.taskDispatcher.uploadAllPendingUploads();
         profiler.pop();
         this.minecraft.getProfiler().popPush("schedule_async_compile");
 

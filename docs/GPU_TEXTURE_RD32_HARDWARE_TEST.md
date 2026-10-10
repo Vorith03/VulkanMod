@@ -115,3 +115,11 @@ chooses the next GPU-offload target. The old fixed-settle RD32 run mixed initial
 terrain population with measurement and cannot supply a whole-run steady-state
 speedup comparison. Paired disabled/enabled captures with this same converged
 settling policy remain required before adoption or a quantitative speedup claim.
+
+## Later paired CPU pilot comparison
+
+After collecting the controlled O3/O4 evidence above, the particle profiling
+hook gate and topology-neutral terrain publication changes may be compared
+against a qualified pre-pilot executable with exactly matched settings. The
+older #988 benchmark is not a paired measurement; no FPS gain is asserted
+from it. This pilot must first pass the full Forge/native/compatibility suite.

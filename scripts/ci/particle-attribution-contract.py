@@ -105,6 +105,19 @@ public class ParticleAttributionContract {
 }
 '''
 
+# Remove the per-particle injected HEAD/RETURN hooks from normal gameplay
+# without disabling engine-level timing or automated benchmark attribution.
+fine = (root / 'src/main/java/net/vulkanmod/mixin/profiling/ParticleEngineAttributionMixin.java').read_text()
+coarse = (root / 'src/main/java/net/vulkanmod/mixin/profiling/ParticleEnginePerformanceMixin.java').read_text()
+plugin = (root / 'src/main/java/net/vulkanmod/mixin/MixinPlugin.java').read_text()
+mixins = (root / 'src/main/resources/vulkanmod.mixins.json').read_text()
+assert fine.count('@Inject(') == 4
+assert 'method = "tickParticle(' in fine and 'method = "makeParticle(' in fine
+assert 'beginParticleTick' not in coarse and 'endParticleTick' not in coarse
+assert 'ClientTickBreakdown.Stage.PARTICLES' in coarse
+assert 'ParticleEngineAttributionMixin' in plugin and 'ParticleEngineAttributionMixin' in mixins
+assert 'Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark")' in plugin
+
 with tempfile.TemporaryDirectory(prefix="vulkanmod-particle-attribution-") as directory:
     destination = Path(directory)
     sources = destination / package

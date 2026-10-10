@@ -24,6 +24,8 @@ public class MixinPlugin implements IMixinConfigPlugin {
             "net.vulkanmod.mixin.render.GameRendererPostChainSmokeMixin";
     private static final String GPU_TERRAIN_ASYNC_SMOKE_MIXIN =
             "net.vulkanmod.mixin.debug.GpuTerrainAsyncCompletionSmokeMixin";
+    private static final String PARTICLE_ATTRIBUTION_MIXIN =
+            "net.vulkanmod.mixin.profiling.ParticleEngineAttributionMixin";
     private static final String IMMERSIVE_PORTALS_LEVEL_RENDERER_MIXIN =
             "net.vulkanmod.mixin.compatibility.ImmersivePortalsLevelRendererMixin";
     private static final String LEVEL_RENDERER_TARGET = "net.minecraft.client.renderer.LevelRenderer";
@@ -71,6 +73,14 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
         if(GPU_TERRAIN_ASYNC_SMOKE_MIXIN.equals(mixinClassName)
                 && !Boolean.getBoolean(VULKAN_SMOKE_PROPERTY)) {
+            return false;
+        }
+
+        // Drop the per-particle Mixin callbacks entirely in normal gameplay.
+        // Broad client tick attribution remains available independently.
+        if(PARTICLE_ATTRIBUTION_MIXIN.equals(mixinClassName)
+                && !(Boolean.getBoolean("vulkanmod.performanceProfiler")
+                        && Boolean.getBoolean("vulkanmod.performanceProfiler.autoBenchmark"))) {
             return false;
         }
 

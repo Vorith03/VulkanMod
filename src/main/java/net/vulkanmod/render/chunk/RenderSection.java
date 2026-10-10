@@ -204,8 +204,20 @@ public class RenderSection {
     public ChunkArea getChunkArea() { return this.chunkArea; }
     public CompiledSection getCompiledSection() { return compileStatus.compiledSection; }
     public boolean isCompiled() { return this.compileStatus.compiledSection != CompiledSection.UNCOMPILED; }
-    public void setVisibility(long visibility) { this.visibility = visibility; }
-    public void setCompletelyEmpty(boolean b) { this.completelyEmpty = b; }
+    public void setVisibility(long visibility) {
+        if(this.visibility != visibility) {
+            this.visibility = visibility;
+            if(this.worldRenderer != null)
+                this.worldRenderer.setNeedsUpdate();
+        }
+    }
+    public void setCompletelyEmpty(boolean b) {
+        if(this.completelyEmpty != b) {
+            this.completelyEmpty = b;
+            if(this.worldRenderer != null)
+                this.worldRenderer.setNeedsUpdate();
+        }
+    }
 
     public boolean visibilityBetween(Direction dir1, Direction dir2) {
         return (this.visibility & (1L << ((dir1.ordinal() << 3) + dir2.ordinal()))) != 0;
