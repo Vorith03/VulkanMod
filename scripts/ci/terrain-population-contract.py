@@ -123,3 +123,160 @@ with tempfile.TemporaryDirectory(prefix='vulkanmod-population-') as folder:
     subprocess.run([os.environ.get('JAVAC', 'javac'), '--release', '17', '-d', str(path / 'classes'), *map(str, sources.glob('*.java'))], check=True, timeout=30)
     subprocess.run(['java', '-cp', str(path / 'classes'), 'net.vulkanmod.render.chunk.build.PopulationContract'], check=True, timeout=30)
 print('Terrain population contract passed: queued/publication ownership, maintenance, cancellation race, reset, capture guard')
+
+
+# Compile and execute the real cached-graph scheduler methods in a minimal
+# Java fixture. This checks behavior, not merely the presence of source anchors.
+def method_body(source, signature):
+    start = source.index('    private ' + signature)
+    opening = source.index('{', start)
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == '{':
+            depth += 1
+        elif source[index] == '}':
+            depth -= 1
+            if depth == 0:
+                return source[start:index + 1]
+    raise AssertionError('Unbalanced production Java method: ' + signature)
+
+
+scheduler = r'''import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public final class CachedGraphContract {
+    static void check(boolean ok, String message) {
+        if(!ok) throw new AssertionError(message);
+    }
+
+    static class RenderSection {
+        boolean dirty = true;
+        boolean neighbors = true;
+        boolean graphVisible = true;
+        short frame = 9;
+        final ChunkArea area = new ChunkArea();
+
+        boolean isDirty() { return dirty; }
+        boolean hasXYNeighbours() { return neighbors; }
+        ChunkArea getChunkArea() { return area; }
+        short getLastFrame() { return frame; }
+    }
+
+    static class ChunkArea {
+        boolean isGraphVisible(RenderSection section) { return section.graphVisible; }
+    }
+
+    static class RenderRegionCache {}
+
+    static class TaskDispatcher {
+        int capacity = 5;
+        int getBuildSchedulingCapacity() { return capacity; }
+    }
+
+    static class Renderer {
+        final Set<RenderSection> pendingDirtySections = ConcurrentHashMap.newKeySet();
+        final List<RenderSection> chunkQueue = new ArrayList<>(List.of(new RenderSection()));
+        final TaskDispatcher taskDispatcher = new TaskDispatcher();
+        static final int MAX_CACHED_DIRTY_SECTIONS = 512;
+        short lastFrame = 9;
+        boolean needsUpdate;
+        long cachedGraphRebuildSchedules;
+        int scheduled;
+        Runnable onSchedule;
+
+        boolean scheduleUpdate(RenderSection section, int capacity, RenderRegionCache cache) {
+            if(capacity <= 0 || !section.dirty) return false;
+            scheduled++;
+            section.dirty = false;
+            if(onSchedule != null) onSchedule.run();
+            return true;
+        }
+
+__METHODS__
+    }
+
+    public static void main(String[] args) {
+        Renderer r = new Renderer();
+        RenderSection a = new RenderSection();
+        r.pendingDirtySections.add(a);
+        check(r.cachedGraphCoversPendingDirty(), "known visible dirty section rejected");
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.scheduled == 1 && r.cachedGraphRebuildSchedules == 1,
+                "first dirty section not admitted exactly once");
+        check(r.pendingDirtySections.isEmpty() && !a.dirty,
+                "successful publication left stale dirty notice");
+
+        r.taskDispatcher.capacity = 0;
+        a.dirty = true;
+        r.pendingDirtySections.add(a);
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.pendingDirtySections.contains(a) && r.scheduled == 1,
+                "zero capacity dropped pending section");
+
+        r.taskDispatcher.capacity = 5;
+        a.neighbors = false;
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.pendingDirtySections.contains(a) && r.scheduled == 1,
+                "unavailable neighbors dropped or scheduled the section");
+        a.neighbors = true;
+        r.schedulePendingDirtyOnCachedGraph();
+        check(!r.pendingDirtySections.contains(a) && r.scheduled == 2,
+                "ready neighbor retry failed");
+
+        a.dirty = true;
+        a.frame = 8;
+        r.pendingDirtySections.add(a);
+        check(!r.cachedGraphCoversPendingDirty(), "stale traversal stamp passed");
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.needsUpdate && r.pendingDirtySections.contains(a) && r.scheduled == 2,
+                "off-graph section was scheduled or lost");
+
+        r.needsUpdate = false;
+        a.frame = 9;
+        a.graphVisible = false;
+        check(!r.cachedGraphCoversPendingDirty(), "area membership mismatch passed");
+        a.graphVisible = true;
+        r.pendingDirtySections.clear();
+
+        RenderSection b = new RenderSection(), c = new RenderSection();
+        r.pendingDirtySections.add(b);
+        r.pendingDirtySections.add(c);
+        r.taskDispatcher.capacity = 1;
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.scheduled == 3 && r.pendingDirtySections.size() == 1,
+                "backpressure did not preserve exactly one pending section");
+        r.taskDispatcher.capacity = 5;
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.scheduled == 4 && r.pendingDirtySections.isEmpty(),
+                "backpressure retry lost pending section");
+
+        // A re-dirty while submitting must survive removal-before-admission.
+        RenderSection d = new RenderSection();
+        r.onSchedule = () -> { d.dirty = true; r.pendingDirtySections.add(d); };
+        r.pendingDirtySections.add(d);
+        r.schedulePendingDirtyOnCachedGraph();
+        r.onSchedule = null;
+        check(r.pendingDirtySections.contains(d), "concurrent redirty lost");
+        r.pendingDirtySections.clear();
+
+        for(int i = 0; i <= Renderer.MAX_CACHED_DIRTY_SECTIONS; i++)
+            r.pendingDirtySections.add(new RenderSection());
+        check(!r.cachedGraphCoversPendingDirty(), "over-capacity queue accepted");
+        r.pendingDirtySections.clear();
+        r.chunkQueue.clear();
+        r.pendingDirtySections.add(new RenderSection());
+        check(!r.cachedGraphCoversPendingDirty(), "empty graph reused");
+        System.out.println("Cached graph scheduler functional contract passed");
+    }
+}
+'''
+scheduler = scheduler.replace('__METHODS__', '\n\n'.join((
+    method_body(render, 'boolean cachedGraphCoversPendingDirty()'),
+    method_body(render, 'void schedulePendingDirtyOnCachedGraph()'),
+)))
+with tempfile.TemporaryDirectory(prefix='vulkanmod-cached-graph-') as directory:
+    java_source = Path(directory) / 'CachedGraphContract.java'
+    java_source.write_text(scheduler)
+    subprocess.run([os.environ.get('JAVAC', 'javac'), '--release', '17',
+                    '-d', directory, str(java_source)], check=True, timeout=30)
+    subprocess.run(['java', '-cp', directory, 'CachedGraphContract'], check=True, timeout=30)

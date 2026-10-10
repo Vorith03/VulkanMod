@@ -2,6 +2,26 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Terrain backpressure and benchmark attribution — 2026-10-10
+
+Full native CI #1012 passed at `ab8e3de12b06124d4b3228b5c49009aace52a449`
+(run `38028819261`), including Forge compilation/packaging,
+offline contracts, startup, Vulkan native rendering/readback,
+Create Chronicles and Crash Assistant. RX hardware performance remains
+unmeasured.
+
+The next bounded follow-up addresses an avoidable repeat traversal:
+both normal/spectator full-graph passes previously set `needsUpdate`
+when the worker backlog reached its scheduling limit, and neighbour
+readiness failures did the same. These are now retained in the existing
+concurrent dirty queue for admission once capacity/loaded neighbours
+recover. Genuine camera, frustum, world, off-graph, visibility and
+empty/nonempty changes still perform full traversal. New profiler
+`terrain_window` fields report full traversals, direct cached
+admissions and pending dirty depth, including valid same-renderer
+deltas, for an objective RX comparison. Validation of this follow-up
+remains pending; no measured speedup is asserted.
+
 ## Cached-graph dirty rebuild admission — 2026-10-09
 
 Following fully green native/public #1010 at commit

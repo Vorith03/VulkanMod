@@ -871,6 +871,8 @@ public final class PerformanceProfiler {
         TaskDispatcher.PerformanceCounters priorWorkers = sameRenderer ? prior.workers() : null;
         boolean reset = sameRenderer && (current.dirtyNotices() < prior.dirtyNotices()
                 || current.scheduled() < prior.scheduled()
+                || current.graphTraversals() < prior.graphTraversals()
+                || current.cachedGraphSchedules() < prior.cachedGraphSchedules()
                 || workers.builds() < priorWorkers.builds()
                 || workers.published() < priorWorkers.published()
                 || workers.accepted() < priorWorkers.accepted()
@@ -878,7 +880,7 @@ public final class PerformanceProfiler {
         boolean deltaValid = sameRenderer && !reset;
 
         writeLine(String.format(Locale.ROOT,
-                "[VulkanModPerf] terrain_window delta_valid=%s counters_reset=%s gpu_diagnostics_enabled=%s voxel_staging_enabled=%s visible_sections=%d dirty_total=%d dirty_delta=%d scheduled_total=%d scheduled_delta=%d builds_total=%d builds_delta=%d published_total=%d published_delta=%d accepted_total=%d accepted_delta=%d dropped_total=%d dropped_delta=%d queued_high=%d queued_low=%d active=%d pub_waiters=%d pub_queue=%d staging_entries=%d/%d staging_kib=%d/%d staging_rejected_total=%d staging_rejected_delta=%d preflight_full_total=%d preflight_full_delta=%d publish_rejected_total=%d publish_rejected_delta=%d cpu_recovery_total=%d cpu_recovery_delta=%d",
+                "[VulkanModPerf] terrain_window delta_valid=%s counters_reset=%s gpu_diagnostics_enabled=%s voxel_staging_enabled=%s visible_sections=%d dirty_total=%d dirty_delta=%d scheduled_total=%d scheduled_delta=%d builds_total=%d builds_delta=%d published_total=%d published_delta=%d accepted_total=%d accepted_delta=%d dropped_total=%d dropped_delta=%d queued_high=%d queued_low=%d active=%d pub_waiters=%d pub_queue=%d graph_traversals_total=%d graph_traversals_delta=%d cached_graph_schedules_total=%d cached_graph_schedules_delta=%d pending_dirty=%d staging_entries=%d/%d staging_kib=%d/%d staging_rejected_total=%d staging_rejected_delta=%d preflight_full_total=%d preflight_full_delta=%d publish_rejected_total=%d publish_rejected_delta=%d cpu_recovery_total=%d cpu_recovery_delta=%d",
                 deltaValid, reset, GpuTerrainDiagnostics.enabled(), RegionVoxelStore.ENABLED,
                 current.nonEmptySections(),
                 current.dirtyNotices(), deltaValid ? current.dirtyNotices() - prior.dirtyNotices() : -1L,
@@ -889,7 +891,9 @@ public final class PerformanceProfiler {
                 workers.dropped(), deltaValid ? workers.dropped() - priorWorkers.dropped() : -1,
                 workers.queuedHigh(), workers.queuedLow(), workers.active(),
                 workers.publicationWaiters(), workers.publicationQueue(),
-                staging.entries(), staging.maxEntries(), staging.bytes() / 1024, staging.maxBytes() / 1024,
+                current.graphTraversals(), deltaValid ? current.graphTraversals() - prior.graphTraversals() : -1L,
+                current.cachedGraphSchedules(), deltaValid ? current.cachedGraphSchedules() - prior.cachedGraphSchedules() : -1L,
+                current.pendingDirty(), staging.entries(), staging.maxEntries(), staging.bytes() / 1024, staging.maxBytes() / 1024,
                 staging.rejected(), deltaValid ? staging.rejected() - lastStagingRejected : -1L,
                 preflightFull, deltaValid ? preflightFull - lastPreflightFull : -1L,
                 publishRejected, deltaValid ? publishRejected - lastPublishRejected : -1L,

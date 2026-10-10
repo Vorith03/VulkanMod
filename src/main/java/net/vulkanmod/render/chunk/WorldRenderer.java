@@ -395,7 +395,9 @@ public class WorldRenderer {
             }
 
             if(renderSection.isDirty() && rebuildLimit <= 0) {
-                this.needsUpdate = true;
+                // Capacity pressure is mesh scheduling, not a graph change.
+                // Retry from the existing graph rather than traversing it again.
+                this.requestSectionRebuild(renderSection);
             } else if(this.scheduleUpdate(renderSection, rebuildLimit, renderRegionCache)) {
                 rebuildLimit--;
             }
@@ -436,7 +438,9 @@ public class WorldRenderer {
             }
 
             if(renderSection.isDirty() && rebuildLimit <= 0) {
-                this.needsUpdate = true;
+                // Capacity pressure is mesh scheduling, not a graph change.
+                // Retry from the existing graph rather than traversing it again.
+                this.requestSectionRebuild(renderSection);
             } else if(this.scheduleUpdate(renderSection, rebuildLimit, renderRegionCache)) {
                 rebuildLimit--;
             }
@@ -513,7 +517,9 @@ public class WorldRenderer {
         // Leave it dirty and retry: neighbours can arrive without camera motion.
         // The worker retains its check for unloads after this admission check.
         if(!section.hasXYNeighbours()) {
-            this.needsUpdate = true;
+            // The cached-graph scheduler will retry after neighbour arrival.
+            // The worker still rechecks loaded neighbours after admission.
+            this.requestSectionRebuild(section);
             return false;
         }
 
@@ -852,11 +858,14 @@ public class WorldRenderer {
     /** Snapshot of section scheduling and async work for a single profiler window. */
     public PerformanceCounters performanceCounters() {
         return new PerformanceCounters(performanceDirtyNotices, performanceScheduledBuilds,
-                nonEmptyChunks, taskDispatcher.performanceCounters());
+                nonEmptyChunks, taskDispatcher.performanceCounters(),
+                fullGraphTraversals, cachedGraphRebuildSchedules, pendingDirtySections.size());
     }
 
     public record PerformanceCounters(long dirtyNotices, long scheduled, int nonEmptySections,
-                                      TaskDispatcher.PerformanceCounters workers) {}
+                                      TaskDispatcher.PerformanceCounters workers,
+                                      long graphTraversals, long cachedGraphSchedules,
+                                      int pendingDirty) {}
 
     public void cleanUp() {
         if(this.closed)
