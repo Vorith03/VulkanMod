@@ -87,6 +87,12 @@ assert '.terrainPopulation() != capturePopulationTracker' in controller
 # changes: mesh bytes, UVs and existing draw parameters update in place.
 render = (root / 'src/main/java/net/vulkanmod/render/chunk/WorldRenderer.java').read_text()
 section = (root / 'src/main/java/net/vulkanmod/render/chunk/RenderSection.java').read_text()
+frustum = (root / 'src/main/java/net/vulkanmod/render/chunk/VFrustum.java').read_text()
+assert 'sameCullingVolume(VFrustum prior)' in frustum
+assert 'this.matrix.equals(prior.matrix)' in frustum
+assert 'cachedAreaFrustum = null;' in render
+assert 'this.frustum.sameCullingVolume(this.cachedAreaFrustum)' in render
+assert 'this.sectionGrid.updateFrustumVisibility(this.frustum);' in render
 assert 'this.taskDispatcher.uploadAllPendingUploads();' in render
 assert 'if(this.taskDispatcher.uploadAllPendingUploads())' not in render
 for signature, predicate in (('setVisibility(long visibility)', 'this.visibility != visibility'),

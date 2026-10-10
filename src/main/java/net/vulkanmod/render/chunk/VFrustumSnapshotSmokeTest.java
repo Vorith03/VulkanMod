@@ -13,6 +13,20 @@ public final class VFrustumSnapshotSmokeTest {
                 new Matrix4f().ortho(-32.0F, 32.0F, -32.0F, 32.0F, -32.0F, 32.0F));
 
         VFrustum frozen = live.snapshot();
+        require(live.sameCullingVolume(frozen), "Exact culling snapshot did not match");
+        require(!live.sameCullingVolume(null), "Null coarse frustum snapshot was reused");
+
+        VFrustum cameraChanged = frozen.snapshot();
+        cameraChanged.setCamOffset(0.5D, 0.0D, 0.0D);
+        require(!cameraChanged.sameCullingVolume(frozen),
+                "Sub-block camera movement incorrectly reused area classification");
+
+        VFrustum projectionChanged = frozen.snapshot();
+        projectionChanged.calculateFrustum(new Matrix4f().identity(),
+                new Matrix4f().ortho(-16.0F, 16.0F, -32.0F, 32.0F, -32.0F, 32.0F));
+        require(!projectionChanged.sameCullingVolume(frozen),
+                "Projection-only frustum change incorrectly reused area classification");
+
         int originalResult = frozen.cubeInFrustum(-8.0F, -8.0F, -8.0F,
                 8.0F, 8.0F, 8.0F);
         float[] originalPlanes = new float[VFrustum.PLANE_COUNT * VFrustum.PLANE_WORDS];
@@ -23,6 +37,9 @@ public final class VFrustumSnapshotSmokeTest {
         live.setCamOffset(256.0D, 64.0D, -128.0D);
         live.calculateFrustum(new Matrix4f().identity(),
                 new Matrix4f().ortho(-4.0F, 4.0F, -6.0F, 6.0F, -8.0F, 8.0F));
+        require(!live.sameCullingVolume(frozen), "Mutated shared frustum looked unchanged");
+        require(frozen.sameCullingVolume(frozen.snapshot()),
+                "Frozen snapshot did not preserve classifier equality");
 
         require(frozen.cubeInFrustum(-8.0F, -8.0F, -8.0F,
                         8.0F, 8.0F, 8.0F) == originalResult,

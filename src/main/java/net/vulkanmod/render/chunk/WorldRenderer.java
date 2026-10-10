@@ -86,6 +86,7 @@ public class WorldRenderer {
     private double zTransparentOld;
 
     private VFrustum frustum;
+    private VFrustum cachedAreaFrustum;
 
     IndirectBuffer[] indirectBuffers;
 
@@ -200,7 +201,14 @@ public class WorldRenderer {
                 this.needsUpdate = false;
 
                 this.frustum = (((FrustumMixed)(frustum)).customFrustum()).offsetToFullyIncludeCameraCube(8);
-                this.sectionGrid.updateFrustumVisibility(this.frustum);
+                // Dirty sections can require a new BFS even at a stationary
+                // camera. The coarse-area frustum bins are still exact until
+                // the projection or adjusted camera changes; retain them across
+                // graph-only updates rather than reclassifying every region.
+                if(!this.frustum.sameCullingVolume(this.cachedAreaFrustum)) {
+                    this.sectionGrid.updateFrustumVisibility(this.frustum);
+                    this.cachedAreaFrustum = this.frustum.snapshot();
+                }
                 this.lastCameraX = cameraX;
                 this.lastCameraY = cameraY;
                 this.lastCameraZ = cameraZ;
@@ -479,6 +487,9 @@ public class WorldRenderer {
                 this.globalBlockEntities.clear();
             }
 
+            // All new coarse areas must receive a fresh classification even
+            // if the new world opens at exactly the previous camera pose.
+            this.cachedAreaFrustum = null;
             this.sectionGrid = new SectionGrid(this, this.level, this.minecraft.options.getEffectiveRenderDistance());
             this.chunkAreaQueue = new AreaSetQueue(this.sectionGrid.chunkAreaManager.size);
 
@@ -493,6 +504,7 @@ public class WorldRenderer {
     }
 
     public void setLevel(@Nullable ClientLevel level) {
+        this.cachedAreaFrustum = null;
         this.lastCameraX = Float.MIN_VALUE;
         this.lastCameraY = Float.MIN_VALUE;
         this.lastCameraZ = Float.MIN_VALUE;

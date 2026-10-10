@@ -22,9 +22,19 @@ profiler and full automated per-class capture remain intact. No particle
 simulation/tick or rendering logic is rewritten, and the previously conflicting
 Immersive Portals per-particle render redirect remains absent.
 
-Offline production-source contracts accompany both changes. A full hosted
-Forge/Vulkan/combined Create run remains the correctness gate for this pilot,
-and a new paired RX capture is required before claiming gains. The existing
+**Full hosted #1009 succeeded** on 2026-10-09 (commit
+`db99a21e198e3df34e761c82ba64f7b7614aa25b`, run `38016373761`):
+both offline contracts, Forge packaging, native Vulkan startup, timestamp,
+indirect/post/depth, screenshot/legacy FBO, Create Chronicles and Crash
+Assistant checks and distributable/log artifact uploads all passed.
+A new paired RX capture is required before claiming gains.
+
+A subsequent coarse-frustum caching slice is being validated separately:
+exactly equal projection matrix and adjusted camera offsets retain the
+last region-frustum classification through graph-only updates. Changed
+camera/projection, render-distance/world reinitialization and new coarse
+area grids fail closed to full classification. The independent snapshot
+avoids comparing a mutable live frustum with itself. The existing
 O5 texture-offload and convergence test remain open; do not enable accelerated
 renderer defaults or ask for an unrelated hardware test based only on this pilot.
 

@@ -59,6 +59,20 @@ public class VFrustum {
         return snapshot;
     }
 
+    /**
+     * Exact equality for the world-space AABB classifier. Never compare only
+     * player direction or camera location: portals, projection changes and
+     * dynamic render scale may alter the matrix without moving the camera.
+     * Compare to an independent snapshot, not the mutable live frustum.
+     */
+    public boolean sameCullingVolume(VFrustum prior) {
+        return prior != null
+                && Double.compare(this.camX, prior.camX) == 0
+                && Double.compare(this.camY, prior.camY) == 0
+                && Double.compare(this.camZ, prior.camZ) == 0
+                && this.matrix.equals(prior.matrix);
+    }
+
     public void setCamOffset(double camX, double camY, double camZ) {
         this.camX = camX;
         this.camY = camY;
