@@ -35,6 +35,13 @@ public final class GpuAnimationSourcePool {
             return null;
         }
         int bytes = source.remaining();
+        long deviceAlignment = Device.deviceProperties.limits().minStorageBufferOffsetAlignment();
+        if(deviceAlignment > Integer.MAX_VALUE || deviceAlignment <= 0L) return null;
+        // Vulkan descriptors require each per-lease source offset to respect
+        // the actual physical device's storage-buffer offset alignment.
+        int alignment = (int)Math.max(4L, deviceAlignment);
+        if((alignment & (alignment - 1)) != 0) return null;
+
         Page page = null;
         int start = -1;
         for(Page candidate : PAGES) {
@@ -50,7 +57,7 @@ public final class GpuAnimationSourcePool {
                 return null;
             }
             TextureResidentBuffer buffer = new TextureResidentBuffer((int)desired);
-            page = new Page(buffer, (int)desired);
+            page = new Page(buffer, (int)desired, alignment);
             allocatedBytes += desired;
             start = page.layout.reserve(bytes);
             if(start < 0) throw new IllegalStateException("New GPU source page cannot fit its first lease");
@@ -90,9 +97,9 @@ public final class GpuAnimationSourcePool {
         final TextureResidentBuffer buffer;
         final GpuSourcePageLayout layout;
         final List<Runnable> callbacks = new ArrayList<>();
-        Page(TextureResidentBuffer buffer, int capacity) {
+        Page(TextureResidentBuffer buffer, int capacity, int alignment) {
             this.buffer = buffer;
-            this.layout = new GpuSourcePageLayout(capacity);
+            this.layout = new GpuSourcePageLayout(capacity, alignment);
         }
     }
 

@@ -34,6 +34,11 @@ public final class GpuSourcePageLayoutContract {
         catch(IllegalArgumentException expected) {}
         check(new GpuSourcePageLayout(4).reserve(Integer.MAX_VALUE) == -1,
               "overflow budget");
+        GpuSourcePageLayout aligned = new GpuSourcePageLayout(4096, 256);
+        check(aligned.reserve(3) == 0, "aligned first");
+        check(aligned.reserve(4) == 256, "hardware storage-offset alignment");
+        try { new GpuSourcePageLayout(1024, 24); throw new AssertionError("bad alignment accepted"); }
+        catch(IllegalArgumentException expected) {}
         System.out.println("GPU shared texture source page layout contract passed");
     }
 }

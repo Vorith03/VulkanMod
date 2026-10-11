@@ -9,17 +9,22 @@ package net.vulkanmod.render.texture;
  */
 public final class GpuSourcePageLayout {
     private final int capacity;
+    private final int alignment;
     private int end;
     private int leases;
 
-    public GpuSourcePageLayout(int capacity) {
-        if(capacity <= 0) throw new IllegalArgumentException("Invalid source page size");
+    public GpuSourcePageLayout(int capacity, int alignment) {
+        if(capacity <= 0 || alignment < 4 || (alignment & (alignment - 1)) != 0)
+            throw new IllegalArgumentException("Invalid source page size/alignment");
         this.capacity = capacity;
+        this.alignment = alignment;
     }
+
+    public GpuSourcePageLayout(int capacity) { this(capacity, 4); }
 
     public int reserve(int bytes) {
         if(bytes <= 0) throw new IllegalArgumentException("Invalid source size");
-        long aligned = ((long)end + 3L) & ~3L;
+        long aligned = ((long)end + alignment - 1L) & ~(alignment - 1L);
         if(aligned + bytes > capacity) return -1;
         end = (int)(aligned + bytes);
         leases++;
