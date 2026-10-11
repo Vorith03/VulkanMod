@@ -81,6 +81,9 @@ public final class SpriteAnimationSmokeTest {
             if(Boolean.getBoolean("vulkanmod.experimentalUnifiedTextureUploads")) {
                 verifyUnifiedTransferBatch();
             }
+            if(GpuAnimationSourcePool.enabled()) {
+                verifySharedSourcePool();
+            }
             TextureUploadGpuProfiler.verifyNativeForCi();
             Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/double-truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, GPU resident copies/interpolation when qualified, Forge zero-extent guards, custom CPU exclusion)");
         } finally {
@@ -90,6 +93,84 @@ public final class SpriteAnimationSmokeTest {
             VTextureSelector.bindTexture(previous);
         }
     }
+    /**
+     * Real device-local pool oracle: two independent sources have distinct
+     * descriptor-aligned offsets within one VkBuffer, and their source ranges
+     * copy into adjacent atlas texels without cross-contamination.
+     */
+    private static void verifySharedSourcePool() {
+        VulkanImage atlas = VulkanImage.createTextureImage(
+                VK_FORMAT_R8G8B8A8_UNORM, 1, 2, 1,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                        | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
+        ByteBuffer sourceA = MemoryUtil.memAlloc(4);
+        ByteBuffer sourceB = MemoryUtil.memAlloc(4);
+        GpuAnimationSourcePool.Lease a = null, b = null;
+        long buffer = 0L, allocation = 0L;
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            for(int i = 0; i < 4; ++i) {
+                sourceA.put(i, (byte)(0x10 + i));
+                sourceB.put(i, (byte)(0x50 + i));
+            }
+            var pBuffer = stack.mallocLong(1);
+            var pAllocation = stack.mallocPointer(1);
+            MemoryManager.getInstance().createBuffer(8L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pBuffer, pAllocation);
+            buffer = pBuffer.get(0);
+            allocation = pAllocation.get(0);
+            Device.getGraphicsQueue().startRecording();
+            try {
+                a = GpuAnimationSourcePool.acquire(sourceA);
+                b = GpuAnimationSourcePool.acquire(sourceB);
+                if(a == null || b == null || a.buffer() != b.buffer() || a.offset() == b.offset())
+                    throw new AssertionError("Separate GPU animation sources did not share a source page");
+
+                int[] offsets = {0};
+                int[] widths = {1};
+                int[] heights = {1};
+                if(VTextureSelector.copyResidentSpriteFrame(
+                        a.buffer(), a.offset(), a.bytes(), atlas,
+                        offsets, widths, heights, 0, 0, 0, 0, 1, 1) != 1)
+                    throw new AssertionError("First pooled GPU sprite upload rejected");
+                if(VTextureSelector.copyResidentSpriteFrame(
+                        b.buffer(), b.offset(), b.bytes(), atlas,
+                        offsets, widths, heights, 1, 0, 0, 0, 1, 1) != 1)
+                    throw new AssertionError("Second pooled GPU sprite upload rejected");
+            } finally {
+                SpriteUtil.addTransitionedLayout(atlas);
+                SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                Device.getGraphicsQueue().endRecordingAndSubmit();
+            }
+            Vulkan.waitIdle();
+
+            Renderer renderer = Renderer.getInstance();
+            renderer.resetBuffers();
+            renderer.beginFrame();
+            RenderTargetManager.copyColorMipToBuffer(atlas, buffer, 0);
+            renderer.endFrame();
+            Vulkan.waitIdle();
+            MemoryManager.getInstance().MapAndCopy(allocation, 8, pointer -> {
+                ByteBuffer pixels = pointer.getByteBuffer(0, 8);
+                for(int i = 0; i < 4; ++i) {
+                    if((pixels.get(i) & 255) != 0x10 + i
+                            || (pixels.get(4 + i) & 255) != 0x50 + i)
+                        throw new AssertionError("Pooled animation source pixel isolation failed");
+                }
+            });
+            Initializer.LOGGER.info(
+                    "Shared GPU animation source pool smoke passed (two leases, one device buffer, offset-aligned pixel isolation)");
+        } finally {
+            Vulkan.waitIdle();
+            if(a != null) a.retire(null);
+            if(b != null) b.retire(null);
+            if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
+            MemoryUtil.memFree(sourceA);
+            MemoryUtil.memFree(sourceB);
+            atlas.doFree();
+        }
+    }
+
     /**
      * One native graphics-batch test exercises 48 disjoint texture regions
      * (exceeding the former 32-region ceiling) and an overlapping final write.
