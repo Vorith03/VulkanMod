@@ -127,8 +127,22 @@ with tempfile.TemporaryDirectory(prefix="vulkanmod-attribution-") as directory:
         (sources / name).write_text((root / "src/main/java" / package / name).read_text())
     (sources / "PerformanceProfiler.java").write_text(stub)
     (sources / "AttributionCaptureContract.java").write_text(harness)
+    # The benchmark-only attribution summary now reads the production GPU
+    # source-pool snapshot. Keep this isolated contract independent of Vulkan.
+    pool_sources = destination / "net/vulkanmod/render/texture"
+    pool_sources.mkdir(parents=True)
+    (pool_sources / "GpuAnimationSourcePool.java").write_text("""package net.vulkanmod.render.texture;
+public final class GpuAnimationSourcePool {
+    public static Stats stats() { return new Stats(false, 0L, 0, 0L, 0L, 0L); }
+    public record Stats(boolean enabled, long allocatedBytes, int livePages,
+                        long successfulLeases, long capacityRejected,
+                        long retiredPages) {}
+}
+""")
     java_home = os.environ.get("JAVA_HOME")
     javac = str(Path(java_home) / "bin/javac") if java_home else "javac"
     java = str(Path(java_home) / "bin/java") if java_home else "java"
-    subprocess.run([javac, "--release", "17", "-d", directory, *map(str, sources.glob("*.java"))], check=True, timeout=30)
+    subprocess.run([javac, "--release", "17", "-d", directory,
+                    *map(str, sources.glob("*.java")),
+                    *map(str, pool_sources.glob("*.java"))], check=True, timeout=30)
     subprocess.run([java, "-Dvulkanmod.performanceProfiler=true", "-Dvulkanmod.performanceProfiler.autoBenchmark=true", "-cp", directory, "net.vulkanmod.render.profiling.AttributionCaptureContract"], check=True, timeout=30)
