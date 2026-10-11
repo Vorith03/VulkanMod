@@ -112,3 +112,36 @@ claimed as finished. Qualification needs: Java/Forge compile, native Vulkan
 synchronization/pixel oracle for sequential overlapping writes, modpack
 compatibility gate, and matched RD32 CPU/GPU capture with exact fallback and
 copy-flush cause denominators.
+
+
+## Source-only shared GPU residency — October 11 continuation
+
+**Implemented but unqualified:** Opt-in
+`vulkanmod.experimentalGpuTextureSourcePool` provisions immutable animation
+source sheets into 4 MiB shared GPU buffer pages (larger dedicated page for
+large sheets) with device-aligned leases. The same resident-source copy path
+adds the base offset to its validated VkBufferImageCopy addresses; the
+existing float64 compute shader continues to index mip bytes relative to
+the slice through an offset/range-limited Vulkan descriptor. O3/O4 source
+identity, mutation invalidation, the old 128 MiB active-source/scratch
+budget, CPU fallbacks, and texture atlas clocks are preserved. GPU pages
+have a separate 128 MiB physical cap.
+
+The page allocator is append-only, with the entire GPU buffer retired only
+when all slice leases close and its upload-safe retirement completes. This
+prevents reuse-before-GPU-completion but may exacerbate fragmentation or
+delay budget release. The CPU Java 17 allocator contract passes; the
+expanded actual Vulkan native oracle now checks distinct source offsets
+for O3 copies **and** O4 RGBA interpolation (RGB blended, current alpha
+retained) and is included in the screenshot smoke under validation.
+**It has not run**; no Forge compilation, native validation or matched RD32
+performance evidence exists. Source pool memory/lease/capacity counters are
+included in the benchmark summary; these are renderer-lifetime counters,
+including warmup and pending retirement.
+
+Next implementation phase, **not yet claimed**: aggregate GPU animation
+commands by shared source page and atlas while preserving chronological
+ordering with CPU-generated uploads, barriers, Vulkan format/mip bounds,
+and source lifetimes. This first requires the present source-pool native
+pixel/sync oracle to pass; enlargement alone is not proof of CPU time
+reduction.

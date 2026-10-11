@@ -193,7 +193,11 @@ heuristic exemptions. Preserve opaque CPU dynamic/mod pixel generation as an
 input, not a falsely GPU-equivalent algorithm. Start with the common Vulkan
 copy-batch path and its synchronization contract, then central shared
 resident animation source/dispatch where qualification supports it.
-New source-only opt-in pilot is **unqualified**, not full GPU offload.
+An opt-in shared device-local GPU source-page implementation now exists
+behind `vulkanmod.experimentalGpuTextureSourcePool`; it is **source-only
+and unqualified**. Native Vulkan pixel/sync and Forge packaging are pending.
+True GPU animation command coalescing remains a separate open step. The
+whole-tick transfer pilot is also **unqualified**, not full GPU offload.
 
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
 

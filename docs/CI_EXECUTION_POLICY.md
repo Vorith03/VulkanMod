@@ -8,9 +8,9 @@ the earlier full-native-suite-on-every-executable-push rule with explicit scopes
 
 | Scope | Offline contracts | Forge build / packaging / CPU checks | Native renderer and compatibility | Published JAR |
 | --- | --- | --- | --- | --- |
-| `full` | All 20 | All | All eight existing launches | Only after the entire suite passes |
-| `build` | All 20 | All | Deferred | None |
-| `contracts` | All 20 | Reused baseline; not rerun | Reused baseline; not rerun | None |
+| `full` | All 21 | All | All eight existing launches | Only after the entire suite passes |
+| `build` | All 21 | All | Deferred | None |
+| `contracts` | All 21 | Reused baseline; not rerun | Reused baseline; not rerun | None |
 | `none` | None | Reused baseline | Reused baseline | None |
 
 Production Java, shaders/resources, build/dependency configuration, native smoke

@@ -251,6 +251,16 @@ release and exclude VMA allocation overhead and retained CPU images. Memory
 peaks are not reset at capture boundaries; route/copy/interpolation update
 counts cover only measured texture ticks.
 
+The shared-source GPU pilot additionally emits
+`gpu_source_pool_enabled`, `gpu_source_pool_allocated_kib`,
+`gpu_source_pool_live_pages`, `gpu_source_pool_leases`,
+`gpu_source_pool_capacity_rejected`, and
+`gpu_source_pool_retired_pages`. These are **lifetime** counts/storage
+(including pre-capture warmup and pending retirement), not per-tick O3/O4
+coverage. The pool is a source-only opt-in experiment awaiting Forge/native
+qualification; it does not convert arbitrary custom CPU pixels into GPU
+compute jobs.
+
 The post-#1016 source-only candidate also emits `copy_flush_<reason>` and
 `copy_flush_<reason>_regions`. Their totals should equal existing
 `copy_flushes` and `copy_regions` in a successful capture, subject to

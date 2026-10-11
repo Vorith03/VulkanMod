@@ -2,6 +2,53 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Shared GPU animation source pool — 2026-10-11 source-only implementation
+
+At source commit `76fce5f64fb52cf6a626c3028ba4fe1ee9151d0d`,
+the opt-in `-Dvulkanmod.experimentalGpuTextureSourcePool=true` path
+moves the **immutable O3/O4 source backing storage** out of individual
+`TextureResidentBuffer` objects into shared 4 MiB (or dedicated larger)
+device-local pages with aligned per-sprite leases. The **device's**
+`minStorageBufferOffsetAlignment` governs slice boundaries. O3
+`VkBufferImageCopy.bufferOffset` and O4 storage descriptor
+offset/range/source validation now use the lease correctly, while all
+existing shader mip-relative addresses and exact CPU fallback remain
+unchanged. One 128 MiB physical-page cap prevents unbounded allocation;
+the earlier 128 MiB per-source/scratch accounting budget is retained.
+This is real shared Vulkan GPU storage, but **not** a deferred GPU
+animation-job merger.
+
+Safety boundary: source slices are append-only while the page is live,
+and cannot be immediately reused after a sprite closes. The page is
+retired via the existing upload-safe `TextureResidentBuffer.retire`
+queue **only after all its source leases close**; charge/counter callbacks
+wait for page retirement. This avoids GPU use-after-free and reuse races,
+but incurs page fragmentation and can retain retired-source budget until
+a whole page empties. Do not default-enable or call it an adoption win
+without native and RX measurements. Transparent execution of arbitrary
+Forge CPU pixel-generation logic remains out of scope.
+
+A pure Java 17 page-layout contract passed locally, including
+device-offset-style 256-byte alignment, underflow and non-reuse. The
+registered offline suite now contains **21 contracts**.
+The Vulkan screenshot native test is source-added and opts into both
+the existing unified-transfer pilot and the new shared-source pilot:
+two leases share one VkBuffer; two O3 copies and O4 interpolation from
+the **second nonzero descriptor offset** are checked by exact atlas
+readback, including Minecraft's preserve-current-alpha rule. Both
+original pixel/mutation/fallback tests and Vulkan sync validation remain
+mandatory.
+
+**Qualification:** no full Forge Java compilation, native run, CI or
+new JAR has occurred under the existing owner-directed pre-hardware
+build hold. This is a source-only candidate, and the last qualified
+executable remains **#1016**. New profiler fields report pooled-source
+page/lease/capacity counters. At the next warranted build, the native
+smoke must pass (including no validation hazards) before any owner RX
+test. Only then decide whether shared per-atlas job batching is safe
+and effective; do not stack unqualified high-risk Vulkan dispatch changes
+on this until those boundaries are established.
+
 ## Whole-tick GPU transfer unification pilot — 2026-10-11
 
 The owner explicitly prioritized a generic GPU texture-update architecture
