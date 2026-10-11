@@ -194,7 +194,15 @@ public abstract class VTextureSelector {
      * steady frame changes copy directly from the resident buffer into the atlas.
      */
     public static boolean uploadTextureResidentSource(TextureResidentBuffer destination, ByteBuffer source) {
-        if(destination == null || source == null || source.remaining() <= 0) {
+        return uploadTextureResidentSource(destination, 0, source);
+    }
+
+    /** Upload immutable source bytes into a reserved range of a shared GPU page. */
+    public static boolean uploadTextureResidentSource(TextureResidentBuffer destination,
+                                                      int destinationOffset, ByteBuffer source) {
+        if(destination == null || source == null || source.remaining() <= 0
+                || destinationOffset < 0
+                || destinationOffset > destination.getBufferSize() - source.remaining()) {
             return false;
         }
 
@@ -208,7 +216,7 @@ public abstract class VTextureSelector {
         flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.SOURCE_SEED);
 
         int size = source.remaining();
-        if(size > TEXTURE_STAGING_BATCH_LIMIT || destination.getBufferSize() < size) {
+        if(size > TEXTURE_STAGING_BATCH_LIMIT) {
             return false;
         }
 
@@ -244,7 +252,7 @@ public abstract class VTextureSelector {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferCopy.Buffer copy = VkBufferCopy.callocStack(1, stack);
             copy.srcOffset(sourceOffset);
-            copy.dstOffset(0L);
+            copy.dstOffset(destinationOffset);
             copy.size(size);
             vkCmdCopyBuffer(commandBuffer.getHandle(), stagingBuffer.getId(), destination.getId(), copy);
 
@@ -255,7 +263,7 @@ public abstract class VTextureSelector {
             barrier.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
             barrier.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
             barrier.buffer(destination.getId());
-            barrier.offset(0L);
+            barrier.offset(destinationOffset);
             barrier.size(size);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_TRANSFER_BIT,
