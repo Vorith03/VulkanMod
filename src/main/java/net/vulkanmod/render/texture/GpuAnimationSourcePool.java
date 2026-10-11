@@ -24,6 +24,9 @@ public final class GpuAnimationSourcePool {
     private static final long MAX_ALLOCATED_BYTES = 128L * 1024L * 1024L;
     private static final List<Page> PAGES = new ArrayList<>();
     private static long allocatedBytes;
+    private static long successfulLeases;
+    private static long capacityRejected;
+    private static long retiredPages;
 
     private GpuAnimationSourcePool() {}
 
@@ -54,6 +57,7 @@ public final class GpuAnimationSourcePool {
         if(page == null) {
             long desired = Math.max(PAGE_BYTES, ((long)bytes + 4095L) & ~4095L);
             if(desired > Integer.MAX_VALUE || allocatedBytes > MAX_ALLOCATED_BYTES - desired) {
+                capacityRejected++;
                 return null;
             }
             TextureResidentBuffer buffer = new TextureResidentBuffer((int)desired);
@@ -67,6 +71,7 @@ public final class GpuAnimationSourcePool {
         boolean success = false;
         try {
             success = VTextureSelector.uploadTextureResidentSource(page.buffer, start, source);
+            if(success) successfulLeases++;
             return success ? lease : null;
         } finally {
             if(!success) lease.retire(null);
@@ -83,6 +88,7 @@ public final class GpuAnimationSourcePool {
         page.buffer.retire(() -> {
             synchronized(GpuAnimationSourcePool.class) {
                 allocatedBytes -= capacity;
+                retiredPages++;
                 if(allocatedBytes < 0L)
                     throw new IllegalStateException("GPU texture pool allocation underflow");
             }
@@ -90,6 +96,15 @@ public final class GpuAnimationSourcePool {
             page.callbacks.clear();
         });
     }
+
+    public static synchronized Stats stats() {
+        return new Stats(REQUESTED, allocatedBytes, PAGES.size(),
+                successfulLeases, capacityRejected, retiredPages);
+    }
+
+    public record Stats(boolean enabled, long allocatedBytes, int livePages,
+                        long successfulLeases, long capacityRejected,
+                        long retiredPages) { }
 
     public static synchronized long allocatedBytes() { return allocatedBytes; }
 

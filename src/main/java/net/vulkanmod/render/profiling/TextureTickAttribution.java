@@ -310,6 +310,15 @@ public final class TextureTickAttribution {
                 millis(copyFlushNanosSum / ticks), millis(percentile(copyFlushSamples, sampledTicks, 0.95D)),
                 outerCopyFlushes, outerCopyRegions, millis(outerCopyFlushNanosSum / ticks),
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
+        net.vulkanmod.render.texture.GpuAnimationSourcePool.Stats pool =
+                net.vulkanmod.render.texture.GpuAnimationSourcePool.stats();
+        line.append(" gpu_source_pool_enabled=").append(pool.enabled())
+                .append(" gpu_source_pool_allocated_kib=")
+                .append(String.format(Locale.ROOT, "%.3f", pool.allocatedBytes() / 1024.0D))
+                .append(" gpu_source_pool_live_pages=").append(pool.livePages())
+                .append(" gpu_source_pool_leases=").append(pool.successfulLeases())
+                .append(" gpu_source_pool_capacity_rejected=").append(pool.capacityRejected())
+                .append(" gpu_source_pool_retired_pages=").append(pool.retiredPages());
         line.append(" sprite_upload_requests=").append(spriteUploadRequests)
                 .append(" gpu_sprite_uploads=").append(gpuSpriteUploads)
                 .append(" cpu_sprite_uploads=").append(cpuSpriteUploads)
