@@ -32,3 +32,14 @@ This is the compact authoritative index for **performance outcomes**, not a comm
 2. For existing #1014 evidence, inspect every available rejection and call-count counter; avoid treating memory allocation count as a per-update fallback denominator.
 3. A later controlled capture should quantify standard interpolation GPU/CPU routes and discrete upload routes after the fix, without asking the owner to rerun any unchanged candidate. If desired for a true speedup claim, use matched CPU-path vs O3/O4 A/B with the **same** convergence rules and profiler flags.
 4. If cached terrain admissions remain zero, distinguish bypass reasons within current traversal/dirty counters before revising scheduler logic.
+
+## Corrective implementation after #1014
+
+An original-mip-array identity guard now prevents interpolation-generated
+temporary CPU NativeImages from entering O3 source admission/validation. A
+CI-only interpolation fallback runs while O3 remains enabled, and the native
+screenshot smoke requires CPU staging, unchanged original-source invalidation
+count, and a subsequent GPU discrete upload. This targets the confirmed
+cross-path hazard, not every observed CPU route. Validation pending at source
+checkpoint; native CI and later RX route coverage must determine qualification
+and effectiveness separately.

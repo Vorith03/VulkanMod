@@ -2,6 +2,32 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Post-#1014 optimization effectiveness audit — 2026-10-10
+
+Owner's completed RX 6900 XT RD32 capture now supersedes the pre-hardware
+checkpoint below. Its preliminary route counters show substantial CPU fallback
+in O3/O4; **no matched speedup is established**. Consult
+`docs/OPTIMIZATION_EVIDENCE_LEDGER.md` for exact source-counter denominators,
+the verified retrospective, dispositions and next gate. Audit enforcement is
+in `AGENTS.md` §6A and `ROADMAP.md`.
+
+A code-level O3/O4 fallback boundary error was identified: interpolation's
+temporary CPU mip outputs were treated as candidate original-resident source
+uploads, potentially invalidating residency and permanently disabling that
+sprite after a single CPU interpolation fallback. This session restricts
+residency to the exact SpriteContents original `byMipLevel` array and adds
+a forced-interpolation-CPU-fallback native smoke with a required completion
+marker. **This correction is not yet hardware-measured**. Its new full native
+CI is pending at the time of this source checkpoint; do not treat it as
+qualified until the run completes. Preserve source mutation checks, fallback
+behavior, 128 MiB budget, defaults and Forge/portal compatibility.
+
+Next: review full native/compatibility qualification of this milestone,
+then evaluate the #1014 captured admission/fallback statistics against its
+source counter definitions. Obtain a narrow comparable capture only after
+establishing the next unresolved hypothesis; avoid a repeat of unchanged
+#1014 and do not claim performance improvement from the patch.
+
 ## Final pre-hardware qualification — 2026-10-10
 
 The owner requested continuation until the next physical test is needed. The

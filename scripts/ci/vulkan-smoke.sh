@@ -231,6 +231,7 @@ case "$mode" in
     grep -F "Sprite usage animation smoke passed" vulkan-screenshot-smoke.log
     grep -F "GPU resident animation smoke passed" vulkan-screenshot-smoke.log
     grep -F "GPU texture interpolation smoke passed" vulkan-screenshot-smoke.log
+    grep -F "GPU animation fallback smoke passed" vulkan-screenshot-smoke.log
     grep -F "VULKANMOD_TEXTURE_UPLOAD_GPU_SMOKE_OK" vulkan-screenshot-smoke.log
     for animation_type in SpriteContents 'SpriteContents$Ticker' 'SpriteContents$InterpolationData'; do
       javap -c -p "run/.mixin.out/class/net/minecraft/client/renderer/texture/${animation_type}.class" > "vulkan-animation-${animation_type}.javap"

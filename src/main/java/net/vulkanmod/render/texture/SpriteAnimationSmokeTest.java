@@ -205,6 +205,45 @@ public final class SpriteAnimationSmokeTest {
                         test.name);
             }
 
+            // CPU interpolation passes temporary NativeImage mips to
+            // SpriteContents.upload. It must neither evict the original source
+            // nor prevent a later discrete frame from taking the GPU path.
+            // Reordered's durations sum to eight; after 24 ticks the next tick
+            // must interpolate distinct indices at subFrame=1.
+            if("reordered".equals(test.name)
+                    && GpuAnimatedTextureResidency.interpolationEnabled()) {
+                var beforeFallback = GpuAnimatedTextureResidency.stats();
+                Device.getGraphicsQueue().startRecording();
+                VTextureSelector.beginSpriteUploadBatch();
+                long stagedBefore = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
+                try {
+                    Initializer.CONFIG.animateOnlyUsedTextures = false;
+                    GpuAnimatedTextureResidency.setCiForceCpuInterpolation(true);
+                    try {
+                        candidateTicker.tickAndUpload(candidateX, 0);
+                    } finally {
+                        GpuAnimatedTextureResidency.setCiForceCpuInterpolation(false);
+                    }
+                    if(Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes() == stagedBefore) {
+                        throw new AssertionError("Forced CPU interpolation did not upload temporary mips");
+                    }
+                    candidate.uploadFirstFrame(candidateX, 0);
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                    SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                    Device.getGraphicsQueue().endRecordingAndSubmit();
+                }
+                Vulkan.waitIdle();
+                var afterFallback = GpuAnimatedTextureResidency.stats();
+                if(afterFallback.sourceInvalidated() != beforeFallback.sourceInvalidated()) {
+                    throw new AssertionError("CPU interpolation fallback invalidated original sprite residency");
+                }
+                if(afterFallback.totalCopyCalls() <= beforeFallback.totalCopyCalls()) {
+                    throw new AssertionError("O3 source did not survive CPU interpolation fallback");
+                }
+                Initializer.LOGGER.info("GPU animation fallback smoke passed (temporary CPU interpolation upload preserves original resident source and later GPU discrete copy)");
+            }
+
             if("discrete".equals(test.name) && GpuAnimatedTextureResidency.enabled()) {
                 GpuAnimatedTextureResidency.Stats beforeMutation = GpuAnimatedTextureResidency.stats();
                 NativeImage base = candidate.byMipLevel[0];
@@ -242,6 +281,7 @@ public final class SpriteAnimationSmokeTest {
             Initializer.LOGGER.info("Animation oracle case passed: {}", test.name);
         } finally {
             GpuAnimatedTextureResidency.setCiForceCpuPath(false);
+            GpuAnimatedTextureResidency.setCiForceCpuInterpolation(false);
             Vulkan.waitIdle();
             if(buffer != 0) MemoryManager.freeBuffer(buffer, allocation);
             atlas.doFree();

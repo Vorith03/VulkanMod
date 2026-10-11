@@ -40,6 +40,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
     private static long interpolationBytes;
     private static long interpolationBindingRejected;
     private static boolean ciForceCpuPath;
+    private static boolean ciForceCpuInterpolation;
 
     private final NativeImage[] images;
     private final long[] mutationGenerations;
@@ -87,7 +88,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
     }
 
     public static boolean interpolationEnabled() {
-        return !ciForceCpuPath && GpuTextureInterpolationCompute.enabled();
+        return !ciForceCpuPath && !ciForceCpuInterpolation && GpuTextureInterpolationCompute.enabled();
     }
 
     static void setCiForceCpuPath(boolean force) {
@@ -95,6 +96,14 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             throw new IllegalStateException("CPU-reference override is CI-only");
         }
         ciForceCpuPath = force;
+    }
+
+    /** Deliberately exercise a CPU interpolation fallback without disabling O3 residency. */
+    static void setCiForceCpuInterpolation(boolean force) {
+        if(force && !Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) {
+            throw new IllegalStateException("CPU-interpolation override is CI-only");
+        }
+        ciForceCpuInterpolation = force;
     }
 
     public static GpuAnimatedTextureResidency tryCreate(

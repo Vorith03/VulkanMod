@@ -189,7 +189,12 @@ public abstract class MSpriteContents implements VSpriteContentsI {
         this.vulkanmod$performanceUploadStartNanos = ClientTickBreakdown.beginTextureSpriteUpload(
                 nativeImages != null ? nativeImages.length : 0);
 
+        // InterpolationData also calls this method with its own temporary mip
+        // images when O4 falls back to CPU. Only the SpriteContents-owned
+        // original mip chain may initialize/validate O3 residency; temporary
+        // pixel output must never invalidate an otherwise valid source lease.
         if(vulkanmod$animationState != null
+                && nativeImages == this.byMipLevel
                 && vulkanmod$animationState.tryResidentUpload(
                         i, j, k, l, nativeImages, this.width(), this.height())) {
             TextureTickAttribution.recordSpriteUploadRoute(true);
