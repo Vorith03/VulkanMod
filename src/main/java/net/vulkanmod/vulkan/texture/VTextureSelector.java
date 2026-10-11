@@ -21,6 +21,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkBufferCopy;
 import org.lwjgl.vulkan.VkBufferImageCopy;
 import org.lwjgl.vulkan.VkBufferMemoryBarrier;
+import org.lwjgl.vulkan.VkMemoryBarrier;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
@@ -35,7 +36,12 @@ public abstract class VTextureSelector {
     private static final int TEXTURE_STAGING_BATCH_LIMIT = 128 * 1024 * 1024;
     private static final int MAX_SINGLE_TEXTURE_STAGING = 512 * 1024 * 1024;
     private static final int MAX_UNBATCHED_TEXTURE_SUBMISSIONS = 256;
-    private static final int MAX_SPRITE_COPY_BATCH_REGIONS = 32;
+    // Operates on the whole TextureManager.tick upload batch, including uploads
+    // from custom Tickables: a shared GPU transfer queue, not per-sprite routing.
+    // Opt in until native validation and matched CPU/GPU evidence are available.
+    private static final boolean UNIFIED_GPU_UPLOADS =
+            Boolean.getBoolean("vulkanmod.experimentalUnifiedTextureUploads");
+    private static final int MAX_SPRITE_COPY_BATCH_REGIONS = UNIFIED_GPU_UPLOADS ? 128 : 32;
 
     static {
         if(Boolean.getBoolean("vulkanmod.smokeTest")) {
@@ -527,6 +533,16 @@ public abstract class VTextureSelector {
         if(spriteUploadRegionCount == MAX_SPRITE_COPY_BATCH_REGIONS) {
             flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.REGION_LIMIT);
         }
+        // A single vkCmdCopyBufferToImage cannot have overlapping image
+        // destinations. A later write to overlapping texels also needs a
+        // transfer-write dependency after the preceding copy command.
+        if(UNIFIED_GPU_UPLOADS && TextureTransferBatchPolicy.overlapsAny(
+                spriteMipLevels, spriteXOffsets, spriteYOffsets,
+                spriteWidths, spriteHeights, spriteUploadRegionCount,
+                mipLevel, xOffset, yOffset, width, height)) {
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.OVERLAPPING_REGION);
+            transferWriteToWriteBarrier();
+        }
         if(spriteUploadRegionCount == 0) {
             spriteUploadStagingBufferId = stagingBufferId;
         }
@@ -538,6 +554,23 @@ public abstract class VTextureSelector {
         spriteXOffsets[index] = xOffset;
         spriteYOffsets[index] = yOffset;
         spriteBufferOffsets[index] = bufferOffset;
+    }
+
+    /**
+     * Preserve a same-command-buffer write-after-write dependency when the
+     * centralized upload queue encounters an overlapping destination.
+     * Distinct atlas sprites stay batched without an unnecessary barrier.
+     */
+    private static void transferWriteToWriteBarrier() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack);
+            barrier.sType(VK_STRUCTURE_TYPE_MEMORY_BARRIER);
+            barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+            barrier.dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+            vkCmdPipelineBarrier(Device.getGraphicsQueue().getCommandBuffer().getHandle(),
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, barrier, null, null);
+        }
     }
 
     // Keep the original no-argument method as the native profiler mixin's

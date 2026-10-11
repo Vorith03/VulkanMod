@@ -89,7 +89,7 @@ public final class TextureTickAttribution {
     public enum CopyFlushReason {
         SOURCE_SEED, STAGING_RESET, RESIDENT_COPY, GPU_INTERPOLATION,
         EXPLICIT_FLUSH, OUTER_BATCH_END, TEXTURE_SWITCH, DIRECT_UPLOAD,
-        STAGING_BUFFER_SWITCH, REGION_LIMIT
+        STAGING_BUFFER_SWITCH, REGION_LIMIT, OVERLAPPING_REGION
     }
 
     private static final InterpolationFallback[] INTERPOLATION_REASONS = InterpolationFallback.values();
