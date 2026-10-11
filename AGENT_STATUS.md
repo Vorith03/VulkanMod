@@ -2,6 +2,39 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Raw #1014 reconciliation and source-only attribution — 2026-10-11
+
+The original owner-uploaded UUID benchmark log was recovered from the Project
+Library. It confirms 180.028 s, 3,600 texture ticks, 7,647 frames, O3/O4
+requested with float64 enabled, 16.113 ms/tick texture work, **1,009,923**
+CPU sprite-copy flushes taking **5.727 ms/tick** (nested in texture time),
+1,313,703 GPU/3,401,636 CPU mixed sprite-upload requests, and only
+1,067 GPU/2,886,248 CPU standard interpolation attempts. Residency had 1,184
+admissions, 541 capacity rejections, **0** source/staging rejections, 704
+invalidations and a nearly full 128 MiB charged budget. The final terrain
+counter was **9,698 cumulative traversals** (not capture-only), zero cached
+schedules, stable 1,604 pending dirty; the live fast-path preflight is capped
+at 512 notices. See `docs/OPTIMIZATION_EVIDENCE_LEDGER.md` for exact scope
+and the competing hypotheses.
+
+Source-only commit `f3a72701003fd285c3f37d8c96200f16a61325d1`
+instruments the existing paths without moving them: separate source vs
+temporary CPU uploads, disjoint first-failure O4 reason buckets, and
+nonempty sprite-copy flush counts/regions by actual calling boundary.
+The `attribution-capture-contract.py` harness covers capture gating and
+reset for the new counters. Source/diff consistency inspection completed.
+**No Java compile, native CI or new JAR was run for this candidate** in
+accordance with the owner’s test-build hold; qualification and measured
+effectiveness are explicitly pending.
+
+Next: do not infer that all 5.727 ms of flush CPU can be eliminated without
+preserving texture/GPU write ordering. Reassess the #1016 source-identity
+fix with the new distinct-route attribution at the next justified hardware
+capture; only optimize the dominant *measured* flush reason or O4 fallback.
+Do not raise the 128 MiB cap, loosen Forge/custom-source gating, or claim
+RX speedup before paired results. Existing full #1016 is the last
+**qualified** executable, not the latest source-only candidate.
+
 ## Post-#1014 optimization effectiveness audit — 2026-10-10
 
 **Full public/native CI #1016 passed** at executable

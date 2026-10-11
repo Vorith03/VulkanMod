@@ -217,8 +217,15 @@ Do not subtract unrelated percentiles; the non-upload p95 is calculated from per
 
 The `texture_outer_batch_attribution` summary also counts materialized sprite
 upload routes (`sprite_upload_requests = gpu_sprite_uploads + cpu_sprite_uploads`).
-This denominator includes CPU-only/custom uploads; it is coverage of actual
-upload calls, not a count of unique sprites. Standard ticker interpolation with
+This denominator includes CPU-only/custom uploads **and CPU-generated temporary
+interpolation mip outputs**; it is coverage of actual materialized calls,
+not unique sprites or source-only residency eligibility. Beginning with the
+post-#1016 source-only attribution candidate, the four additional fields
+`gpu_source_mip_uploads`, `cpu_source_mip_uploads`,
+`gpu_other_mip_uploads` and `cpu_other_mip_uploads` partition those
+two existing route counters by whether the NativeImage array is the owning
+SpriteContents `byMipLevel` array. `other` is an identity category, not
+proof that every operation is interpolation. Standard ticker interpolation with
 distinct frame indices and positive progress has its own
 `standard_interpolation_updates = standard_interpolation_gpu_updates +
 standard_interpolation_cpu_updates`. Hidden uploads and repeated-frame no-op
@@ -226,7 +233,13 @@ interpolation are excluded. GPU interpolation bypasses `SpriteContents.upload`,
 so do not divide interpolation successes by sprite-upload requests. A CPU route
 can mean a disabled/unsupported GPU path as well as an admission/dispatch
 fallback; correlate the request/float64 environment fields and residency
-rejection counters before attributing a cause.
+rejection counters before attributing a cause. The new
+`interpolation_fallback_*` counts distinguish the **first failed condition**
+for each standard-ticker CPU attempt that reaches the existing O4 eligibility
+check. They are not unique-sprite counts and can include repeated misses from
+one permanently disabled sprite. The fallback buckets should sum to
+`standard_interpolation_cpu_updates` for the source version with these
+counters enabled; a mismatch indicates missing attribution.
 
 Residency admission/rejection and memory fields explicitly describe renderer
 lifetime, including warmup and pending retirement. `resident_current_kib` and
@@ -237,6 +250,16 @@ actually allocated scratch payload. They count retired buffers until actual
 release and exclude VMA allocation overhead and retained CPU images. Memory
 peaks are not reset at capture boundaries; route/copy/interpolation update
 counts cover only measured texture ticks.
+
+The post-#1016 source-only candidate also emits `copy_flush_<reason>` and
+`copy_flush_<reason>_regions`. Their totals should equal existing
+`copy_flushes` and `copy_regions` in a successful capture, subject to
+any exceptional interrupted flush. Causes identify the existing source-seed,
+resident-copy, interpolation, outer/explicit batch, texture-switch, direct
+upload, staging-reset/buffer-switch and region-limit boundaries. They do
+**not** claim every flush is removable; the CPU timing includes Vulkan
+command recording and dependency-preserving behavior. All new fields
+remain unqualified until Java/Forge/native tests are run; #1014 pre-dates them.
 
 ## Optional Vulkan GPU timestamps
 
