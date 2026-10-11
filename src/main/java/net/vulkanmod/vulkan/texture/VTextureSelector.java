@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.texture;
 
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -198,7 +199,7 @@ public abstract class VTextureSelector {
 
         // Preserve atlas-copy order when this resident source is seeded between
         // CPU-backed sprite uploads in the outer texture-tick batch.
-        flushSpriteUploadCopies();
+        flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.SOURCE_SEED);
 
         int size = source.remaining();
         if(size > TEXTURE_STAGING_BATCH_LIMIT || destination.getBufferSize() < size) {
@@ -209,7 +210,7 @@ public abstract class VTextureSelector {
         if(stagingBuffer.wouldExceedUsageLimit(size, 4, TEXTURE_STAGING_BATCH_LIMIT)) {
             // Pending sprite regions point at the current staging allocation.
             // Record them before the normal bounded reset/reuse sequence.
-            flushSpriteUploadCopies();
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.STAGING_RESET);
             graphicsQueue.endRecordingAndSubmit();
 
             if(AreaUploadManager.INSTANCE != null) {
@@ -341,7 +342,7 @@ public abstract class VTextureSelector {
 
             // Prior CPU-backed regions were staged earlier in this same logical
             // texture tick; emit them before this direct resident copy.
-            flushSpriteUploadCopies();
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.RESIDENT_COPY);
 
             CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
             texture.transferDstLayout(commandBuffer);
@@ -358,7 +359,7 @@ public abstract class VTextureSelector {
      * transfer/compute commands into the same texture-tick command buffer.
      */
     public static void flushPendingSpriteUploadCopies() {
-        flushSpriteUploadCopies();
+        flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.GPU_INTERPOLATION);
     }
 
     public static void beginSpriteUploadBatch() {
@@ -372,7 +373,9 @@ public abstract class VTextureSelector {
     public static int spriteUploadBatchDepth() { return spriteUploadDepth; }
 
     /** Record pending regions without consuming an outer scope's ownership. */
-    public static void flushSpriteUploadBatch() { flushSpriteUploadCopies(); }
+    public static void flushSpriteUploadBatch() {
+        flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.EXPLICIT_FLUSH);
+    }
 
     /** Restore the owning scope even if a leaf upload threw before its RETURN hook. */
     public static void endSpriteUploadBatchesTo(int depth) {
@@ -388,7 +391,7 @@ public abstract class VTextureSelector {
 
         if(--spriteUploadDepth == 0) {
             try {
-                flushSpriteUploadCopies();
+                flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.OUTER_BATCH_END);
             } finally {
                 spriteUploadTexture = null;
                 spriteUploadStagingBufferId = VK_NULL_HANDLE;
@@ -439,7 +442,7 @@ public abstract class VTextureSelector {
         if(stagingBudgetReached || submissionBudgetReached) {
             // Pending regions reference the current staging contents. Record them
             // before the existing budget path submits/waits/resets that buffer.
-            flushSpriteUploadCopies();
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.STAGING_RESET);
 
             boolean restartUploadBatch = activeUploadBatch;
             if(restartUploadBatch) {
@@ -488,7 +491,7 @@ public abstract class VTextureSelector {
         try {
             if(batchSpriteCopies && texture.getCurrentLayout() == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
                 if(spriteUploadTexture != null && spriteUploadTexture != texture) {
-                    flushSpriteUploadCopies();
+                    flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.TEXTURE_SWITCH);
                 }
                 spriteUploadTexture = texture;
                 stagingBuffer.copyTexture(buffer, layout, texture.formatSize);
@@ -499,7 +502,7 @@ public abstract class VTextureSelector {
                 // so it owns the SHADER_READ/UNDEFINED -> TRANSFER_DST transition.
                 // Once that transition is recorded, the remaining sprite/mip copies
                 // can share one vkCmdCopyBufferToImage call.
-                flushSpriteUploadCopies();
+                flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.DIRECT_UPLOAD);
                 texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset,
                         layout, buffer);
                 if(batchSpriteCopies) {
@@ -519,10 +522,10 @@ public abstract class VTextureSelector {
         // while this sprite was being staged, close the old region set against the
         // old handle before accumulating regions from the replacement buffer.
         if(spriteUploadRegionCount > 0 && spriteUploadStagingBufferId != stagingBufferId) {
-            flushSpriteUploadCopies();
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.STAGING_BUFFER_SWITCH);
         }
         if(spriteUploadRegionCount == MAX_SPRITE_COPY_BATCH_REGIONS) {
-            flushSpriteUploadCopies();
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.REGION_LIMIT);
         }
         if(spriteUploadRegionCount == 0) {
             spriteUploadStagingBufferId = stagingBufferId;
@@ -535,6 +538,15 @@ public abstract class VTextureSelector {
         spriteXOffsets[index] = xOffset;
         spriteYOffsets[index] = yOffset;
         spriteBufferOffsets[index] = bufferOffset;
+    }
+
+    // Keep the original no-argument method as the native profiler mixin's
+    // timing target; the wrapper identifies *why* a nonempty batch was emitted.
+    private static void flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason reason) {
+        if(spriteUploadRegionCount > 0) {
+            TextureTickAttribution.recordCopyFlushReason(reason, spriteUploadRegionCount);
+        }
+        flushSpriteUploadCopies();
     }
 
     private static void flushSpriteUploadCopies() {

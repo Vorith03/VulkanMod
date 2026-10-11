@@ -197,7 +197,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
                 && nativeImages == this.byMipLevel
                 && vulkanmod$animationState.tryResidentUpload(
                         i, j, k, l, nativeImages, this.width(), this.height())) {
-            TextureTickAttribution.recordSpriteUploadRoute(true);
+            TextureTickAttribution.recordSpriteUploadRoute(true, true);
             SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
             ClientTickBreakdown.endTextureSpriteUpload(this.vulkanmod$performanceUploadStartNanos);
             this.vulkanmod$performanceUploadStartNanos = 0L;
@@ -206,7 +206,7 @@ public abstract class MSpriteContents implements VSpriteContentsI {
             return;
         }
 
-        TextureTickAttribution.recordSpriteUploadRoute(false);
+        TextureTickAttribution.recordSpriteUploadRoute(false, nativeImages == this.byMipLevel);
         SpriteUtil.addTransitionedLayout(VTextureSelector.getBoundTexture());
         // One SpriteContents upload normally emits one NativeImage upload per mip.
         // Keep every staged copy, but let VTextureSelector combine those mip copy

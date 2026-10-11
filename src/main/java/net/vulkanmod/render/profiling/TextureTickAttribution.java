@@ -74,13 +74,43 @@ public final class TextureTickAttribution {
     private static long gpuSpriteUploads;
     private static long standardInterpolationUpdates;
     private static long standardInterpolationGpuUpdates;
+    private static long gpuSourceUploads;
+    private static long cpuSourceUploads;
+    private static long gpuOtherMipUploads;
+    private static long cpuOtherMipUploads;
 
-    /** Materialized upload routes only; hidden/catch-up suppression is not a fallback. */
-    public static void recordSpriteUploadRoute(boolean gpu) {
+    // Capture-only buckets: no per-update allocation or string formatting.
+    public enum InterpolationFallback {
+        INELIGIBLE, RESIDENCY_DISABLED, SUPPRESSED, NO_RESIDENCY,
+        OFF_RENDER_THREAD, GPU_UNAVAILABLE, NO_UPLOAD_BATCH,
+        NO_ATLAS, SOURCE_MUTATED, DISPATCH_FAILED
+    }
+
+    public enum CopyFlushReason {
+        SOURCE_SEED, STAGING_RESET, RESIDENT_COPY, GPU_INTERPOLATION,
+        EXPLICIT_FLUSH, OUTER_BATCH_END, TEXTURE_SWITCH, DIRECT_UPLOAD,
+        STAGING_BUFFER_SWITCH, REGION_LIMIT
+    }
+
+    private static final InterpolationFallback[] INTERPOLATION_REASONS = InterpolationFallback.values();
+    private static final CopyFlushReason[] COPY_FLUSH_REASONS = CopyFlushReason.values();
+    private static final long[] interpolationFallbackCounts = ENABLED ? new long[INTERPOLATION_REASONS.length] : null;
+    private static final long[] copyFlushReasonCounts = ENABLED ? new long[COPY_FLUSH_REASONS.length] : null;
+    private static final long[] copyFlushReasonRegions = ENABLED ? new long[COPY_FLUSH_REASONS.length] : null;
+
+    /** Materialized uploads; identity is the owning SpriteContents mip array, not assumed interpolation. */
+    public static void recordSpriteUploadRoute(boolean gpu, boolean originalMipChain) {
         if (!ENABLED || !tickActive) return;
         spriteUploadRequests++;
-        if (gpu) gpuSpriteUploads++;
-        else cpuSpriteUploads++;
+        if (gpu) {
+            gpuSpriteUploads++;
+            if (originalMipChain) gpuSourceUploads++;
+            else gpuOtherMipUploads++;
+        } else {
+            cpuSpriteUploads++;
+            if (originalMipChain) cpuSourceUploads++;
+            else cpuOtherMipUploads++;
+        }
     }
 
     /** Standard ticker, distinct resolved frame indices, positive interpolation progress only. */
@@ -88,6 +118,19 @@ public final class TextureTickAttribution {
         if (!ENABLED || !tickActive) return;
         standardInterpolationUpdates++;
         if (gpu) standardInterpolationGpuUpdates++;
+    }
+
+    /** Exactly one reason for each standard-ticker CPU interpolation attempt. */
+    public static void recordStandardInterpolationFallback(InterpolationFallback reason) {
+        if (!ENABLED || !tickActive || reason == null) return;
+        interpolationFallbackCounts[reason.ordinal()]++;
+    }
+
+    /** Count nonempty sprite copy flushes by boundary, independent of flush timing. */
+    public static void recordCopyFlushReason(CopyFlushReason reason, int regions) {
+        if (!ENABLED || !tickActive || reason == null || regions <= 0) return;
+        copyFlushReasonCounts[reason.ordinal()]++;
+        copyFlushReasonRegions[reason.ordinal()] += regions;
     }
 
     private TextureTickAttribution() {
@@ -270,6 +313,10 @@ public final class TextureTickAttribution {
         line.append(" sprite_upload_requests=").append(spriteUploadRequests)
                 .append(" gpu_sprite_uploads=").append(gpuSpriteUploads)
                 .append(" cpu_sprite_uploads=").append(cpuSpriteUploads)
+                .append(" gpu_source_mip_uploads=").append(gpuSourceUploads)
+                .append(" cpu_source_mip_uploads=").append(cpuSourceUploads)
+                .append(" gpu_other_mip_uploads=").append(gpuOtherMipUploads)
+                .append(" cpu_other_mip_uploads=").append(cpuOtherMipUploads)
                 .append(" standard_interpolation_updates=").append(standardInterpolationUpdates)
                 .append(" standard_interpolation_gpu_updates=").append(standardInterpolationGpuUpdates)
                 .append(" standard_interpolation_cpu_updates=")
@@ -301,6 +348,17 @@ public final class TextureTickAttribution {
                 .append(" resident_source_rejected=").append(residentSourceRejected)
                 .append(" resident_staging_rejected=").append(residentStagingRejected)
                 .append(" resident_invalidated=").append(residentInvalidated);
+        for (InterpolationFallback reason : INTERPOLATION_REASONS) {
+            line.append(" interpolation_fallback_")
+                    .append(reason.name().toLowerCase(Locale.ROOT)).append('=')
+                    .append(interpolationFallbackCounts[reason.ordinal()]);
+        }
+        for (CopyFlushReason reason : COPY_FLUSH_REASONS) {
+            line.append(" copy_flush_").append(reason.name().toLowerCase(Locale.ROOT))
+                    .append('=').append(copyFlushReasonCounts[reason.ordinal()]);
+            line.append(" copy_flush_").append(reason.name().toLowerCase(Locale.ROOT))
+                    .append("_regions=").append(copyFlushReasonRegions[reason.ordinal()]);
+        }
         for (Phase phase : PHASES) {
             int ordinal = phase.ordinal();
             line.append(' ').append(phase.label).append("_calls=").append(phaseCalls[ordinal]);
@@ -337,7 +395,11 @@ public final class TextureTickAttribution {
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
         residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
         spriteUploadRequests = cpuSpriteUploads = gpuSpriteUploads = 0L;
+        gpuSourceUploads = cpuSourceUploads = gpuOtherMipUploads = cpuOtherMipUploads = 0L;
         standardInterpolationUpdates = standardInterpolationGpuUpdates = 0L;
+        Arrays.fill(interpolationFallbackCounts, 0L);
+        Arrays.fill(copyFlushReasonCounts, 0L);
+        Arrays.fill(copyFlushReasonRegions, 0L);
         residentInterpolationCalls = residentInterpolationDispatches =
                 residentInterpolationPixels = residentInterpolationBytes = 0L;
         Arrays.fill(currentPhaseNanos, 0L);

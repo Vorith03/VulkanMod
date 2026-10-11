@@ -1,6 +1,8 @@
 package net.vulkanmod.render.texture;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.profiling.TextureTickAttribution;
+import net.vulkanmod.render.profiling.TextureTickAttribution.InterpolationFallback;
 import net.vulkanmod.interfaces.SpriteAnimationTicker;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
@@ -83,36 +85,42 @@ public final class SpriteAnimationState {
     public boolean tryGpuInterpolation(int x, int y,
                                        int currentIndex, int nextIndex,
                                        int subFrame, int duration) {
-        if(!residentCandidate || residentDisabled || !materialize
-                || residentFrames == null
-                || !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()
-                || !GpuAnimatedTextureResidency.interpolationEnabled()
-                || !Device.getGraphicsQueue().hasActiveUploadBatch()) {
-            return false;
-        }
+        if(!residentCandidate) return interpolationFallback(InterpolationFallback.INELIGIBLE);
+        if(residentDisabled) return interpolationFallback(InterpolationFallback.RESIDENCY_DISABLED);
+        if(!materialize) return interpolationFallback(InterpolationFallback.SUPPRESSED);
+        if(residentFrames == null) return interpolationFallback(InterpolationFallback.NO_RESIDENCY);
+        if(!com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread())
+            return interpolationFallback(InterpolationFallback.OFF_RENDER_THREAD);
+        if(!GpuAnimatedTextureResidency.interpolationEnabled())
+            return interpolationFallback(InterpolationFallback.GPU_UNAVAILABLE);
+        if(!Device.getGraphicsQueue().hasActiveUploadBatch())
+            return interpolationFallback(InterpolationFallback.NO_UPLOAD_BATCH);
 
         VulkanImage target = VTextureSelector.getBoundTexture();
-        if(target == null) {
-            return false;
-        }
+        if(target == null) return interpolationFallback(InterpolationFallback.NO_ATLAS);
 
         if(!residentFrames.sourcesValid()) {
             residentFrames.noteSourceInvalidated();
             residentFrames.close();
             residentFrames = null;
             residentDisabled = true;
-            return false;
+            return interpolationFallback(InterpolationFallback.SOURCE_MUTATED);
         }
 
         if(!residentFrames.interpolateToAtlas(
                 target, x, y, currentIndex, nextIndex, subFrame, duration)) {
-            return false;
+            return interpolationFallback(InterpolationFallback.DISPATCH_FAILED);
         }
 
         SpriteUtil.addTransitionedLayout(target);
         this.atlas = target;
         visibility.refreshed();
         return true;
+    }
+
+    private static boolean interpolationFallback(InterpolationFallback reason) {
+        TextureTickAttribution.recordStandardInterpolationFallback(reason);
+        return false;
     }
 
     public void use() {
