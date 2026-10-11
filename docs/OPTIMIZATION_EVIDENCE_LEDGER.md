@@ -74,3 +74,37 @@ No adoption or speedup claim applies to this source-only candidate, and #1014
 cannot contain these new fields. Next: review the focused contract and native
 gate when a coherent physical-test candidate is ready; then compare exact O3/O4
 fallback causes and flush boundaries under the same RD32 settings.
+
+
+## Unified GPU texture-update architecture — user reprioritization, 2026-10-11
+
+The target is a **common texture-update engine** with three semantic inputs:
+immutable frame sheets + frame-clock metadata (GPU copy/compute), already
+computed CPU/dynamic pixels (one-time/frequently staged Vulkan transfers),
+and texture lifetime/reload/invalidation. No per-sprite feature allowlist is
+the desired steady-state design; unsupported or non-reproducible custom
+CPU semantics must retain an exact fallback at the generic input boundary.
+GPU texture *storage and transfer* does not mean arbitrary Forge shader/mod
+pixel logic can be automatically executed on the GPU.
+
+The first source-only whole-texture-tick pilot extends the existing shared
+VTextureSelector GPU transfer batching from 32 to 128 regions under
+`-Dvulkanmod.experimentalUnifiedTextureUploads=true`, using a half-open
+destination overlap test and explicit write dependency to preserve correct
+per-texel writes. The original limit remains the default. It is not a new
+animation source/interpolation implementation. Existing #1014 measurements
+(1,009,923 small flushes, 5.727 ms/tick inclusive in texture CPU time)
+motivate the experiment but **do not prove** how many calls the wider grouping
+will save; non-capacity flush boundaries continue to exist. The original
+copy-flush-reason diagnostic candidate remains relevant to this decision.
+
+The broader design requires a **bounded shared immutable GPU source pool**
+(atlas/sheet lifetime, safe eviction/retirement) and a **per-atlas GPU
+animation job queue** that aggregates discrete and interpolation jobs with
+correct mip, overlap, mutation, ordering and Forge fallback semantics.
+O3/O4's existing exact interpolation shader and native pixel oracle should
+be reused, not reimplemented. This is a future implementation gate, not
+claimed as finished. Qualification needs: Java/Forge compile, native Vulkan
+synchronization/pixel oracle for sequential overlapping writes, modpack
+compatibility gate, and matched RD32 CPU/GPU capture with exact fallback and
+copy-flush cause denominators.

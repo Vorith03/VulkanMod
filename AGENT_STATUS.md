@@ -2,6 +2,37 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Whole-tick GPU transfer unification pilot — 2026-10-11
+
+The owner explicitly prioritized a generic GPU texture-update architecture
+over more sprite-by-sprite coverage exceptions. Existing code **already**
+transfers all uploaded CPU pixel data via Vulkan and batches the entire
+TextureManager.tick scope, including custom Tickables; however, it records
+many small transfer command groups and O3/O4 requires separately admitted
+immutable native animation source sheets. Arbitrary Forge/custom CPU pixel
+generation, resource decoding, and source mutation cannot transparently
+be replaced with identical GPU computation.
+
+Pilot `0840db29c3a422b44333991d707a85084ad98947` extends that **shared**
+transfer boundary rather than adding a sprite-specific rule. With the opt-in
+`-Dvulkanmod.experimentalUnifiedTextureUploads=true`, the common upload
+region ceiling grows from 32 to 128. Each pending image/mip destination is
+checked for exact rectangle overlap. Overlapping copies flush first and
+record a transfer-write-to-write pipeline barrier before the next write,
+preserving the Vulkan no-overlap and WAW rules. Existing staging ownership,
+source mutation checks, non-tick upload behavior and O3/O4 CPU fallback
+remain unchanged. A Java 17 offline contract covers rectangle geometry;
+the contract is added to the bounded CPU suite (20 total).
+
+**Validation and effectiveness:** source-only, deferred Java/Forge/native
+qualification and RX A/B due the existing no-new-JAR build hold. There is
+no demonstrated GPU-speedup or guarantee of full GPU-resident texture
+coverage. The next coherent work should address central *GPU animation
+update scheduling and shared source residency*, rather than expanding
+per-sprite eligibility exceptions; it must keep mod-defined CPU pixel
+generation as an opaque input and bound GPU memory. Do not present this
+transfer pilot as a completed GPU-animation redesign.
+
 ## Raw #1014 reconciliation and source-only attribution — 2026-10-11
 
 The original owner-uploaded UUID benchmark log was recovered from the Project

@@ -187,6 +187,14 @@ Vanilla Minecraft post effects are core correctness and belong in Phase 3. Full 
 
 **Status: ACTIVE MEASUREMENT PRIORITY; CONTRACT PRESENT; COMPARABLE RUNS OPEN**
 
+**Owner-directed architecture priority (2026-10-11):** consolidate animation and
+texture transfers into a generic GPU update engine; stop multiplying per-sprite
+heuristic exemptions. Preserve opaque CPU dynamic/mod pixel generation as an
+input, not a falsely GPU-equivalent algorithm. Start with the common Vulkan
+copy-batch path and its synchronization contract, then central shared
+resident animation source/dispatch where qualification supports it.
+New source-only opt-in pilot is **unqualified**, not full GPU offload.
+
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
 
 Goal: create apples-to-apples measurements so optimization claims have evidence.
