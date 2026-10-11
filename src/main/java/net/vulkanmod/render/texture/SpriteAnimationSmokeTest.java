@@ -100,21 +100,23 @@ public final class SpriteAnimationSmokeTest {
      */
     private static void verifySharedSourcePool() {
         VulkanImage atlas = VulkanImage.createTextureImage(
-                VK_FORMAT_R8G8B8A8_UNORM, 1, 2, 1,
+                VK_FORMAT_R8G8B8A8_UNORM, 1, 3, 1,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
                         | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
         ByteBuffer sourceA = MemoryUtil.memAlloc(4);
-        ByteBuffer sourceB = MemoryUtil.memAlloc(4);
+        ByteBuffer sourceB = MemoryUtil.memAlloc(8);
         GpuAnimationSourcePool.Lease a = null, b = null;
+        GpuTextureInterpolationCompute.Binding interpolationBinding = null;
         long buffer = 0L, allocation = 0L;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             for(int i = 0; i < 4; ++i) {
                 sourceA.put(i, (byte)(0x10 + i));
                 sourceB.put(i, (byte)(0x50 + i));
+                sourceB.put(i + 4, (byte)(0x70 + i));
             }
             var pBuffer = stack.mallocLong(1);
             var pAllocation = stack.mallocPointer(1);
-            MemoryManager.getInstance().createBuffer(8L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            MemoryManager.getInstance().createBuffer(12L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pBuffer, pAllocation);
             buffer = pBuffer.get(0);
@@ -135,8 +137,18 @@ public final class SpriteAnimationSmokeTest {
                     throw new AssertionError("First pooled GPU sprite upload rejected");
                 if(VTextureSelector.copyResidentSpriteFrame(
                         b.buffer(), b.offset(), b.bytes(), atlas,
-                        offsets, widths, heights, 1, 0, 0, 0, 1, 1) != 1)
+                        offsets, new int[]{2}, heights, 1, 0, 0, 0, 1, 1) != 1)
                     throw new AssertionError("Second pooled GPU sprite upload rejected");
+
+                // This is the important additional proof: O4's shader must read
+                // its mip offsets relative to the *second* descriptor-aligned
+                // slice, rather than the start of the shared physical buffer.
+                interpolationBinding = GpuTextureInterpolationCompute.createBinding(
+                        b.buffer(), b.offset(), b.bytes(), 4);
+                if(interpolationBinding == null || interpolationBinding.dispatch(
+                        atlas, offsets, new int[]{2}, heights, offsets,
+                        1, 1, 2, 0, 1, 1, 2, 2, 0) == null)
+                    throw new AssertionError("Pooled O4 interpolation source descriptor rejected");
             } finally {
                 SpriteUtil.addTransitionedLayout(atlas);
                 SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
@@ -150,18 +162,20 @@ public final class SpriteAnimationSmokeTest {
             RenderTargetManager.copyColorMipToBuffer(atlas, buffer, 0);
             renderer.endFrame();
             Vulkan.waitIdle();
-            MemoryManager.getInstance().MapAndCopy(allocation, 8, pointer -> {
-                ByteBuffer pixels = pointer.getByteBuffer(0, 8);
+            MemoryManager.getInstance().MapAndCopy(allocation, 12, pointer -> {
+                ByteBuffer pixels = pointer.getByteBuffer(0, 12);
                 for(int i = 0; i < 4; ++i) {
                     if((pixels.get(i) & 255) != 0x10 + i
-                            || (pixels.get(4 + i) & 255) != 0x50 + i)
-                        throw new AssertionError("Pooled animation source pixel isolation failed");
+                            || (pixels.get(4 + i) & 255) != 0x50 + i
+                            || (pixels.get(8 + i) & 255) != 0x60 + i)
+                        throw new AssertionError("Pooled O3/O4 source pixel isolation failed");
                 }
             });
             Initializer.LOGGER.info(
-                    "Shared GPU animation source pool smoke passed (two leases, one device buffer, offset-aligned pixel isolation)");
+                    "Shared GPU animation source pool smoke passed (two leases, one device buffer, distinct-source O3 copies and offset-bound O4 interpolation)");
         } finally {
             Vulkan.waitIdle();
+            if(interpolationBinding != null) interpolationBinding.retire();
             if(a != null) a.retire(null);
             if(b != null) b.retire(null);
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
