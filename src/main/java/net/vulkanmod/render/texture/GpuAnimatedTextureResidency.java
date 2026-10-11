@@ -49,6 +49,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
     private final int[] sourceHeights;
     private final int[] interpolationOutputOffsets;
     private final TextureResidentBuffer buffer;
+    private final GpuAnimationSourcePool.Lease sharedSourceLease;
+    private final int sharedSourceOffset;
     private final int sourceBytes;
     private final int budgetChargeBytes;
     private final int interpolationScratchBytes;
@@ -64,6 +66,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                                         int[] mipOffsets, int[] sourceWidths, int[] sourceHeights,
                                         int[] interpolationOutputOffsets,
                                         TextureResidentBuffer buffer,
+                                        GpuAnimationSourcePool.Lease sharedSourceLease,
+                                        int sharedSourceOffset,
                                         int sourceBytes, int budgetChargeBytes,
                                         int interpolationScratchBytes,
                                         int frameWidth, int frameHeight, int columns) {
@@ -74,6 +78,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         this.sourceHeights = sourceHeights;
         this.interpolationOutputOffsets = interpolationOutputOffsets;
         this.buffer = buffer;
+        this.sharedSourceLease = sharedSourceLease;
+        this.sharedSourceOffset = sharedSourceOffset;
         this.sourceBytes = sourceBytes;
         this.budgetChargeBytes = budgetChargeBytes;
         this.interpolationScratchBytes = interpolationScratchBytes;
@@ -228,6 +234,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         int chargeBytes = (int)budgetCharge;
         ByteBuffer packed = null;
         TextureResidentBuffer buffer = null;
+        GpuAnimationSourcePool.Lease sharedLease = null;
         boolean reserved = false;
         try {
             currentBytes += chargeBytes;
@@ -250,22 +257,35 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             }
             packed.flip();
 
-            buffer = new TextureResidentBuffer(sourceBytes);
-            if(!VTextureSelector.uploadTextureResidentSource(buffer, packed)) {
-                stagingRejected++;
-                TextureTickAttribution.residentStagingRejected();
-                return null;
+            if(GpuAnimationSourcePool.enabled()) {
+                sharedLease = GpuAnimationSourcePool.acquire(packed);
+                if(sharedLease == null) {
+                    stagingRejected++;
+                    TextureTickAttribution.residentStagingRejected();
+                    return null;
+                }
+                buffer = sharedLease.buffer();
+            } else {
+                buffer = new TextureResidentBuffer(sourceBytes);
+                if(!VTextureSelector.uploadTextureResidentSource(buffer, packed)) {
+                    stagingRejected++;
+                    TextureTickAttribution.residentStagingRejected();
+                    return null;
+                }
             }
 
             admitted++;
             TextureTickAttribution.residentAdmitted(chargeBytes);
             TextureTickAttribution.residentSourceAdmitted(sourceBytes);
             TextureResidentBuffer owned = buffer;
+            GpuAnimationSourcePool.Lease ownedLease = sharedLease;
+            int sharedOffset = ownedLease == null ? 0 : ownedLease.offset();
             buffer = null;
+            sharedLease = null;
             reserved = false;
             return new GpuAnimatedTextureResidency(
                     images, generations, offsets, widths, heights,
-                    interpolationOffsets, owned,
+                    interpolationOffsets, owned, ownedLease, sharedOffset,
                     sourceBytes, chargeBytes, scratchBytes,
                     frameWidth, frameHeight, columns);
         } catch(OutOfMemoryError | RuntimeException failure) {
@@ -276,7 +296,10 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             if(packed != null) {
                 MemoryUtil.memFree(packed);
             }
-            if(buffer != null) {
+            if(sharedLease != null) {
+                final int releaseBytes = chargeBytes;
+                sharedLease.retire(() -> currentBytes = Math.max(0L, currentBytes - releaseBytes));
+            } else if(buffer != null) {
                 final int releaseBytes = chargeBytes;
                 buffer.retire(() -> currentBytes = Math.max(0L, currentBytes - releaseBytes));
             } else if(reserved) {
@@ -296,7 +319,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         }
 
         int regions = VTextureSelector.copyResidentSpriteFrame(
-                this.buffer, atlas, this.mipOffsets, this.sourceWidths, this.sourceHeights,
+                this.buffer, this.sharedSourceOffset, this.sourceBytes,
+                atlas, this.mipOffsets, this.sourceWidths, this.sourceHeights,
                 destX, destY, sourceX, sourceY, frameWidth, frameHeight);
         if(regions <= 0) {
             return false;
@@ -332,7 +356,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             }
             this.interpolationBindingAttempted = true;
             this.interpolationBinding = GpuTextureInterpolationCompute.createBinding(
-                    this.buffer, this.interpolationScratchBytes);
+                    this.buffer, this.sharedSourceOffset, this.sourceBytes,
+                    this.interpolationScratchBytes);
             if(this.interpolationBinding == null) {
                 interpolationBindingRejected++;
                 return false;
@@ -405,11 +430,16 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         }
 
         final int releaseBytes = this.budgetChargeBytes;
-        this.buffer.retire(() -> {
+        Runnable afterGpuSafe = () -> {
             currentBytes = Math.max(0L, currentBytes - releaseBytes);
             TextureTickAttribution.residentReleased(releaseBytes);
             TextureTickAttribution.residentSourceReleased(this.sourceBytes);
-        });
+        };
+        if(this.sharedSourceLease != null) {
+            this.sharedSourceLease.retire(afterGpuSafe);
+        } else {
+            this.buffer.retire(afterGpuSafe);
+        }
     }
 
     public static Stats stats() {

@@ -95,7 +95,18 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     }
 
     public static synchronized Binding createBinding(TextureResidentBuffer source, int scratchBytes) {
-        if(!enabled() || source == null || scratchBytes <= 0) {
+        return createBinding(source, 0, source == null ? 0 : source.getBufferSize(), scratchBytes);
+    }
+
+    /** Descriptor offsets keep existing shader mip offsets relative to each lease. */
+    public static synchronized Binding createBinding(TextureResidentBuffer source,
+                                                     int sourceOffset, int sourceBytes,
+                                                     int scratchBytes) {
+        if(!enabled() || source == null || scratchBytes <= 0
+                || sourceOffset < 0 || sourceBytes <= 0
+                || (long)sourceOffset + sourceBytes > source.getBufferSize()
+                || (sourceOffset % Math.max(4L,
+                        Device.deviceProperties.limits().minStorageBufferOffsetAlignment())) != 0L) {
             return null;
         }
 
@@ -103,7 +114,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             if(instance == null) {
                 instance = new GpuTextureInterpolationCompute();
             }
-            return instance.allocateBinding(source, scratchBytes);
+            return instance.allocateBinding(source, sourceOffset, sourceBytes, scratchBytes);
         } catch(RuntimeException | OutOfMemoryError failure) {
             unavailable = true;
             Initializer.LOGGER.warn(
@@ -122,7 +133,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         unavailable = false;
     }
 
-    private synchronized Binding allocateBinding(TextureResidentBuffer source, int scratchBytes) {
+    private synchronized Binding allocateBinding(TextureResidentBuffer source,
+                                                 int sourceOffset, int sourceBytes, int scratchBytes) {
         if(this.closed || this.liveBindings >= MAX_BINDINGS) {
             return null;
         }
@@ -146,10 +158,11 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         try {
             scratch = new TextureResidentBuffer(scratchBytes);
             TextureTickAttribution.residentScratchAllocated(scratchBytes);
-            this.updateDescriptorSet(descriptorSet, source, scratch);
+            this.updateDescriptorSet(descriptorSet, source, sourceOffset, sourceBytes, scratch);
             this.liveBindings++;
             success = true;
-            return new Binding(this, descriptorSet, source, scratch, scratchBytes);
+            return new Binding(this, descriptorSet, source, sourceOffset, sourceBytes,
+                    scratch, scratchBytes);
         } finally {
             if(!success) {
                 if(scratch != null) {
@@ -163,13 +176,14 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     }
 
     private void updateDescriptorSet(long descriptorSet, TextureResidentBuffer source,
+                                     int sourceOffset, int sourceBytes,
                                      TextureResidentBuffer scratch) {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorBufferInfo.Buffer sourceInfo = VkDescriptorBufferInfo.calloc(1, stack);
             sourceInfo.get(0)
                     .buffer(source.getId())
-                    .offset(0L)
-                    .range(source.getBufferSize());
+                    .offset(sourceOffset)
+                    .range(sourceBytes);
             VkDescriptorBufferInfo.Buffer outputInfo = VkDescriptorBufferInfo.calloc(1, stack);
             outputInfo.get(0)
                     .buffer(scratch.getId())
@@ -290,7 +304,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     (nextBaseY + height - 1L) * sheetWidth + nextBaseX + width;
             long maxSourceEnd = sourceBase
                     + Math.max(currentLastPixelExclusive, nextLastPixelExclusive) * 4L;
-            if(maxSourceEnd > binding.source.getBufferSize()) {
+            if(maxSourceEnd > binding.sourceBytes) {
                 return null;
             }
 
@@ -319,8 +333,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(binding.source.getId())
-                    .offset(0L)
-                    .size(binding.source.getBufferSize());
+                    .offset(binding.sourceOffset)
+                    .size(binding.sourceBytes);
             beforeCompute.get(1)
                     .sType$Default()
                     .srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
@@ -621,16 +635,20 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         private final GpuTextureInterpolationCompute owner;
         private final long descriptorSet;
         private final TextureResidentBuffer source;
+        private final int sourceOffset;
+        private final int sourceBytes;
         private final TextureResidentBuffer scratch;
         private final int scratchBytes;
         private boolean retired;
 
         private Binding(GpuTextureInterpolationCompute owner, long descriptorSet,
-                        TextureResidentBuffer source, TextureResidentBuffer scratch,
-                        int scratchBytes) {
+                        TextureResidentBuffer source, int sourceOffset, int sourceBytes,
+                        TextureResidentBuffer scratch, int scratchBytes) {
             this.owner = owner;
             this.descriptorSet = descriptorSet;
             this.source = source;
+            this.sourceOffset = sourceOffset;
+            this.sourceBytes = sourceBytes;
             this.scratch = scratch;
             this.scratchBytes = scratchBytes;
         }

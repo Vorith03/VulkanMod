@@ -286,7 +286,21 @@ public abstract class VTextureSelector {
                                                int[] mipOffsets, int[] sourceWidths, int[] sourceHeights,
                                                int destX, int destY, int sourceX, int sourceY,
                                                int frameWidth, int frameHeight) {
+        return copyResidentSpriteFrame(source, 0,
+                source != null ? source.getBufferSize() : 0, texture,
+                mipOffsets, sourceWidths, sourceHeights,
+                destX, destY, sourceX, sourceY, frameWidth, frameHeight);
+    }
+
+    public static int copyResidentSpriteFrame(TextureResidentBuffer source,
+                                               int sourceBaseOffset, int sourceByteLength,
+                                               VulkanImage texture,
+                                               int[] mipOffsets, int[] sourceWidths, int[] sourceHeights,
+                                               int destX, int destY, int sourceX, int sourceY,
+                                               int frameWidth, int frameHeight) {
         if(source == null || texture == null || mipOffsets == null
+                || sourceBaseOffset < 0 || sourceByteLength <= 0
+                || (long)sourceBaseOffset + sourceByteLength > source.getBufferSize()
                 || sourceWidths == null || sourceHeights == null) {
             return -1;
         }
@@ -331,9 +345,12 @@ public abstract class VTextureSelector {
 
                 long rowStart = (long)srcY * sheetWidth + srcX;
                 long lastPixelExclusive = ((long)srcY + height - 1L) * sheetWidth + srcX + width;
-                long bufferOffset = (long)mipOffsets[mip] + rowStart * texture.formatSize;
-                long bufferEnd = (long)mipOffsets[mip] + lastPixelExclusive * texture.formatSize;
-                if(bufferOffset < 0L || bufferEnd > source.getBufferSize()
+                long bufferOffset = (long)sourceBaseOffset + mipOffsets[mip]
+                        + rowStart * texture.formatSize;
+                long bufferEnd = (long)sourceBaseOffset + mipOffsets[mip]
+                        + lastPixelExclusive * texture.formatSize;
+                if(bufferOffset < sourceBaseOffset
+                        || bufferEnd > (long)sourceBaseOffset + sourceByteLength
                         || (bufferOffset & 3L) != 0L) {
                     return -1;
                 }
