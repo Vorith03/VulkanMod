@@ -22,10 +22,20 @@ record a transfer-write-to-write pipeline barrier before the next write,
 preserving the Vulkan no-overlap and WAW rules. Existing staging ownership,
 source mutation checks, non-tick upload behavior and O3/O4 CPU fallback
 remain unchanged. A Java 17 offline contract covers rectangle geometry;
-the contract is added to the bounded CPU suite (20 total).
+the contract is added to the bounded CPU suite (20 total). The isolated
+geometry policy was compiled/executed with Java 17 and passed in this
+session; this is **not** a Forge compile.
 
-**Validation and effectiveness:** source-only, deferred Java/Forge/native
-qualification and RX A/B due the existing no-new-JAR build hold. There is
+Native test source commit `22f7cfb215a17573993217a9e30307bedf4b11f7`
+adds a real Vulkan pixel/readback oracle for 48 independent subuploads
+followed by a same-batch overlapping overwrite. The native screenshot
+CI configuration opts into this pilot and requires the oracle's marker;
+synchronization validation must stay active. The native test was **not
+yet executed**.
+
+**Validation and effectiveness:** source-only apart from the isolated Java
+geometry contract; deferred Java/Forge/native qualification and RX A/B due
+the existing no-new-JAR build hold. There is
 no demonstrated GPU-speedup or guarantee of full GPU-resident texture
 coverage. The next coherent work should address central *GPU animation
 update scheduling and shared source residency*, rather than expanding

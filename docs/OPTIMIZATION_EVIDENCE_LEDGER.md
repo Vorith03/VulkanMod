@@ -91,7 +91,11 @@ The first source-only whole-texture-tick pilot extends the existing shared
 VTextureSelector GPU transfer batching from 32 to 128 regions under
 `-Dvulkanmod.experimentalUnifiedTextureUploads=true`, using a half-open
 destination overlap test and explicit write dependency to preserve correct
-per-texel writes. The original limit remains the default. It is not a new
+per-texel writes. A Java 17 geometry harness passed locally and is
+registered in the 20-contract offline suite. The native screenshot smoke
+now opts in and verifies 48 disjoint writes plus one overlapping same-command
+write by exact pixel readback and synchronization validation; this native
+gate is **source-added but unexecuted** until the next qualified build. The original limit remains the default. It is not a new
 animation source/interpolation implementation. Existing #1014 measurements
 (1,009,923 small flushes, 5.727 ms/tick inclusive in texture CPU time)
 motivate the experiment but **do not prove** how many calls the wider grouping

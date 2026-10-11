@@ -8,9 +8,9 @@ the earlier full-native-suite-on-every-executable-push rule with explicit scopes
 
 | Scope | Offline contracts | Forge build / packaging / CPU checks | Native renderer and compatibility | Published JAR |
 | --- | --- | --- | --- | --- |
-| `full` | All 19 | All | All eight existing launches | Only after the entire suite passes |
-| `build` | All 19 | All | Deferred | None |
-| `contracts` | All 19 | Reused baseline; not rerun | Reused baseline; not rerun | None |
+| `full` | All 20 | All | All eight existing launches | Only after the entire suite passes |
+| `build` | All 20 | All | Deferred | None |
+| `contracts` | All 20 | Reused baseline; not rerun | Reused baseline; not rerun | None |
 | `none` | None | Reused baseline | Reused baseline | None |
 
 Production Java, shaders/resources, build/dependency configuration, native smoke
@@ -78,7 +78,7 @@ retention reduces future storage, not previously accrued usage.
 
 ## Validation and limits
 
-Final 19-contract comparison on the same workspace/toolchain: serial **15.140s**,
+Historical 19-contract comparison on the same workspace/toolchain: serial **15.140s**,
 four workers **6.378s**, both successful (about **58% less wall time**). An earlier
 implementation iteration measured 18.693s / 5.394s; timings vary with host load
 and warm-up. These are local CPU-contract timings, not measured hosted-CI or
