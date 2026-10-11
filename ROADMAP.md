@@ -47,6 +47,10 @@ A checkbox becomes complete only when there is corresponding evidence such as:
 
 Code existing in the repository is not by itself proof that the behavior works.
 
+### Optimization implementation versus realized benefit
+
+For performance work, implementation and CI qualification are enabling milestones, not demonstrated speedup. Consult [optimization evidence ledger](docs/OPTIMIZATION_EVIDENCE_LEDGER.md) before selecting work or describing an existing GPU path as a new opportunity. Every substantive candidate needs recorded production activation and coverage, a fallback/cost explanation, and matched before/after hardware evidence before being marked a **proven improvement**. Record qualified-but-unmeasured and low-adoption candidates explicitly; do not close a performance gate based solely on a correctness oracle. Existing Phase 5 matched baseline and frame-time gates remain open.
+
 ### Progress percentages
 
 Do not invent an overall project percentage from intuition.

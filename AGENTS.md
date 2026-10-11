@@ -197,6 +197,18 @@ Warnings should be investigated according to relevance but must not distract fro
 
 ---
 
+# 6A. Optimization Effectiveness and Evidence
+
+For every substantial performance candidate, distinguish **implemented**, **correctness-qualified**, **activated on the target workload**, **measured coverage**, and **measured net benefit**. Do not equate any earlier stage with a later one. The evidence chain is: measured bottleneck -> causal hypothesis -> bounded change -> exercised production path -> numerator/denominator and fallback reasons -> comparable frame/tick result -> explicit disposition.
+
+Before proposing a new mechanism, inspect the current implementation and recent relevant commits. If a path already exists, investigate admission, configuration, fallback, lifetime, CPU command preparation, GPU work, and synchronization before suggesting it again. CPU cost alone does not justify GPU rewriting.
+
+Track active candidates in `docs/OPTIMIZATION_EVIDENCE_LEDGER.md`, recording implementation and qualification references, exact activation, coverage, comparable impact (or **unmeasured**), known safety limits, and the next action that can change the verdict. Allowed dispositions: **proven improvement**, **qualified but unmeasured**, **low adoption**, **ineffective**, **regression**, **blocked**, or **intentionally limited**. Qualification without paired hardware evidence is never a proven improvement. Split verified facts from hypotheses, and never turn fallback or a full budget into a presumed defect without attribution.
+
+Only expand instrumentation when a specific decision lacks discriminating evidence. First inspect the existing profiler counters and their scopes. Compare runs with matched workload, settings, convergence, and profiling; keep overlapping GPU timestamp scopes separate. Report implementation, validation, activation, effectiveness and unresolved limits independently. Update the ledger and checkpoint when an outcome or next action materially changes; avoid commit-by-commit status bureaucracy. Preserve correctness/compatibility gates and minimize unnecessary builds and user-machine tests.
+
+---
+
 # 7. Failure Classification
 
 When a build or runtime failure appears, classify it before making broad changes.
