@@ -14,6 +14,7 @@ CONTRACTS = (
     'legacy-framebuffer-contract.py', 'terrain-population-contract.py',
     'benchmark-hud-contract.py', 'gpu-profiler-contract.py',
     'texture-upload-gpu-contract.py', 'texture-transfer-contract.py',
+    'gpu-source-page-contract.py',
     'attribution-capture-contract.py',
     'particle-attribution-contract.py', 'compilation-cache-contract.py',
     'pipeline-variant-contract.py', 'animation-oracle-contract.py',
