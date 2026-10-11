@@ -18,6 +18,8 @@ import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import static org.lwjgl.vulkan.VK10.*;
@@ -76,6 +78,9 @@ public final class SpriteAnimationSmokeTest {
                     new SpriteAnimationOracle.Frame[] {frame(2,3),frame(0,2)}));
             verify(explicit("custom_cpu", 2, 2, 2, 2, 1, true, true,
                     frame(3,3),frame(0,2),frame(2,1)));
+            if(Boolean.getBoolean("vulkanmod.experimentalUnifiedTextureUploads")) {
+                verifyUnifiedTransferBatch();
+            }
             TextureUploadGpuProfiler.verifyNativeForCi();
             Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/double-truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, GPU resident copies/interpolation when qualified, Forge zero-extent guards, custom CPU exclusion)");
         } finally {
@@ -85,6 +90,88 @@ public final class SpriteAnimationSmokeTest {
             VTextureSelector.bindTexture(previous);
         }
     }
+    /**
+     * One native graphics-batch test exercises 48 disjoint texture regions
+     * (exceeding the former 32-region ceiling) and an overlapping final write.
+     * Vulkan synchronization validation catches a missing WAW barrier and
+     * readback checks ordering, not merely command submission.
+     */
+    private static void verifyUnifiedTransferBatch() {
+        final int width = 64;
+        VulkanImage atlas = VulkanImage.createTextureImage(
+                VK_FORMAT_R8G8B8A8_UNORM, 1, width, 1,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                        | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
+        long buffer = 0L, allocation = 0L;
+        int priorActiveUnit = VTextureSelector.getActiveTextureUnit();
+        ByteBuffer pixel = MemoryUtil.memAlloc(4);
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VTextureSelector.setActiveTexture(0);
+            VTextureSelector.bindTexture(atlas);
+            var pBuffer = stack.mallocLong(1);
+            var pAllocation = stack.mallocPointer(1);
+            MemoryManager.getInstance().createBuffer(width * 4L,
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pBuffer, pAllocation);
+            buffer = pBuffer.get(0);
+            allocation = pAllocation.get(0);
+
+            Device.getGraphicsQueue().startRecording();
+            VTextureSelector.beginSpriteUploadBatch();
+            try {
+                for(int x = 0; x < 48; ++x) {
+                    pixel.put(0, (byte)x);
+                    pixel.put(1, (byte)(x + 1));
+                    pixel.put(2, (byte)(x + 2));
+                    pixel.put(3, (byte)(x + 3));
+                    VTextureSelector.uploadSubTexture(0, 1, 1, x, 0, 0, 0, 1, pixel);
+                }
+                // Same mip and destination: must split the pending Vk copy
+                // regions and order the second write after the first.
+                pixel.put(0, (byte)0x60);
+                pixel.put(1, (byte)0x61);
+                pixel.put(2, (byte)0x62);
+                pixel.put(3, (byte)0x63);
+                VTextureSelector.uploadSubTexture(0, 1, 1, 0, 0, 0, 0, 1, pixel);
+            } finally {
+                VTextureSelector.endSpriteUploadBatch();
+                SpriteUtil.addTransitionedLayout(atlas);
+                SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                Device.getGraphicsQueue().endRecordingAndSubmit();
+            }
+            Vulkan.waitIdle();
+
+            Renderer renderer = Renderer.getInstance();
+            renderer.resetBuffers();
+            renderer.beginFrame();
+            RenderTargetManager.copyColorMipToBuffer(atlas, buffer, 0);
+            renderer.endFrame();
+            Vulkan.waitIdle();
+            MemoryManager.getInstance().MapAndCopy(allocation, width * 4, pointer -> {
+                ByteBuffer bytes = pointer.getByteBuffer(0, width * 4);
+                for(int x = 0; x < 48; ++x) {
+                    for(int component = 0; component < 4; ++component) {
+                        int actual = bytes.get(x * 4 + component) & 255;
+                        int expected = (x == 0 ? 0x60 : x) + component;
+                        if(actual != expected)
+                            throw new AssertionError("Unified transfer wrong pixel at "
+                                    + x + " channel " + component
+                                    + ": expected " + expected + ", actual " + actual);
+                    }
+                }
+            });
+            Initializer.LOGGER.info(
+                    "Unified GPU texture transfer smoke passed (48 disjoint regions, overlapping overwrite, same-command-buffer sync, Vulkan pixels)");
+        } finally {
+            Vulkan.waitIdle();
+            if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
+            MemoryUtil.memFree(pixel);
+            atlas.doFree();
+            VTextureSelector.setActiveTexture(priorActiveUnit);
+        }
+    }
+
     private static void verify(Case test) {
         long interpolationCallsBefore = GpuAnimatedTextureResidency.stats().interpolationCalls();
         // Align both destinations at every tested mip, including zero sprite extents.
