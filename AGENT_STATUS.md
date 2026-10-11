@@ -4,16 +4,22 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Post-#1014 optimization effectiveness audit — 2026-10-10
 
-Native CI #1015 compiled and passed 19 offline contracts, Forge distributable,
-Immersive Portals anchors, startup, indirect and post/depth gates. The new
-animation fallback smoke asserted its expected CPU stage and preserved O3 lease,
-but the test immediately overwrote the same atlas location with a second GPU
-copy **in the same command buffer**. Vulkan sync validation correctly failed
-with `SYNC-HAZARD-WRITE_AFTER_WRITE`; this is a test sequencing error, not a
-qualified production performance result. The regression now makes the follow-up
-discrete GPU copy in the next submitted upload batch after a completed/idle
-first batch, retaining full native synchronization validation. Full CI recheck
-is pending. Do not promote this executable until green.
+**Full public/native CI #1016 passed** at executable
+`f6fa3f71962a529441ee7be64d468605eb3f2d0a`
+([run](https://github.com/Vorith03/VulkanMod/actions/runs/38118180872)).
+All 19 offline contracts, Forge compilation/packaging, animation provenance,
+Immersive Portals anchors, both Vulkan startup paths, indirect/post/depth,
+native screenshot and O3/O4 forced CPU interpolation fallback, Create Chronicles,
+Crash Assistant, and distributable/log uploads passed. Private real-pack
+fixtures were skipped. Source is correctness-qualified; **no new RX gameplay
+performance, route-adoption or matched FPS evidence** is established.
+
+Earlier #1015 exposed a regression-test-only same-command-buffer transfer
+write-after-write hazard when it forced CPU interpolation then immediately
+overwrote the same atlas rectangle using O3. Full Vulkan sync validation
+correctly caught it. The final test exercises the next discrete GPU copy
+in a subsequent completed upload batch. Validation was not weakened and no
+extra hot-path transfer barrier was added.
 
 Owner's completed RX 6900 XT RD32 capture now supersedes the pre-hardware
 checkpoint below. Its preliminary route counters show substantial CPU fallback
@@ -28,16 +34,16 @@ uploads, potentially invalidating residency and permanently disabling that
 sprite after a single CPU interpolation fallback. This session restricts
 residency to the exact SpriteContents original `byMipLevel` array and adds
 a forced-interpolation-CPU-fallback native smoke with a required completion
-marker. **This correction is not yet hardware-measured**. Its new full native
-CI is pending at the time of this source checkpoint; do not treat it as
-qualified until the run completes. Preserve source mutation checks, fallback
+marker. **This correction is now native qualified in #1016 but remains
+hardware-performance-unmeasured.** Preserve source mutation checks, fallback
 behavior, 128 MiB budget, defaults and Forge/portal compatibility.
 
-Next: review full native/compatibility qualification of this milestone,
-then evaluate the #1014 captured admission/fallback statistics against its
-source counter definitions. Obtain a narrow comparable capture only after
-establishing the next unresolved hypothesis; avoid a repeat of unchanged
-#1014 and do not claim performance improvement from the patch.
+Next: reconcile the previous #1014 benchmark against its original UUID log
+before treating numerical counts as authoritative. Distinguish source uploads
+from interpolation-generated staging, classify valid source rejection versus
+capacity and lifetime fallback, then select the narrowest outcome-changing
+matched test if residual uncertainty demands one. Do not rerun the unchanged
+#1014 candidate or claim an FPS improvement based on #1016 CI.
 
 ## Final pre-hardware qualification — 2026-10-10
 
