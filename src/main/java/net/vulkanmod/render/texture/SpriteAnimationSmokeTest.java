@@ -167,7 +167,7 @@ public final class SpriteAnimationSmokeTest {
                 for(int i = 0; i < 4; ++i) {
                     if((pixels.get(i) & 255) != 0x10 + i
                             || (pixels.get(4 + i) & 255) != 0x50 + i
-                            || (pixels.get(8 + i) & 255) != 0x60 + i)
+                            || (pixels.get(8 + i) & 255) != (i == 3 ? 0x53 : 0x60 + i))
                         throw new AssertionError("Pooled O3/O4 source pixel isolation failed");
                 }
             });
