@@ -40,6 +40,10 @@ temporary CPU NativeImages from entering O3 source admission/validation. A
 CI-only interpolation fallback runs while O3 remains enabled, and the native
 screenshot smoke requires CPU staging, unchanged original-source invalidation
 count, and a subsequent GPU discrete upload. This targets the confirmed
-cross-path hazard, not every observed CPU route. Validation pending at source
-checkpoint; native CI and later RX route coverage must determine qualification
-and effectiveness separately.
+cross-path hazard, not every observed CPU route. Native #1015 verified CPU temporary staging and later GPU resident survival, but
+failed sync validation because the regression forced two overlapping atlas writes
+into a single command buffer without a barrier. The test now isolates the later
+GPU frame copy into a subsequent submitted command buffer; this eliminates the
+artificial WAW without weakening native sync checking or introducing a hot-path
+barrier. Full CI requalification remains required, and RX route coverage still
+determines effectiveness.

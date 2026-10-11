@@ -227,6 +227,20 @@ public final class SpriteAnimationSmokeTest {
                     if(Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes() == stagedBefore) {
                         throw new AssertionError("Forced CPU interpolation did not upload temporary mips");
                     }
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                    SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                    Device.getGraphicsQueue().endRecordingAndSubmit();
+                }
+                Vulkan.waitIdle();
+
+                // The follow-up discrete update runs in a later submitted texture
+                // batch. Forcing it into the preceding CPU-interpolation command
+                // buffer would write the same atlas region twice without a WAW
+                // barrier, creating an artificial validation hazard.
+                Device.getGraphicsQueue().startRecording();
+                VTextureSelector.beginSpriteUploadBatch();
+                try {
                     candidate.uploadFirstFrame(candidateX, 0);
                 } finally {
                     VTextureSelector.endSpriteUploadBatch();

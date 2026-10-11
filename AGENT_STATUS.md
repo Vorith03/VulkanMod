@@ -4,6 +4,17 @@ This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime e
 
 ## Post-#1014 optimization effectiveness audit — 2026-10-10
 
+Native CI #1015 compiled and passed 19 offline contracts, Forge distributable,
+Immersive Portals anchors, startup, indirect and post/depth gates. The new
+animation fallback smoke asserted its expected CPU stage and preserved O3 lease,
+but the test immediately overwrote the same atlas location with a second GPU
+copy **in the same command buffer**. Vulkan sync validation correctly failed
+with `SYNC-HAZARD-WRITE_AFTER_WRITE`; this is a test sequencing error, not a
+qualified production performance result. The regression now makes the follow-up
+discrete GPU copy in the next submitted upload batch after a completed/idle
+first batch, retaining full native synchronization validation. Full CI recheck
+is pending. Do not promote this executable until green.
+
 Owner's completed RX 6900 XT RD32 capture now supersedes the pre-hardware
 checkpoint below. Its preliminary route counters show substantial CPU fallback
 in O3/O4; **no matched speedup is established**. Consult
