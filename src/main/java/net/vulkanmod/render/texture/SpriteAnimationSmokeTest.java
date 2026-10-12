@@ -186,13 +186,14 @@ public final class SpriteAnimationSmokeTest {
     }
 
     /**
-     * One native graphics-batch test exercises 48 disjoint texture regions
-     * (exceeding the former 32-region ceiling) and an overlapping final write.
+     * One native graphics-batch test exercises 160 disjoint texture regions
+     * (exceeding the prior 32-region and opt-in 128-region ceilings)
+     * followed by an overlapping write to the first direct-upload region.
      * Vulkan synchronization validation catches a missing WAW barrier and
      * readback checks ordering, not merely command submission.
      */
     private static void verifyUnifiedTransferBatch() {
-        final int width = 64;
+        final int width = 192;
         VulkanImage atlas = VulkanImage.createTextureImage(
                 VK_FORMAT_R8G8B8A8_UNORM, 1, width, 1,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
@@ -215,7 +216,7 @@ public final class SpriteAnimationSmokeTest {
             Device.getGraphicsQueue().startRecording();
             VTextureSelector.beginSpriteUploadBatch();
             try {
-                for(int x = 0; x < 48; ++x) {
+                for(int x = 0; x < 160; ++x) {
                     pixel.put(0, (byte)x);
                     pixel.put(1, (byte)(x + 1));
                     pixel.put(2, (byte)(x + 2));
@@ -245,7 +246,7 @@ public final class SpriteAnimationSmokeTest {
             Vulkan.waitIdle();
             MemoryManager.getInstance().MapAndCopy(allocation, width * 4, pointer -> {
                 ByteBuffer bytes = pointer.getByteBuffer(0, width * 4);
-                for(int x = 0; x < 48; ++x) {
+                for(int x = 0; x < 160; ++x) {
                     for(int component = 0; component < 4; ++component) {
                         int actual = bytes.get(x * 4 + component) & 255;
                         int expected = (x == 0 ? 0x60 : x) + component;
@@ -257,7 +258,7 @@ public final class SpriteAnimationSmokeTest {
                 }
             });
             Initializer.LOGGER.info(
-                    "Unified GPU texture transfer smoke passed (48 disjoint regions, overlapping overwrite, same-command-buffer sync, Vulkan pixels)");
+                    "Unified GPU texture transfer smoke passed (160 regions across capacity flush, direct-first overlap, same-command-buffer sync, Vulkan pixels)");
         } finally {
             Vulkan.waitIdle();
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);

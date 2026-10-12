@@ -381,6 +381,8 @@ public abstract class VTextureSelector {
             regions.limit(regionCount);
             vkCmdCopyBufferToImage(commandBuffer.getHandle(), source.getId(), texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+            if(UNIFIED_GPU_UPLOADS && spriteUploadDepth > 0)
+                transferWriteToWriteBarrier();
             return regionCount;
         }
     }
@@ -537,6 +539,9 @@ public abstract class VTextureSelector {
                 texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset,
                         layout, buffer);
                 if(batchSpriteCopies) {
+                    // Direct writes bypass the pending-region list. Order them
+                    // before any later atlas overwrite in this upload batch.
+                    if(UNIFIED_GPU_UPLOADS) transferWriteToWriteBarrier();
                     spriteUploadTexture = texture;
                 }
             }
@@ -565,8 +570,8 @@ public abstract class VTextureSelector {
                 spriteMipLevels, spriteXOffsets, spriteYOffsets,
                 spriteWidths, spriteHeights, spriteUploadRegionCount,
                 mipLevel, xOffset, yOffset, width, height)) {
+            // The flush establishes the write dependency once for this group.
             flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.OVERLAPPING_REGION);
-            transferWriteToWriteBarrier();
         }
         if(spriteUploadRegionCount == 0) {
             spriteUploadStagingBufferId = stagingBufferId;
@@ -641,6 +646,12 @@ public abstract class VTextureSelector {
                     texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     regions);
+            // Writes already emitted in this command buffer are no longer
+            // represented by the bounded queue. Conservatively order every
+            // flushed group before later writes, including overwrites after
+            // a 128-region capacity flush or a source/texture switch.
+            // Opt-in only: benchmark must measure this barrier overhead.
+            if(UNIFIED_GPU_UPLOADS) transferWriteToWriteBarrier();
         }
 
         spriteUploadRegionCount = 0;
