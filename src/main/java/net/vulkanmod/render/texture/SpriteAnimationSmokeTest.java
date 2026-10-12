@@ -231,12 +231,15 @@ public final class SpriteAnimationSmokeTest {
                     pixel.put(3, (byte)(x + 3));
                     VTextureSelector.uploadSubTexture(0, 1, 1, x, 0, 0, 0, 1, pixel);
                 }
-                // Same mip and destination: must split the pending Vk copy
-                // regions and order the second write after the first.
-                pixel.put(0, (byte)0x60);
-                pixel.put(1, (byte)0x61);
-                pixel.put(2, (byte)0x62);
-                pixel.put(3, (byte)0x63);
+                // Index 1 was in the earlier capacity-flushed region set,
+                // whereas index 0 was uploaded by the initial direct path.
+                // Both must retain write-after-write ordering across the
+                // bounded region history, not just among pending regions.
+                for(int component = 0; component < 4; ++component)
+                    pixel.put(component, (byte)(0x40 + component));
+                VTextureSelector.uploadSubTexture(0, 1, 1, 1, 0, 0, 0, 1, pixel);
+                for(int component = 0; component < 4; ++component)
+                    pixel.put(component, (byte)(0x60 + component));
                 VTextureSelector.uploadSubTexture(0, 1, 1, 0, 0, 0, 0, 1, pixel);
             } finally {
                 VTextureSelector.endSpriteUploadBatch();
@@ -257,7 +260,7 @@ public final class SpriteAnimationSmokeTest {
                 for(int x = 0; x < 160; ++x) {
                     for(int component = 0; component < 4; ++component) {
                         int actual = bytes.get(x * 4 + component) & 255;
-                        int expected = (x == 0 ? 0x60 : x) + component;
+                        int expected = (x == 0 ? 0x60 : x == 1 ? 0x40 : x) + component;
                         if(actual != expected)
                             throw new AssertionError("Unified transfer wrong pixel at "
                                     + x + " channel " + component
