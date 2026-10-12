@@ -131,24 +131,32 @@ public final class SpriteAnimationSmokeTest {
                 int[] offsets = {0};
                 int[] widths = {1};
                 int[] heights = {1};
-                if(VTextureSelector.copyResidentSpriteFrame(
-                        a.buffer(), a.offset(), a.bytes(), atlas,
-                        offsets, widths, heights, 0, 0, 0, 0, 1, 1) != 1)
-                    throw new AssertionError("First pooled GPU sprite upload rejected");
-                if(VTextureSelector.copyResidentSpriteFrame(
-                        b.buffer(), b.offset(), b.bytes(), atlas,
-                        offsets, new int[]{2}, heights, 1, 0, 0, 0, 1, 1) != 1)
-                    throw new AssertionError("Second pooled GPU sprite upload rejected");
+                VTextureSelector.beginSpriteUploadBatch();
+                try {
+                    // These two copies share one VkBuffer and atlas. They must
+                    // remain queued until the O4 compute boundary flushes
+                    // them, including the nonzero source descriptor offset.
+                    if(VTextureSelector.copyResidentSpriteFrame(
+                            a.buffer(), a.offset(), a.bytes(), atlas,
+                            offsets, widths, heights, 0, 0, 0, 0, 1, 1) != 1)
+                        throw new AssertionError("First pooled GPU sprite upload rejected");
+                    if(VTextureSelector.copyResidentSpriteFrame(
+                            b.buffer(), b.offset(), b.bytes(), atlas,
+                            offsets, new int[]{2}, heights, 1, 0, 0, 0, 1, 1) != 1)
+                        throw new AssertionError("Second pooled GPU sprite upload rejected");
 
-                // This is the important additional proof: O4's shader must read
-                // its mip offsets relative to the *second* descriptor-aligned
-                // slice, rather than the start of the shared physical buffer.
-                interpolationBinding = GpuTextureInterpolationCompute.createBinding(
-                        b.buffer(), b.offset(), b.bytes(), 4);
-                if(interpolationBinding == null || interpolationBinding.dispatch(
-                        atlas, offsets, new int[]{2}, heights, offsets,
-                        1, 1, 2, 0, 1, 1, 2, 2, 0) == null)
-                    throw new AssertionError("Pooled O4 interpolation source descriptor rejected");
+                    // The interpolation must flush queued O3 regions before
+                    // dispatch, and its shader sees mip offsets relative to
+                    // the second aligned slice of the source buffer.
+                    interpolationBinding = GpuTextureInterpolationCompute.createBinding(
+                            b.buffer(), b.offset(), b.bytes(), 4);
+                    if(interpolationBinding == null || interpolationBinding.dispatch(
+                            atlas, offsets, new int[]{2}, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 2, 0) == null)
+                        throw new AssertionError("Pooled O4 interpolation source descriptor rejected");
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                }
             } finally {
                 SpriteUtil.addTransitionedLayout(atlas);
                 SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
@@ -172,7 +180,7 @@ public final class SpriteAnimationSmokeTest {
                 }
             });
             Initializer.LOGGER.info(
-                    "Shared GPU animation source pool smoke passed (two leases, one device buffer, distinct-source O3 copies and offset-bound O4 interpolation)");
+                    "Shared GPU animation source pool smoke passed (two leases, coalesced O3 atlas regions flushed before offset-bound O4 interpolation)");
         } finally {
             Vulkan.waitIdle();
             if(interpolationBinding != null) interpolationBinding.retire();
