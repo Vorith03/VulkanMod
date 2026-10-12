@@ -2,6 +2,53 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Unified CPU/GPU atlas-copy queue — 2026-10-12 source-only continuation
+
+Commits `65ebac2bdd13c2d1c83f93814282faceee54c42b`,
+`2fbe5a4da81e78428037d6885f12a1793149168a`,
+`1cc93e35f699ca5608a327b3ada48a79629ea612`,
+`69fd3cdb4141cbf0551211b96f8c41009ca5f9fa`, and
+`d63502604669ec138d977334f3810a7fac419584`
+extend the existing experimental unified transfer queue to O3 GPU-resident
+discrete sprite copies, not just CPU-staged uploads. They share one
+`VkBufferImageCopy` emitter: a pending group has exactly one Vulkan image
+destination and one buffer source; each region retains its mip, offset,
+extent, `bufferRowLength`, and `bufferImageHeight`. Shared resident
+page slices can combine into fewer transfer calls. Source/texture
+switch, overlap, 128-region cap, and texture-tick end flush the group,
+as does the existing pre-O4 compute boundary.
+
+**Newly identified ordering hazard and fix:** the original pending-region
+overlap check did not know about writes already recorded directly or
+flushed because of capacity. In the opt-in unified path, every emitted
+group, every direct CPU upload in a texture-tick scope, and every unqueued
+resident write now establishes a conservative transfer-write-to-write
+dependency before later writes. The native smoke writes 160 disjoint
+pixels across the 128-region boundary, then overwrites both an earlier
+flushed pixel and the original direct-upload pixel. The shared source
+native smoke now records two O3 copies in one batch, then validates
+their automatic flush into O4 compute and exact source-isolated pixels.
+
+**Cost/measurement:** this conservative barrier policy can add GPU
+serialization; the performance benefit and even net direction remain
+unmeasured. The benchmark now distinguishes
+`resident_queued_copy_calls/regions` from
+`resident_direct_copy_calls/regions`, because the generic
+`copy_flushes`/regions/timing includes GPU-resident queued copies
+when the pilot is enabled, rather than CPU-staged copies only. Do not
+compare these mixed queue denominators directly against #1014.
+
+**Validation state:** source/diff audit and existing standalone region
+geometry coverage only. No Forge compile, native Vulkan synchronization
+validation, CI job, or new JAR has run; #1016 remains the latest
+fully qualified executable under the existing owner hold. The next
+necessary action is *one* full native qualification of the accumulated
+pilot, including both screenshot/pixel oracles and compatibility. If it
+fails, fix the actual build/Vulkan evidence; do not stack a second
+compute shader scheduler on an unqualified transfer path. After
+qualification, capture matched GPU adoption, copy flush causes, and CPU
+and GPU frame times before considering a batched O4 compute kernel.
+
 ## Shared GPU animation source pool — 2026-10-11 source-only implementation
 
 At source commit `76fce5f64fb52cf6a626c3028ba4fe1ee9151d0d`,

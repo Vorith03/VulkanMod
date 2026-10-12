@@ -441,3 +441,28 @@ Add narrower instrumentation only when the current capture leaves an important d
 | Full event trace | Bounded frame examples + worst record | A rare pathology cannot be reconstructed from aggregates. |
 
 Do not blanket-instrument every draw, allocation, Forge callback, worker task, or GPU pass. The profiler's job is to make the next optimization decision measurable with the least observer effect necessary.
+
+
+## Experimental unified CPU/GPU texture transfer accounting
+
+Under `-Dvulkanmod.experimentalUnifiedTextureUploads=true`, queued O3
+GPU-resident copies now join CPU-staged atlas upload regions in the
+same `VTextureSelector` command queue. Each group retains its
+individual Vulkan buffer row/image strides. Queue flushes therefore
+measure **mixed transfer commands** (including GPU resident regions),
+not just CPU staging, so `copy_flushes`, `copy_regions`, and
+`copy_flush_cpu_ms_avg` are no longer directly comparable to the
+#1014 CPU-staging-only denominator. Accepted O3 routes additionally
+emit `resident_queued_copy_calls`, `resident_queued_copy_regions`,
+`resident_direct_copy_calls`, and `resident_direct_copy_regions`.
+These distinguish a route's admission from the actual number of
+emitted `vkCmdCopyBufferToImage` calls; the latter is counted by the
+existing flush profiler. Unqueued resident operations are unchanged
+when the experimental flag is off. These new metrics are capture-only,
+with the same warmup gating/reset contract as the existing attribution.
+
+An opt-in conservative transfer-write barrier is recorded after
+each nonempty flushed group and each direct CPU upload in an outer
+batch to order writes that left the fixed-size pending-region history.
+There may be a measurable GPU cost; the native pixel+sync oracle and
+matched GPU timestamp captures must qualify the tradeoff.

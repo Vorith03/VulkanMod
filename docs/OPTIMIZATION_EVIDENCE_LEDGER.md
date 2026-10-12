@@ -145,3 +145,39 @@ ordering with CPU-generated uploads, barriers, Vulkan format/mip bounds,
 and source lifetimes. This first requires the present source-pool native
 pixel/sync oracle to pass; enlargement alone is not proof of CPU time
 reduction.
+
+
+## Unified GPU-resident and CPU-staged atlas-copy engine — October 12
+
+**Source-only, not correctness qualified or a proven improvement.**
+The experimental whole-tick queue now accepts both CPU staging regions
+(tightly packed) and O3 resident sheet regions (source-sheet stride and
+per-slice base offset) via the same immutable fixed-array `VkBufferImageCopy`
+emitter. Adjacent O3 source leases residing in one buffer page and
+targeting one atlas can coalesce, reducing the number of source-copy
+commands even though clocks/frame selection remain on the CPU. O4
+compute remains one dispatch per eligible interpolated sprite; it drains
+pending atlas copies before dispatch. The target is generic transfer
+mechanics, not an ever-growing sprite-specific allowlist.
+
+**Correctness intervention:** pending-rectangle overlap logic alone was
+insufficient, as earlier flushes and the initial direct texture upload
+lost their geometry history. Conservative transfer WAW barriers were
+introduced at those opt-in flush/direct boundaries; the native oracle
+tests 160 regions, an earlier flushed-overwrite and direct-overwrite,
+plus shared source-page O3-to-O4 ordering and exact pixel parity. It
+has not run. Barriers may reduce GPU concurrency, so matched GPU batch
+timing is mandatory to judge the result. Real hardware benefit is
+**unknown**.
+
+Source-only benchmark metrics `resident_queued_copy_calls/regions`
+and `resident_direct_copy_calls/regions` distinguish acceptance into
+the queue from fallback to direct O3 commands. In this opt-in mode,
+`copy_flushes/regions` refer to **mixed CPU-staged/GPU-resident
+Vulkan transfers**, unlike #1014's CPU-staged-only data; these
+denominators are deliberately not treated as a paired comparison.
+
+**Next gate:** Java/Forge compile and all preexisting native screenshot,
+sync-validation, animation oracle, Create/Flywheel and packaging gates.
+Then RX 6900 XT matched captures if the pilot is kept; do not turn
+on the experimental flags by default before those results.
