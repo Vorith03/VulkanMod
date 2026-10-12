@@ -54,6 +54,8 @@ public final class TextureTickAttribution {
     private static long residentCopyCalls;
     private static long residentCopyRegions;
     private static long residentCopyBytes;
+    private static long residentQueuedCalls, residentQueuedRegions;
+    private static long residentDirectCalls, residentDirectRegions;
     private static long residentInterpolationCalls;
     private static long residentInterpolationDispatches;
     private static long residentInterpolationPixels;
@@ -199,6 +201,18 @@ public final class TextureTickAttribution {
         residentCopyBytes += bytes;
     }
 
+    /** Accepted O3 route, kept distinct from actual shared-copy flush count. */
+    public static void recordResidentCopyQueueRoute(boolean queued, int regions) {
+        if(!ENABLED || !tickActive || regions <= 0) return;
+        if(queued) {
+            residentQueuedCalls++;
+            residentQueuedRegions += regions;
+        } else {
+            residentDirectCalls++;
+            residentDirectRegions += regions;
+        }
+    }
+
     public static void recordResidentInterpolation(int dispatches, long pixels, long bytes) {
         if(!ENABLED || !tickActive || dispatches <= 0 || pixels <= 0L || bytes < 0L) return;
         residentInterpolationCalls++;
@@ -332,6 +346,10 @@ public final class TextureTickAttribution {
                 .append(standardInterpolationUpdates - standardInterpolationGpuUpdates)
                 .append(" resident_copy_calls=").append(residentCopyCalls)
                 .append(" resident_copy_regions=").append(residentCopyRegions)
+                .append(" resident_queued_copy_calls=").append(residentQueuedCalls)
+                .append(" resident_queued_copy_regions=").append(residentQueuedRegions)
+                .append(" resident_direct_copy_calls=").append(residentDirectCalls)
+                .append(" resident_direct_copy_regions=").append(residentDirectRegions)
                 .append(" resident_copy_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", residentCopyBytes / 1024.0D))
                 .append(" resident_interpolation_calls=").append(residentInterpolationCalls)
@@ -403,6 +421,8 @@ public final class TextureTickAttribution {
         copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
         residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
+        residentQueuedCalls = residentQueuedRegions = 0L;
+        residentDirectCalls = residentDirectRegions = 0L;
         spriteUploadRequests = cpuSpriteUploads = gpuSpriteUploads = 0L;
         gpuSourceUploads = cpuSourceUploads = gpuOtherMipUploads = cpuOtherMipUploads = 0L;
         standardInterpolationUpdates = standardInterpolationGpuUpdates = 0L;

@@ -34,6 +34,8 @@ public class AttributionCaptureContract {
         long tick = TextureTickAttribution.beginTick();
         TextureTickAttribution.recordSpriteUploadRoute(true, true);
         TextureTickAttribution.recordSpriteUploadRoute(false, false);
+        TextureTickAttribution.recordResidentCopyQueueRoute(true, 2);
+        TextureTickAttribution.recordResidentCopyQueueRoute(false, 3);
         TextureTickAttribution.recordCopyFlushReason(TextureTickAttribution.CopyFlushReason.RESIDENT_COPY, 3);
         TextureTickAttribution.recordStandardInterpolationFallback(
                 TextureTickAttribution.InterpolationFallback.NO_RESIDENCY);
@@ -90,6 +92,7 @@ public class AttributionCaptureContract {
         check(texture.contains("resident_current_kib=3.000 resident_peak_kib=3.000 "), texture);
         check(texture.contains("resident_source_current_kib=2.000 resident_source_peak_kib=2.000 "), texture);
         check(texture.contains("resident_scratch_current_kib=0.500 resident_scratch_peak_kib=0.500 "), texture);
+        check(texture.contains("resident_queued_copy_calls=1 resident_queued_copy_regions=2 resident_direct_copy_calls=1 resident_direct_copy_regions=3 "), texture);
         check(texture.contains("copy_flushes=1 copy_regions=3 "), texture);
         check(texture.contains("outer_copy_flushes=1 outer_copy_regions=3 "), texture);
         String world = PerformanceProfiler.lines.get(1);
@@ -112,6 +115,7 @@ public class AttributionCaptureContract {
         check(PerformanceProfiler.lines.get(2).contains("gpu_source_mip_uploads=1 cpu_source_mip_uploads=0 gpu_other_mip_uploads=0 cpu_other_mip_uploads=1 "), "prior source/mip route leaked");
         check(PerformanceProfiler.lines.get(2).contains("interpolation_fallback_no_residency=1 "), "prior interpolation reason leaked");
         check(PerformanceProfiler.lines.get(2).contains("copy_flush_resident_copy=1 copy_flush_resident_copy_regions=3 "), "prior copy flush reason leaked");
+        check(PerformanceProfiler.lines.get(2).contains("resident_queued_copy_calls=1 resident_queued_copy_regions=2 resident_direct_copy_calls=1 resident_direct_copy_regions=3 "), "queued/direct route leaked");
         check(PerformanceProfiler.lines.get(2).contains("resident_source_current_kib=0.000 resident_source_peak_kib=2.000 "), "source retirement/peak lost");
         check(PerformanceProfiler.lines.get(2).contains("resident_scratch_current_kib=0.000 resident_scratch_peak_kib=0.500 "), "scratch retirement/peak lost");
         check(PerformanceProfiler.lines.get(3).contains("world_calls=1 "), "prior world leaked");

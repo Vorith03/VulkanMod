@@ -394,6 +394,7 @@ public abstract class VTextureSelector {
                             source.getId(), (int)region.bufferOffset(),
                             region.bufferRowLength(), region.bufferImageHeight());
                 }
+                TextureTickAttribution.recordResidentCopyQueueRoute(true, regionCount);
                 return regionCount;
             }
 
@@ -405,6 +406,7 @@ public abstract class VTextureSelector {
             regions.limit(regionCount);
             vkCmdCopyBufferToImage(commandBuffer.getHandle(), source.getId(), texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+            TextureTickAttribution.recordResidentCopyQueueRoute(false, regionCount);
             return regionCount;
         }
     }
