@@ -71,11 +71,11 @@ public abstract class VTextureSelector {
     private static int unbatchedTextureSubmissions;
     private static long observedMainFrameSubmissions;
 
-    // SpriteContents uploads each mip through NativeImage independently. During a
-    // texture/atlas upload batch those copies all target the same Vulkan image and
-    // staging buffer, so retain their regions and record them with one Vulkan call.
-    // Fixed primitive storage keeps the hot path allocation-free; 32 regions is far
-    // above Minecraft's practical mip count and overflow simply flushes early.
+    // Shared CPU-staging and GPU-resident atlas upload queue. A group contains
+    // one VkBuffer source and one VulkanImage destination. Distinct resident
+    // source sheets in the same device-local page can therefore be coalesced;
+    // source or destination switches flush it before recording further writes.
+    // Fixed primitive arrays keep the queue bookkeeping allocation-free.
     private static int spriteUploadDepth;
     private static VulkanImage spriteUploadTexture;
     private static long spriteUploadStagingBufferId;
@@ -86,6 +86,10 @@ public abstract class VTextureSelector {
     private static final int[] spriteXOffsets = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
     private static final int[] spriteYOffsets = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
     private static final int[] spriteBufferOffsets = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
+    // Zero for tightly packed CPU staging, sheet dimensions for GPU-resident
+    // source frames. The same VkBufferImageCopy emitter supports both routes.
+    private static final int[] spriteBufferRowLengths = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
+    private static final int[] spriteBufferImageHeights = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
 
     private static void markCoreSamplerMutation() {
         coreSamplerMutationVersion++;
@@ -371,18 +375,36 @@ public abstract class VTextureSelector {
                 return -1;
             }
 
-            // Prior CPU-backed regions were staged earlier in this same logical
-            // texture tick; emit them before this direct resident copy.
-            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.RESIDENT_COPY);
-
             CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
+            // Validate every mip first, then use the same bounded queue as CPU
+            // staging. Frames from one GPU source page can share a single
+            // VkBufferImageCopy command with CPU uploads if their VkBuffer
+            // handles, atlas and write order permit it.
+            if(UNIFIED_GPU_UPLOADS && spriteUploadDepth > 0) {
+                if(spriteUploadTexture != null && spriteUploadTexture != texture)
+                    flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.TEXTURE_SWITCH);
+                texture.transferDstLayout(commandBuffer);
+                spriteUploadTexture = texture;
+                for(int i = 0; i < regionCount; i++) {
+                    VkBufferImageCopy region = regions.get(i);
+                    queueSpriteUploadCopy(
+                            region.imageSubresource().mipLevel(),
+                            region.imageExtent().width(), region.imageExtent().height(),
+                            region.imageOffset().x(), region.imageOffset().y(),
+                            source.getId(), (int)region.bufferOffset(),
+                            region.bufferRowLength(), region.bufferImageHeight());
+                }
+                return regionCount;
+            }
+
+            // Outside a complete TextureManager upload scope keep the original
+            // synchronous Vulkan command emission and its lifetime semantics.
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.RESIDENT_COPY);
             texture.transferDstLayout(commandBuffer);
             regions.position(0);
             regions.limit(regionCount);
             vkCmdCopyBufferToImage(commandBuffer.getHandle(), source.getId(), texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
-            if(UNIFIED_GPU_UPLOADS && spriteUploadDepth > 0)
-                transferWriteToWriteBarrier();
             return regionCount;
         }
     }
@@ -553,6 +575,14 @@ public abstract class VTextureSelector {
     private static void queueSpriteUploadCopy(int mipLevel, int width, int height,
                                               int xOffset, int yOffset,
                                               long stagingBufferId, int bufferOffset) {
+        queueSpriteUploadCopy(mipLevel, width, height, xOffset, yOffset,
+                stagingBufferId, bufferOffset, 0, 0);
+    }
+
+    private static void queueSpriteUploadCopy(int mipLevel, int width, int height,
+                                              int xOffset, int yOffset,
+                                              long stagingBufferId, int bufferOffset,
+                                              int bufferRowLength, int bufferImageHeight) {
         // StagingBuffer growth swaps its VkBuffer but deliberately retires the old
         // allocation only after the active upload batch ends. If growth happened
         // while this sprite was being staged, close the old region set against the
@@ -584,6 +614,8 @@ public abstract class VTextureSelector {
         spriteXOffsets[index] = xOffset;
         spriteYOffsets[index] = yOffset;
         spriteBufferOffsets[index] = bufferOffset;
+        spriteBufferRowLengths[index] = bufferRowLength;
+        spriteBufferImageHeights[index] = bufferImageHeight;
     }
 
     /**
@@ -630,8 +662,8 @@ public abstract class VTextureSelector {
             for(int i = 0; i < count; ++i) {
                 VkBufferImageCopy region = regions.get(i);
                 region.bufferOffset(spriteBufferOffsets[i]);
-                region.bufferRowLength(0);
-                region.bufferImageHeight(0);
+                region.bufferRowLength(spriteBufferRowLengths[i]);
+                region.bufferImageHeight(spriteBufferImageHeights[i]);
                 region.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
                 region.imageSubresource().mipLevel(spriteMipLevels[i]);
                 region.imageSubresource().baseArrayLayer(0);
