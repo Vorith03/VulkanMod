@@ -73,6 +73,12 @@ public class CpuGraphicsCaptureContract {
  static void check(boolean b,String s) { if(!b) throw new AssertionError(s); }
  public static void main(String[] args) throws Exception {
   Path dir=Path.of(args[0]); List<String> lines=new ArrayList<>();
+  if(args.length>1 && args[1].equals("exit")) {
+   CpuGraphicsProfiler.start(dir.resolve("exit.log"),true,lines::add);
+   check(lines.get(0).contains("status=active"),lines.toString());
+   net.minecraft.client.renderer.texture.ContractTexture.work();
+   return; // The actual JVM shutdown hook must dump this still-active recording.
+  }
   if(args.length>1) {
    CpuGraphicsProfiler.start(dir.resolve("capture.log"),true,lines::add);
    check(lines.get(0).contains("status=unavailable"),lines.toString());
@@ -134,5 +140,9 @@ with tempfile.TemporaryDirectory(prefix='vulkanmod-cpu-graphics-') as directory:
                     *map(str, d.rglob('*.java'))], check=True, timeout=30)
     subprocess.run([java, '-cp', directory, 'net.vulkanmod.render.profiling.CpuGraphicsAccountingContract'], check=True, timeout=30)
     subprocess.run([java, '-cp', directory, 'CpuGraphicsCaptureContract', directory], check=True, timeout=30)
+    exit_dir = d / 'exit'
+    exit_dir.mkdir()
+    subprocess.run([java, '-cp', directory, 'CpuGraphicsCaptureContract', str(exit_dir), 'exit'], check=True, timeout=30)
+    assert any(p.stat().st_size > 0 for p in exit_dir.glob('*.jfr')), 'orderly JVM exit lost the active recording'
     subprocess.run([java, '--limit-modules', 'java.base', '-cp', directory,
                     'CpuGraphicsCaptureContract', directory, 'unavailable'], check=True, timeout=30)
