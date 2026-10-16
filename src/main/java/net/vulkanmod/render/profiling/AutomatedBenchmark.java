@@ -219,6 +219,11 @@ public final class AutomatedBenchmark {
         }
     }
 
+    /** Align the controller deadline after profiler/JFR one-time initialization. */
+    public static void onProfilerCaptureStarted(long now) {
+        if (ENABLED && state == State.CAPTURING) captureStartedAt = now;
+    }
+
     /** Runs after the sampled frame has ended, so save/quit cannot enter its timing. */
     public static void onFrameEnd(Minecraft minecraft) {
         if (!ENABLED || state != State.CAPTURING || minecraft == null) return;

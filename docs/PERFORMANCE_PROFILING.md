@@ -14,7 +14,10 @@ The profiler is designed to answer progressively narrower questions without blan
 
 Profiling is disabled by default. CPU hot-path probes use fixed primitive buffers and `System.nanoTime()`; formatting, percentile sorting, JVM telemetry, terrain snapshots and file I/O occur at summary boundaries. GPU timing is separately opt-in and uses frame-slot-owned Vulkan timestamp-query pools.
 
-This is deliberately not a full event trace. Add narrower probes only when captured evidence leaves a decision ambiguous.
+This is deliberately not a full event trace. Automated captures also collect
+bounded Java Flight Recorder execution stacks, exposing graphics CPU paths and
+mod callers that have no dedicated timing hook. Add narrower probes only when
+captured evidence leaves a decision ambiguous.
 
 ## Enable CPU profiling
 
@@ -424,6 +427,76 @@ For an A/B performance claim:
 Profiler instrumentation has nonzero observer cost. A build with additional diagnostic probes should be used primarily to locate a mechanism; a small FPS difference versus a less-instrumented build is not by itself an optimization result.
 
 Formal Phase 5 baseline numbers still follow `docs/TERRAIN_PERFORMANCE_BASELINE.md`.
+
+## Broad CPU graphics stack census
+
+The owner requested broad discovery of CPU graphics work. Automated benchmark
+captures now enable `CpuGraphicsProfiler` by default. It uses Java 17 JFR
+`jdk.ExecutionSample` and `jdk.NativeMethodSample`, rather than a callback per
+draw, vertex or pixel. No sampling is started during automated warmup, and
+JFR initialization is excluded from the first frame and capture duration.
+Recording stops before final report decoding/formatting and normal save/quit.
+Profiling is still entirely disabled by default in ordinary gameplay.
+
+The existing benchmark log gains:
+
+- `cpu_graphics_recording`: requested/active/unavailable/failed state, sampling
+  period, raw file, rolling size limit and actual retained sample interval;
+- `cpu_graphics_samples`: sample counts, unknown/missing/truncated stacks,
+  excluded background/observer work, and aggregation overflow;
+- `cpu_graphics_category`: render-thread and graphics-worker samples for
+  textures/transfers, terrain meshing/visibility/submission, particles,
+  entities/models, block entities, GUI, post effects, vertices, Flywheel,
+  Vulkan preparation/native boundaries and other graphics;
+- `cpu_graphics_hotspot`: ranked leaf-to-root call chains with Java class,
+  method and line, including third-party callers with no specific hook; and
+- `cpu_graphics_hotspots`: reported versus unreported samples for each kind.
+
+The raw `*.cpu-graphics-*.jfr` file is beside the UUID benchmark log. Return it
+with the log for full retained stacks or later reclassification. JFR also dumps
+the raw recording on orderly JVM exit when manual capture has no deadline. Java execution
+and native-boundary counts have **separate denominators**; sample counts and
+percentages are statistical coverage, not exact milliseconds or GPU duration.
+Native boundaries do not resolve driver-internal symbols and can include waits.
+Short/rare/inlined work may be missed. Use existing stage timing and exact
+texture fallback/route counters to establish cost and offload eligibility.
+CPU work is not automatically a defect or suitable for GPU execution.
+
+All render-thread samples with no recognized graphics owner are kept as
+`render_thread_unclassified`, which may include gameplay work. Other threads
+qualify as graphics workers only when their stacks contain a known graphics
+caller. Unknown custom worker pipelines may therefore remain in the excluded
+background count; their raw samples remain available in the JFR file. Summary
+formatting/attribution stacks are counted as observer samples, not ranked as
+graphics hotspots. The interval includes between-frame work; this statistical
+census is not an exclusive partition of the existing per-frame stages.
+
+Storage is a **64 MiB rolling JFR chunk limit**, not an unlimited trace or an
+exact byte ceiling (JFR rotates whole chunks). Parsing stops at one million
+events. Aggregation retains the first 2,048 distinct stack keys; the log prints up to 40
+chains per sample kind, 48 frames each, and retains overflow/tail counts. No
+stack decoding, sorting or log writes are added to individual draw calls.
+If JFR is missing from a stripped Java runtime or output fails, the log says
+unavailable/failed and the existing stage profiler continues. Aborted captures
+stay interrupted; cancellation does not fabricate a complete stack report.
+
+Optional controls (use identical settings in A/B runs):
+
+```text
+-Dvulkanmod.performanceProfiler.cpuGraphicsSamples=true
+-Dvulkanmod.performanceProfiler.cpuGraphicsPeriodMs=10
+```
+
+The period is clamped to 5–100 ms. `cpuGraphicsSamples=false` disables this
+additional observer for comparison; manual profiling requires explicit `true`.
+Sampling has observer cost: compare the same profiler configuration rather than
+attributing differences from older builds to renderer performance. The offline
+contract covers actual JFR record/decode, bounded classification/accounting,
+disabled/cancel/I/O paths and missing-JFR fallback. Native startup additionally
+requires activation inside the real Forge module/runtime; this does not prove
+representative RX/modpack hotspot coverage.
+
+Java 17 API reference: [JFR Recording](https://docs.oracle.com/en/java/javase/17/docs/api/jdk.jfr/jdk/jfr/Recording.html).
 
 ## Remaining discriminators and expansion rule
 

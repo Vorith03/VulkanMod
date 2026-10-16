@@ -2,6 +2,36 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Broad CPU graphics discovery — 2026-10-16 implementation, qualification pending
+
+The owner requested logs exposing CPU graphics work for the next optimization
+pass. Existing exact phase/texture/particle route instrumentation remains in
+place; the missing arbitrary/mod/worker call-site view is now addressed by
+benchmark-scoped Java 17 JFR execution/native-boundary sampling. The normal
+benchmark log ranks bounded graphics stacks with mod callers, thread role,
+category and explicit unknown/missing/truncated/overflow counts. A rolling
+64 MiB raw `*.cpu-graphics-*.jfr` sits beside the benchmark log. Java and native
+sample kinds have separate denominators; neither is an exact millisecond/GPU
+timer, an exhaustive event trace or proof of GPU eligibility.
+
+Sampling defaults on only for automated profiling captures; ordinary gameplay
+adds no per-draw hooks. Initialization is excluded from the capture/controller
+deadline, and decode/ranking runs after stopping capture. Missing JFR or I/O
+failure produces unavailable/failed metadata; cancel/abort does not invent a
+complete report. The existing user hardware gate remains, now requiring this
+profiler candidate instead of #1018 after full qualification. Return the raw
+JFR as well as the UUID benchmark and latest.log; keep observer settings equal
+in the same-JAR pilot comparison.
+
+All **22** offline contracts pass locally on Java 17, including actual JFR
+record/decode, mod/worker/unclassified attribution, independent sample kinds,
+bounds, cancellation/output failure, stripped-runtime fallback and deadline
+alignment. The startup native fixture now explicitly enables sampling and
+requires active JFR plus a nonempty raw file after orderly Forge exit. Full
+Forge/native/module/compatibility qualification remains pending; #1018 is
+still the latest qualified executable. Next: inspect the full candidate CI,
+fix actual failures, then update the RD32 procedure/build and this checkpoint.
+
 ## Unified GPU texture pilot fully qualified — 2026-10-16
 
 Full public/native CI **#1018**, run `38899462146`, validation job

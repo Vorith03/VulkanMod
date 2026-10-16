@@ -211,10 +211,11 @@ public final class PerformanceProfiler {
     /** Close a measured world capture before the controller saves and quits. */
     public static boolean finishAutomatedCapture(String reason) {
         if (!AUTOMATED_BENCHMARK || !active || !announced || frameActive) return false;
+        long now = System.nanoTime();
+        CpuGraphicsProfiler.finish(line -> writeLine("[VulkanModPerf] benchmark " + line));
         TextureTickAttribution.emitSummary();
         WorldRenderAttribution.emitSummary();
         ParticleAttribution.emitSummary();
-        long now = System.nanoTime();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] capture_complete reason=%s duration_seconds=%.3f frames=%d",
@@ -229,6 +230,7 @@ public final class PerformanceProfiler {
     public static void abortAutomatedCapture() {
         if (!AUTOMATED_BENCHMARK) return;
         if (announced) finishAutomatedCapture("interrupted");
+        CpuGraphicsProfiler.cancel();
         active = false;
     }
 
@@ -460,6 +462,7 @@ public final class PerformanceProfiler {
         }
 
         if (durationReached && active) {
+            CpuGraphicsProfiler.finish(line -> writeLine("[VulkanModPerf] benchmark " + line));
             writeLine(String.format(Locale.ROOT,
                     "[VulkanModPerf] capture_complete duration_seconds=%.3f frames=%d",
                     (now - captureStartNanos) / 1_000_000_000.0D, frameSequence));
@@ -491,7 +494,13 @@ public final class PerformanceProfiler {
         }
 
         announced = true;
+        CpuGraphicsProfiler.start(outputPath, AUTOMATED_BENCHMARK,
+                line -> writeLine("[VulkanModPerf] benchmark " + line));
+        // JFR initialization can be substantial on first use. Exclude it from
+        // the admitted capture duration, first frame and CPU/GC baseline.
+        now = System.nanoTime();
         captureStartNanos = now;
+        if (AUTOMATED_BENCHMARK) AutomatedBenchmark.onProfilerCaptureStarted(now);
         captureStartEpochMillis = System.currentTimeMillis();
         lastSummaryNanos = now;
         lastGcCount = totalGcCount();
@@ -955,6 +964,7 @@ public final class PerformanceProfiler {
     }
 
     private static boolean closeOutput() {
+        CpuGraphicsProfiler.cancel();
         BufferedWriter writer = outputWriter;
         outputWriter = null;
         if (writer == null) {

@@ -221,3 +221,20 @@ page-capacity/retirement effects, CPU tick/frame and separate GPU upload/
 main-frame times. Three matched pairs remain the performance-claim gate.
 Do not implement another scheduler, raise budgets or enable defaults from
 native qualification alone. Full GPU compute dispatch batching remains open.
+
+## Owner-requested broad CPU graphics census — October 16
+
+**Diagnostic implementation, full qualification pending.** The exact existing
+stage/route counters do not name arbitrary third-party/worker CPU call sites.
+The benchmark now adds JFR execution and native-boundary stacks, categorized
+with separate render/graphics-worker roles and retained unknown render-thread
+samples. Bounded ranked paths are printed in the benchmark log; the rolling
+raw JFR preserves retained background and overflow stacks for reclassification.
+Missing/zero/overflow/unavailable states are explicit. Native API samples do
+not establish driver-internal compute or GPU time; sampling is not exhaustive.
+Use the existing measured stage/route/fallback counters to test a causal
+offload hypothesis after locating a hotspot. No renderer speedup or new GPU
+capability is claimed. All 22 offline contracts pass locally, including real
+Java 17 JFR and stripped-runtime fallback. Full Forge/native startup activation
+and raw-dump assertions are the next qualification gate; representative RX
+coverage and observer cost remain unmeasured. See `PERFORMANCE_PROFILING.md`.

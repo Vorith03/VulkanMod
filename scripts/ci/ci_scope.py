@@ -16,6 +16,7 @@ CONTRACTS = (
     'texture-upload-gpu-contract.py', 'texture-transfer-contract.py',
     'gpu-source-page-contract.py',
     'attribution-capture-contract.py',
+    'cpu-graphics-contract.py',
     'particle-attribution-contract.py', 'compilation-cache-contract.py',
     'pipeline-variant-contract.py', 'animation-oracle-contract.py',
     'animation-visibility-contract.py', 'chunk-budget-contract.py',

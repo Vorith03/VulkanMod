@@ -22,6 +22,11 @@ assert identity["schema"] == "1"
 uuid.UUID(identity["run_id"])
 assert identity["vulkanmod_version"]
 assert identity["automated"] == "false", "startup smoke must not manipulate a world"
+cpu_graphics = next(fields(line) for line in lines
+                    if "cpu_graphics_recording requested=true " in line)
+assert cpu_graphics["status"] == "active", "JFR must initialize in the actual Forge runtime"
+assert cpu_graphics["raw_file"].endswith('.jfr')
+assert (path.parent / cpu_graphics["raw_file"]).stat().st_size > 0, "raw JFR must survive orderly Forge exit"
 
 windows = [index for index, line in enumerate(lines) if "[VulkanModPerf] window " in line]
 assert windows, "no completed profiler windows in startup smoke"
