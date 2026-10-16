@@ -2,30 +2,42 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Unified transfer qualification and reverse-boundary fix — 2026-10-16
+## Unified GPU texture pilot fully qualified — 2026-10-16
 
-The accumulated source-only pilot has reached its full native qualification
-gate. All 21 offline contracts pass locally on Java 17; the prebenchmark
-cleanup fixture now accepts reason-aware flush calls. Local Forge compilation
-cannot start because the Gradle distribution download is network-blocked.
-Full CI #1017 was started at `785ef414eb1d5179087e1a54ea7be23ffc1c9ed6`;
-the next executable push supersedes it with the complete boundary correction.
+Full public/native CI **#1018**, run `38899462146`, validation job
+`116968655497`, passed at executable
+`db77ff5c5232e18eb6a696a691c5ae01ed660117`. This qualifies the accumulated
+unified CPU/GPU atlas-copy queue, shared immutable GPU source pages, original
+source/fallback attribution, and reverse-boundary ordering repair. All 21
+offline contracts, Forge compilation/production packaging, pinned animation
+source and packaged portal anchors, both Vulkan startup paths, indirect,
+post/depth/screenshot native gates, combined Create Chronicles, Crash Assistant,
+and log/JAR uploads passed. Private real-pack fixtures were skipped. #1017
+was superseded/cancelled, not a failed qualification. Local offline contracts
+also pass on Java 17; local Forge compilation remains unavailable because the
+Gradle distribution download is network-blocked.
 
-Source review found the reverse O4-to-queued-O3 ordering gap: the existing
-barrier before O4's scratch-to-atlas copy orders earlier atlas writes, but
-cannot order that copy against later queued uploads. The unified pilot now
-also establishes its conservative transfer-write dependency after external
-O4 and direct resident copies. The native shared-source oracle checks both
-O3-to-O4 and overlapping O4-to-O3, then repeats O4 on the same scratch buffer
-and reads back all four atlas texels. These new native assertions remain
-pending full CI. No defaults or performance disposition changed.
+The source review found that O4's pre-copy atlas barrier could not order its
+own scratch-to-atlas result against a subsequent queued overwrite. The opt-in
+unified path now completes external O4/direct resident copies with the same
+conservative transfer-write dependency as flushed groups. The native oracle
+passed both O3-to-O4 and overlapping O4-to-O3 boundaries, repeated scratch use,
+source-offset isolation, and all four exact atlas pixels under sync validation.
+The stale upload-cleanup fixture was updated for reason-aware flush calls;
+failed/nested scope cleanup assertions remain intact.
 
-Next: inspect the complete follow-up Forge/native/compatibility result, fix
-actual failures if present, then update the existing RD32 hardware procedure
-to the qualified candidate and its two opt-in pilot flags. No new scheduler
-or compute batching should be stacked before qualification and matched RX
-coverage/timing evidence. #1016 remains the last fully qualified executable
-until the new suite passes; private-pack coverage must be checked separately.
+**Next required action:** owner RX 6900 XT/RADV RD32 capture using the qualified
+#1018 JAR and the two explicit pilot flags in
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Read separate source/temporary upload
+routes, O4 fallback buckets, queued/direct resident copies, flush causes, page
+memory and CPU/GPU times. For net benefit, use the same JAR/settings with only
+the two pilots disabled as control; three matched pairs remain required for a
+formal performance claim. #1014 already completed and is historical context,
+not a same-executable mixed-queue control. No new compute scheduler or default
+adoption is selected before this evidence. Reload/re-entry remains deferred;
+private-pack coverage, representative adoption and RX speedup remain unverified.
+The source-only notes below describe pre-qualification history, superseded by
+this result for native/Forge qualification only.
 
 ## Unified CPU/GPU atlas-copy queue — 2026-10-12 source-only continuation
 

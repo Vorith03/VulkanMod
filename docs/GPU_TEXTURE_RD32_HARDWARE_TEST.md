@@ -1,23 +1,28 @@
-# O3/O4 RD32 hardware qualification
+# Unified GPU texture RD32 hardware qualification
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
-Create Chronicles and the existing selected packs. Use fully public-CI-green
-`e9f8591e2df44486cc504dfbb06bdf759ceed377`, build **#1014**:
-[build #1014](https://github.com/Vorith03/VulkanMod/actions/runs/38044340567).
-Install its qualified distributable
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1014-ge9f8591e-all.jar`. Replace
-the existing VulkanMod JAR; do not leave two versions installed.
+Create Chronicles and the existing selected packs. Candidate executable
+`db77ff5c5232e18eb6a696a691c5ae01ed660117`, build **#1018**:
+[build #1018](https://github.com/Vorith03/VulkanMod/actions/runs/38899462146).
+Full public/native validation job `116968655497` passed all 21 offline
+contracts, Forge packaging, native pixel/synchronization gates, combined Create
+Chronicles, and Crash Assistant. Log/JAR uploads succeeded; private real-pack
+fixtures were skipped. Install the qualified distributable
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1018-gdb77ff5c-all.jar`.
+Replace the existing VulkanMod JAR; do not leave two versions installed.
 
-This candidate includes the prebenchmark renderer audit, corrected initial
-population/HUD logic, particle attribution-hook gating, topology-neutral terrain
-graph reuse, exact coarse-frustum caching, cached dirty rebuild admission and
-backpressure, dirty ring ownership, and one terrain sprite-usage scan per setup.
-The last two production changes were held source-only until this hardware gate.
-Full validation job `114190874016` passed all 19 offline contracts, Forge
-compilation/packaging, native Vulkan and combined compatibility gates. JAR and
-log uploads succeeded; private real-pack fixtures were skipped.
-No matched RX speedup is established; this run first qualifies the current
-candidate's owner-world convergence, O3/O4 behavior and route coverage.
+The candidate retains the CPU/terrain work already exercised by the owner's
+completed #1014 capture and adds the #1016 original-source identity repair,
+explicit fallback/flush attribution, shared immutable GPU source pages, and
+one bounded queue for CPU-staged and GPU-resident atlas copies. Conservative
+transfer dependencies cover capacity/direct writes and both O3-to-O4 and
+O4-to-O3 ordering. O3/O4 and the two pilots remain opt-in; GPU compute dispatch
+coalescing is not implemented. Native correctness does not establish hardware
+adoption, convergence, or speedup, and does not qualify deferred reload/re-entry.
+
+The owner's #1014 capture completed successfully and is the existing historical
+evidence, not a test to repeat with #1014. Its CPU-only copy-flush counters are
+not directly comparable to the new pilot's mixed CPU/GPU transfer denominator.
 
 ## Failed #1002 attempt and retry
 
@@ -80,6 +85,8 @@ Evidence SHA256:
    -Dvulkanmod.performanceProfiler.durationSeconds=180
    -Dvulkanmod.gpuAnimatedTextureCopies=true
    -Dvulkanmod.gpuAnimatedTextureInterpolation=true
+   -Dvulkanmod.experimentalUnifiedTextureUploads=true
+   -Dvulkanmod.experimentalGpuTextureSourcePool=true
    ```
 
    Keep the existing benchmark-world override if the world is not named
@@ -114,9 +121,14 @@ terrain/Flywheel test is part of this capture.
   tickable-loop and outer batch CPU costs. Do not identify all remaining
   non-upload time as Java clock iteration: GPU interpolation command preparation
   also lives outside `SpriteContents.upload`.
-- Use measured sprite upload routes and standard distinct-frame interpolation
-  routes for CPU/GPU coverage. Correlate CPU routes with request/capability,
-  admission/rejection/mutation fields; disabled/custom paths are not GPU failures.
+- Use source-mip versus temporary-mip upload routes and standard distinct-frame
+  interpolation GPU/CPU routes for coverage. Read the disjoint first-failure
+  interpolation buckets and copy-flush causes before selecting another change.
+  Disabled/custom CPU paths are not GPU failures.
+- Confirm `gpu_source_pool_enabled=true` and inspect its page/lease/capacity and
+  retirement counters. Check `resident_queued_copy_calls/regions` against
+  `resident_direct_copy_calls/regions`; the mixed `copy_flushes/regions` count
+  describes emitted Vulkan groups, while queued calls describe input requests.
 - Read `texture_upload_gpu` alongside main graphics, keeping their different
   timestamp scopes separate. Inspect unresolved/dropped/query-error counters;
   this whole-batch timer includes dependencies and is not isolated shader time.
@@ -126,11 +138,21 @@ terrain/Flywheel test is part of this capture.
   concrete adapters if particles remain the next significant transferable cost.
   Preserve the rejected Immersive Portals-conflicting render-hook boundary.
 
-This first run establishes representative hardware correctness/coverage and
-chooses the next GPU-offload target. The old fixed-settle RD32 run mixed initial
-terrain population with measurement and cannot supply a whole-run steady-state
-speedup comparison. Paired disabled/enabled captures with this same converged
-settling policy remain required before adoption or a quantitative speedup claim.
+This run establishes the new pilot's representative hardware correctness and
+coverage. For its effectiveness comparison, use this same JAR and O3/O4 settings
+for a control capture with only these two arguments changed to `false`:
+
+```text
+-Dvulkanmod.experimentalUnifiedTextureUploads=false
+-Dvulkanmod.experimentalGpuTextureSourcePool=false
+```
+
+Keep convergence, world, packs, settings and profiler flags identical. Compare
+CPU texture/client tick and frame times, GPU main-frame and separate upload-batch
+times, route coverage, flush causes, and memory/capacity counters. A correctness
+pass or one unusually fast run is not adoption evidence; the Phase 5 performance
+claim gate remains three matched pairs. Existing #1014 data supplies historical
+context, not a same-executable pilot control.
 
 ## Later paired CPU pilot comparison
 

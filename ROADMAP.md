@@ -193,14 +193,16 @@ heuristic exemptions. Preserve opaque CPU dynamic/mod pixel generation as an
 input, not a falsely GPU-equivalent algorithm. Start with the common Vulkan
 copy-batch path and its synchronization contract, then central shared
 resident animation source/dispatch where qualification supports it.
-An opt-in shared device-local GPU source-page implementation now exists
-behind `vulkanmod.experimentalGpuTextureSourcePool`; it is **source-only
-and unqualified**. Native Vulkan pixel/sync and Forge packaging are pending.
-Shared GPU-resident **discrete copy** batching now joins the existing
-unified CPU transfer queue, source-only and unqualified. Native sync/pixel
-parity and matched frame-time evidence remain mandatory. **GPU compute
-animation dispatch coalescing** is a separate open step. The
-whole-tick transfer pilot is also **unqualified**, not full GPU offload.
+The opt-in shared device-local GPU source pool and unified CPU-staged/
+GPU-resident discrete-copy queue are **native/Forge correctness-qualified**
+in full CI **#1018** at `db77ff5c5232e18eb6a696a691c5ae01ed660117`.
+Exact pixels and synchronization passed across shared-source offsets,
+capacity/direct overwrites and both O3/O4 ordering directions. Default
+compatibility gates passed; private resource-pack fixtures were skipped.
+Representative RX coverage and net frame-time benefit remain **unmeasured**;
+use `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md` for the next gate. Keep both
+pilots off by default. **GPU compute animation dispatch coalescing** remains
+a separate open step, pending the qualified pilot's coverage/cost evidence.
 
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
 

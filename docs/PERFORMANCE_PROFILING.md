@@ -462,7 +462,10 @@ when the experimental flag is off. These new metrics are capture-only,
 with the same warmup gating/reset contract as the existing attribution.
 
 An opt-in conservative transfer-write barrier is recorded after
-each nonempty flushed group and each direct CPU upload in an outer
-batch to order writes that left the fixed-size pending-region history.
+each nonempty flushed group, each direct CPU upload in an outer
+batch, and external resident/O4 result copies to order writes that left
+the fixed-size pending-region history. The pre-O4 atlas barrier orders
+earlier uploads before compute output; the post-copy boundary separately
+orders that result before a later queued overwrite.
 There may be a measurable GPU cost; the native pixel+sync oracle and
 matched GPU timestamp captures must qualify the tradeoff.

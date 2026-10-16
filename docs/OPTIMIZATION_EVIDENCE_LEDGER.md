@@ -192,3 +192,32 @@ existing O3-to-O4 boundary. All 21 offline contracts pass locally, including
 the corrected reason-aware upload cleanup fixture. Native/Forge/full-pack
 qualification and net hardware benefit remain pending; no adoption claim
 or increased memory budget follows from this repair.
+
+
+## Full native qualification outcome — October 16
+
+**Disposition: qualified but unmeasured.** Full CI **#1018**, executable
+`db77ff5c5232e18eb6a696a691c5ae01ed660117`, run `38899462146`, validation
+job `116968655497`, passed all 21 offline contracts, Forge production
+packaging, all existing native/synchronization oracles, combined Create
+Chronicles and Crash Assistant, with log/JAR uploads. Private real-pack
+fixtures skipped. #1017 was superseded/cancelled. This supersedes the
+source-only/unqualified status of the unified queue, source pool and
+October 16 ordering repair above; it does not establish a hardware gain.
+
+The shared-source oracle proved nonzero descriptor-offset O4 pixels,
+coalesced O3 copies, O3-to-O4 flushing, overlapping O4-to-O3 ordering and
+repeated scratch dispatch. The wider queue oracle passed capacity-flushed
+and initial-direct-write overwrites under synchronization validation.
+Two opt-in flags activate the complete pilot:
+`vulkanmod.experimentalUnifiedTextureUploads=true` and
+`vulkanmod.experimentalGpuTextureSourcePool=true`, alongside O3/O4.
+
+Next disposition-changing evidence is the RX RD32 candidate capture and
+same-JAR control with only these pilots disabled, as documented in
+`GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Quantify source/temporary routes,
+interpolation fallbacks, queued/direct copies and actual flush causes,
+page-capacity/retirement effects, CPU tick/frame and separate GPU upload/
+main-frame times. Three matched pairs remain the performance-claim gate.
+Do not implement another scheduler, raise budgets or enable defaults from
+native qualification alone. Full GPU compute dispatch batching remains open.
