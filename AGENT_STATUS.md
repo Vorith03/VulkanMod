@@ -2,35 +2,46 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Broad CPU graphics discovery — 2026-10-16 implementation, qualification pending
+## Broad CPU graphics discovery fully qualified — 2026-10-16
 
-The owner requested logs exposing CPU graphics work for the next optimization
-pass. Existing exact phase/texture/particle route instrumentation remains in
-place; the missing arbitrary/mod/worker call-site view is now addressed by
-benchmark-scoped Java 17 JFR execution/native-boundary sampling. The normal
-benchmark log ranks bounded graphics stacks with mod callers, thread role,
-category and explicit unknown/missing/truncated/overflow counts. A rolling
-64 MiB raw `*.cpu-graphics-*.jfr` sits beside the benchmark log. Java and native
-sample kinds have separate denominators; neither is an exact millisecond/GPU
-timer, an exhaustive event trace or proof of GPU eligibility.
+Full public/native CI **#1019**, run `38972838076`, validation job
+`117215415389`, passed at executable
+`ce9d66e1219e13139e3b0b6b7de531082f7a04c7`. All 22 offline contracts,
+Forge compilation/production packaging, animation source and portal anchors,
+both Vulkan startup paths, indirect/post/depth/screenshot pixel/sync gates,
+combined Create Chronicles, Crash Assistant and log/JAR uploads passed.
+Private real-resource-pack fixtures were skipped. This supersedes #1018 as the
+next hardware-test candidate. No RX performance or hotspot coverage is claimed.
+
+The owner requested broad CPU graphics logs for selecting the next pass.
+Existing exact phase/texture/particle route counters remain intact. New
+benchmark-scoped Java 17 JFR execution/native-boundary sampling adds ranked
+render/mod/graphics-worker call chains, graphics categories and explicit
+unclassified/missing/truncated/overflow/observer counts to the benchmark log.
+The raw rolling 64 MiB `*.cpu-graphics-*.jfr` sits beside it. Java execution
+and native-boundary counts use separate denominators; they are statistical
+samples, not exact method milliseconds, driver internals, GPU time, an
+exhaustive operation trace or proof of offload eligibility. Unknown custom
+worker pipelines can remain in raw background samples; stacks and retention
+limits are reported rather than hidden.
 
 Sampling defaults on only for automated profiling captures; ordinary gameplay
-adds no per-draw hooks. Initialization is excluded from the capture/controller
-deadline, and decode/ranking runs after stopping capture. Missing JFR or I/O
-failure produces unavailable/failed metadata; cancel/abort does not invent a
-complete report. The existing user hardware gate remains, now requiring this
-profiler candidate instead of #1018 after full qualification. Return the raw
-JFR as well as the UUID benchmark and latest.log; keep observer settings equal
-in the same-JAR pilot comparison.
+adds no per-draw hooks. One-time initialization is excluded from the profiler
+and automated-controller deadline. Decode/ranking runs after stopping capture.
+Missing JFR or I/O failure produces unavailable/failed metadata. Local Java 17
+contracts exercise real record/decode, orderly-exit dumps, classification and
+caps, cancel/output failures, absent-JFR fallback and deadline alignment.
+Native startup additionally verified active JFR inside Forge and a nonempty
+raw recording after JVM exit. Local Forge compilation remains unavailable due
+the blocked Gradle distribution download; CI establishes that qualification.
 
-All **22** offline contracts pass locally on Java 17, including actual JFR
-record/decode, mod/worker/unclassified attribution, independent sample kinds,
-bounds, cancellation/output failure, stripped-runtime fallback and deadline
-alignment. The startup native fixture now explicitly enables sampling and
-requires active JFR plus a nonempty raw file after orderly Forge exit. Full
-Forge/native/module/compatibility qualification remains pending; #1018 is
-still the latest qualified executable. Next: inspect the full candidate CI,
-fix actual failures, then update the RD32 procedure/build and this checkpoint.
+**Next required action:** existing RX 6900 XT/RADV RD32 capture using #1019 and
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Return the UUID benchmark log, its
+neighboring raw JFR and latest.log. Read CPU stack coverage alongside measured
+stage/texture fallback costs; retain matching sampler settings for the same-JAR
+pilot on/off comparison. Three matched pairs remain required for a formal
+performance claim. No additional scheduler, budget increase or renderer default
+adoption is selected before this evidence. Reload/re-entry remains deferred.
 
 ## Unified GPU texture pilot fully qualified — 2026-10-16
 

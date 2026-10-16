@@ -2,19 +2,21 @@
 
 This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Candidate executable
-`db77ff5c5232e18eb6a696a691c5ae01ed660117`, build **#1018**:
-[build #1018](https://github.com/Vorith03/VulkanMod/actions/runs/38899462146).
-Full public/native validation job `116968655497` passed all 21 offline
-contracts, Forge packaging, native pixel/synchronization gates, combined Create
-Chronicles, and Crash Assistant. Log/JAR uploads succeeded; private real-pack
-fixtures were skipped. Install the qualified distributable
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1018-gdb77ff5c-all.jar`.
+`ce9d66e1219e13139e3b0b6b7de531082f7a04c7`, build **#1019**:
+[build #1019](https://github.com/Vorith03/VulkanMod/actions/runs/38972838076).
+Full public/native job `117215415389` passed all 22 offline contracts, Forge
+packaging, native pixel/synchronization gates, real Forge JFR activation/dump,
+combined Create Chronicles and Crash Assistant. Log/JAR uploads succeeded;
+private real-pack fixtures were skipped. Install the qualified distributable
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1019-gce9d66e1-all.jar`.
 Replace the existing VulkanMod JAR; do not leave two versions installed.
 
 The candidate retains the CPU/terrain work already exercised by the owner's
 completed #1014 capture and adds the #1016 original-source identity repair,
 explicit fallback/flush attribution, shared immutable GPU source pages, and
-one bounded queue for CPU-staged and GPU-resident atlas copies. Conservative
+one bounded queue for CPU-staged and GPU-resident atlas copies. It also adds
+automatic CPU graphics JFR discovery: sampled render/mod/worker call chains,
+ranked categories and an accompanying raw JFR. Conservative
 transfer dependencies cover capacity/direct writes and both O3-to-O4 and
 O4-to-O3 ordering. O3/O4 and the two pilots remain opt-in; GPU compute dispatch
 coalescing is not implemented. Native correctness does not establish hardware
@@ -79,6 +81,8 @@ Evidence SHA256:
    -Dvulkanmod.performanceProfiler=true
    -Dvulkanmod.performanceProfiler.autoBenchmark=true
    -Dvulkanmod.performanceProfiler.gpuTimestamps=true
+   -Dvulkanmod.performanceProfiler.cpuGraphicsSamples=true
+   -Dvulkanmod.performanceProfiler.cpuGraphicsPeriodMs=10
    -Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
    -Dvulkanmod.performanceProfiler.benchmarkQuietSeconds=10
    -Dvulkanmod.performanceProfiler.benchmarkMaxSettleSeconds=300
@@ -100,8 +104,10 @@ Evidence SHA256:
    300 seconds, or another guard aborts, the game remains open; report the abort
    rather than changing the workload to force a result.
 
-Return the newest `logs/vulkanmod-performance-benchmark-<UUID>.log` and
-`logs/latest.log` from that instance. Also report any visibly frozen, incorrect
+Return the newest `logs/vulkanmod-performance-benchmark-<UUID>.log`, its
+neighboring `*.cpu-graphics-*.jfr` file, and `logs/latest.log` from that instance.
+The log names its JFR in `cpu_graphics_recording raw_file`; JFR retains a rolling
+64 MiB of chunks, with possible chunk-sized overshoot. Also report any visibly frozen, incorrect
 or flickering animations. No deferred reload/re-entry or unrelated experimental
 terrain/Flywheel test is part of this capture.
 
@@ -117,6 +123,13 @@ terrain/Flywheel test is part of this capture.
   and backlog. Only interpret deltas when `delta_valid=true`; a shrinking pending
   queue is expected when capacity or neighbors recover. Frequent full traversals
   require their measured context, not an assumed hardware speedup.
+- Confirm `cpu_graphics_recording requested=true status=active`, a final
+  `cpu_graphics_samples status=complete`, and a nonempty raw JFR. Read ranked
+  render/graphics-worker stacks, mod callers, unclassified render work and
+  overflow/missing/truncated samples. Java execution and native-boundary
+  samples have separate denominators and are not exact per-method timers or
+  GPU execution. This broad census chooses where existing phase/route timing
+  needs a closer look; it does not prove all sampled CPU work can move to GPU.
 - Read client/texture tick mean and p95, allocations, sprite-upload work,
   tickable-loop and outer batch CPU costs. Do not identify all remaining
   non-upload time as Java clock iteration: GPU interpolation command preparation
@@ -147,7 +160,9 @@ for a control capture with only these two arguments changed to `false`:
 -Dvulkanmod.experimentalGpuTextureSourcePool=false
 ```
 
-Keep convergence, world, packs, settings and profiler flags identical. Compare
+Keep convergence, world, packs, settings and profiler flags identical, including
+CPU graphics sampling and its period in both variants. Sampling has observer
+cost; #1018 cannot substitute for a same-JAR observer-matched control. Compare
 CPU texture/client tick and frame times, GPU main-frame and separate upload-batch
 times, route coverage, flush causes, and memory/capacity counters. A correctness
 pass or one unusually fast run is not adoption evidence; the Phase 5 performance

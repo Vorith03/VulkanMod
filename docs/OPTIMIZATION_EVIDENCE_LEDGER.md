@@ -238,3 +238,14 @@ capability is claimed. All 22 offline contracts pass locally, including real
 Java 17 JFR and stripped-runtime fallback. Full Forge/native startup activation
 and raw-dump assertions are the next qualification gate; representative RX
 coverage and observer cost remain unmeasured. See `PERFORMANCE_PROFILING.md`.
+
+
+**CPU census qualification outcome:** full public/native **#1019** at
+`ce9d66e1219e13139e3b0b6b7de531082f7a04c7`, run `38972838076`, job
+`117215415389`, passed all 22 offline contracts, Forge packaging, real-Forge
+JFR activation and orderly-exit raw dump, all retained native pixel/sync gates,
+combined Create Chronicles, Crash Assistant and artifact uploads. Private-pack
+fixtures skipped. This supersedes the pending qualification above. Disposition
+is **qualified diagnostic, representative coverage/observer cost unmeasured**;
+no renderer speedup follows. Use #1019 for the existing RX gate, return its raw
+JFR as well as the UUID log, and keep sampler configuration equal in A/B.
