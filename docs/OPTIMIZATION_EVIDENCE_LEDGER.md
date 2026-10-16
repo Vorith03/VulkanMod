@@ -181,3 +181,14 @@ denominators are deliberately not treated as a paired comparison.
 sync-validation, animation oracle, Create/Flywheel and packaging gates.
 Then RX 6900 XT matched captures if the pilot is kept; do not turn
 on the experimental flags by default before those results.
+
+**October 16 correctness follow-up, native qualification pending:** source
+review found that O4's pre-copy atlas barrier did not cover a later O3/CPU
+overwrite of the O4 result. The unified pilot now completes external O4
+and direct resident copies with the same conservative WAW dependency as
+flushed queue groups. The shared-source native oracle exercises the reverse
+overlapping O4-to-O3 boundary and repeated O4 scratch use as well as the
+existing O3-to-O4 boundary. All 21 offline contracts pass locally, including
+the corrected reason-aware upload cleanup fixture. Native/Forge/full-pack
+qualification and net hardware benefit remain pending; no adoption claim
+or increased memory budget follows from this repair.

@@ -406,6 +406,7 @@ public abstract class VTextureSelector {
             regions.limit(regionCount);
             vkCmdCopyBufferToImage(commandBuffer.getHandle(), source.getId(), texture.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+            finishExternalSpriteUploadCopy();
             TextureTickAttribution.recordResidentCopyQueueRoute(false, regionCount);
             return regionCount;
         }
@@ -565,7 +566,7 @@ public abstract class VTextureSelector {
                 if(batchSpriteCopies) {
                     // Direct writes bypass the pending-region list. Order them
                     // before any later atlas overwrite in this upload batch.
-                    if(UNIFIED_GPU_UPLOADS) transferWriteToWriteBarrier();
+                    finishExternalSpriteUploadCopy();
                     spriteUploadTexture = texture;
                 }
             }
@@ -621,10 +622,16 @@ public abstract class VTextureSelector {
     }
 
     /**
-     * Preserve a same-command-buffer write-after-write dependency when the
-     * centralized upload queue encounters an overlapping destination.
-     * Distinct atlas sprites stay batched without an unnecessary barrier.
+     * Order atlas writes that bypass the pending region list before a later
+     * queued/direct overwrite. In particular, a barrier before O4's scratch
+     * copy cannot order that copy against subsequent O3 or CPU writes.
+     * Preserve the legacy path when the unified pilot is disabled.
      */
+    public static void finishExternalSpriteUploadCopy() {
+        if(UNIFIED_GPU_UPLOADS) transferWriteToWriteBarrier();
+    }
+
+    /** Conservative ordering for writes whose geometry left the bounded queue. */
     private static void transferWriteToWriteBarrier() {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack);

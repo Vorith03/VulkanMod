@@ -100,7 +100,7 @@ public final class SpriteAnimationSmokeTest {
      */
     private static void verifySharedSourcePool() {
         VulkanImage atlas = VulkanImage.createTextureImage(
-                VK_FORMAT_R8G8B8A8_UNORM, 1, 3, 1,
+                VK_FORMAT_R8G8B8A8_UNORM, 1, 4, 1,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
                         | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
         ByteBuffer sourceA = MemoryUtil.memAlloc(4);
@@ -116,7 +116,7 @@ public final class SpriteAnimationSmokeTest {
             }
             var pBuffer = stack.mallocLong(1);
             var pAllocation = stack.mallocPointer(1);
-            MemoryManager.getInstance().createBuffer(12L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            MemoryManager.getInstance().createBuffer(16L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     pBuffer, pAllocation);
             buffer = pBuffer.get(0);
@@ -154,6 +154,18 @@ public final class SpriteAnimationSmokeTest {
                             atlas, offsets, new int[]{2}, heights, offsets,
                             1, 1, 2, 0, 1, 1, 2, 2, 0) == null)
                         throw new AssertionError("Pooled O4 interpolation source descriptor rejected");
+
+                    // Reverse the boundary too: O4 writes are outside the
+                    // region list, so a later queued O3 overwrite must see
+                    // the completed scratch-to-atlas copy as a predecessor.
+                    if(VTextureSelector.copyResidentSpriteFrame(
+                            a.buffer(), a.offset(), a.bytes(), atlas,
+                            offsets, widths, heights, 2, 0, 0, 0, 1, 1) != 1)
+                        throw new AssertionError("Post-compute pooled O3 overwrite rejected");
+                    if(interpolationBinding.dispatch(
+                            atlas, offsets, new int[]{2}, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 3, 0) == null)
+                        throw new AssertionError("Repeated pooled O4 interpolation rejected");
                 } finally {
                     VTextureSelector.endSpriteUploadBatch();
                 }
@@ -170,17 +182,18 @@ public final class SpriteAnimationSmokeTest {
             RenderTargetManager.copyColorMipToBuffer(atlas, buffer, 0);
             renderer.endFrame();
             Vulkan.waitIdle();
-            MemoryManager.getInstance().MapAndCopy(allocation, 12, pointer -> {
-                ByteBuffer pixels = pointer.getByteBuffer(0, 12);
+            MemoryManager.getInstance().MapAndCopy(allocation, 16, pointer -> {
+                ByteBuffer pixels = pointer.getByteBuffer(0, 16);
                 for(int i = 0; i < 4; ++i) {
                     if((pixels.get(i) & 255) != 0x10 + i
                             || (pixels.get(4 + i) & 255) != 0x50 + i
-                            || (pixels.get(8 + i) & 255) != (i == 3 ? 0x53 : 0x60 + i))
+                            || (pixels.get(8 + i) & 255) != 0x10 + i
+                            || (pixels.get(12 + i) & 255) != (i == 3 ? 0x53 : 0x60 + i))
                         throw new AssertionError("Pooled O3/O4 source pixel isolation failed");
                 }
             });
             Initializer.LOGGER.info(
-                    "Shared GPU animation source pool smoke passed (two leases, coalesced O3 atlas regions flushed before offset-bound O4 interpolation)");
+                    "Shared GPU animation source pool smoke passed (two leases, coalesced O3, offset-bound O4, overlapping O4-to-O3 overwrite, repeated dispatch)");
         } finally {
             Vulkan.waitIdle();
             if(interpolationBinding != null) interpolationBinding.retire();

@@ -455,6 +455,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             vkCmdCopyBufferToImage(commandBuffer.getHandle(),
                     binding.scratch.getId(), atlas.getId(),
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+            VTextureSelector.finishExternalSpriteUploadCopy();
         }
 
         return new DispatchResult(regionCount, totalPixels, totalBytes);

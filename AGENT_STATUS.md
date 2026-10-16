@@ -2,6 +2,31 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Unified transfer qualification and reverse-boundary fix — 2026-10-16
+
+The accumulated source-only pilot has reached its full native qualification
+gate. All 21 offline contracts pass locally on Java 17; the prebenchmark
+cleanup fixture now accepts reason-aware flush calls. Local Forge compilation
+cannot start because the Gradle distribution download is network-blocked.
+Full CI #1017 was started at `785ef414eb1d5179087e1a54ea7be23ffc1c9ed6`;
+the next executable push supersedes it with the complete boundary correction.
+
+Source review found the reverse O4-to-queued-O3 ordering gap: the existing
+barrier before O4's scratch-to-atlas copy orders earlier atlas writes, but
+cannot order that copy against later queued uploads. The unified pilot now
+also establishes its conservative transfer-write dependency after external
+O4 and direct resident copies. The native shared-source oracle checks both
+O3-to-O4 and overlapping O4-to-O3, then repeats O4 on the same scratch buffer
+and reads back all four atlas texels. These new native assertions remain
+pending full CI. No defaults or performance disposition changed.
+
+Next: inspect the complete follow-up Forge/native/compatibility result, fix
+actual failures if present, then update the existing RD32 hardware procedure
+to the qualified candidate and its two opt-in pilot flags. No new scheduler
+or compute batching should be stacked before qualification and matched RX
+coverage/timing evidence. #1016 remains the last fully qualified executable
+until the new suite passes; private-pack coverage must be checked separately.
+
 ## Unified CPU/GPU atlas-copy queue — 2026-10-12 source-only continuation
 
 Commits `65ebac2bdd13c2d1c83f93814282faceee54c42b`,
