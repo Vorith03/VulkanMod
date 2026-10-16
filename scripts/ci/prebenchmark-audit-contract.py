@@ -24,6 +24,8 @@ tick_path = 'net/vulkanmod/mixin/texture/MTextureManager.java'
 tick = method(tick_path, 'public void tick()')
 finish = method(tick_path, 'private void vulkanmod$finishTickUpload(')
 selector_path = 'net/vulkanmod/vulkan/texture/VTextureSelector.java'
+copy_flush_reason = method('net/vulkanmod/render/profiling/TextureTickAttribution.java',
+                           'public enum CopyFlushReason')
 scope = '\n'.join(method(selector_path, sig) for sig in [
     'public static void beginSpriteUploadBatch()', 'public static int spriteUploadBatchDepth()',
     'public static void endSpriteUploadBatchesTo(', 'public static void endSpriteUploadBatch()',
@@ -93,6 +95,7 @@ public class AuditContract {
  }
  static class Device { static GraphicsQueue queue=new GraphicsQueue(); static GraphicsQueue getGraphicsQueue() { return queue; } }
  static class TextureTickAttribution {
+  __COPY_FLUSH_REASON__
   enum Phase { BATCH_START,TICKABLE_LOOP,BATCH_DRAIN,LAYOUT_TRANSITIONS,QUEUE_SUBMIT }
   static int ticks; static long beginTick() { ticks++; return 0; }
   static void endTick(long t) { ticks--; }
@@ -112,7 +115,7 @@ public class AuditContract {
   static int spriteUploadDepth,spriteUploadRegionCount,flushes; static Object spriteUploadTexture;
   static long spriteUploadStagingBufferId; static final long VK_NULL_HANDLE=0;
   static boolean failFlush;
-  static void flushSpriteUploadCopies() { flushes++; if(failFlush) throw new IllegalStateException("flush"); spriteUploadRegionCount=0; }
+  static void flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason reason) { flushes++; if(failFlush) throw new IllegalStateException("flush"); spriteUploadRegionCount=0; }
   __SCOPE__
  }
  static class TextureManager {
@@ -248,7 +251,7 @@ public class ModelScratchContract {
   System.out.println("Model normal scratch contract passed: one allocation, immutable source normals, packed/fallback parity, reentrant consumer");
  }
 }'''.replace('__COMPILE__', model_compile)
-for name, value in [('TRANSPARENCY_STATE',transparency_state),('SECTION',section),('WORLD',world),('SPRITE',sprite_methods),('SCOPE',scope),('TICK',tick),('FINISH',finish),('ATLAS',atlas_close)]:
+for name, value in [('COPY_FLUSH_REASON',copy_flush_reason),('TRANSPARENCY_STATE',transparency_state),('SECTION',section),('WORLD',world),('SPRITE',sprite_methods),('SCOPE',scope),('TICK',tick),('FINISH',finish),('ATLAS',atlas_close)]:
     sources['AuditContract.java'] = sources['AuditContract.java'].replace("__" + name + "__",value)
 with tempfile.TemporaryDirectory(prefix='vulkanmod-audit-') as folder:
     target = Path(folder)
