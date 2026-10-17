@@ -2,6 +2,35 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Source-switch texture repair — 2026-10-17, qualification pending
+
+The owner explicitly reprioritized implementation of a demonstrated root cause.
+At base `504617c`, the unified queue still required one source handle for all
+pending regions, causing 88.23% of #1019's flushes. The common CPU/O3 queue now
+retains per-region source handles and emits one command per source within a
+bounded pairwise-disjoint epoch. Cross-source overlap and all compute/direct/
+layout/reset/lifetime boundaries retain draining and write dependencies. One
+barrier orders the epoch, replacing barriers between disjoint source groups.
+No residency budget/policy, default, shader, submission or wait was added.
+
+See `docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. All 22 local offline
+contracts pass. The production enqueue/drain reproducer fails on the original
+selector and passes after repair: 128 disjoint alternating two-source writes
+require 2 commands/1 barrier instead of 128/128; 100,000 randomized writes match
+sequential pixels. This is operation-count evidence, **not measured FPS/time**.
+The native test now checks alternating CPU/two-resident-source pixels, pending
+counts, overlaps, capacity and early source retirement. Local Forge configuration
+remains blocked by the network-unreachable Gradle 8.1.1 distribution download.
+
+**Next action:** full CI native/pixel/synchronization/Forge qualification of this
+coherent candidate, then the bounded #1019-versus-repair RX comparison. Both
+pilots stay enabled in both workloads; no unrelated terrain/particle/admission
+changes before that comparison. `copy_flushes` counts ordering epochs now;
+new `copy_commands` counts emitted queued Vulkan commands. No net benefit or
+physical correctness claim until that evidence. Existing O4 residency admission,
+terrain/particles and deferred reload/re-entry remain open. Supersedes the old
+"next source review" direction below; #1019 capture receipt remains settled.
+
 ## Owner #1019 RX capture received and analyzed — 2026-10-17
 
 The requested single RD32 capture is now available: UUID

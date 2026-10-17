@@ -15,6 +15,7 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.RenderTargetManager;
 import net.vulkanmod.vulkan.memory.MemoryManager;
+import net.vulkanmod.vulkan.memory.TextureResidentBuffer;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
@@ -222,6 +223,8 @@ public final class SpriteAnimationSmokeTest {
         long buffer = 0L, allocation = 0L;
         int priorActiveUnit = VTextureSelector.getActiveTextureUnit();
         ByteBuffer pixel = MemoryUtil.memAlloc(4);
+        ByteBuffer sourceA = MemoryUtil.memAlloc(8), sourceB = MemoryUtil.memAlloc(12);
+        TextureResidentBuffer residentA = null, residentB = null;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VTextureSelector.setActiveTexture(0);
             VTextureSelector.bindTexture(atlas);
@@ -234,7 +237,16 @@ public final class SpriteAnimationSmokeTest {
             buffer = pBuffer.get(0);
             allocation = pAllocation.get(0);
 
+            residentA = new TextureResidentBuffer(8);
+            residentB = new TextureResidentBuffer(12);
+            for(int i = 0; i < 4; i++) {
+                sourceA.put(i + 4, (byte)(0x20 + i));
+                sourceB.put(i + 8, (byte)(0x80 + i));
+            }
             Device.getGraphicsQueue().startRecording();
+            if(!VTextureSelector.uploadTextureResidentSource(residentA, sourceA)
+                    || !VTextureSelector.uploadTextureResidentSource(residentB, sourceB))
+                throw new AssertionError("Mixed-source smoke seed failed");
             VTextureSelector.beginSpriteUploadBatch();
             try {
                 for(int x = 0; x < 160; ++x) {
@@ -242,8 +254,30 @@ public final class SpriteAnimationSmokeTest {
                     pixel.put(1, (byte)(x + 1));
                     pixel.put(2, (byte)(x + 2));
                     pixel.put(3, (byte)(x + 3));
-                    VTextureSelector.uploadSubTexture(0, 1, 1, x, 0, 0, 0, 1, pixel);
+                    if(x % 3 == 0) {
+                        VTextureSelector.uploadSubTexture(0, 1, 1, x, 0, 0, 0, 1, pixel);
+                    } else if(VTextureSelector.copyResidentSpriteFrame(
+                            x % 3 == 1 ? residentA : residentB, atlas,
+                            new int[]{0}, new int[]{x % 3 == 1 ? 2 : 3}, new int[]{1},
+                            x, 0, x % 3 == 1 ? 1 : 2, 0, 1, 1) != 1) {
+                        throw new AssertionError("Mixed-source smoke copy rejected");
+                    }
+                    // The first pixel takes the direct transition path. Every
+                    // later disjoint write must survive alternating buffers.
+                    if(x == 126) assertPendingCopyRegions(126);
+                    if(x == 159) assertPendingCopyRegions(31);
                 }
+                // Cross-source overwrite in the pending set: grouping must
+                // not reorder either predecessor past its final writer.
+                VTextureSelector.uploadSubTexture(0, 1, 1, 158, 0, 0, 0, 1, pixel);
+                if(VTextureSelector.copyResidentSpriteFrame(residentB, atlas,
+                        new int[]{0}, new int[]{3}, new int[]{1},
+                        158, 0, 2, 0, 1, 1) != 1)
+                    throw new AssertionError("Mixed-source overlap rejected");
+                // Closing immutable sources while their final regions remain
+                // queued must preserve upload-safe retirement.
+                residentA.retire(null);
+                residentB.retire(null);
                 // Index 1 was in the earlier capacity-flushed region set,
                 // whereas index 0 was uploaded by the initial direct path.
                 // Both must retain write-after-write ordering across the
@@ -273,7 +307,8 @@ public final class SpriteAnimationSmokeTest {
                 for(int x = 0; x < 160; ++x) {
                     for(int component = 0; component < 4; ++component) {
                         int actual = bytes.get(x * 4 + component) & 255;
-                        int expected = (x == 0 ? 0x60 : x == 1 ? 0x40 : x) + component;
+                        int expected = (x == 0 ? 0x60 : x == 1 ? 0x40
+                                : x % 3 == 1 ? 0x20 : x % 3 == 2 ? 0x80 : x) + component;
                         if(actual != expected)
                             throw new AssertionError("Unified transfer wrong pixel at "
                                     + x + " channel " + component
@@ -282,13 +317,30 @@ public final class SpriteAnimationSmokeTest {
                 }
             });
             Initializer.LOGGER.info(
-                    "Unified GPU texture transfer smoke passed (160 regions across capacity flush, direct-first overlap, same-command-buffer sync, Vulkan pixels)");
+                    "Unified GPU texture transfer smoke passed (160 alternating CPU/two-resident-source regions, grouped queue counts, capacity/cross-source/direct overlap, early retirement, Vulkan pixels)");
         } finally {
             Vulkan.waitIdle();
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
+            if(residentA != null) residentA.retire(null);
+            if(residentB != null) residentB.retire(null);
+            MemoryUtil.memFree(sourceA);
+            MemoryUtil.memFree(sourceB);
             MemoryUtil.memFree(pixel);
             atlas.doFree();
             VTextureSelector.setActiveTexture(priorActiveUnit);
+        }
+    }
+
+    /** Test-only inspection avoids adding a production hot-path test counter. */
+    private static void assertPendingCopyRegions(int expected) {
+        try {
+            var field = VTextureSelector.class.getDeclaredField("spriteUploadRegionCount");
+            field.setAccessible(true);
+            if(field.getInt(null) != expected)
+                throw new AssertionError("Disjoint source switches drained the unified queue: expected "
+                        + expected + ", got " + field.getInt(null));
+        } catch(ReflectiveOperationException failure) {
+            throw new AssertionError("Cannot inspect native copy queue", failure);
         }
     }
 

@@ -72,9 +72,9 @@ public abstract class VTextureSelector {
     private static long observedMainFrameSubmissions;
 
     // Shared CPU-staging and GPU-resident atlas upload queue. A group contains
-    // one VkBuffer source and one VulkanImage destination. Distinct resident
-    // source sheets in the same device-local page can therefore be coalesced;
-    // source or destination switches flush it before recording further writes.
+    // one VulkanImage destination. In unified mode it retains all source handles
+    // until an ordering boundary, then groups disjoint destinations by source.
+    // Source switches alone do not impose a dependency or require a flush.
     // Fixed primitive arrays keep the queue bookkeeping allocation-free.
     private static int spriteUploadDepth;
     private static VulkanImage spriteUploadTexture;
@@ -90,6 +90,10 @@ public abstract class VTextureSelector {
     // source frames. The same VkBufferImageCopy emitter supports both routes.
     private static final int[] spriteBufferRowLengths = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
     private static final int[] spriteBufferImageHeights = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
+    private static final long[] spriteSourceBuffers = new long[MAX_SPRITE_COPY_BATCH_REGIONS];
+    private static final int[] spriteSourceOrder = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
+    private static final long[] spriteGroupSources = new long[MAX_SPRITE_COPY_BATCH_REGIONS];
+    private static final int[] spriteGroupEnds = new int[MAX_SPRITE_COPY_BATCH_REGIONS];
 
     private static void markCoreSamplerMutation() {
         coreSamplerMutationVersion++;
@@ -586,11 +590,11 @@ public abstract class VTextureSelector {
                                               int xOffset, int yOffset,
                                               long stagingBufferId, int bufferOffset,
                                               int bufferRowLength, int bufferImageHeight) {
-        // StagingBuffer growth swaps its VkBuffer but deliberately retires the old
-        // allocation only after the active upload batch ends. If growth happened
-        // while this sprite was being staged, close the old region set against the
-        // old handle before accumulating regions from the replacement buffer.
-        if(spriteUploadRegionCount > 0 && spriteUploadStagingBufferId != stagingBufferId) {
+        // Both resident sources and old staging allocations remain alive through
+        // upload retirement. Preserve each region's handle across staging growth;
+        // reset/reuse still drains before submitting/waiting and changing bytes.
+        if(!UNIFIED_GPU_UPLOADS && spriteUploadRegionCount > 0
+                && spriteUploadStagingBufferId != stagingBufferId) {
             flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.STAGING_BUFFER_SWITCH);
         }
         if(spriteUploadRegionCount == MAX_SPRITE_COPY_BATCH_REGIONS) {
@@ -619,6 +623,7 @@ public abstract class VTextureSelector {
         spriteBufferOffsets[index] = bufferOffset;
         spriteBufferRowLengths[index] = bufferRowLength;
         spriteBufferImageHeights[index] = bufferImageHeight;
+        spriteSourceBuffers[index] = stagingBufferId;
     }
 
     /**
@@ -666,10 +671,20 @@ public abstract class VTextureSelector {
             throw new IllegalStateException("Sprite upload copy batch lost its graphics command-buffer owner");
         }
 
+        int groups;
+        if(UNIFIED_GPU_UPLOADS) {
+            groups = TextureTransferBatchPolicy.groupSources(spriteSourceBuffers, count,
+                    spriteSourceOrder, spriteGroupSources, spriteGroupEnds);
+        } else {
+            groups = 1;
+            spriteGroupSources[0] = spriteUploadStagingBufferId;
+            spriteGroupEnds[0] = count;
+        }
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferImageCopy.Buffer regions = VkBufferImageCopy.calloc(count, stack);
-            for(int i = 0; i < count; ++i) {
-                VkBufferImageCopy region = regions.get(i);
+            for(int out = 0; out < count; ++out) {
+                int i = UNIFIED_GPU_UPLOADS ? spriteSourceOrder[out] : out;
+                VkBufferImageCopy region = regions.get(out);
                 region.bufferOffset(spriteBufferOffsets[i]);
                 region.bufferRowLength(spriteBufferRowLengths[i]);
                 region.bufferImageHeight(spriteBufferImageHeights[i]);
@@ -681,16 +696,21 @@ public abstract class VTextureSelector {
                 region.imageExtent().set(spriteWidths[i], spriteHeights[i], 1);
             }
 
-            vkCmdCopyBufferToImage(
-                    graphicsQueue.getCommandBuffer().getHandle(),
-                    spriteUploadStagingBufferId,
-                    texture.getId(),
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    regions);
+            int start = 0;
+            for(int group = 0; group < groups; group++) {
+                regions.limit(spriteGroupEnds[group]);
+                regions.position(start);
+                vkCmdCopyBufferToImage(graphicsQueue.getCommandBuffer().getHandle(),
+                        spriteGroupSources[group], texture.getId(),
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions);
+                start = spriteGroupEnds[group];
+            }
+            TextureTickAttribution.recordCopyCommands(groups);
             // Writes already emitted in this command buffer are no longer
             // represented by the bounded queue. Conservatively order every
-            // flushed group before later writes, including overwrites after
-            // a 128-region capacity flush or a source/texture switch.
+            // epoch before later writes, including overwrites after a capacity
+            // or texture switch. All groups inside this epoch are pairwise
+            // disjoint at each mip, so no barrier between sources is needed.
             // Opt-in only: benchmark must measure this barrier overhead.
             if(UNIFIED_GPU_UPLOADS) transferWriteToWriteBarrier();
         }

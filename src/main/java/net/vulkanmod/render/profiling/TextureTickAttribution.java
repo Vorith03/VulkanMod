@@ -48,6 +48,7 @@ public final class TextureTickAttribution {
     private static long copyFlushNanosSum;
     private static long outerCopyFlushNanosSum;
     private static long copyFlushes;
+    private static long copyCommands;
     private static long copyRegions;
     private static long outerCopyFlushes;
     private static long outerCopyRegions;
@@ -133,6 +134,12 @@ public final class TextureTickAttribution {
         if (!ENABLED || !tickActive || reason == null || regions <= 0) return;
         copyFlushReasonCounts[reason.ordinal()]++;
         copyFlushReasonRegions[reason.ordinal()] += regions;
+    }
+
+    /** A disjoint epoch can emit several commands, one per source buffer. */
+    public static void recordCopyCommands(int commands) {
+        if (!ENABLED || !tickActive) return;
+        copyCommands += commands;
     }
 
     private TextureTickAttribution() {
@@ -326,7 +333,8 @@ public final class TextureTickAttribution {
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
         net.vulkanmod.render.texture.GpuAnimationSourcePool.Stats pool =
                 net.vulkanmod.render.texture.GpuAnimationSourcePool.stats();
-        line.append(" gpu_source_pool_enabled=").append(pool.enabled())
+        line.append(" copy_commands=").append(copyCommands)
+                .append(" gpu_source_pool_enabled=").append(pool.enabled())
                 .append(" gpu_source_pool_allocated_kib=")
                 .append(String.format(Locale.ROOT, "%.3f", pool.allocatedBytes() / 1024.0D))
                 .append(" gpu_source_pool_live_pages=").append(pool.livePages())
@@ -420,6 +428,7 @@ public final class TextureTickAttribution {
         currentCopyFlushes = currentCopyRegions = currentOuterCopyFlushes = currentOuterCopyRegions = 0;
         copyFlushNanosSum = outerCopyFlushNanosSum = 0L;
         copyFlushes = copyRegions = outerCopyFlushes = outerCopyRegions = 0L;
+        copyCommands = 0L;
         residentCopyCalls = residentCopyRegions = residentCopyBytes = 0L;
         residentQueuedCalls = residentQueuedRegions = 0L;
         residentDirectCalls = residentDirectRegions = 0L;

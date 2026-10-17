@@ -10,6 +10,32 @@ package net.vulkanmod.vulkan.texture;
 public final class TextureTransferBatchPolicy {
     private TextureTransferBatchPolicy() {}
 
+    /**
+     * Stable source grouping within one pairwise-disjoint destination epoch.
+     * The caller supplies reusable scratch arrays, each at least count long.
+     * Returns the number of groups; groupEnds contains exclusive order offsets.
+     * This does not authorize reordering across overlap, layout or compute boundaries.
+     */
+    public static int groupSources(long[] buffers, int count, int[] order,
+                                   long[] sources, int[] groupEnds) {
+        if(count < 0 || count > buffers.length || count > order.length
+                || count > sources.length || count > groupEnds.length)
+            throw new IllegalArgumentException("Invalid texture source group capacity");
+        int groups = 0;
+        for(int i = 0; i < count; i++) {
+            int group = 0;
+            while(group < groups && sources[group] != buffers[i]) group++;
+            if(group == groups) sources[groups++] = buffers[i];
+        }
+        int out = 0;
+        for(int group = 0; group < groups; group++) {
+            for(int i = 0; i < count; i++)
+                if(buffers[i] == sources[group]) order[out++] = i;
+            groupEnds[group] = out;
+        }
+        return groups;
+    }
+
     public static boolean overlapsAny(int[] mips, int[] xs, int[] ys,
                                       int[] widths, int[] heights, int count,
                                       int mip, int x, int y, int width, int height) {
