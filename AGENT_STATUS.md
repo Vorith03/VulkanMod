@@ -2,38 +2,47 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Owner #1021 capture received; bulk CPU interpolation candidate — 2026-10-17
+## Bulk CPU interpolation qualified; RX comparison next — 2026-10-17
 
-Base `646bb52` above executable `8ff928dd` (#1021, full run `39070465187`
-rechecked green). Requested UUID `f4741fc5` + raw JFR + latest/debug are
-received. Do not request another unchanged #1021 capture. See
-`docs/RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md` for hashes,
-scopes and implementation. Valid windows show 439 traversals/6,457 frames,
-785 cached rebuild admissions and retained 1,604 pending notices. Terrain setup
-averages 0.907 ms vs historical 4.221 ms; favorable adoption/screening, **not
-matched performance proof**. Textures remain 17.950 ms/tick; GPU interpolation
-coverage is 2.92% with residency-disabled CPU fallback dominating.
+Executable `bd2cc13afb74b6468acd586e24729e4795d1924a` passed full CI **#1023**:
+run `39073019680`, job `117514597700`. All 23 contracts, Forge production
+packaging, pinned animation/portal anchors, both startup configurations,
+indirect/post/depth, native screenshot pixels/synchronization, public Create
+Chronicles and Crash Assistant passed. JAR/log uploads passed; private packs
+skipped. Qualified artifact `12116211650` is
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1023-gbd2cc13a-all.jar`.
 
-An opt-in `vulkanmod.experimentalCpuSpriteInterpolation=true` candidate replaces
-the measured standard CPU pixel loop with validated native rows after GPU
-first refusal. It retains exact RGB double/truncation/current-alpha pixels,
-all positive source mips, original upload/clock/visibility, source mutation,
-custom/invalid/off-thread fallback and fixed GPU budgets. It does not repair
-GPU admission policy or enable any new default. Capture-only bulk-update
-numerator distinguishes adoption from intent. All 23 offline contracts
-pass; transformed ticker/native pixel/sync qualification is pending. Local
-Forge configuration is blocked on the Gradle distribution download. Full CI
-must pass before offering a new test artifact. Original local implementation
-commits are `909497a` and `e1c332d`. The owner explicitly authorized remote
-publication and CI after the initial automatic approval rejection. The shell
-Git transport has no credentials; publication uses the connected GitHub API.
-First full #1022 (`39072794735`, job `117513870765`) passed all 23
-contracts but failed compileJava: putting an upload invoker in MSpriteContents
-conflicted with that mixin's existing upload injection refmap entry. The invoker
-is now isolated in its own registered accessor mixin; pixels/uploads are unchanged.
-Next: inspect full native/Forge CI for the corrected candidate. Then same-JAR bulk flag off/on with identical
-settings/sampler, matched restored-world pairs for a benefit claim. Particle/block-entity/server work remain separate;
-reload/re-entry and private-pack qualification remain open.
+The opt-in `vulkanmod.experimentalCpuSpriteInterpolation=true` path replaces
+the measured standard CPU pixel loop with validated native rows after GPU first
+refusal. Exact RGB double/truncation/current-alpha pixels, source mips,
+original uploads/clocks/visibility, source mutation and custom/invalid/off-thread
+fallback remain. No GPU budget/admission or default change. The actual transformed
+ticker/native oracle exercised 56 bulk frames across five standard cases and
+zero on the custom subclass, with all-mip pixels, hidden/refresh cadence and
+clocks matching the unchanged vanilla reference. Three corrupted local kernels
+(alpha, arithmetic, odd mip offsets) fail the independent CPU oracle.
+Initial #1022 failed compileJava because an invoker shared MSpriteContents'
+injection refmap namespace; #1023 qualifies the separate registered invoker.
+Source changes were explicitly owner-authorized and published through the
+connected GitHub API because shell Git has no credentials. Local pre-API
+commits `909497a`/`e1c332d` are historical; the qualified remote executable above
+is authoritative.
+
+Owner #1021 UUID `f4741fc5` + JFR/latest/debug are received: 439 traversals / 6,457
+valid frames, 785 cached admissions, retained 1,604 pending dirty. Terrain setup
+averages 0.907 ms vs historical 4.221 ms: adopted and favorable screening, **not
+matched net-benefit proof**. Textures remain 17.950 ms/tick; GPU interpolation
+covers 2.92%, with disabled residency dominating fallback. Do not repeat unchanged
+#1021. See `docs/RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md`.
+
+Next: same-JAR #1023 control/candidate with ONLY the bulk CPU flag false/true,
+all prior flags/settings and 10 ms JFR sampler retained. Return UUID logs/JFR,
+latest/debug and animation observations. Read bulk-update numerator/CPU-update
+denominator, complete texture/client-tick time and frame distributions. A pair
+screens; three alternating restored-world pairs qualify formal benefit.
+Hardware adoption/net benefit remain **unmeasured**; do not enable the default.
+Instructions: `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Particle/block-entity/server
+work stays separate; reload/re-entry and private-pack qualification remain open.
 
 ## Owner #1020 evidence and terrain repair fully qualified — 2026-10-17
 

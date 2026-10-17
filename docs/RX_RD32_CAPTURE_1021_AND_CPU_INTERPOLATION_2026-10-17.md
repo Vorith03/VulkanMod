@@ -1,5 +1,30 @@
 # RX #1021 terrain adoption and CPU interpolation fallback
 
+## Final qualification (supersedes pending notes below)
+
+Corrected executable `bd2cc13afb74b6468acd586e24729e4795d1924a` passed full
+[CI #1023](https://github.com/Vorith03/VulkanMod/actions/runs/39073019680), job
+`117514597700`: all 23 CPU contracts, Forge production packaging, animation and
+portal anchors, both Vulkan startup modes, indirect/post/depth, screenshot
+pixels/synchronization, public Create Chronicles, Crash Assistant and both
+artifact uploads. Private packs skipped. Native logs explicitly report bulk
+frames: reordered 6, odd_rectangular 11, zero_mip_extent 12, implicit 12,
+filtered_metadata 15, custom_cpu 0. Those 56 frames use the actual transformed
+CPU fallback, unchanged vanilla reference and independent numeric/readback
+oracle, including clocks and hidden/refresh behavior. This is correctness
+qualification, not RX adoption or speedup.
+
+Qualified [artifact 12116211650](https://github.com/Vorith03/VulkanMod/actions/runs/39073019680/artifacts/12116211650):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1023-gbd2cc13a-all.jar`.
+The artifact API digest is for its ZIP archive, not the raw JAR. The failed
+#1022 mapping attempt is preserved below and superseded for qualification only.
+The owner's explicit publication authorization resolved the earlier approval
+block. API-published source trees were checked equal to the local reviewed trees.
+
+Disposition: **qualified but unmeasured**. Next: same-JAR bulk flag false/true
+comparison described in `GPU_TEXTURE_RD32_HARDWARE_TEST.md`. No default, budget,
+GPU admission, deferred lifecycle or private-pack gate is promoted.
+
 ## State and provenance
 
 Analysis base `646bb52052cd97b4a4ea42ffa9f52896ced41925` is documentation-only

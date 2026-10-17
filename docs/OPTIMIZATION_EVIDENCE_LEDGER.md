@@ -325,3 +325,19 @@ authorization, then normal full qualification; no hardware test requested yet.
 The owner subsequently authorized publication and CI. The initial approval block
 is superseded; the connected GitHub API publishes the implementation because the
 shell Git transport lacks credentials. Full/native qualification remains pending.
+
+
+### Bulk fallback qualification completed — full #1023
+
+Executable `bd2cc13afb74b6468acd586e24729e4795d1924a`, run `39073019680`, job
+`117514597700`, passed all 23 contracts, Forge packaging and all public/native
+pixel/synchronization/compatibility gates; private packs skipped. The real
+transformed ticker executed 56 bulk frames with exact oracle pixels/clocks/
+cadence and zero bulk adoption in the custom subclass. First attempt #1022
+failed a demonstrated invoker/injection refmap conflict, fixed by isolating the
+invoker; that negative result is retained. Publication was explicitly authorized;
+the earlier approval and native-qualification blocks are superseded.
+Disposition: **qualified but unmeasured**. Artifact `12116211650`, #1023.
+Next: same-JAR flag false/true with bulk numerator, CPU denominator and complete
+texture/tick/frame evidence. No hardware benefit, broader GPU adoption, default
+or deferred lifecycle qualification is claimed.

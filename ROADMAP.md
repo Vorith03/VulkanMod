@@ -224,7 +224,9 @@ received: UUID `f4741fc5`, 439 traversals/6,457 valid frames, 785 cached admissi
 and 1,604 retained notices; terrain setup averages 0.907 ms/frame (historical
 #1020: 4.221). Adoption is measured; net benefit remains unpaired. The opt-in
 bulk CPU interpolation candidate targets the still-measured vanilla pixel loop
-without changing GPU budgets/admission. Native qualification is pending; see
+without changing GPU budgets/admission. Full native/Forge #1023 qualification passed at `bd2cc13a` (run `39073019680`),
+including 56 actual bulk frames and custom exclusion. Hardware adoption and net
+benefit remain open; use the same-JAR flag false/true comparison. See
 `docs/RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md`.
 Matched control/pairs remain
 open; no Phase 5 performance gate is closed by one capture.

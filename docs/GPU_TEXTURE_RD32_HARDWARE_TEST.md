@@ -1,16 +1,20 @@
 # Unified GPU texture RD32 hardware qualification
 
-## Bulk CPU interpolation comparison (await full/native qualification)
+## Current gate: qualified #1023 bulk CPU interpolation comparison
 
 The owner #1021 UUID `f4741fc5` capture is received. It shows cached terrain
 adoption (439 traversals/6,457 valid frames, 785 cached rebuilds, 1,604 retained
 notices); do not repeat that unchanged candidate. See
 [analysis and fallback implementation](RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md).
 
-Candidate executable `b3625355238f98fe9d5402dfc692e19a819f2d10`, build #1022,
-adds an opt-in bulk version of the standard CPU interpolation fallback. Full
-Forge/native qualification is **pending**; do not use an unqualified artifact.
-After all gates pass, use one copy of the qualified JAR and preserve the #1021
+Executable `bd2cc13afb74b6468acd586e24729e4795d1924a`, build **#1023**,
+passed full [Forge/native CI](https://github.com/Vorith03/VulkanMod/actions/runs/39073019680),
+job `117514597700`: all 23 contracts, packaged Forge client, transformed ticker/
+all-mip pixel/synchronization oracle, both startup modes, indirect/post/depth,
+public Create Chronicles and Crash Assistant. Private packs skipped.
+Download [qualified artifact 12116211650](https://github.com/Vorith03/VulkanMod/actions/runs/39073019680/artifacts/12116211650):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1023-gbd2cc13a-all.jar`.
+Replace the existing VulkanMod JAR; install only one version. Preserve the #1021
 settings, texture pilot flags, fixed framebuffer/camera and 10 ms JFR sampler.
 Only change this flag between control and candidate:
 
@@ -35,7 +39,7 @@ path are unchanged. No new terrain flags or reload/re-entry tests are required.
 
 The following #1021 request is historical and superseded by capture receipt.
 
-## Current gate: #1021 terrain backlog repair
+## Historical #1021 terrain backlog repair gate (capture received)
 
 The first #1020 source-grouping capture is **received** (UUID `e12d7c14`).
 Do not repeat that unchanged build. Analysis and the new bounded terrain repair:
