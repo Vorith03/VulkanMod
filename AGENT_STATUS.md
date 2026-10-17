@@ -19,16 +19,16 @@ reduced CPU loop work. See
 `docs/RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md` for
 metrics, hashes, GPU/JFR validity, workload comparisons and cautions.
 
-**Disposition:** positive first same-JAR screening comparison,
-not 3 restored-world pairs. Snapshot restoration cannot be verified
-from supplied files; no CPU default promotion and no new GPU budget.
-The existing #1023 JAR suffices. Next formal gate:
-three alternating snapshot-restored OFF/ON pairs; if the owner
-confirms this pair was restored, it may count as the first.
-Do not request a repeat of these unchanged captures; no new
-renderer commit or CI is needed until further evidence indicates
-a defect or enough paired measurements support default promotion.
-Phase 5 matched OpenGL/Vulkan and frame-time gates remain open.
+**Disposition:** **conditionally accepted matched OFF/ON pair 1/3**
+on the owner's instruction to assume restored benchmark-world snapshots.
+This is an explicit assumption, not a snapshot identity proven by logs.
+Bulk CPU ON has substantial favorable texture/frametime evidence, but
+the three-pair default-adoption gate remains open.
+**Two further alternating restored-world OFF/ON pairs are needed**,
+with unchanged #1023 JAR, GPU flags, modpack/settings and 10-ms JFR.
+No repeat of pair one, no new JAR/GPU budgets, no default promotion.
+Independent owner visual observations remain to be collected; the
+separate Phase 5 OpenGL/Vulkan baseline gates remain open.
 
 ## Owner #1023 bulk CPU ON capture received; OFF control next — 2026-10-17
 

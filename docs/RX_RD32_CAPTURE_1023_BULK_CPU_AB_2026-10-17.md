@@ -2,8 +2,9 @@
 
 ## Disposition
 
-**Positive first same-executable screening pair. Do not promote the opt-in
-CPU path to default yet.** Both captures identify qualified Forge/native #1023
+**Positive first same-executable OFF/ON comparison, conditionally accepted
+as matched pair 1/3 under the owner's restored-world-snapshot assumption.
+Do not promote the opt-in CPU path to default yet.** Both captures identify qualified Forge/native #1023
 executable `bd2cc13afb74b6468acd586e24729e4795d1924a`, Minecraft 1.20.1 /
 Forge 47.3.0, Java 17.0.15, RX 6900 XT/RADV, fixed 2552×1374, RD32 / simulation 12,
 VSync off, same world/dimension/pose, texture source pool/unified queue and
@@ -12,10 +13,14 @@ The only *intended* setting difference was
 `-Dvulkanmod.experimentalCpuSpriteInterpolation=false/true`.
 Benchmark outputs prove the behavioral switch: OFF records **0** bulk
 CPU updates; ON records **2,768,429 / 2,768,429** standard CPU interpolation
-updates using bulk. The files alone do not prove that the owner restored an
-identical pre-run world snapshot or that every other launcher JVM argument
-matched. Treat this as one strong screening pair, not three restored-world
-replicates or a closed Phase 5 matched-baseline gate.
+updates using bulk. The owner subsequently instructed us to **assume identical restored
+benchmark-world snapshots** for these runs. This is an owner-directed
+assumption, **not independently verified** by log evidence.
+Under that assumption, this is **matched pair 1/3**, not merely unpaired
+screening. Other launcher JVM arguments also cannot be exhaustively
+verified from the log alone. One pair is not three replicates, does not
+complete the CPU default-adoption criterion, and does not close the
+separate Phase 5 OpenGL/Vulkan baseline gate.
 
 Both runs have `capture_complete reason=benchmark_complete`; world,
 screen, pose and framebuffer stayed stable, with initial-population settling
@@ -111,13 +116,13 @@ The experimental path remains off by default; the formal multi-pair,
 identically-restored-world benefit criterion is open, as are private packs,
 deferred reload/re-entry and independent visual observations.
 
-Next, **do not rebuild a JAR or repeat this unchanged ON/OFF screening
-pair without restoring the benchmark world**. For formal default adoption,
-use the same qualified #1023 JAR, snapshot-restored worlds, identical
-modpack/launcher settings, a single changed CPU-bulk flag and the same
-10-ms JFR sampler; obtain three alternating OFF/ON pairs in total.
-If the owner confirms that this first pair used an identically restored
-snapshot it can count as pair one; otherwise it is screening only.
+Next, **do not rebuild a JAR or repeat the completed first OFF/ON pair**.
+Under the owner's restored-snapshot assumption it now counts as
+**matched pair 1/3**. For a formal default-adoption decision obtain
+**two additional alternating OFF/ON pairs** from the same restored
+world snapshot, with the same qualified #1023 JAR, identical
+modpack/launcher settings, one changed CPU-bulk flag and the same
+10-ms JFR sampler.
 Comparisons must cover full tick/texture/non-upload, GPU upload and
 graphics scopes, late-run frame distributions, and any animation errors.
 No other texture/GPU budget change should be bundled into that comparison.

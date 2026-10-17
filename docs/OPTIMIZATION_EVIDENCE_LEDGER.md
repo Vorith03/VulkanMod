@@ -305,10 +305,11 @@ bulk CPU updates OFF versus 2,768,429 ON. Texture CPU
 (+17.4%) favors ON. CPU JFR pixel/transfer category 2,348→1,249
 relevant Java samples; GPU main graphics 3.191→3.173 ms/frame
 and separate texture-upload 3.218→3.207 ms/batch are flat.
-**Disposition: production-adopted, positive same-executable
-screening A/B, net benefit not yet formally qualified.**
-The files do not establish restored snapshots; require three
-alternating restored-world pairs total before promoting default.
+**Disposition: production-adopted, positive conditionally matched
+OFF/ON pair 1/3; default-promotion benefit still unqualified.**
+The owner explicitly instructed us to assume restored benchmark-world
+snapshots; this is not independent log evidence. Require **two further
+alternating restored-world pairs** before default adoption.
 No new code/JAR/budget change now. See
 [`RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md`](RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md).
 

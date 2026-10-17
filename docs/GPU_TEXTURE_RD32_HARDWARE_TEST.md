@@ -6,19 +6,20 @@ Owner #1023 OFF UUID `5c61d553` is received, with ON `252df7a2`.
 The actual transformed path was toggled: OFF zero bulk updates;
 ON 2,768,429/2,768,429 CPU updates bulk. ON improved
 texture CPU 17.984→14.704 ms/tick and whole-capture 37.03→43.47 FPS
-(**single pair, screening only**), with no GPU timestamp or validation
-regression visible in the logs. See
+(**conditionally accepted matched pair 1/3**, based on the owner's
+assumption of restored benchmark-world snapshots), with no GPU timestamp
+or validation regression visible in the logs. See
 [`RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md`](RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md).
 
 **Do not repeat an unchanged capture or download a new JAR.**
-For formal claims/default adoption, use the same #1023 qualified
-JAR and collect three alternating OFF/ON pairs total on *restored*
-world snapshots, preserving all other flags, image size,
-settings and 10-ms JFR. The supplied files do not verify
-snapshot restoration for this first pair; if the owner confirms it,
-only two further restored pairs are needed. Keep pilot off by
-default until the formal gate is met; capture any wrong/stale/flickering
-animation observations. No reload/re-entry request at this gate.
+The owner instructed us to assume the first pair used a restored
+benchmark-world snapshot. Treat it as **pair 1/3, conditionally**; this
+assumption cannot be independently verified from logs.
+For formal claims/default adoption, collect **two further alternating
+OFF/ON pairs**, using the same #1023 qualified JAR, identical restored
+snapshot, GPU flags, image size, settings and 10-ms JFR. Keep pilot
+off by default until the formal gate is met; capture any wrong/stale/
+flickering animation observations. No reload/re-entry request at this gate.
 
 ## Current gate: OFF control for received #1023 ON capture
 
