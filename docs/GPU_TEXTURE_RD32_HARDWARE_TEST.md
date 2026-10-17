@@ -1,5 +1,19 @@
 # Unified GPU texture RD32 hardware qualification
 
+## Current gate: OFF control for received #1023 ON capture
+
+Owner UUID `252df7a2` is the completed #1023 **ON** pilot, with
+2,768,429/2,768,429 CPU standard interpolations using bulk fallback
+([analysis](RX_RD32_CAPTURE_1023_BULK_CPU_ON_2026-10-17.md)).
+**Do not repeat the unchanged ON run.** Keep the qualified **same
+#1023 JAR**, toggle **only**
+`-Dvulkanmod.experimentalCpuSpriteInterpolation=false`
+and preserve the restored world, frame size, RD32, packs, GPU pilots,
+camera and 10-ms JFR settings. Return next UUID benchmark/JFR/latest/
+debug and any animation observations. Three alternating identical
+restored-world OFF/ON pairs are needed before net-benefit claims.
+No new JAR or unrelated rendering changes required.
+
 ## Current gate: qualified #1023 bulk CPU interpolation comparison
 
 The owner #1021 UUID `f4741fc5` capture is received. It shows cached terrain

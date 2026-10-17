@@ -294,6 +294,20 @@ no renderer speedup follows. Use #1019 for the existing RX gate, return its raw
 JFR as well as the UUID log, and keep sampler configuration equal in A/B.
 
 
+## #1023 CPU bulk-ON RX adoption — 2026-10-17
+
+Owner UUID `252df7a2`, #1023/`bd2cc13a`: valid 180.020 s /
+7,825 frames, **100% bulk on the 2,768,429 recorded standard
+CPU fallback updates**; GPU interpolation 111,838/2,880,267
+standard attempts (3.88%, remaining largely residency-disabled).
+Texture CPU 14.704 ms/tick, upload GPU 3.207 ms/batch and
+main GPU 3.173 ms/frame. Compared with unpaired #1021
+17.950 ms/tick and ~35.92 FPS, ~43.47 FPS current is only
+favorable screening. **Disposition: correctness-qualified and
+hardware-adopted, matched net benefit unmeasured.** No default
+promotion. Next: same-JAR OFF control, three alternating
+restored-world pairs. [Detailed evidence](RX_RD32_CAPTURE_1023_BULK_CPU_ON_2026-10-17.md).
+
 ## #1021 RX terrain adoption and bulk CPU fallback candidate — October 17
 
 UUID `f4741fc5` on #1021/`8ff928dd` satisfies the requested single adoption

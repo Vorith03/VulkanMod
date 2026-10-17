@@ -2,6 +2,24 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Owner #1023 bulk CPU ON capture received; OFF control next — 2026-10-17
+
+Owner UUID `252df7a2` benchmark/JFR/latest/debug is received and valid
+for #1023 (`bd2cc13a`). Actual production bulk CPU adoption is
+2,768,429/2,768,429 standard CPU interpolation updates.
+Texture CPU = 14.704 ms/tick versus #1021 historical 17.950
+(**unpaired, no speedup claim**); 7,825 frames/180.020 s,
+GPU interpolation 3.88%, main graphics GPU ~3.17 ms/frame.
+See `docs/RX_RD32_CAPTURE_1023_BULK_CPU_ON_2026-10-17.md`
+for full metrics, caveats, independent JFR verification and hashes.
+
+**Next:** same qualified #1023 JAR, CPU bulk flag **false** with
+identical other settings, source world, GPU pilots and 10-ms JFR.
+Three alternating restored-world OFF/ON pairs qualify formal
+benefit. Do not repeat this unchanged ON run, change budgets,
+enable a default, or build another JAR for the comparison.
+Hardware adoption is measured; matched net benefit remains open.
+
 ## Bulk CPU interpolation qualified; RX comparison next — 2026-10-17
 
 Executable `bd2cc13afb74b6468acd586e24729e4795d1924a` passed full CI **#1023**:
