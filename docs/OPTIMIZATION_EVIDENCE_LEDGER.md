@@ -7,7 +7,11 @@ CPU time is essentially unchanged in historical single captures. Net benefit is
 still unmeasured. Terrain cache is rejected by its 512-entry cutoff against a
 stable 1,604-entry backlog; the bounded membership/attempt repair is implemented
 and passes production-method CPU regressions (baseline failure and cap-only spin
-preserved). Native/Forge qualification and RX adoption/net benefit are pending.
+preserved). **Qualified but unmeasured**: full CI #1021 passes at `8ff928dd`
+(run `39070465187`, job `117507019602`), including production packaging and all
+public renderer/compatibility/pixel/sync gates. Private packs skipped. RX adoption
+and net benefit remain unmeasured; the next gate is the changed-executable terrain
+capture, not another unchanged #1020 run.
 This supersedes the first-capture request below; do not repeat an unchanged run.
 
 

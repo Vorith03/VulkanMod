@@ -2,7 +2,7 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Owner #1020 capture received; terrain backlog repair — 2026-10-17
+## Owner #1020 evidence and terrain repair fully qualified — 2026-10-17
 
 The requested changed-executable capture is received: UUID
 `e12d7c14-9f90-4c41-b213-96606e05a272`, #1020 / `e0807c62`, benchmark + raw JFR
@@ -21,11 +21,19 @@ size, retains unready notices in place and bounds attempted admissions. A cap-on
 edit exposed a reproducible concurrent-set iterator spin on remove/reinsert; that
 negative result is preserved in the evidence document. Exact membership, topology,
 capacity, neighbor and dirty-retention rules remain. All 22 offline contracts pass;
-final focused production scheduler/ring/population tests pass. Local Forge is
-blocked at Gradle distribution download. **Full native/Forge CI is pending for
-this milestone**; inspect its live result before any new hardware-test request.
+final focused production scheduler/ring/population tests pass, including a
+stale-notice/redirty race. Full CI **#1021** at executable
+`8ff928dd02deb6ad2d9098210a82fa23bfdbf5a6` is **green**: run `39070465187`, job
+`117507019602`. All 22 contracts, Forge production packaging, animation/portal
+anchors, both startup modes, indirect, post/depth, screenshot pixel/sync,
+Create Chronicles, Crash Assistant and artifact uploads passed. Private packs
+were skipped. This supersedes local Forge download blockage for qualification.
+Qualified JAR: `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1021-g8ff928dd-all.jar`,
+artifact `12115062566` on that run. Large-backlog behavior is covered by the CPU
+production-method fixture; representative RX adoption/net benefit is unmeasured.
 
-Next: qualify this terrain increment, then test whether stationary traversal
+Next: one changed-executable #1021 RD32 capture using the new first section of
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`. Test whether stationary traversal
 and terrain-setup CPU cost fall while dirty maintenance is retained. Other graph
 invalidations may coexist; no guaranteed traversal-elimination or FPS claim.
 CPU texture interpolation remains a major unresolved cost. Do not request another

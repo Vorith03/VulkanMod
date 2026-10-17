@@ -1,5 +1,40 @@
 # Unified GPU texture RD32 hardware qualification
 
+## Current gate: #1021 terrain backlog repair
+
+The first #1020 source-grouping capture is **received** (UUID `e12d7c14`).
+Do not repeat that unchanged build. Analysis and the new bounded terrain repair:
+[measured evidence and regression](RX_RD32_CAPTURE_1020_AND_TERRAIN_REPAIR_2026-10-17.md).
+
+Executable `8ff928dd02deb6ad2d9098210a82fa23bfdbf5a6` passed full
+[CI #1021](https://github.com/Vorith03/VulkanMod/actions/runs/39070465187), job
+`117507019602`: all 22 contracts, Forge production packaging, both startup modes,
+indirect/post/depth/screenshot pixels and synchronization, public Create Chronicles
+and Crash Assistant. Private packs skipped; RX benefit remains unmeasured.
+Download [artifact 12115062566](https://github.com/Vorith03/VulkanMod/actions/runs/39070465187/artifacts/12115062566):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1021-g8ff928dd-all.jar`.
+Replace the old VulkanMod JAR; install only one version.
+
+Run the same automated benchmark **once**, preserving the #1020 flags, both texture
+pilots enabled, 10 ms JFR sampler, GPU timestamps, RD32/simulation 12, 2552x1374,
+selected packs/world and fixed camera. No new JVM flag is needed. Keep the game
+focused until normal automatic save/exit. Return the UUID benchmark log, neighboring
+JFR and latest.log (debug.log if errors), plus any missing/stale terrain or animation
+observations. Do not add reload/re-entry or new experimental terrain options.
+
+Decision: in baseline-valid stationary windows, does `graph_traversals_delta`
+fall below the frame count, while pending dirty notices remain retained and
+`cached_graph_schedules_delta` admits eligible maintenance? Compare terrain setup,
+full tick/frame and texture times. Unready edge work may remain at 1,604 and cached
+schedules may stay low if no work becomes eligible; queue disappearance is not a
+success criterion. Other topology invalidations can still require a full traversal.
+This single capture qualifies adoption/screening, not a formal matched-world speedup.
+For that claim use restored-world #1020/#1021 pairs with identical settings; three
+alternating pairs are required by the existing policy.
+
+The sections below retain historical texture-pilot contracts; their old first-
+capture requests are superseded by this section.
+
 ## October 17 source-grouping repair comparison
 
 Implementation: `e0807c626bfa27416ebadc53eddff519f9ac29ef`, full CI

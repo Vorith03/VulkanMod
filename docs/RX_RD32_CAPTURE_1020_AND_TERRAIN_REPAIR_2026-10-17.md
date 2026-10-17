@@ -105,17 +105,25 @@ attempt bound, and exact-once drain of all 1,604 after neighbors become ready in
 batches of at most seven. Existing backpressure, neighbor retry, redirty,
 initial-population and ring-ownership regressions pass.
 
-All 22 offline contracts passed locally; the final stale-notice refinement was
+All 22 offline contracts passed locally; the final stale-notice refinement and deterministic redirty-race regression were
 rechecked with the focused terrain contract. `git diff --check` passed. The local
 Java 17 installation exposes the compiler module but has no javac launcher;
 a temporary launcher invokes `java -m jdk.compiler/com.sun.tools.javac.Main`.
 Local Forge validation cannot configure because the Gradle 8.1.1 distribution
-download fails with `Network is unreachable`. Full remote native/Forge validation
-is the remaining correctness gate for this milestone; inspect that result before
-requesting any user-machine test. This is implemented with CPU regression evidence,
-not yet native-qualified or a proven RX speedup.
+download fails with `Network is unreachable`.
 
-After qualification, the narrow changed-executable RX question is whether
+Full public/native CI **#1021** passed at implementation
+`8ff928dd02deb6ad2d9098210a82fa23bfdbf5a6`: run `39070465187`, job
+`117507019602`. All 22 contracts, Forge production packaging, pinned animation/
+portal anchors, both startup modes, indirect, post/depth, screenshot pixel/sync,
+Create Chronicles, Crash Assistant and artifact uploads passed. Private packs
+were skipped. The large-backlog regression executes the production Java scheduler
+methods with CPU fixture dependencies; the native suite is broader regression
+coverage, not proof that the owner-world backlog is exercised on Lavapipe.
+Qualified JAR: `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1021-g8ff928dd-all.jar`,
+artifact `12115062566`. Disposition: **qualified but unmeasured**.
+
+The remaining narrow changed-executable RX question is whether
 `graph_traversals_delta` falls below frames at a stationary pose, unready notices
 remain retained, and `cached_graph_schedules_delta` admits eligible maintenance
 without rendering loss. Compare against this #1020 capture with identical settings
