@@ -129,6 +129,7 @@
     "texture.SpriteAnimationFrameAccessor",
     "texture.SpriteAnimationInfoAccessor",
     "texture.SpriteInterpolationMixin",
+    "texture.SpriteContentsUploadInvoker",
     "texture.SpriteInterpolationInvoker",
     "texture.SpriteTickerMixin",
     "texture.SpriteUsageMixin",

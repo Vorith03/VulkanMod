@@ -147,3 +147,18 @@ transport cannot authenticate (`could not read Username`); the connected GitHub
 API is used to publish the same local implementation tree on the verified base.
 The prior authorization block is superseded. Full/native qualification remains
 pending until actual CI results are inspected.
+
+
+Additional local adversarial qualification rejects three deliberately corrupted
+production kernels: next-frame alpha, integer interpolation weight and truncated
+odd-tile mip offsets. Each fails the independent pixel oracle. Remote #1022,
+run `39072794735`, job `117513870765`, has passed all 23 contracts and entered
+Forge build/packaging; full/native qualification is still pending.
+
+
+#1022's Forge compilation failed with `Mapping conflict for @Invoker target
+upload`: MSpriteContents already owns an injection mapping for the same target
+with a different reference form. The corrected candidate moves the invoker to a
+dedicated registered `SpriteContentsUploadInvoker` interface, matching the
+existing separate-accessor pattern. Pixel logic and upload targets are unchanged.
+Native gates were not reached on #1022; preserve that negative result.

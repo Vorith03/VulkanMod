@@ -1,5 +1,40 @@
 # Unified GPU texture RD32 hardware qualification
 
+## Bulk CPU interpolation comparison (await full/native qualification)
+
+The owner #1021 UUID `f4741fc5` capture is received. It shows cached terrain
+adoption (439 traversals/6,457 valid frames, 785 cached rebuilds, 1,604 retained
+notices); do not repeat that unchanged candidate. See
+[analysis and fallback implementation](RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md).
+
+Candidate executable `b3625355238f98fe9d5402dfc692e19a819f2d10`, build #1022,
+adds an opt-in bulk version of the standard CPU interpolation fallback. Full
+Forge/native qualification is **pending**; do not use an unqualified artifact.
+After all gates pass, use one copy of the qualified JAR and preserve the #1021
+settings, texture pilot flags, fixed framebuffer/camera and 10 ms JFR sampler.
+Only change this flag between control and candidate:
+
+```text
+-Dvulkanmod.experimentalCpuSpriteInterpolation=false
+-Dvulkanmod.experimentalCpuSpriteInterpolation=true
+```
+
+Use **one line per launch**, not both. A control/candidate pair distinguishes
+whole-texture CPU cost from changed-world/workload differences better than a
+candidate-only historical comparison. For formal benefit qualification, restore
+the same world snapshot before each launch and run three alternating pairs.
+A single candidate-only capture can establish adoption, not matched benefit.
+
+Return each UUID benchmark log and neighboring raw JFR plus latest/debug and
+any wrong/stale/flickering animation observations. Read
+`standard_interpolation_cpu_bulk_updates / standard_interpolation_cpu_updates`
+for adoption; the numerator is a subset, not an additional route. Compare whole
+texture/client-tick and frame distributions, CPU interpolation stacks and
+separate upload GPU time. GPU first refusal, budgets/admission and the transfer
+path are unchanged. No new terrain flags or reload/re-entry tests are required.
+
+The following #1021 request is historical and superseded by capture receipt.
+
 ## Current gate: #1021 terrain backlog repair
 
 The first #1020 source-grouping capture is **received** (UUID `e12d7c14`).

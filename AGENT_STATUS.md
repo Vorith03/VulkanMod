@@ -27,7 +27,11 @@ must pass before offering a new test artifact. Original local implementation
 commits are `909497a` and `e1c332d`. The owner explicitly authorized remote
 publication and CI after the initial automatic approval rejection. The shell
 Git transport has no credentials; publication uses the connected GitHub API.
-Next: inspect full native/Forge CI for the published candidate. Then same-JAR bulk flag off/on with identical
+First full #1022 (`39072794735`, job `117513870765`) passed all 23
+contracts but failed compileJava: putting an upload invoker in MSpriteContents
+conflicted with that mixin's existing upload injection refmap entry. The invoker
+is now isolated in its own registered accessor mixin; pixels/uploads are unchanged.
+Next: inspect full native/Forge CI for the corrected candidate. Then same-JAR bulk flag off/on with identical
 settings/sampler, matched restored-world pairs for a benefit claim. Particle/block-entity/server work remain separate;
 reload/re-entry and private-pack qualification remain open.
 

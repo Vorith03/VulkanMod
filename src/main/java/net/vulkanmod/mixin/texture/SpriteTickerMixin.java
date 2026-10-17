@@ -91,7 +91,7 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
                         source, output, width, height, ((SpriteAnimationInfoAccessor)animationInfo).vulkanmod$frameRowSize(),
                         current.vulkanmod$frameIndex(), next.vulkanmod$frameIndex(),
                         subFrame, current.vulkanmod$frameTime())) return false;
-        ((VSpriteContentsI)vulkanmod$owner).vulkanmod$uploadFramePixels(x, y, 0, 0, output);
+        ((SpriteContentsUploadInvoker)(Object)vulkanmod$owner).vulkanmod$uploadFramePixels(x, y, 0, 0, output);
         TextureTickAttribution.recordCpuBulkInterpolation();
         return true;
     }
