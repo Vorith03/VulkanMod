@@ -1,5 +1,21 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+**New owner-directed next-FPS candidate (October 17, #1024):** The
+RX #1023 JFR identifies the Forge per-particle frustum infinite-AABB
+`equals` check as 764 of 2,910 sampled Java particle-render leaves and a
+separate ~601 leaves in modded particle lighting/chunk checks. Bounded
+`FrustumInfiniteBoundsEquality` fast rejection is opt-in and passed
+full public/native/Forge CI [#1024](https://github.com/Vorith03/VulkanMod/actions/runs/39078815371) at `3f77cab2`.
+The source helper matches the original AABB equality contract in 100,000
+random tests and special/subclass cases; ordinary/default execution is
+unchanged with the property absent. **No RX production adoption or net FPS
+benefit measured**; isolated sample shares are not time savings. Next:
+same-JAR restored-world flag-only OFF/ON RX pair, CPU bulk ON in both.
+The previous #1023 bulk CPU pair remains conditionally accepted 1/3 and its
+formal default gate open, but the owner specifically selected a new hotspot
+instead of immediate additional #1023 pairs. See
+[fast-path evidence](FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md).
+
 **Latest evidence, October 17:** owner #1020 capture is received; see
 [analysis and terrain repair](RX_RD32_CAPTURE_1020_AND_TERRAIN_REPAIR_2026-10-17.md).
 Source-switch elimination and fewer copy commands are exercised, while texture

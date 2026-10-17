@@ -1,5 +1,52 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1024 opt-in Forge particle-frustum equality fast rejection qualified — 2026-10-17
+
+The owner directed us to **move on to the next framerate improvement**, rather
+than immediately repeat the completed #1023 bulk CPU interpolation A/B. The
+earlier bulk result remains **conditionally matched pair 1/3** under the owner's
+restored-benchmark-world assumption; its two additional pairs/default adoption
+gate remain open, but are **not** the immediate next user request.
+
+The #1023 RX raw JFR sampled 2,910 Render-thread execution samples whose
+stacks contain particle rendering; 764 sampled leaves were
+`AABB.equals` in Forge frustum culling and 601 were modded
+`ClientLevel.hasChunk` queries from particle light-color lookup. Particle
+render averaged 4.196 ms/frame and tick approximately 4.482 ms/client tick.
+These are evidence for candidate selection, **not** a predicted savings.
+
+Committed opt-in fast rejection at `3f77cab2941f60a0a935b2f609f28317072b59f9`
+with `-Dvulkanmod.experimentalParticleFrustumFastPath=true`. A scoped
+Forge `Frustum.isVisible(AABB)` redirect avoids virtual six-coordinate
+equality when an exact vanilla AABB has a provably different first coordinate
+from the infinite-bounds sentinel. All other cases still invoke original
+`AABB.equals`, preserving special sentinel, subclasses and the unchanged
+frustum plane test. The mixin is omitted entirely when the flag is absent.
+Isolated Java 17 production-helper equality regression covers 100,000 random
+inputs and special doubles/subclass behavior.
+
+**Full native/Forge CI #1024 passed** at that executable:
+[run 39078815371](https://github.com/Vorith03/VulkanMod/actions/runs/39078815371). Java/CPU contracts, Forge JAR packaging,
+flagged Vulkan startup, no-splash startup, GPU indirect, post/depth,
+screenshot pixel/synchronization, public Create Chronicles, Crash Assistant,
+and artifact/log delivery passed. Qualified artifact **12118446728**:
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1024-g3f77cab2-all.jar`.
+The qualified CI startup loads with the opt-in flag, but this is **not**
+RX adoption, a visual check, or measured net FPS benefit.
+
+**Next owner-machine gate:** one restored-world **same-JAR #1024 OFF/ON
+pair** toggling only `vulkanmod.experimentalParticleFrustumFastPath`.
+Keep the proven #1023 CPU bulk pilot **ON in both**, along with GPU source
+pool/unified transfer and prior O3/O4 flags, RD32, simulation 12, fixed
+2552x1374 framebuffer/pose, packs/modpack and 10-ms JFR. Compare particle
+render stage, full FPS/frame distribution and JFR frustum/equality stacks.
+Return both UUID benchmark files, neighboring JFR, latest/debug logs and any
+particle culling/light/animation visual anomaly. No default promotion or
+speedup claim without matched RX evidence. The new candidate does not reopen
+prior terrain/texture investigations. See
+`docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md` and the updated
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`.
+
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
 ## #1023 bulk CPU interpolation: first OFF/ON control favors ON — 2026-10-17

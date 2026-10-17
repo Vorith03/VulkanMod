@@ -204,6 +204,17 @@ use `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md` for the next gate. Keep both
 pilots off by default. **GPU compute animation dispatch coalescing** remains
 a separate open step, pending the qualified pilot's coverage/cost evidence.
 
+**October 17 next-framerate owner direction:** After the conditionally
+matched first #1023 CPU bulk ON/OFF pair, the owner explicitly selected
+the **next performance candidate** rather than immediately repeating two
+#1023 pairs. The new opt-in Forge infinite-AABB frustum fast-rejection
+candidate passed public/native #1024 at `3f77cab2`; see
+`docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md`.
+Its RX same-JAR flag-only A/B and particle visual gate remain open, and
+**no frame-rate gain is claimed**. The separate CPU bulk pair 2/3 and
+3/3, CPU-default adoption, and Phase 5 OpenGL/Vulkan baseline gates remain
+open. Do not conflate these separate qualification tracks.
+
 **October 17 evidence update:** #1019's owner RD32 pilot-on capture and raw JFR
 are received; see `docs/RX_RD32_CAPTURE_2026-10-17.md` and the ledger. The
 common queue/source pool are exercised, but source-buffer switches cause

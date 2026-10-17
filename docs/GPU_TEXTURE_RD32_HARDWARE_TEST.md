@@ -1,5 +1,47 @@
 # Unified GPU texture RD32 hardware qualification
 
+## Owner-directed next test: #1024 opt-in particle frustum fast-path
+
+The owner explicitly moved to the next framerate candidate rather than
+collecting the two outstanding #1023 CPU bulk repetitions immediately.
+The first bulk OFF/ON result remains conditional matched pair 1/3; its
+separate default-adoption gate stays open. **Do not repeat that old pair
+as the new frustum test.**
+
+Qualified executable **`3f77cab2941f60a0a935b2f609f28317072b59f9`**,
+full Forge/native CI [#1024](https://github.com/Vorith03/VulkanMod/actions/runs/39078815371) passed, including Java contracts,
+flagged Vulkan startup, no-splash, indirect, post/depth/screenshot
+pixel/synchronization, Create Chronicles and Crash Assistant public gates.
+Use [qualified artifact 12118446728](https://github.com/Vorith03/VulkanMod/actions/runs/39078815371/artifacts/12118446728):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1024-g3f77cab2-all.jar`.
+Replace the previous mod JAR; install only one VulkanMod version.
+
+Run **one restored-world, same-JAR OFF/ON pair**. On **both** launches
+preserve all of the tested #1023 ON settings (especially
+`-Dvulkanmod.experimentalCpuSpriteInterpolation=true`; do **not** toggle
+this), GPU texture source pool/unified uploads, GPU animation O3/O4,
+profiling/10-ms JFR, world snapshot, fixed 2552x1374/RD32/simulation 12,
+camera, other mods and resource packs. Change **only one** of these flags
+between the two launches:
+
+```text
+-Dvulkanmod.experimentalParticleFrustumFastPath=false
+-Dvulkanmod.experimentalParticleFrustumFastPath=true
+```
+
+Compare window-weighted and whole-run frame throughput/distributions,
+particle_render_ms/frame, total world/game render, raw JFR samples in
+`AABB.equals` under particle rendering, and any new frustum/equality
+helper stacks. The baseline found 764 `AABB.equals` sampled leaves in
+2,910 Java particle-render samples (statistical, not measured milliseconds
+saved). Read render/other GPU and client tick to detect tradeoffs.
+Return both UUID benchmark logs and adjacent raw `*.jfr`, latest/debug
+logs and any wrong, missing or unexpectedly visible smoke/particles.
+One pair is **screening** for adoption/net direction; three alternating
+matched restored-world pairs remain the formal performance-adoption
+standard. Do not default-enable on CI success alone. For implementation
+safety, see `docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md`.
+
 ## Current gate: first #1023 OFF/ON result received; formal qualification open
 
 Owner #1023 OFF UUID `5c61d553` is received, with ON `252df7a2`.
