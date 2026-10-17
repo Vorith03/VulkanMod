@@ -294,6 +294,24 @@ no renderer speedup follows. Use #1019 for the existing RX gate, return its raw
 JFR as well as the UUID log, and keep sampler configuration equal in A/B.
 
 
+## #1023 first same-JAR OFF/ON bulk CPU comparison — October 17
+
+OFF owner UUID `5c61d553` vs ON `252df7a2`: both qualified
+#1023/`bd2cc13a`, unchanged RD32/framebuffer/GPU pilots; zero
+bulk CPU updates OFF versus 2,768,429 ON. Texture CPU
+**17.984→14.704 ms/tick**; non-upload texture
+**10.684→7.282 ms/tick**; complete client tick
+**30.264→26.809 ms/tick**; throughput **37.03→43.47 FPS**
+(+17.4%) favors ON. CPU JFR pixel/transfer category 2,348→1,249
+relevant Java samples; GPU main graphics 3.191→3.173 ms/frame
+and separate texture-upload 3.218→3.207 ms/batch are flat.
+**Disposition: production-adopted, positive same-executable
+screening A/B, net benefit not yet formally qualified.**
+The files do not establish restored snapshots; require three
+alternating restored-world pairs total before promoting default.
+No new code/JAR/budget change now. See
+[`RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md`](RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md).
+
 ## #1023 CPU bulk-ON RX adoption — 2026-10-17
 
 Owner UUID `252df7a2`, #1023/`bd2cc13a`: valid 180.020 s /

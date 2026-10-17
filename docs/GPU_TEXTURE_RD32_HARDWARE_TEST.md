@@ -1,5 +1,25 @@
 # Unified GPU texture RD32 hardware qualification
 
+## Current gate: first #1023 OFF/ON result received; formal qualification open
+
+Owner #1023 OFF UUID `5c61d553` is received, with ON `252df7a2`.
+The actual transformed path was toggled: OFF zero bulk updates;
+ON 2,768,429/2,768,429 CPU updates bulk. ON improved
+texture CPU 17.984→14.704 ms/tick and whole-capture 37.03→43.47 FPS
+(**single pair, screening only**), with no GPU timestamp or validation
+regression visible in the logs. See
+[`RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md`](RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md).
+
+**Do not repeat an unchanged capture or download a new JAR.**
+For formal claims/default adoption, use the same #1023 qualified
+JAR and collect three alternating OFF/ON pairs total on *restored*
+world snapshots, preserving all other flags, image size,
+settings and 10-ms JFR. The supplied files do not verify
+snapshot restoration for this first pair; if the owner confirms it,
+only two further restored pairs are needed. Keep pilot off by
+default until the formal gate is met; capture any wrong/stale/flickering
+animation observations. No reload/re-entry request at this gate.
+
 ## Current gate: OFF control for received #1023 ON capture
 
 Owner UUID `252df7a2` is the completed #1023 **ON** pilot, with

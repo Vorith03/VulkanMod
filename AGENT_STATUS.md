@@ -2,6 +2,34 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## #1023 bulk CPU interpolation: first OFF/ON control favors ON — 2026-10-17
+
+Owner #1023 OFF UUID `5c61d553` (benchmark/JFR/latest/debug) is received.
+Same qualified executable `bd2cc13a` and nominal identical RD32/2552×1374
+workload/GPU flags as ON UUID `252df7a2`: production bulk count
+**0 OFF versus 2,768,429/2,768,429 ON**. Both captures complete
+normally. Texture CPU **17.984 OFF vs 14.704 ON ms/tick**;
+non-upload remainder **10.684 vs 7.282**; full client tick
+**30.264 vs 26.809**. Full capture **6,666 vs 7,825 frames**
+(~37.03 vs ~43.47 FPS, **17.4% favorable ON**).
+GPU main graphics (3.191 vs 3.173 ms/frame) and texture upload
+(3.218 vs 3.207 ms/batch) near-equal. OFF JFR has 2,348 relevant
+texture pixel/transfer category samples vs ON 1,249, corroborating
+reduced CPU loop work. See
+`docs/RX_RD32_CAPTURE_1023_BULK_CPU_AB_2026-10-17.md` for
+metrics, hashes, GPU/JFR validity, workload comparisons and cautions.
+
+**Disposition:** positive first same-JAR screening comparison,
+not 3 restored-world pairs. Snapshot restoration cannot be verified
+from supplied files; no CPU default promotion and no new GPU budget.
+The existing #1023 JAR suffices. Next formal gate:
+three alternating snapshot-restored OFF/ON pairs; if the owner
+confirms this pair was restored, it may count as the first.
+Do not request a repeat of these unchanged captures; no new
+renderer commit or CI is needed until further evidence indicates
+a defect or enough paired measurements support default promotion.
+Phase 5 matched OpenGL/Vulkan and frame-time gates remain open.
+
 ## Owner #1023 bulk CPU ON capture received; OFF control next — 2026-10-17
 
 Owner UUID `252df7a2` benchmark/JFR/latest/debug is received and valid
