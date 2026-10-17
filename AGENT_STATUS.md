@@ -2,6 +2,35 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Owner #1020 capture received; terrain backlog repair — 2026-10-17
+
+The requested changed-executable capture is received: UUID
+`e12d7c14-9f90-4c41-b213-96606e05a272`, #1020 / `e0807c62`, benchmark + raw JFR
++ latest(10)/debug(7). See
+`docs/RX_RD32_CAPTURE_1020_AND_TERRAIN_REPAIR_2026-10-17.md` for hashes,
+analysis and the implemented scheduler repair. Prior instructions to collect
+the first #1020 capture are superseded. Source-switch drains are zero and queued
+copy commands fall ~55.6% versus the historical #1019 capture, but textures still
+cost 17.556 ms/tick and inclusive flush CPU 8.176 ms/tick. No paired CPU speedup
+is established; O4 coverage remains low (4.17%).
+
+The stationary capture has 4,997 graph traversals/4,997 baseline-valid frames,
+zero cached schedules and 1,604 pending dirty. The 512-entry cutoff guarantees
+cache rejection. The repair validates real graph membership regardless of backlog
+size, retains unready notices in place and bounds attempted admissions. A cap-only
+edit exposed a reproducible concurrent-set iterator spin on remove/reinsert; that
+negative result is preserved in the evidence document. Exact membership, topology,
+capacity, neighbor and dirty-retention rules remain. All 22 offline contracts pass;
+final focused production scheduler/ring/population tests pass. Local Forge is
+blocked at Gradle distribution download. **Full native/Forge CI is pending for
+this milestone**; inspect its live result before any new hardware-test request.
+
+Next: qualify this terrain increment, then test whether stationary traversal
+and terrain-setup CPU cost fall while dirty maintenance is retained. Other graph
+invalidations may coexist; no guaranteed traversal-elimination or FPS claim.
+CPU texture interpolation remains a major unresolved cost. Do not request another
+unchanged #1020 capture, raise memory budgets or enable pilots by default.
+
 ## Source-switch texture repair fully qualified — 2026-10-17
 
 Implementation `e0807c626bfa27416ebadc53eddff519f9ac29ef` is qualified by full

@@ -104,7 +104,6 @@ assert render.count('!area.isGraphVisible(section)') >= 2, 'must recheck members
 assert 'this.pendingDirtySections.clear();' in render
 assert 'if(!section.hasXYNeighbours())' in render
 assert 'this.cachedGraphRebuildSchedules++;' in render
-assert 'this.pendingDirtySections.size() > MAX_CACHED_DIRTY_SECTIONS' in render
 assert 'this.worldRenderer.requestSectionRebuild(this);' in section
 assert 'this.worldRenderer.setNeedsUpdate();' not in section.split('public void setDirty(', 1)[1].split('\n    }', 1)[0]
 assert 'if(this.taskDispatcher.uploadAllPendingUploads())' not in render
@@ -156,7 +155,12 @@ public final class CachedGraphContract {
         short frame = 9;
         final ChunkArea area = new ChunkArea();
 
-        boolean isDirty() { return dirty; }
+        Runnable afterDirtyRead;
+        boolean isDirty() {
+            boolean value = dirty;
+            if(afterDirtyRead != null) afterDirtyRead.run();
+            return value;
+        }
         boolean hasXYNeighbours() { return neighbors; }
         ChunkArea getChunkArea() { return area; }
         short getLastFrame() { return frame; }
@@ -177,15 +181,18 @@ public final class CachedGraphContract {
         final Set<RenderSection> pendingDirtySections = ConcurrentHashMap.newKeySet();
         final List<RenderSection> chunkQueue = new ArrayList<>(List.of(new RenderSection()));
         final TaskDispatcher taskDispatcher = new TaskDispatcher();
-        static final int MAX_CACHED_DIRTY_SECTIONS = 512;
+__LEGACY_LIMIT__
         short lastFrame = 9;
         boolean needsUpdate;
         long cachedGraphRebuildSchedules;
         int scheduled;
         Runnable onSchedule;
+        boolean rejectSchedule;
+        int attempts;
 
         boolean scheduleUpdate(RenderSection section, int capacity, RenderRegionCache cache) {
-            if(capacity <= 0 || !section.dirty) return false;
+            attempts++;
+            if(rejectSchedule || capacity <= 0 || !section.dirty) return false;
             scheduled++;
             section.dirty = false;
             if(onSchedule != null) onSchedule.run();
@@ -259,9 +266,66 @@ __METHODS__
         check(r.pendingDirtySections.contains(d), "concurrent redirty lost");
         r.pendingDirtySections.clear();
 
-        for(int i = 0; i <= Renderer.MAX_CACHED_DIRTY_SECTIONS; i++)
-            r.pendingDirtySections.add(new RenderSection());
-        check(!r.cachedGraphCoversPendingDirty(), "over-capacity queue accepted");
+        // A dirty notification arriving after the first clean read but before
+        // stale-notice removal must survive that removal.
+        RenderSection clean = new RenderSection();
+        clean.dirty = false;
+        clean.afterDirtyRead = () -> {
+            clean.afterDirtyRead = null;
+            clean.dirty = true;
+            r.pendingDirtySections.add(clean);
+        };
+        r.pendingDirtySections.add(clean);
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.pendingDirtySections.contains(clean) && clean.dirty,
+                "stale-notice cleanup erased a new dirty notification");
+        r.pendingDirtySections.clear();
+
+        // RX #1020: 1,604 known graph members lacking ready neighbors remain
+        // dirty after every full traversal. Count alone must not invalidate
+        // connectivity; retain the work until the neighbors arrive.
+        List<RenderSection> edge = new ArrayList<>();
+        for(int i = 0; i < 1604; i++) {
+            RenderSection section = new RenderSection();
+            section.neighbors = false;
+            edge.add(section);
+            r.pendingDirtySections.add(section);
+        }
+        int before = r.scheduled;
+        for(int frame = 0; frame < 100; frame++) {
+            check(r.cachedGraphCoversPendingDirty(), "large known backlog forced a full traversal");
+            r.schedulePendingDirtyOnCachedGraph();
+            check(!r.needsUpdate && r.scheduled == before
+                    && r.pendingDirtySections.size() == 1604,
+                    "unready backlog was scheduled, lost, or invalidated the graph");
+        }
+        // A true graph/ownership mismatch must still invalidate even above
+        // the old ceiling, independently of concurrent-set iteration order.
+        RenderSection stale = edge.get(1300);
+        stale.frame = 8;
+        check(!r.cachedGraphCoversPendingDirty(), "large backlog hid a stale owner");
+        stale.frame = 9;
+        stale.graphVisible = false;
+        check(!r.cachedGraphCoversPendingDirty(), "large backlog hid missing area membership");
+        stale.graphVisible = true;
+        for(RenderSection section : edge) section.neighbors = true;
+        // A neighbor can disappear again inside scheduleUpdate. Failed work
+        // is retained, and reinsertion cannot make this frame loop forever.
+        r.rejectSchedule = true;
+        int attempts = r.attempts;
+        r.schedulePendingDirtyOnCachedGraph();
+        check(r.attempts - attempts <= 1604 && r.pendingDirtySections.size() == 1604,
+                "rejected work was lost or exceeded the per-frame attempt bound");
+        r.rejectSchedule = false;
+        r.taskDispatcher.capacity = 7;
+        while(!r.pendingDirtySections.isEmpty()) {
+            check(r.cachedGraphCoversPendingDirty(), "neighbor arrival invalidated connectivity");
+            int previous = r.scheduled;
+            r.schedulePendingDirtyOnCachedGraph();
+            check(r.scheduled > previous && r.scheduled - previous <= 7,
+                    "large backlog violated capacity or failed to drain");
+        }
+        check(r.scheduled - before == 1604, "neighbor-ready work not admitted exactly once");
         r.pendingDirtySections.clear();
         r.chunkQueue.clear();
         r.pendingDirtySections.add(new RenderSection());
@@ -270,6 +334,9 @@ __METHODS__
     }
 }
 '''
+scheduler = scheduler.replace('__LEGACY_LIMIT__',
+    '        static final int MAX_CACHED_DIRTY_SECTIONS = 512;'
+    if 'MAX_CACHED_DIRTY_SECTIONS' in render else '')
 scheduler = scheduler.replace('__METHODS__', '\n\n'.join((
     method_body(render, 'boolean cachedGraphCoversPendingDirty()'),
     method_body(render, 'void schedulePendingDirtyOnCachedGraph()'),

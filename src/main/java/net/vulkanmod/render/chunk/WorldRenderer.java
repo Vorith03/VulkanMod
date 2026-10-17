@@ -80,7 +80,6 @@ public class WorldRenderer {
     // just to enqueue another mesh task.
     private final Set<RenderSection> pendingDirtySections =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
-    private static final int MAX_CACHED_DIRTY_SECTIONS = 512;
     private long cachedGraphRebuildSchedules;
     private long fullGraphTraversals;
     private final Set<BlockEntity> globalBlockEntities = Sets.newHashSet();
@@ -271,9 +270,14 @@ public class WorldRenderer {
     }
 
     private boolean cachedGraphCoversPendingDirty() {
-        if(this.chunkQueue.size() == 0
-                || this.pendingDirtySections.size() > MAX_CACHED_DIRTY_SECTIONS)
+        if(this.chunkQueue.size() == 0)
             return false;
+        // A large mesh backlog does not imply changed graph connectivity.
+        // Unready edge sections can remain dirty indefinitely; a size ceiling
+        // would rebuild the full graph every frame and recreate that backlog.
+        // Validate the actual members instead. This allocation-free linear scan
+        // is bounded by resident section identities, and submission below still
+        // obeys dispatcher capacity and rechecks ownership at consumption.
         for(RenderSection section : this.pendingDirtySections) {
             ChunkArea area = section.getChunkArea();
             if(area == null || section.getLastFrame() != this.lastFrame
@@ -297,13 +301,19 @@ public class WorldRenderer {
         if(remaining <= 0)
             return;
         RenderRegionCache cache = new RenderRegionCache();
+        int noticesRemaining = this.pendingDirtySections.size();
         for(RenderSection section : this.pendingDirtySections) {
-            if(remaining <= 0)
+            // A weakly consistent iterator can revisit removed/reinserted
+            // notices. Bound attempts as well as successful submissions.
+            if(remaining <= 0 || noticesRemaining-- <= 0)
                 break;
-            if(!this.pendingDirtySections.remove(section))
+            if(!section.isDirty()) {
+                // A redirty can race this stale-notice cleanup. Recheck after
+                // removal so its notification is not erased by our remove.
+                if(this.pendingDirtySections.remove(section) && section.isDirty())
+                    this.pendingDirtySections.add(section);
                 continue;
-            if(!section.isDirty())
-                continue;
+            }
 
             // Check again at consumption, not just during preflight: an
             // asynchronous dirty notification can join the concurrent set
@@ -312,14 +322,17 @@ public class WorldRenderer {
             ChunkArea area = section.getChunkArea();
             if(area == null || section.getLastFrame() != this.lastFrame
                     || !area.isGraphVisible(section)) {
-                this.pendingDirtySections.add(section);
                 this.needsUpdate = true;
                 return;
             }
-            if(!section.hasXYNeighbours()) {
-                this.pendingDirtySections.add(section);
+            // Retain unready notices in place: remove/reinsert while iterating
+            // can repeatedly visit a tree-bin entry and allocate new map nodes.
+            if(!section.hasXYNeighbours())
                 continue;
-            }
+            if(!this.pendingDirtySections.remove(section))
+                continue;
+            if(!section.isDirty())
+                continue;
             if(this.scheduleUpdate(section, remaining, cache)) {
                 remaining--;
                 this.cachedGraphRebuildSchedules++;

@@ -1,5 +1,16 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+**Latest evidence, October 17:** owner #1020 capture is received; see
+[analysis and terrain repair](RX_RD32_CAPTURE_1020_AND_TERRAIN_REPAIR_2026-10-17.md).
+Source-switch elimination and fewer copy commands are exercised, while texture
+CPU time is essentially unchanged in historical single captures. Net benefit is
+still unmeasured. Terrain cache is rejected by its 512-entry cutoff against a
+stable 1,604-entry backlog; the bounded membership/attempt repair is implemented
+and passes production-method CPU regressions (baseline failure and cap-only spin
+preserved). Native/Forge qualification and RX adoption/net benefit are pending.
+This supersedes the first-capture request below; do not repeat an unchanged run.
+
+
 **Current implementation, October 17:** [source-switch queue repair](TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md)
 replaces the unified pilot's single-source pending group with per-source emission
 inside a 128-region disjoint epoch. **Qualified but unmeasured**: full public/native CI #1020 is green at

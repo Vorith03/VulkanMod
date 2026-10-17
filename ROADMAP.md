@@ -212,10 +212,14 @@ attempts, mainly falling back through disabled residency. Representative
 coverage is now measured for this capture; **net benefit remains unmeasured**.
 The bounded source-grouping repair is implemented with production-method CPU
 regressions and full native/Forge qualification in **#1020** at `e0807c62`; see
-`docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. RX adoption capture and
-matched comparison are next; fixed-budget admission stays
-unchanged. No default adoption or automatic memory-cap increase is selected. The
-unchanged single capture need not be repeated. Matched control/pairs remain
+`docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. Fixed-budget admission
+stays unchanged. No default adoption or automatic memory-cap increase is selected.
+The first #1020 adoption capture is now received: UUID `e12d7c14` (see
+`docs/RX_RD32_CAPTURE_1020_AND_TERRAIN_REPAIR_2026-10-17.md`). Source switches
+are eliminated, but CPU texture benefit remains unproven. The measured per-frame
+terrain traversal/1,604-notice backlog now has a bounded production scheduler
+repair with CPU regressions; native/Forge qualification and RX benefit remain
+open. The unchanged single capture need not be repeated. Matched control/pairs remain
 open; no Phase 5 performance gate is closed by one capture.
 
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
