@@ -16,31 +16,40 @@ Use [qualified artifact 12118446728](https://github.com/Vorith03/VulkanMod/actio
 `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1024-g3f77cab2-all.jar`.
 Replace the previous mod JAR; install only one VulkanMod version.
 
-Run **one restored-world, same-JAR OFF/ON pair**. On **both** launches
-preserve all of the tested #1023 ON settings (especially
-`-Dvulkanmod.experimentalCpuSpriteInterpolation=true`; do **not** toggle
-this), GPU texture source pool/unified uploads, GPU animation O3/O4,
-profiling/10-ms JFR, world snapshot, fixed 2552x1374/RD32/simulation 12,
-camera, other mods and resource packs. Change **only one** of these flags
-between the two launches:
+**Only one new benchmark is requested.** The already supplied #1023
+**bulk CPU ON** capture UUID `252df7a2-f803-4d4c-b174-f11f83b60a07`,
+with its JFR and latest/debug logs, is the **before** baseline. It recorded
+7,825 frames over 180.020 seconds (~43.47 FPS), with particle rendering
+~4.196 ms/frame. The owner explicitly declined to run a redundant OFF
+capture. **Do not ask for a new control run or to repeat that baseline.**
+
+Install only the qualified #1024 JAR. Restore the same benchmark-world
+snapshot, keeping #1023 bulk CPU ON and other tested GPU texture flags,
+profiler/10-ms JFR, RD32/simulation 12, 2552x1374 framebuffer, fixed
+camera, modpack and packs. The **one new run** must enable:
 
 ```text
--Dvulkanmod.experimentalParticleFrustumFastPath=false
 -Dvulkanmod.experimentalParticleFrustumFastPath=true
 ```
 
-Compare window-weighted and whole-run frame throughput/distributions,
-particle_render_ms/frame, total world/game render, raw JFR samples in
-`AABB.equals` under particle rendering, and any new frustum/equality
-helper stacks. The baseline found 764 `AABB.equals` sampled leaves in
-2,910 Java particle-render samples (statistical, not measured milliseconds
-saved). Read render/other GPU and client tick to detect tradeoffs.
-Return both UUID benchmark logs and adjacent raw `*.jfr`, latest/debug
-logs and any wrong, missing or unexpectedly visible smoke/particles.
-One pair is **screening** for adoption/net direction; three alternating
-matched restored-world pairs remain the formal performance-adoption
-standard. Do not default-enable on CI success alone. For implementation
-safety, see `docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md`.
+Compare this candidate against the existing #1023 bulk-ON log/JFR:
+particle render ms/frame, full/client/world/render timing, frame
+throughput and frame-time distribution, `AABB.equals` stack sampling,
+the new equality-helper stack and any changed GPU costs. The prior
+2,910 Render-thread samples include 764 with `AABB.equals` leaves
+under particle rendering; sample shares are not milliseconds saved.
+Return **only the new** benchmark UUID log and neighboring raw JFR,
+latest/debug and visual observations (e.g. missing/incorrectly visible
+smoke or particles). The existing #1023 files need not be re-uploaded.
+
+This is a **cross-executable historical-control** comparison (#1023 ON
+versus #1024 ON), not same-JAR OFF/ON. Hold configuration and restored
+world constant and disclose any uncertainty that cannot be eliminated.
+It can screen adoption, possible speedup and regressions; it cannot
+independently satisfy the formal three-pair attribution rule. Keep
+default off until sufficient evidence and an explicit decision. For
+implementation safety, see
+`docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md`.
 
 ## Current gate: first #1023 OFF/ON result received; formal qualification open
 

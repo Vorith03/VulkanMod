@@ -13,4 +13,20 @@ The mixin is **not applied when the flag is absent**. CI startup enables the fla
 ## Qualification and next decision
 Prior #1023 A/B results remain a conditional single matched pair for the **separate** bulk CPU interpolation decision (pair 1/3). That path stays opt-in, with its two further pairs open. This new frustum experiment must not be conflated with those observations.
 
-Local equality-only Java 17 oracle passed before publication; full Forge/native CI and RX on/off hardware benefit are pending until their individual results exist. If native CI succeeds, compare same new JAR/identically restored benchmark world **fast-path OFF vs ON**, holding CPU bulk and all GPU texture settings fixed. Inspect particle render ms/frame, full frame-time distribution, FPS, and Java JFR `AABB.equals` samples; reject if the transformed path produces errors/visual changes or if benefit is negligible. Keep default off without paired evidence. Particle light queries, buffers, and campfire tick work remain separate candidates.
+The equality-only Java 17 oracle passed before publication. Full
+public/native/Forge #1024 CI passed at `3f77cab2`, including flagged
+startup and renderer/compatibility/pixel/synchronization gates.
+This qualifies the implementation, **not** RX speedup or visuals.
+
+The owner declined a repeat baseline: the **already supplied** #1023
+bulk CPU ON benchmark `252df7a2` with its raw JFR is the before
+measurement. The next step is **one** #1024 benchmark on the restored
+world with `-Dvulkanmod.experimentalParticleFrustumFastPath=true`,
+retaining bulk CPU ON, GPU pilot flags, resolution, camera and sampling
+settings. Do not ask for another OFF run, another copy of #1023, or a
+same-JAR A/B. Compare new particle-render timings, total FPS/frametimes,
+`AABB.equals` sample attribution and visual correctness against the
+existing baseline. The changed JAR makes this a **cross-build
+historical-control** comparison; avoid formal proof claims from a
+single sample. Keep the option off by default pending evidence.
+Particle light queries, buffers, and campfire tick work remain separate candidates.

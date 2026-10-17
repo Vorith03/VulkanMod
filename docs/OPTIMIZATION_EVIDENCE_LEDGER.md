@@ -9,8 +9,12 @@ full public/native/Forge CI [#1024](https://github.com/Vorith03/VulkanMod/action
 The source helper matches the original AABB equality contract in 100,000
 random tests and special/subclass cases; ordinary/default execution is
 unchanged with the property absent. **No RX production adoption or net FPS
-benefit measured**; isolated sample shares are not time savings. Next:
-same-JAR restored-world flag-only OFF/ON RX pair, CPU bulk ON in both.
+benefit measured**; isolated sample shares are not time savings. Owner correction: **only one new #1024 flag-ON RX capture**; use
+the already received #1023 bulk-ON UUID `252df7a2` as the before
+baseline, with otherwise unchanged settings and assumed restored world.
+No duplicate baseline, fresh #1024 OFF, or repeated before/after.
+This remains cross-build, historical-control screening and **not** a
+same-JAR formally matched speedup claim.
 The previous #1023 bulk CPU pair remains conditionally accepted 1/3 and its
 formal default gate open, but the owner specifically selected a new hotspot
 instead of immediate additional #1023 pairs. See

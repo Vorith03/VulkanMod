@@ -210,10 +210,16 @@ the **next performance candidate** rather than immediately repeating two
 #1023 pairs. The new opt-in Forge infinite-AABB frustum fast-rejection
 candidate passed public/native #1024 at `3f77cab2`; see
 `docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md`.
-Its RX same-JAR flag-only A/B and particle visual gate remain open, and
-**no frame-rate gain is claimed**. The separate CPU bulk pair 2/3 and
-3/3, CPU-default adoption, and Phase 5 OpenGL/Vulkan baseline gates remain
-open. Do not conflate these separate qualification tracks.
+The owner specifically declined a redundant new OFF/control run:
+compare **one new #1024 fast-path-ON capture** against the existing
+#1023 bulk-ON UUID `252df7a2` benchmark/JFR as its before baseline.
+Retain the same restored-world assumption and otherwise fixed test
+settings. This is cross-build screening, not a same-JAR three-pair
+proof; frustum RX adoption, visual correctness and net benefit remain
+open until the single new capture is analyzed. No framerate gain is
+claimed. The separate CPU bulk pair 2/3 and 3/3, CPU-default
+adoption, and Phase 5 OpenGL/Vulkan baseline gates remain open.
+Do not conflate these separate qualification tracks.
 
 **October 17 evidence update:** #1019's owner RD32 pilot-on capture and raw JFR
 are received; see `docs/RX_RD32_CAPTURE_2026-10-17.md` and the ledger. The

@@ -34,17 +34,23 @@ and artifact/log delivery passed. Qualified artifact **12118446728**:
 The qualified CI startup loads with the opt-in flag, but this is **not**
 RX adoption, a visual check, or measured net FPS benefit.
 
-**Next owner-machine gate:** one restored-world **same-JAR #1024 OFF/ON
-pair** toggling only `vulkanmod.experimentalParticleFrustumFastPath`.
-Keep the proven #1023 CPU bulk pilot **ON in both**, along with GPU source
-pool/unified transfer and prior O3/O4 flags, RD32, simulation 12, fixed
-2552x1374 framebuffer/pose, packs/modpack and 10-ms JFR. Compare particle
-render stage, full FPS/frame distribution and JFR frustum/equality stacks.
-Return both UUID benchmark files, neighboring JFR, latest/debug logs and any
-particle culling/light/animation visual anomaly. No default promotion or
-speedup claim without matched RX evidence. The new candidate does not reopen
-prior terrain/texture investigations. See
-`docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md` and the updated
+**Owner correction to the next hardware gate:** Do **not** ask for a fresh
+OFF run. The existing #1023 **bulk-ON** benchmark UUID
+`252df7a2-f803-4d4c-b174-f11f83b60a07` and its raw JFR are the
+owner-designated **before** evidence (~43.47 FPS over 7,825 frames/180.020 s,
+particle render ~4.196 ms/frame). Only **one new #1024 run with
+`-Dvulkanmod.experimentalParticleFrustumFastPath=true`** is needed.
+Restore the same benchmark-world snapshot (owner permits assuming restoration)
+and retain CPU bulk ON, all GPU texture flags, RD32/simulation 12, fixed
+2552x1374/camera, packs/modpack and 10-ms JFR. Return the **new** benchmark
+UUID, raw JFR and latest/debug logs plus any particle-culling visual anomaly.
+Analyze against the already received #1023 baseline; do not request its
+recapture or an #1024 OFF control. This is a **cross-build** comparison,
+not same-JAR matched evidence: report confounding, frame-time metrics and
+observed JFR path changes, and do not promote defaults or claim formally
+proven net improvement on one cross-build run. The separate #1023 CPU bulk
+default-adoption evidence gate remains open but is not this task. See
+`docs/FRUSTUM_INFINITE_BOUNDS_FAST_PATH_2026-10-17.md` and
 `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`.
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
