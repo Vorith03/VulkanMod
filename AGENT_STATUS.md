@@ -2,6 +2,44 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Owner #1019 RX capture received and analyzed — 2026-10-17
+
+The requested single RD32 capture is now available: UUID
+`6c29da16-40b9-4f37-8e78-aa1180197560`, benchmark + raw JFR + latest/debug.
+Analysis base is `d27f762abe061c90ee3bcff00ccd329b0bc03b8a`, documentation-only
+above tested executable `ce9d66e1219e13139e3b0b6b7de531082f7a04c7` (#1019).
+The live #1019 job steps were rechecked green; private-pack fixtures skipped.
+See `docs/RX_RD32_CAPTURE_2026-10-17.md` for evidence, scopes, raw file hashes,
+source review and next decisions. No executable changes or new build here.
+
+Capture completed: 4,772 frames / 180.012 s (~26.51 FPS), large early hitches,
+late-window mean ~34.75 ms. Textures cost 17.787 ms/client tick. O4 reaches
+108,800 / 2,870,199 attempts (3.79%); 2,755,020 CPU fallbacks are residency
+disabled. Charged residency is near 128 MiB with 1,257 lifetime capacity
+rejections, zero source/staging rejection/invalidation. The common mixed queue
+is active, but 1,266,289 / 1,435,220 flushes (88.23%) are **source VkBuffer
+switches**, not demonstrated staging reallocations. Total inclusive copy-flush
+CPU is 8.154 ms/tick, not additive to texture time and not reason-specific.
+Terrain traverses once per frame in all baseline-valid windows; 1,604 pending
+dirty exceeds the 512-entry cached preflight. Campfire smoke dominates particle
+tick calls; particle rendering also costs 4.453 ms/frame. JFR raw event counts
+reconcile with the log; category shares require full caller chains. Server lag
+persists. No paired speedup, visual correctness or absence of observer effect
+is claimed; a historical slower aggregate is not a proven regression.
+
+**Next useful action:** source-review a bounded common copy queue grouped by
+source, preserving destination ordering/overlap, O4/direct boundaries and
+GPU-safe lifetime. Raising region capacity alone does not address the measured
+source switches; removing barriers or blindly reordering is unsafe. Separately
+review fixed-budget first-admission/permanent-disabled residency policy before
+choosing a coverage change. Do not raise budgets, enable defaults or create a
+new GPU scheduler by inference. This analysis is complete; implementation and
+qualification of any successor remain open. No repeat of the unchanged single
+capture is needed. The existing same-JAR pilot-off control/three matched pairs
+remain necessary for a performance verdict, not for this source review.
+Reload/re-entry remains deferred. Older "next required capture" statements
+below are historical and superseded for receipt of this one capture.
+
 ## Broad CPU graphics discovery fully qualified — 2026-10-16
 
 Full public/native CI **#1019**, run `38972838076`, validation job

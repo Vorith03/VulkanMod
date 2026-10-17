@@ -204,6 +204,17 @@ use `docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md` for the next gate. Keep both
 pilots off by default. **GPU compute animation dispatch coalescing** remains
 a separate open step, pending the qualified pilot's coverage/cost evidence.
 
+**October 17 evidence update:** #1019's owner RD32 pilot-on capture and raw JFR
+are received; see `docs/RX_RD32_CAPTURE_2026-10-17.md` and the ledger. The
+common queue/source pool are exercised, but source-buffer switches cause
+88.23% of mixed flushes and GPU interpolation covers only 3.79% of standard
+attempts, mainly falling back through disabled residency. Representative
+coverage is now measured for this capture; **net benefit remains unmeasured**.
+Next source review targets bounded source grouping/write order and fixed-budget
+admission, not default adoption or an automatic memory-cap increase. The
+unchanged single capture need not be repeated. Matched control/pairs remain
+open; no Phase 5 performance gate is closed by one capture.
+
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.
 
 Goal: create apples-to-apples measurements so optimization claims have evidence.
