@@ -38,7 +38,9 @@ drains and combine repeated sources, without changing final pixels or crossing
 any actual dependency. The exact production enqueue/drain methods now run in
 `texture-transfer-contract.py` against a native-call recorder. The test fails
 on the original `504617c` selector at `source alternation must not drain` and
-passes on the repaired selector. A controlled 128-write/two-source alternation
+passes on the repaired selector. A separate run of the original production
+methods also confirms the original 128/128 command/barrier counts. A controlled
+128-write/two-source alternation
 changes **128 copy commands / 128 barriers to 2 commands / 1 barrier**. This is
 an operation-count reproducer, not a time/FPS measurement or a replay of the
 benchmark (the original capture did not record every handle/region).
@@ -103,8 +105,16 @@ pending overwrites, capacity/direct-first overwrites and early source retirement
 All 160 final pixels are checked. Existing transformed ticker/mip/mutation/
 fallback tests and both O3/O4 ordering directions remain in the suite.
 
-Full CI result is recorded in AGENT_STATUS and the ledger after qualification.
-Until it passes this implementation is source/CPU-qualified only. The owner
+Full public/native CI **#1020** passed at
+`e0807c626bfa27416ebadc53eddff519f9ac29ef`: run `39038204099`, validation job
+`117412382928`. All 22 offline contracts, Forge/packaging, animation source and
+portal anchors, both startup configurations, indirect/post/depth/screenshot
+pixel+sync gates, combined Create Chronicles and Crash Assistant passed. The
+extended mixed-source native oracle was required by the screenshot gate and
+passed. Logs and qualified JAR uploads passed; private real-pack fixtures were
+skipped. The JAR is `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1020-ge0807c62-all.jar`,
+artifact `12103455469`. Native/Forge correctness is qualified; net RX speedup,
+real-pack visual correctness and deferred reload/re-entry remain unverified. The owner
 JAR hold is respected until this coherent candidate reaches the point where
 native qualification and RX comparison are the remaining validation gates.
 

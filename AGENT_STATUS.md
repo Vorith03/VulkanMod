@@ -2,34 +2,55 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
-## Source-switch texture repair — 2026-10-17, qualification pending
+## Source-switch texture repair fully qualified — 2026-10-17
 
-The owner explicitly reprioritized implementation of a demonstrated root cause.
-At base `504617c`, the unified queue still required one source handle for all
-pending regions, causing 88.23% of #1019's flushes. The common CPU/O3 queue now
-retains per-region source handles and emits one command per source within a
-bounded pairwise-disjoint epoch. Cross-source overlap and all compute/direct/
-layout/reset/lifetime boundaries retain draining and write dependencies. One
-barrier orders the epoch, replacing barriers between disjoint source groups.
+Implementation `e0807c626bfa27416ebadc53eddff519f9ac29ef` is qualified by full
+public/native CI **#1020**, run `39038204099`, job `117412382928` (**all green**).
+All 22 offline contracts, Forge compilation/production packaging, pinned
+animation and portal anchors, both Vulkan startup configurations, indirect,
+post/depth and screenshot pixel/sync gates, combined Create Chronicles and
+Crash Assistant passed. Qualified JAR and logs uploaded; private-pack fixtures
+were skipped. Source-only/native-pending descriptions in the implementation
+commit are superseded by this result. No RX net benefit is claimed.
+
+At base `504617c`, the unified queue required one source handle for all pending
+regions, causing 88.23% of #1019's flushes. Both CPU interpolation and resident
+copy stacks reached Vulkan command recording through that source-switch drain.
+The repaired common CPU/O3 queue retains each region's source handle and emits
+one command per source within a bounded pairwise-disjoint epoch. All overlap,
+compute/direct/layout/reset/lifetime boundaries retain draining and dependencies.
+One barrier orders the epoch instead of barriers between disjoint source groups.
 No residency budget/policy, default, shader, submission or wait was added.
 
-See `docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. All 22 local offline
-contracts pass. The production enqueue/drain reproducer fails on the original
-selector and passes after repair: 128 disjoint alternating two-source writes
-require 2 commands/1 barrier instead of 128/128; 100,000 randomized writes match
-sequential pixels. This is operation-count evidence, **not measured FPS/time**.
-The native test now checks alternating CPU/two-resident-source pixels, pending
-counts, overlaps, capacity and early source retirement. Local Forge configuration
-remains blocked by the network-unreachable Gradle 8.1.1 distribution download.
+See `docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. Local production-method
+regressions fail on the original selector and pass after repair. Executed counts:
+128 disjoint alternating two-source writes require **2 commands/1 barrier instead
+of 128/128**; 100,000 randomized writes match sequential pixels. These are
+operation counts, **not measured frame/tick time**. The native test passed 160
+alternating CPU/two-resident-source pixels, asserted pending counts, cross-source/
+capacity/direct overlaps and early source retirement. Existing O3/O4 boundaries
+and mutation/fallback/ticker/mip oracles also passed. Local Forge configuration
+remains unavailable due the network-blocked Gradle 8.1.1 download; CI provides
+Forge/native qualification.
 
-**Next action:** full CI native/pixel/synchronization/Forge qualification of this
-coherent candidate, then the bounded #1019-versus-repair RX comparison. Both
-pilots stay enabled in both workloads; no unrelated terrain/particle/admission
-changes before that comparison. `copy_flushes` counts ordering epochs now;
-new `copy_commands` counts emitted queued Vulkan commands. No net benefit or
-physical correctness claim until that evidence. Existing O4 residency admission,
-terrain/particles and deferred reload/re-entry remain open. Supersedes the old
-"next source review" direction below; #1019 capture receipt remains settled.
+**Next action:** the first changed-executable RD32 capture with #1020 using
+`docs/GPU_TEXTURE_RD32_HARDWARE_TEST.md`, returning UUID log, neighboring raw
+JFR and latest.log plus animation observations. Keep both pilots enabled and
+the #1019 settings (2552x1374, simulation distance 12, same camera/sampler).
+Check `copy_commands`, regions, full texture/client tick CPU and upload GPU time;
+`copy_flushes` now counts epochs, not commands. No net-benefit verdict from fewer
+flushes alone. The exact test-ready artifact is
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1020-ge0807c62-all.jar`, artifact
+`12103455469` on run `39038204099`. For a formal speedup claim use three matched
+#1019/#1020 pairs from identically restored worlds with both pilots enabled in
+both. Candidate-only capture establishes adoption, not paired time benefit.
+
+Low O4 coverage under first-admission/permanent-disable residency, persistent
+terrain dirty traversal, campfire particle costs and integrated-server load
+remain independent work. Preserve the first comparison before combining those
+changes. Reload/re-entry and private-pack qualification remain open. The owner
+#1019 capture is already received; the source-review-only direction below is
+historical and superseded by this implementation/qualification.
 
 ## Owner #1019 RX capture received and analyzed — 2026-10-17
 

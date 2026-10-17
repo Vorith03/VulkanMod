@@ -211,8 +211,9 @@ common queue/source pool are exercised, but source-buffer switches cause
 attempts, mainly falling back through disabled residency. Representative
 coverage is now measured for this capture; **net benefit remains unmeasured**.
 The bounded source-grouping repair is implemented with production-method CPU
-regressions; see `docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. Full native
-qualification and matched RX comparison are next; fixed-budget admission stays
+regressions and full native/Forge qualification in **#1020** at `e0807c62`; see
+`docs/TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md`. RX adoption capture and
+matched comparison are next; fixed-budget admission stays
 unchanged. No default adoption or automatic memory-cap increase is selected. The
 unchanged single capture need not be repeated. Matched control/pairs remain
 open; no Phase 5 performance gate is closed by one capture.

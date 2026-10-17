@@ -1,6 +1,38 @@
 # Unified GPU texture RD32 hardware qualification
 
-This is the next owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
+## October 17 source-grouping repair comparison
+
+Implementation: `e0807c626bfa27416ebadc53eddff519f9ac29ef`, full CI
+[#1020](https://github.com/Vorith03/VulkanMod/actions/runs/39038204099).
+Full public/native job `117412382928` passed all contracts, Forge packaging,
+renderer/pixel/sync and public compatibility gates. Private packs skipped.
+Use artifact [12103455469](https://github.com/Vorith03/VulkanMod/actions/runs/39038204099/artifacts/12103455469),
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1020-ge0807c62-all.jar`. Replace the
+existing VulkanMod JAR; do not install both versions together. The executable repairs source-buffer-switch fragmentation;
+see [cause, proof and boundaries](TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md).
+Qualified distributable version: `0.3.2-forge.2-build.1020-ge0807c62`.
+
+For the first candidate capture, retain the exact #1019 RD32 settings below,
+including both texture pilots **enabled**, GPU timestamps and the 10ms JFR
+sampler. Match the recorded 2552x1374 framebuffer, simulation distance 12 and
+fixed camera. Return the UUID log, neighboring JFR and latest.log, and report
+stale/flickering/wrong animations. The discriminators are zero source-switch
+flushes in unified mode, emitted `copy_commands` relative to `copy_regions`,
+texture/client-tick CPU time, upload GPU time, and unchanged animation cadence.
+An increase in necessary overlap flushes is possible: these now see all pending
+sources, rather than just the last source group.
+
+For an actual net-benefit claim, compare #1019 against #1020 on identically
+restored world snapshots with **both pilots enabled in both**, preserving all
+other executable settings. One pair screens; three alternating matched pairs
+qualify a formal claim. Pilot-off changes multiple mechanisms and is not a
+repair-only control. The existing #1019 attachment establishes the mechanism,
+not a time-matched control for a later evolving world. A new candidate-only
+capture can verify adoption without being called a measured speedup.
+
+## Historical #1019 capture contract
+
+This was the #1019 owner-machine gate: RX 6900 XT / RADV, Forge 47.3.0,
 Create Chronicles and the existing selected packs. Candidate executable
 `ce9d66e1219e13139e3b0b6b7de531082f7a04c7`, build **#1019**:
 [build #1019](https://github.com/Vorith03/VulkanMod/actions/runs/38972838076).

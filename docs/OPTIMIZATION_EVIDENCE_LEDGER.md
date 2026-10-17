@@ -2,13 +2,16 @@
 
 **Current implementation, October 17:** [source-switch queue repair](TEXTURE_SOURCE_GROUPING_REPAIR_2026-10-17.md)
 replaces the unified pilot's single-source pending group with per-source emission
-inside a 128-region disjoint epoch. CPU-qualified; full native CI pending;
-**net benefit unmeasured**. The production regression fails on `504617c` and
+inside a 128-region disjoint epoch. **Qualified but unmeasured**: full public/native CI #1020 is green at
+`e0807c626bfa27416ebadc53eddff519f9ac29ef`, run `39038204099`, job
+`117412382928`. All 22 contracts, Forge packaging, mixed-source native pixels/
+synchronization, renderer, Create Chronicles and Crash Assistant passed; private
+packs skipped. **Net hardware benefit remains unmeasured**. The production regression fails on `504617c` and
 passes after repair (128 alternating writes: 128->2 copy commands, 128->1
 barriers; 100,000 randomized writes match sequential output). This changes real
 command recording/dependency work, not only counters. Both pilots stay opt-in;
-residency budget/admission is unchanged. Next: full native qualification, then
-matched #1019-versus-candidate RX runs with both pilots enabled in both. Existing
+residency budget/admission is unchanged. Next: first #1020 RD32 adoption capture, then matched #1019-versus-candidate
+RX runs with both pilots enabled in both. Existing
 capture proves fragmentation/activation, not a measured speedup.
 
 **Latest evidence, October 17:** the owner returned the #1019 pilot-on RD32
@@ -19,7 +22,7 @@ older "representative coverage unmeasured" statements for this workload only;
 
 | #1019 candidate | Measured adoption / residual | Net benefit / disposition | Next decision |
 | --- | --- | --- | --- |
-| Common CPU/GPU copy queue + source pool | Exercised: all 1,097,842 resident-copy requests queued. 1,435,220 mixed flushes, 88.23% caused by changed source VkBuffer, 8.154 ms/tick inclusive flush CPU. Source pool 31 pages / 124 MiB; no pool-capacity rejections. | **Qualified but unmeasured**; one pilot-on run cannot establish improvement or regression. | Source grouping is now implemented; qualify native mixed-source pixels/sync, then compare command counts, texture CPU and upload GPU time. |
+| Common CPU/GPU copy queue + source pool | Exercised: all 1,097,842 resident-copy requests queued. 1,435,220 mixed flushes, 88.23% caused by changed source VkBuffer, 8.154 ms/tick inclusive flush CPU. Source pool 31 pages / 124 MiB; no pool-capacity rejections. | **Qualified but unmeasured**; one pilot-on run cannot establish improvement or regression. | Source grouping is implemented and native-qualified in #1020; next compare emitted commands, texture CPU and upload GPU time on RX. |
 | O3 original-source copies | 1,097,842 GPU / 621,869 CPU source requests (~63.84% GPU); 2,588,241 other/temporary CPU uploads are a separate denominator. Zero lifetime invalidation. | **Qualified but unmeasured**; source identity repair is consistent with zero invalidation here, not a matched speedup. | Preserve original/temporary identity and fallback; compare same executable. |
 | O4 interpolation / residency | 108,800 GPU / 2,761,399 CPU (3.79% GPU); 2,755,020 disabled-residency fallback, 6,379 no-batch, other reasons zero. Logical budget nearly 128 MiB, 1,257 lifetime capacity rejections, zero source/staging rejections. | **Low adoption**, net benefit unmeasured. | Review fixed-budget first-admission/permanent-disable policy; counters do not link each disabled sprite to its rejection. No automatic budget increase or new compute scheduler. |
 | Terrain graph reuse | 4,765 traversals for 4,765 frames after first window baseline, zero cached schedules; 1,604 pending dirty exceeds 512 preflight cap. | **Low adoption** of cached path; net benefit unmeasured. | Preserve neighbor/ring/visibility correctness; investigate recurring pending work before lifting limits. |
