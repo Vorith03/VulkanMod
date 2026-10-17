@@ -345,6 +345,16 @@ public final class SpriteAnimationSmokeTest {
     }
 
     private static void verify(Case test) {
+        verify(test, false);
+        // Exercise the new fallback through the actual transformed ticker,
+        // independently of the GPU admission/capability decision.
+        if(test.interpolate) verify(test, true);
+    }
+
+    private static void verify(Case test, boolean cpuBulk) {
+        CpuSpriteInterpolation.setCiEnabled(cpuBulk);
+        GpuAnimatedTextureResidency.setCiForceCpuInterpolation(cpuBulk);
+        long bulkFramesBefore = CpuSpriteInterpolation.ciFrames();
         long interpolationCallsBefore = GpuAnimatedTextureResidency.stats().interpolationCalls();
         // Align both destinations at every tested mip, including zero sprite extents.
         int half = 1;
@@ -399,9 +409,11 @@ public final class SpriteAnimationSmokeTest {
                     Initializer.CONFIG.animateOnlyUsedTextures = false;
                     long beforeReference = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
                     GpuAnimatedTextureResidency.setCiForceCpuPath(true);
+                    CpuSpriteInterpolation.setCiForceVanilla(true);
                     try {
                         referenceTicker.tickAndUpload(0, 0);
                     } finally {
+                        CpuSpriteInterpolation.setCiForceVanilla(false);
                         GpuAnimatedTextureResidency.setCiForceCpuPath(false);
                     }
                     boolean stagedReference = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes() != beforeReference;
@@ -551,8 +563,13 @@ public final class SpriteAnimationSmokeTest {
                 Initializer.LOGGER.info("GPU resident animation smoke passed (discrete all-mip raw pixels, CPU clock ownership, mutation invalidation and staging fallback)");
             }
 
-            Initializer.LOGGER.info("Animation oracle case passed: {}", test.name);
+            long bulkFrames = CpuSpriteInterpolation.ciFrames() - bulkFramesBefore;
+            if(cpuBulk && (test.custom ? bulkFrames != 0 : bulkFrames <= 0))
+                throw new AssertionError("Bulk CPU interpolation adoption/custom exclusion differs: " + test.name);
+            Initializer.LOGGER.info("Animation oracle case passed: {} bulk_cpu={} frames={}", test.name, cpuBulk, bulkFrames);
         } finally {
+            CpuSpriteInterpolation.setCiEnabled(false);
+            CpuSpriteInterpolation.setCiForceVanilla(false);
             GpuAnimatedTextureResidency.setCiForceCpuPath(false);
             GpuAnimatedTextureResidency.setCiForceCpuInterpolation(false);
             Vulkan.waitIdle();

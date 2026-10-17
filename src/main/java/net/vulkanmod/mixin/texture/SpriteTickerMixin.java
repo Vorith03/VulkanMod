@@ -1,9 +1,12 @@
 package net.vulkanmod.mixin.texture;
 
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.vulkanmod.interfaces.SpriteAnimationTicker;
 import net.vulkanmod.interfaces.VSpriteContentsI;
 import net.vulkanmod.render.texture.SpriteAnimationState;
+import net.vulkanmod.render.texture.CpuSpriteInterpolation;
 import net.vulkanmod.render.profiling.TextureTickAttribution;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,12 +20,14 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
     @Shadow @Final private SpriteContents.AnimatedTexture animationInfo;
     @Shadow @Final private SpriteContents.InterpolationData interpolationData;
     @Unique private SpriteAnimationState vulkanmod$state;
+    @Unique private SpriteContents vulkanmod$owner;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void vulkanmod$attach(SpriteContents owner, SpriteContents.AnimatedTexture info,
                                   SpriteContents.InterpolationData interpolation, CallbackInfo ci) {
         // Subclasses/custom Forge loaders retain their original pixel/ticker behavior.
         if(owner.getClass() == SpriteContents.class && owner.forgeMeta == null) {
+            vulkanmod$owner = owner;
             vulkanmod$state = ((VSpriteContentsI)owner).vulkanmod$animationState();
             vulkanmod$state.attach(this, owner.name().toString());
         }
@@ -67,6 +72,28 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
                 subFrame, current.vulkanmod$frameTime());
         TextureTickAttribution.recordStandardInterpolationRoute(gpu);
         return gpu;
+    }
+    @Override
+    public boolean vulkanmod$tryCpuInterpolation(int x, int y,
+            NativeImage[] output) {
+        if(!CpuSpriteInterpolation.enabled()
+                || vulkanmod$owner == null || vulkanmod$state == null || interpolationData == null
+                || !RenderSystem.isOnRenderThread()) return false;
+        java.util.List<SpriteContents.FrameInfo> frames =
+                ((SpriteAnimationInfoAccessor)animationInfo).vulkanmod$frames();
+        if(frames == null || frames.size() < 2 || frame < 0 || frame >= frames.size()) return false;
+        SpriteAnimationFrameAccessor current = (SpriteAnimationFrameAccessor)(Object)frames.get(frame);
+        SpriteAnimationFrameAccessor next = (SpriteAnimationFrameAccessor)(Object)frames.get((frame + 1) % frames.size());
+        var source = vulkanmod$owner.byMipLevel;
+        int width = vulkanmod$owner.width(), height = vulkanmod$owner.height();
+        if(source == null || source.length == 0 || source[0] == null || width <= 0
+                || !CpuSpriteInterpolation.tryInterpolate(
+                        source, output, width, height, ((SpriteAnimationInfoAccessor)animationInfo).vulkanmod$frameRowSize(),
+                        current.vulkanmod$frameIndex(), next.vulkanmod$frameIndex(),
+                        subFrame, current.vulkanmod$frameTime())) return false;
+        ((VSpriteContentsI)vulkanmod$owner).vulkanmod$uploadFramePixels(x, y, 0, 0, output);
+        TextureTickAttribution.recordCpuBulkInterpolation();
+        return true;
     }
     @Override public void vulkanmod$refreshFrame(int x, int y) {
         SpriteAnimationInfoAccessor info = (SpriteAnimationInfoAccessor)animationInfo;

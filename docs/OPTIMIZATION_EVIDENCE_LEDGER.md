@@ -292,3 +292,36 @@ fixtures skipped. This supersedes the pending qualification above. Disposition
 is **qualified diagnostic, representative coverage/observer cost unmeasured**;
 no renderer speedup follows. Use #1019 for the existing RX gate, return its raw
 JFR as well as the UUID log, and keep sampler configuration equal in A/B.
+
+
+## #1021 RX terrain adoption and bulk CPU fallback candidate — October 17
+
+UUID `f4741fc5` on #1021/`8ff928dd` satisfies the requested single adoption
+capture. 439 full traversals / 6,457 baseline-valid frames, 785 cached rebuild
+admissions and 1,604 retained dirty notices establish scheduler adoption.
+Terrain setup 0.907 ms/frame vs historical 4.221 ms is favorable **unpaired**
+evidence. Disposition remains **qualified but unmeasured** for formal net benefit.
+No repeat unchanged capture is needed.
+
+Textures still cost 17.950 ms/tick. GPU interpolation covers 83,951/2,875,168
+updates (2.92%); disabled residency is the main fallback. Actual vanilla pixel
+stacks account for 2,213/9,203 raw render-thread execution samples inclusively.
+New opt-in `experimentalCpuSpriteInterpolation` uses validated native rows only
+after GPU refusal, retaining exact arithmetic/source/upload/clock semantics and
+custom fallback. CPU production-kernel oracle passes; full Forge/native pixel/
+synchronization qualification is pending, so disposition is **blocked** on that
+gate and hardware benefit is **unmeasured**. No GPU cap/admission/default change.
+See `RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md`. Next discriminator:
+native qualification, then same-JAR flag off/on with bulk-update coverage and
+matched whole-texture/tick/frame results. Particle and block-entity work is not
+combined into this candidate.
+
+
+Remote qualification update: implementation committed locally as `909497a`;
+automatic approval review rejected remote push for lack of explicit remote-write
+authorization. Full/native CI has not run. Next action is explicit push
+authorization, then normal full qualification; no hardware test requested yet.
+
+The owner subsequently authorized publication and CI. The initial approval block
+is superseded; the connected GitHub API publishes the implementation because the
+shell Git transport lacks credentials. Full/native qualification remains pending.

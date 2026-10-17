@@ -28,6 +28,10 @@ public abstract class MSpriteContents implements VSpriteContentsI {
     @Shadow @Final private NativeImage originalImage;
     @Shadow private NativeImage[] byMipLevel;
 
+    @org.spongepowered.asm.mixin.gen.Invoker("upload")
+    public abstract void vulkanmod$uploadFramePixels(int x, int y, int sourceX, int sourceY,
+                                                    NativeImage[] images);
+
     @Shadow public abstract IntStream getUniqueFrames();
     @Shadow public abstract void increaseMipLevel(int mipmapLevels);
     @Shadow public abstract int width();

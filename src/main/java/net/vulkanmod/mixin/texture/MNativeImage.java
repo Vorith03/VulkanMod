@@ -78,6 +78,16 @@ public abstract class MNativeImage implements VNativeImageI {
         return this.format == NativeImage.Format.RGBA;
     }
 
+    @Override
+    public long vulkanmod$getRgbaPixels() {
+        return this.format == NativeImage.Format.RGBA ? this.pixels : 0L;
+    }
+
+    @Override
+    public void vulkanmod$markPixelsChanged() {
+        this.vulkanmod$markMutation();
+    }
+
     @Unique
     private void vulkanmod$markMutation() {
         if(this.vulkanmod$trackMutations) {

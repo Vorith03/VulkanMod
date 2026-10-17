@@ -42,6 +42,7 @@ public class AttributionCaptureContract {
                 TextureTickAttribution.InterpolationFallback.NO_RESIDENCY);
         TextureTickAttribution.recordStandardInterpolationRoute(true);
         TextureTickAttribution.recordStandardInterpolationRoute(false);
+        TextureTickAttribution.recordCpuBulkInterpolation();
         long phase = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
         long copy = TextureTickAttribution.beginSpriteCopyFlush();
         TextureTickAttribution.endSpriteCopyFlush(copy, 3);
@@ -88,6 +89,7 @@ public class AttributionCaptureContract {
         check(texture.contains("sprite_upload_requests=2 gpu_sprite_uploads=1 cpu_sprite_uploads=1 "), texture);
         check(texture.contains("gpu_source_mip_uploads=1 cpu_source_mip_uploads=0 gpu_other_mip_uploads=0 cpu_other_mip_uploads=1 "), texture);
         check(texture.contains("standard_interpolation_updates=2 standard_interpolation_gpu_updates=1 standard_interpolation_cpu_updates=1 "), texture);
+        check(texture.contains("standard_interpolation_cpu_bulk_updates=1 "), texture);
         check(texture.contains("interpolation_fallback_no_residency=1 "), texture);
         check(texture.contains("copy_flush_resident_copy=1 copy_flush_resident_copy_regions=3 "), texture);
         check(texture.contains("resident_current_kib=3.000 resident_peak_kib=3.000 "), texture);
@@ -112,6 +114,7 @@ public class AttributionCaptureContract {
         textureTick(); world(); emit();
         check(PerformanceProfiler.lines.size() == 4, "second capture lost");
         check(PerformanceProfiler.lines.get(2).contains("ticks=1 "), "prior tick leaked");
+        check(PerformanceProfiler.lines.get(2).contains("standard_interpolation_cpu_bulk_updates=1 "), "prior bulk CPU count leaked");
         check(PerformanceProfiler.lines.get(2).contains("copy_commands=2 "), "prior command count leaked");
         check(PerformanceProfiler.lines.get(2).contains("sprite_upload_requests=2 gpu_sprite_uploads=1 cpu_sprite_uploads=1 "), "prior upload route leaked");
         check(PerformanceProfiler.lines.get(2).contains("standard_interpolation_updates=2 standard_interpolation_gpu_updates=1 standard_interpolation_cpu_updates=1 "), "prior interpolation route leaked");

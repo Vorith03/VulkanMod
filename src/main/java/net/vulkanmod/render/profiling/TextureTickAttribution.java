@@ -77,6 +77,7 @@ public final class TextureTickAttribution {
     private static long gpuSpriteUploads;
     private static long standardInterpolationUpdates;
     private static long standardInterpolationGpuUpdates;
+    private static long standardInterpolationCpuBulkUpdates;
     private static long gpuSourceUploads;
     private static long cpuSourceUploads;
     private static long gpuOtherMipUploads;
@@ -117,6 +118,10 @@ public final class TextureTickAttribution {
     }
 
     /** Standard ticker, distinct resolved frame indices, positive interpolation progress only. */
+    public static void recordCpuBulkInterpolation() {
+        if(ENABLED && tickActive) standardInterpolationCpuBulkUpdates++;
+    }
+
     public static void recordStandardInterpolationRoute(boolean gpu) {
         if (!ENABLED || !tickActive) return;
         standardInterpolationUpdates++;
@@ -352,6 +357,7 @@ public final class TextureTickAttribution {
                 .append(" standard_interpolation_gpu_updates=").append(standardInterpolationGpuUpdates)
                 .append(" standard_interpolation_cpu_updates=")
                 .append(standardInterpolationUpdates - standardInterpolationGpuUpdates)
+                .append(" standard_interpolation_cpu_bulk_updates=").append(standardInterpolationCpuBulkUpdates)
                 .append(" resident_copy_calls=").append(residentCopyCalls)
                 .append(" resident_copy_regions=").append(residentCopyRegions)
                 .append(" resident_queued_copy_calls=").append(residentQueuedCalls)
@@ -434,7 +440,7 @@ public final class TextureTickAttribution {
         residentDirectCalls = residentDirectRegions = 0L;
         spriteUploadRequests = cpuSpriteUploads = gpuSpriteUploads = 0L;
         gpuSourceUploads = cpuSourceUploads = gpuOtherMipUploads = cpuOtherMipUploads = 0L;
-        standardInterpolationUpdates = standardInterpolationGpuUpdates = 0L;
+        standardInterpolationUpdates = standardInterpolationGpuUpdates = standardInterpolationCpuBulkUpdates = 0L;
         Arrays.fill(interpolationFallbackCounts, 0L);
         Arrays.fill(copyFlushReasonCounts, 0L);
         Arrays.fill(copyFlushReasonRegions, 0L);

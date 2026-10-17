@@ -2,6 +2,35 @@
 
 This is the living continuation checkpoint. Live `forge-1.20.1` Git/CI/runtime evidence always wins if this file is stale. Historical detail belongs in Git and focused evidence documents.
 
+## Owner #1021 capture received; bulk CPU interpolation candidate — 2026-10-17
+
+Base `646bb52` above executable `8ff928dd` (#1021, full run `39070465187`
+rechecked green). Requested UUID `f4741fc5` + raw JFR + latest/debug are
+received. Do not request another unchanged #1021 capture. See
+`docs/RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md` for hashes,
+scopes and implementation. Valid windows show 439 traversals/6,457 frames,
+785 cached rebuild admissions and retained 1,604 pending notices. Terrain setup
+averages 0.907 ms vs historical 4.221 ms; favorable adoption/screening, **not
+matched performance proof**. Textures remain 17.950 ms/tick; GPU interpolation
+coverage is 2.92% with residency-disabled CPU fallback dominating.
+
+An opt-in `vulkanmod.experimentalCpuSpriteInterpolation=true` candidate replaces
+the measured standard CPU pixel loop with validated native rows after GPU
+first refusal. It retains exact RGB double/truncation/current-alpha pixels,
+all positive source mips, original upload/clock/visibility, source mutation,
+custom/invalid/off-thread fallback and fixed GPU budgets. It does not repair
+GPU admission policy or enable any new default. Capture-only bulk-update
+numerator distinguishes adoption from intent. All 23 offline contracts
+pass; transformed ticker/native pixel/sync qualification is pending. Local
+Forge configuration is blocked on the Gradle distribution download. Full CI
+must pass before offering a new test artifact. Original local implementation
+commits are `909497a` and `e1c332d`. The owner explicitly authorized remote
+publication and CI after the initial automatic approval rejection. The shell
+Git transport has no credentials; publication uses the connected GitHub API.
+Next: inspect full native/Forge CI for the published candidate. Then same-JAR bulk flag off/on with identical
+settings/sampler, matched restored-world pairs for a benefit claim. Particle/block-entity/server work remain separate;
+reload/re-entry and private-pack qualification remain open.
+
 ## Owner #1020 evidence and terrain repair fully qualified — 2026-10-17
 
 The requested changed-executable capture is received: UUID

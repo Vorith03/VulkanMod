@@ -19,6 +19,7 @@ CONTRACTS = (
     'cpu-graphics-contract.py',
     'particle-attribution-contract.py', 'compilation-cache-contract.py',
     'pipeline-variant-contract.py', 'animation-oracle-contract.py',
+    'cpu-interpolation-contract.py',
     'animation-visibility-contract.py', 'chunk-budget-contract.py',
     'deployment-contract.py', 'render-scale-contract.py',
     'instance-input-contract.py', 'flywheel-ownership-contract.py',

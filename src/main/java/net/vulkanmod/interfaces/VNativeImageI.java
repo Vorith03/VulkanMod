@@ -15,4 +15,8 @@ public interface VNativeImageI {
     long vulkanmod$getMutationGeneration();
 
     boolean vulkanmod$isRgba();
+
+    /** Internal synchronous row kernel access; zero for non-RGBA or closed storage. */
+    long vulkanmod$getRgbaPixels();
+    void vulkanmod$markPixelsChanged();
 }

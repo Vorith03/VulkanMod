@@ -219,7 +219,14 @@ The first #1020 adoption capture is now received: UUID `e12d7c14` (see
 are eliminated, but CPU texture benefit remains unproven. The measured per-frame
 terrain traversal/1,604-notice backlog now has a bounded production scheduler
 repair with CPU regressions and full native/Forge qualification in #1021 at
-`8ff928dd`. Representative RX adoption and net benefit remain open. The unchanged single capture need not be repeated. Matched control/pairs remain
+`8ff928dd`. Representative RX adoption and net benefit remain open. The unchanged single capture need not be repeated. The #1021 capture is now
+received: UUID `f4741fc5`, 439 traversals/6,457 valid frames, 785 cached admissions
+and 1,604 retained notices; terrain setup averages 0.907 ms/frame (historical
+#1020: 4.221). Adoption is measured; net benefit remains unpaired. The opt-in
+bulk CPU interpolation candidate targets the still-measured vanilla pixel loop
+without changing GPU budgets/admission. Native qualification is pending; see
+`docs/RX_RD32_CAPTURE_1021_AND_CPU_INTERPOLATION_2026-10-17.md`.
+Matched control/pairs remain
 open; no Phase 5 performance gate is closed by one capture.
 
 **Owner-directed detour (2026-10-06):** prioritize safe GPU offload of renderer work while these measurement gates remain open. O3/O4 texture residency/compute, measured particle adapters, existing Phase 7 GPU terrain/hybrid work, and qualified Vulkan instancing may advance as opt-in experiments. Preserve exact CPU fallback/Forge semantics and do not close Phase 5 gates without comparable hardware evidence.

@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 import java.util.List;
 @Mixin(SpriteContents.AnimatedTexture.class)
 public interface SpriteAnimationInfoAccessor {
+    @Accessor("frameRowSize") int vulkanmod$frameRowSize();
     @Accessor("frames") List<SpriteContents.FrameInfo> vulkanmod$frames();
     @Invoker("uploadFrame") void vulkanmod$uploadFrame(int x, int y, int frame);
 }
