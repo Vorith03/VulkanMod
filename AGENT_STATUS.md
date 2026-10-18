@@ -31,7 +31,7 @@ artifact 12144887049. Offline, Forge package/startup, native exact animation pix
 sync including admission and batch, public Create Chronicles and Crash Assistant
 all green; private packs skipped. RX adoption/net benefit unmeasured.
 
-Third slice implemented, validation pending: `experimentalGpuIndirectCpuBypass`
+Third slice native/Forge-qualified in full #1032 at `03f730a5` (39150002619): `experimentalGpuIndirectCpuBypass`
 requires existing GPU indirect commands/draw flags and no terrain mesh handoff.
 Consumes current complete bounded GPU commands without constructing/uploading CPU
 FrameBatch; lazily restores current CPU commands on rejection. Candidate ownership
@@ -42,8 +42,11 @@ intervals and fallback. Renderer-update slot/fallback counters, no readbacks.
 Historical #1029 passed admission policy but an extracted tick
 fixture lacked its new dependency; #1030 found the corresponding attribution
 fixture gap. Both fixed, negative evidence preserved in the ownership doc.
-Local JRE lacks javac and Gradle download is unreachable; the third slice
-requires its own full native/Forge CI result. No measured coverage/net benefit for the new pilot,
+Local JRE lacks javac and Gradle download is unreachable; full remote CI is the
+compilation/native evidence. The subsequent APPEND-composition guard needs its
+own full CI result: the v1 indirect candidate ABI is now rejected by both GPU
+command consumers whenever terrain handoff is active, even with zero currently
+published GPU draws, so a pending CPU exception half cannot be exposed. No measured coverage/net benefit for the new pilot,
 no default promotion or integrated release qualification. See
 `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` and new active roadmap sequence.
 Continue qualified particle billboard preparation (reuse instancing, preserve IP), further multi-sprite texture batching, and

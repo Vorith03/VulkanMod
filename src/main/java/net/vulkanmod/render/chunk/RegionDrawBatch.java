@@ -169,13 +169,22 @@ final class RegionDrawBatch {
         boolean outputValid = store.isValidFor(table.generation(),
                 area.position.x, area.position.y, area.position.z);
         return isGpuIndirectPlanSafe(GPU_INDIRECT_DRAW, outputValid,
-                table.candidateCount(), cpuBatch.drawCount, store.commandCapacity());
+                table.candidateCount(), cpuBatch.drawCount, store.commandCapacity(), GPU_TERRAIN_DRAW_HANDOFF);
     }
 
     static boolean isGpuIndirectPlanSafe(boolean enabled, boolean outputValid,
                                          int candidateCount, int cpuDrawCount,
                                          int capacity) {
-        return enabled && outputValid && cpuDrawCount > 0 && capacity > 0
+        return isGpuIndirectPlanSafe(enabled, outputValid, candidateCount, cpuDrawCount, capacity, false);
+    }
+
+    static boolean isGpuIndirectPlanSafe(boolean enabled, boolean outputValid,
+                                         int candidateCount, int cpuDrawCount,
+                                         int capacity, boolean terrainHandoff) {
+        // Candidate ABI v1 only describes ordinary complete CPU meshes. Even
+        // when this batch has zero published GPU draws, a pending APPEND section
+        // may already have CPU exception parameters. Never draw that half alone.
+        return !terrainHandoff && enabled && outputValid && cpuDrawCount > 0 && capacity > 0
                 && candidateCount >= cpuDrawCount && candidateCount <= capacity;
     }
 

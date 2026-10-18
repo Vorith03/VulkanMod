@@ -713,6 +713,8 @@ public final class RegionBatchSmokeTest {
     }
 
     private static void verifyGpuIndirectFallbackContract() {
+        require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, true, 512, 99, 512, true),
+                "Pending APPEND CPU halves must not escape through legacy GPU indirect selection");
         require(!RegionDrawBatch.isGpuIndirectPlanSafe(false, true, 512, 99, 512),
                 "Disabled GPU indirect draw must retain CPU commands");
         require(!RegionDrawBatch.isGpuIndirectPlanSafe(true, false, 512, 99, 512),

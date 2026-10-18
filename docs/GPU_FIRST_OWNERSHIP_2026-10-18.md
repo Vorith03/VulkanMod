@@ -186,3 +186,24 @@ render loop before bypassing SingleQuadParticle CPU expansion. Existing instanci
 buffers/pipelines should be reused; no particle acceleration has been implemented
 or claimed by the texture/terrain-command slices. Broad terrain generated-geometry
 activation and the deferred REPLACE/APPEND portal/dirty rebuild gates remain open.
+
+### Composition correction: candidate v1 versus pending APPEND
+
+Adversarial review of the existing legacy GPU indirect consumer found that
+`batch.gpuDrawCount == 0` is insufficient to establish safe candidate semantics:
+a pending APPEND pair can already expose ready CPU exception parameters while the
+atomic FrameBatch deliberately omits that section until GPU publication. Candidate
+ABI v1 could then select the CPU half independently if another ordinary section
+made the batch nonempty. Both GPU indirect ownership routes now reject any terrain
+handoff configuration, retaining the authoritative atomic planner until a future
+candidate ABI represents both halves. The native fallback contract covers this
+combination explicitly. This preserves mesher REPLACE/APPEND support; it restricts
+combining that support with the older independent indirect selector.
+
+Full terrain-command milestone CI **#1032**, run **39150002619**, passed at
+`03f730a596be87d691b01d1ea5c494cab4a2d1f8`, including the mandatory native
+`VULKANMOD_GPU_COMMAND_OWNERSHIP_OK` marker, existing GPU exact-command/zero-tail
+oracle, texture pixels/sync and all public Forge/compatibility gates. This does
+not prove live RX command-bypass adoption, hybrid GPU commands, particle offload,
+or FPS improvement. The subsequent APPEND-composition guard needs separate full
+qualification before it becomes the final executable checkpoint.

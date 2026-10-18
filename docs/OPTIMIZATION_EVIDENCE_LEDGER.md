@@ -36,6 +36,13 @@ are region attempts/acceptance and zero-tail candidate slots, not GPU selected d
 counts. CPU graph/candidate input remains; no measured net benefit. Particle adapter
 and generated-terrain activation remain open; entire release is incomplete.
 
+Full #1032 passed at `03f730a5` (39150002619), including native lazy current CPU
+fallback, dirty GPU interval, no CPU shadow allocation/upload and all existing
+public GPU/Forge/compatibility gates. **Qualified but unmeasured** for the narrow
+command-owner path; no live RX production adoption claim. Follow-up safety repair
+also excludes the old indirect consumer during terrain handoff: v1 candidate
+metadata cannot represent pending APPEND pairs. New full qualification required.
+
 
 **#1028 pilot texture queue bound:** #1026 measured `copy_flush_region_limit=114177` of 244,701 nonempty epochs (21.37M regions, 628,843 real Vulkan copy commands, 8.289 ms/tick inclusive CPU flush) at cap 128. A bounded 128→256 queue capacity experiment affects only existing `experimentalUnifiedTextureUploads` opt-in; legacy cap 32 unchanged. Production-method oracle and 288-pixel native Vulkan verification expanded; full [CI #1028](https://github.com/Vorith03/VulkanMod/actions/runs/39143814563) passed at executable `50f39eb5`: production-method oracle and 288 native Vulkan pixel/sync tests qualified (artifact `12142713171`, real packs skipped). **Disposition: correctness-qualified, RX frame-time gain unmeasured**; overlap scanning increases with the cap and may negate native-call savings. See [#1028 evidence](TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md).
 

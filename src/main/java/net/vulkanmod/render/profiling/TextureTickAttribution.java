@@ -344,6 +344,8 @@ public final class TextureTickAttribution {
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
         net.vulkanmod.render.texture.GpuAnimationSourcePool.Stats pool =
                 net.vulkanmod.render.texture.GpuAnimationSourcePool.stats();
+        line.append(" gpu_animation_batch_requested=")
+                .append(Boolean.getBoolean("vulkanmod.experimentalGpuAnimationBatch"));
         line.append(" interpolation_queued_copy_updates=").append(interpolationQueuedCopies)
                 .append(" interpolation_direct_copy_updates=").append(interpolationDirectCopies);
         var admission = net.vulkanmod.render.texture.GpuAnimationAdmission.stats();
