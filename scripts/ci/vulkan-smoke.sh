@@ -139,6 +139,7 @@ case "$mode" in
     grep -F "Compilation cache smoke passed" vulkan-smoke.log
     grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke.log
+    grep -F "VULKANMOD_GPU_COMMAND_OWNERSHIP_OK" vulkan-smoke.log
     grep -F "Terrain region batching: enabled" vulkan-smoke.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=false)" vulkan-smoke.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke.log

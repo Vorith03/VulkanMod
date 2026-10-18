@@ -133,3 +133,56 @@ contract but failed an extracted tick harness missing its new dependency. #1030
 harness. Both fixtures are corrected by preserving the real policy in the latter
 and modelling the tick boundary in the former. Neither failed run reached Forge
 compilation or native validation; do not describe them as qualified.
+
+## Third implemented slice: GPU indirect commands without a CPU command shadow
+
+`experimentalGpuIndirectCpuBypass` requires both existing
+`experimentalGpuIndirectCommands` and `experimentalGpuIndirectDraw`. This is
+separate from terrain meshing. Production `RegionDrawBatch.draw` first publishes
+its candidate input and attempts the exact-generation GPU result, then lazily
+builds the CPU FrameBatch only if ownership is rejected. On acceptance it does
+not walk the CPU visible queue to serialize commands, allocate a CPU command
+buffer, or upload those duplicate commands. The GPU storage+indirect output is
+the consumed result. Existing frame-slot CPU buffers remain owned for later
+fallback, and are rebuilt from current revisions when needed.
+
+Eligibility additionally proves every CPU-visible section belongs to the region's
+full owned candidate set, checks bounded candidate slots and current frozen
+culling volume, and rejects any configuration using GPU terrain draw handoff.
+Candidate v1 cannot encode atomic APPEND pairs, so the existing hybrid command
+planner remains authoritative there. Camera/projection/portal-volume changes now
+invalidate a candidate generation even when mesh/visibility fingerprints match;
+stale-volume or incomplete-superset output is also rejected by the legacy GPU
+consumer. CPU graph visibility and candidate numeric metadata remain inputs; this
+does not replace graph traversal, remove every CPU frustum test, or establish
+representative portal correctness.
+
+Existing renderer-update statistics report GPU-owner region attempts/acceptance,
+issued candidate **slots** (including zero-tail no-ops, not actual selected draw
+count), and disabled/hybrid/incomplete-superset/stale-volume/missing-output/capacity
+fallback counts. `sections` remains the existing CPU-observed count when using
+CPU fallback; it is not fabricated from GPU slots. Normal operation adds no GPU
+readback or synchronization wait. Existing exact-command/zero-tail Vulkan smoke
+remains the GPU oracle. Expanded native region-cache tests exercise no CPU
+allocation/upload on GPU ownership, dirty-mesh suppression, current fallback,
+re-adoption and safety rejection. This slice still needs its full CI result.
+
+## Qualification update
+
+Full CI **#1031**, run **39149394473**, passed at texture executable
+`1e32e359a7b64784b8d530b25ddc5ef98e76970c`. All offline contracts, Forge build/package,
+both startup modes, persistent indirect, post/depth, screenshot exact animation
+pixels and synchronization, public Create Chronicles and Crash Assistant passed.
+The new admission and batch success markers are mandatory in the screenshot gate.
+Private packs were skipped. Artifact **12144887049** is the CI-qualified texture
+milestone, not the integrated GPU-first release candidate. RX coverage, net CPU
+savings, GPU cost and frame-time/tail benefit remain **unmeasured**.
+
+Particles remain the next substantial implementation boundary. The measured class
+is not a transferable generic simulation: collision, light/chunk reads, randomness
+and Java/mod callbacks remain CPU-owned. A rendering adapter must preserve inherited
+billboard semantics, sorting/interleaving, custom shaders and the IP particle
+render loop before bypassing SingleQuadParticle CPU expansion. Existing instancing
+buffers/pipelines should be reused; no particle acceleration has been implemented
+or claimed by the texture/terrain-command slices. Broad terrain generated-geometry
+activation and the deferred REPLACE/APPEND portal/dirty rebuild gates remain open.

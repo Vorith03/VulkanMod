@@ -4,6 +4,8 @@ package net.vulkanmod.render.chunk;
 final class RegionBatchStats {
     static int sections, calls;
     static int commandUploads, commandBytes;
+    static int gpuCommandOwnerAttempts, gpuCommandCandidateSlots;
+    static final int[] gpuCommandOwnerReasons = new int[7];
     static int meshUploads, reusedSlices, allocatedSlices, bufferGrowths;
     static long meshBytes;
     static long regionBufferReuses, regionBufferFallbacks;
@@ -11,6 +13,8 @@ final class RegionBatchStats {
     static void reset() {
         sections = calls = 0;
         commandUploads = commandBytes = 0;
+        gpuCommandOwnerAttempts = gpuCommandCandidateSlots = 0;
+        java.util.Arrays.fill(gpuCommandOwnerReasons, 0);
         meshUploads = reusedSlices = allocatedSlices = bufferGrowths = 0;
         meshBytes = 0L;
         // Region-ring recycling only occurs occasionally and reset() runs every
@@ -47,6 +51,11 @@ final class RegionBatchStats {
                 meshUploads, meshBytes / 1024.0D,
                 reusedSlices, allocatedSlices, bufferGrowths,
                 regionBufferReuses, regionBufferFallbacks);
+        if(gpuCommandOwnerAttempts > 0) drawStats += String.format(
+                " gpuCmdBypass:%d/%d slots:%d fallbackDisabled/hybrid/superset/volume/output/cap:%d/%d/%d/%d/%d/%d",
+                gpuCommandOwnerReasons[0], gpuCommandOwnerAttempts, gpuCommandCandidateSlots,
+                gpuCommandOwnerReasons[1], gpuCommandOwnerReasons[2], gpuCommandOwnerReasons[3],
+                gpuCommandOwnerReasons[4], gpuCommandOwnerReasons[5], gpuCommandOwnerReasons[6]);
         return drawStats + " " + WorldRenderer.getInstance().getChunkAreaManager().getStorageStats();
     }
 }

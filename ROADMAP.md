@@ -39,12 +39,16 @@ Sequence and release gates:
    displacement, adoption/fallback denominators, CPU preparation, separate GPU
    costs, render-only/tick-bearing and tail frame times. 144 FPS is aspirational.
 
-Initial implemented slice: `experimentalGpuAnimationAdmission` plans the standard
+Implemented texture milestone (full native/Forge #1031, RX benefit unmeasured): `experimentalGpuAnimationAdmission` plans the standard
 ticker inventory at the outer texture-tick boundary. Existing live sources stay
 pinned, unallocated candidates are ranked by expected interpolation pixels per
 charged source+scratch byte, with discrete copies after interpolation. It does
 not preload, evict, grow the 128 MiB cap, transfer custom callbacks or claim GPU
 speedup. See `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` for evidence and open gates.
+A third opt-in slice removes the CPU indirect-command shadow when existing GPU
+command output is current, complete and bounded, with lazy current CPU fallback.
+Hybrid APPEND retains its atomic planner until the candidate ABI supports it.
+Particle rendering adapters and generated-terrain activation remain open.
 The entire multi-subsystem mission is **incomplete** until these gates close.
 
 ---

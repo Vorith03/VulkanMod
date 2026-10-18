@@ -26,21 +26,34 @@ ordering, scratch barriers and exact pixel kernel remain; per-sprite descriptors
 and source groups are still retained (multi-sprite compute batching remains open).
 Native/production-method regressions cover overlap and pending scratch reuse.
 
-**Validation pending:** #1029 passed admission policy but an extracted tick
+**Texture milestone qualified:** full #1031 passed at `1e32e359` (39149394473),
+artifact 12144887049. Offline, Forge package/startup, native exact animation pixels/
+sync including admission and batch, public Create Chronicles and Crash Assistant
+all green; private packs skipped. RX adoption/net benefit unmeasured.
+
+Third slice implemented, validation pending: `experimentalGpuIndirectCpuBypass`
+requires existing GPU indirect commands/draw flags and no terrain mesh handoff.
+Consumes current complete bounded GPU commands without constructing/uploading CPU
+FrameBatch; lazily restores current CPU commands on rejection. Candidate ownership
+and exact culling volume checks preserve missing-section/portal/projection safety;
+APPEND stays on the existing atomic planner. Native cache tests cover dirty GPU
+intervals and fallback. Renderer-update slot/fallback counters, no readbacks.
+
+Historical #1029 passed admission policy but an extracted tick
 fixture lacked its new dependency; #1030 found the corresponding attribution
 fixture gap. Both fixed, negative evidence preserved in the ownership doc.
-Local JRE lacks javac, Gradle download unreachable; full
-native/Forge CI required. No measured coverage/net benefit for the new pilot,
+Local JRE lacks javac and Gradle download is unreachable; the third slice
+requires its own full native/Forge CI result. No measured coverage/net benefit for the new pilot,
 no default promotion or integrated release qualification. See
 `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` and new active roadmap sequence.
-Continue texture compute aggregation, then qualified particle preparation and
+Continue qualified particle billboard preparation (reuse instancing, preserve IP), further multi-sprite texture batching, and
 existing terrain execution ownership; do not declare the multi-subsystem mission
-complete after this admission slice. No new owner test needed at this boundary.
+complete after these milestones. No new owner test needed at this boundary.
 
 
 ## #1028 GPU texture copy queue bound — full CI qualified (2026-10-18)
 
-After owner #1026 diagnostic disproved native particle resize growth in the measured render and invalidated its zero capacity-check counter, #1027 removed the probe (full Forge/native CI passed, run 39143353962 at executable `df07fc7b`). The independent #1026 texture profiler shows 114,177 flushes caused by the unified queue's 128-region cap and 8.289 ms/tick inclusive copy flush cost. A **pilot-only 128→256** capacity experiment changes only that integer bound and sizes its existing fixed scratch arrays. The legacy 32-region queue, source ordering/overlap safety, staging budget, barriers, GPU compute and custom pixel generation remain unchanged. The real production-method contract and native Vulkan pixel/synchronization smoke now exercise 256 capacity and 288 writes with overwrite/retirement. Full [#1028 Forge/native CI](https://github.com/Vorith03/VulkanMod/actions/runs/39143814563) **passed** on qualified executable `50f39eb50dda7e71ac0b726495183218e70b69f7` (JAR artifact `12142713171`). Offline production-method contracts, Forge package, two Vulkan startups, indirect, post/depth, screenshot pixel/sync with the 288-column native unified-copy test enabled, public Create Chronicles and Crash Assistant all passed; optional real resource packs skipped. **Disposition: correctness-qualified, RX speedup unmeasured.** A larger queue may increase per-epoch overlap scan CPU. Next: one new #1028 180-second RX capture on the previous world snapshot and flags, compare to existing #1025 without a new baseline/OFF run. Check region-limit drains, true copy commands, inclusive texture flush/tick/client tick, separately scoped GPU times, FPS and visual anomalies. See `docs/TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md`.
+After owner #1026 diagnostic disproved native particle resize growth in the measured render and invalidated its zero capacity-check counter, #1027 removed the probe (full Forge/native CI passed, run 39143353962 at executable `df07fc7b`). The independent #1026 texture profiler shows 114,177 flushes caused by the unified queue's 128-region cap and 8.289 ms/tick inclusive copy flush cost. A **pilot-only 128→256** capacity experiment changes only that integer bound and sizes its existing fixed scratch arrays. The legacy 32-region queue, source ordering/overlap safety, staging budget, barriers, GPU compute and custom pixel generation remain unchanged. The real production-method contract and native Vulkan pixel/synchronization smoke now exercise 256 capacity and 288 writes with overwrite/retirement. Full [#1028 Forge/native CI](https://github.com/Vorith03/VulkanMod/actions/runs/39143814563) **passed** on qualified executable `50f39eb50dda7e71ac0b726495183218e70b69f7` (JAR artifact `12142713171`). Offline production-method contracts, Forge package, two Vulkan startups, indirect, post/depth, screenshot pixel/sync with the 288-column native unified-copy test enabled, public Create Chronicles and Crash Assistant all passed; optional real resource packs skipped. **Disposition: correctness-qualified, RX speedup unmeasured.** A larger queue may increase per-epoch overlap scan CPU. The #1028 owner capture has now been received/read in the active checkpoint above; do not repeat it. See `docs/TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md`.
 
 ## Preserved evidence and outstanding hardware gates
 

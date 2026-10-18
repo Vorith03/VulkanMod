@@ -18,6 +18,7 @@ public final class RegionBatchSmokeTest {
 
     public static void verify() {
         verifyGpuIndirectFallbackContract();
+        verifyLazyGpuCommandOwnership();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
@@ -657,6 +658,57 @@ public final class RegionBatchSmokeTest {
                 batch.commands.freeBuffer();
             area.releaseBuffers();
             RegionVoxelStore.ENABLED = voxelStoreEnabled;
+        }
+    }
+
+    private static void verifyLazyGpuCommandOwnership() {
+        ChunkArea area = new ChunkArea(0, new Vector3i(0, 0, 0));
+        var batch = new RegionDrawBatch.FrameBatch();
+        RenderSection section = new RenderSection(0, 0, 0, 0);
+        TerrainRenderType layer = TerrainRenderType.CUTOUT_MIPPED;
+        var parameters = section.getDrawParameters(layer);
+        parameters.indexCount = 6;
+        parameters.firstIndex = 3;
+        parameters.vertexOffset = 24;
+        parameters.vertexBufferSegment.setReady();
+        area.addSection(section);
+        try {
+            int accepted = RegionDrawBatch.gpuCommandOwnerRejection(true, false, true, true, true, 512, 512);
+            long uploads = RegionBatchStats.commandUploads;
+            require(RegionDrawBatch.prepareCommandOwner(batch, area.drawBuffers, area, layer, accepted, false)
+                            && batch.commands == null && RegionBatchStats.commandUploads == uploads,
+                    "Valid GPU ownership must not allocate/materialize/upload a CPU command shadow");
+            parameters.vertexOffset = 80;
+            int stale = RegionDrawBatch.gpuCommandOwnerRejection(true, false, true, true, false, 512, 512);
+            require(!RegionDrawBatch.prepareCommandOwner(batch, area.drawBuffers, area, layer, stale, false)
+                            && batch.drawCount == 1 && batch.commands.getByteBuffer().getInt(12) == 80,
+                    "Lost GPU generation must lazily build current complete CPU fallback");
+            uploads = RegionBatchStats.commandUploads;
+            require(RegionDrawBatch.prepareCommandOwner(batch, area.drawBuffers, area, layer, accepted, false)
+                            && RegionBatchStats.commandUploads == uploads,
+                    "GPU re-adoption must stop CPU rebuilding after fallback");
+            parameters.vertexOffset = 120;
+            area.drawBuffers.markMeshChanged(layer);
+            require(RegionDrawBatch.prepareCommandOwner(batch, area.drawBuffers, area, layer, accepted, false)
+                            && RegionBatchStats.commandUploads == uploads,
+                    "Dirty mesh while GPU-owned must not eagerly rebuild CPU commands");
+            require(!RegionDrawBatch.prepareCommandOwner(batch, area.drawBuffers, area, layer, stale, false)
+                            && batch.commands.getByteBuffer().getInt(12) == 120,
+                    "Fallback after a dirty GPU interval must reject cached old CPU addresses");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(true,true,true,true,true,512,512)==2,
+                    "Hybrid APPEND must retain the atomic CPU/GPU command planner");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(true,false,false,true,true,512,512)==3,
+                    "A missing owned section cannot be hidden by a large candidate count");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(true,false,true,false,true,512,512)==4,
+                    "Portal/projection/camera mismatch must reject GPU command ownership");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(true,false,true,true,true,513,512)==6,
+                    "Capacity bounds apply before CPU shadow bypass");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(false,false,true,true,true,512,512)==1,
+                    "Absent opt-in must preserve CPU command ownership");
+            Initializer.LOGGER.info("VULKANMOD_GPU_COMMAND_OWNERSHIP_OK: no CPU command allocation/upload on GPU owner, lazy current fallback, re-adoption, hybrid/superset/volume/capacity rejection");
+        } finally {
+            if(batch.commands != null) batch.commands.freeBuffer();
+            area.releaseBuffers();
         }
     }
 
