@@ -1,5 +1,13 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## #1025 candidate: production BufferBuilder growth-pointer and vertex-element work — 2026-10-17
+
+- **Evidence:** #1024 raw 180-second Render-thread JFR has 953 execution leaves in `BufferBuilder.ensureCapacity` during particle render, 937 through `storeRenderedBuffer` finalization; another 385 leaves in the element-advance method. Sampling is not allocation telemetry. The original `BufferBuilderM` pointer update was injected at every `ensureCapacity` return; the existing `nextElement` used `% list.size()` per element.
+- **Work elimination:** native pointer address is fetched only when Minecraft calls `MemoryTracker.resize`, not on capacity checks that do not resize. Element wrap uses comparison rather than integer remainder. Original Forge/vanilla buffer capacity policy, growth request/bytes, index generation, fallback vertex layouts, and upload lifetime remain unchanged.
+- **Correctness/activation:** normal path, not a new GPU/particle experiment. Existing vertex consumer production smoke expanded with forced growth, exact pointer, positions/UVs, release and reuse. Requires full CI and RX gameplay/visual validation; do not infer net FPS or actual growth frequency from removed code.
+- **Disposition:** **qualified but unmeasured** pending full CI, then RX capture. If capacity growth remains dominant despite eliminating redundant address work, instrument *real resize events and bytes* before expanding the optimization.
+
+
 **#1024 RX evidence received (2026-10-17):** Build `3f77cab2`, opt-in Forge Frustum fast path applied in debug and exercised by raw JFR. Current particle-render `AABB.equals` sampled leaves **0/3,138** vs #1023 **764/2,910**, particle-render CPU **4.196→3.776 ms/frame**, capture **7,825→9,167 frames/~180s** (~43.47→50.92 FPS), texture tick **14.704→14.095 ms/tick**. Distinct workloads/executables confound the +17.15% aggregate: **activation and favorable screening, not formally proven isolated net FPS benefit**. Opt-in unchanged, visual check still unconfirmed. Next measured residual is particle lighting/chunk and `BufferBuilder` stacks plus 14.095-ms texture tick; investigate correct ownership before a bounded fix, without asking for repeat #1024 or #1023 capture. See [#1024 analysis](RX_RD32_CAPTURE_1024_FRUSTUM_2026-10-17.md). 
 
 **New owner-directed next-FPS candidate (October 17, #1024):** The

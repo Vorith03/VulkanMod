@@ -1,5 +1,13 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Particle BufferBuilder maintenance / element-advance repair — pending CI
+
+At the #1024 RX 6900 XT baseline, 953 Render-thread particle-render execution samples end at obfuscated `BufferBuilder.m_85722_` (`ensureCapacity`); 937 of these follow `Tesselator.end() -> storeRenderedBuffer()`, and the samples recur through all 180 seconds. Another 385 samples end in BufferBuilder vertex-element processing. These are sampled stack observations, **not proof of native growth, copies, or a measured CPU-time saving**. No native buffer growth counter exists in the uploaded benchmark; the size of possible reallocations remains unknown.
+
+Source review found that `BufferBuilderM` always recomputed the cached native pointer at `ensureCapacity` RETURN even on checks without reallocations, and that its existing `nextElement` override executed a general integer remainder for each element advance. A bounded implementation now updates the pointer at the actual `MemoryTracker.resize` site (keeping Minecraft's original growth/copy policy) and replaces the modulo with a single wrap comparison for the invariant 0..size-1 index. The production Forge-transformed vertex smoke verifies forced native growth, exact pointer/address, first-quad bytes, release, and second-batch allocation reuse, alongside the existing Forge multi-consumer/packed fallback tests.
+
+This is **qualified but unmeasured** until full CI and the owner's new RX capture; it makes **no claim that native capacity growth caused the 953 samples**, nor that the entire particle FPS cost was eliminated. Preserve custom formats, index sorting, modded particle callbacks, and the Vulkan upload/release sequence. Do not repeat #1024's historical baseline. Next: inspect CI at this executable; if green, one changed-build 180-second RD32 RX run can measure particle render CPU and JFR leaves vs #1024, and determine whether further buffer growth instrumentation or the modded lighting/hasChunk path is warranted.
+
 ## #1024 RX frustum fast-path benchmark received — 2026-10-17
 
 Owner #1024 benchmark UUID `1851e3c8-ccef-42ed-9191-126d1d45ae77` plus raw 180-second JFR/latest/debug was received and analyzed. Tested qualified executable `3f77cab2`, capture completed with 9,167 frames / 180.022 s (~50.92 FPS), compared to owner-designated historical #1023 bulk-ON baseline 7,825 / 180.020 s (~43.47 FPS), **+17.15% observed cross-build throughput**. The restored-world assumption is owner-authorized, but snapshots, JIT/server state and cross-executable confounding preclude an isolated net-benefit claim. No new baseline or OFF run is requested.

@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.nio.ByteBuffer;
@@ -78,9 +79,17 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
         this.bufferPtr = MemoryUtil.memAddress0(this.buffer);
     }
 
-    @Inject(method = "ensureCapacity", at = @At(value = "RETURN"))
-    private void setPtr(int initialCapacity, CallbackInfo ci) {
-        this.bufferPtr = MemoryUtil.memAddress0(this.buffer);
+    // Original ensureCapacity is also called when no native growth is needed.
+    // Updating the pointer on every check does repeated ByteBuffer address work.
+    // Intercept only the original resize site, preserving its allocation policy and
+    // updating the cached pointer before the grown allocation can be written to.
+    @Redirect(method = "ensureCapacity", at = @At(value = "INVOKE",
+            target = "Lcom/mojang/blaze3d/platform/MemoryTracker;resize(Ljava/nio/ByteBuffer;I)Ljava/nio/ByteBuffer;"),
+            require = 1)
+    private ByteBuffer vulkanmod$resizeAndUpdatePointer(ByteBuffer previous, int capacity) {
+        ByteBuffer resized = com.mojang.blaze3d.platform.MemoryTracker.resize(previous, capacity);
+        this.bufferPtr = MemoryUtil.memAddress0(resized);
+        return resized;
     }
 
     @Override
@@ -149,7 +158,10 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
         VertexFormatElement vertexFormatElement;
         List<VertexFormatElement> list = ((VertexFormatMixed)(this.format)).getFastList();
 
-        this.elementIndex = (this.elementIndex + 1) % list.size();
+        // elementIndex starts at zero and only advances through this method.
+        // A bounds check avoids integer remainder on every particle vertex element.
+        int nextIndex = this.elementIndex + 1;
+        this.elementIndex = nextIndex == list.size() ? 0 : nextIndex;
         this.nextElementByte += this.currentElement.getByteSize();
 
         this.currentElement = vertexFormatElement = list.get(this.elementIndex);

@@ -11,6 +11,8 @@ import net.minecraft.core.Direction;
 import net.minecraftforge.client.model.IQuadTransformer;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.ExtendedVertexBuilder;
+import net.vulkanmod.interfaces.BufferBuilderMemory;
+import org.lwjgl.system.MemoryUtil;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
@@ -34,6 +36,7 @@ public final class VertexConsumerContractSmokeTest {
         try {
             verifyMultiConsumerFallbackAndLayout();
             verifyForgeBulkData();
+            verifyNativeGrowthPointerAndReuse();
             Initializer.LOGGER.info("Vertex/Forge consumer contract smoke passed");
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Vertex/Forge consumer contract smoke failed", e);
@@ -101,6 +104,56 @@ public final class VertexConsumerContractSmokeTest {
         for (int i = stride; i < stride + 16; ++i) {
             require(bytes.get(i) == SENTINEL,
                     "Packed fallback wrote beyond POSITION_TEX stride at offset " + i);
+        }
+    }
+
+    /**
+     * Exercises the actual Forge-transformed BufferBuilder and VulkanMod's
+     * accelerated/fallback vertex emission, including the native resize call.
+     * A tiny but first-vertex-safe allocation forces a growth during endVertex;
+     * the next batch must reuse the grown allocation without another resize.
+     */
+    private static void verifyNativeGrowthPointerAndReuse() throws ReflectiveOperationException {
+        BufferBuilder builder = new BufferBuilder(4);
+        Field bufferField = BufferBuilder.class.getDeclaredField("buffer");
+        Field pointerField = BufferBuilder.class.getDeclaredField("bufferPtr");
+        bufferField.setAccessible(true);
+        pointerField.setAccessible(true);
+        ByteBuffer original = (ByteBuffer) bufferField.get(builder);
+        require(original.capacity() >= 20, "Growth fixture needs space for the first POSITION_TEX vertex");
+        try {
+            for (int batch = 0; batch < 2; ++batch) {
+                builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+                for (int i = 0; i < 4; ++i) {
+                    ((ExtendedVertexBuilder) builder).vertex(1.25F + i, 2.5F, 3.75F,
+                            0xFF804020, 0.125F, 0.875F, 0, 0, 0);
+                }
+                ByteBuffer current = (ByteBuffer) bufferField.get(builder);
+                if (batch == 0) {
+                    require(current.capacity() > original.capacity(),
+                            "First particle-layout batch must force actual native growth");
+                    require(current != original, "Native resize must replace the buffer object");
+                } else {
+                    require(current == original, "Second batch must reuse the grown native buffer");
+                }
+                require(pointerField.getLong(builder) == MemoryUtil.memAddress0(current),
+                        "Cached vertex pointer was not updated to the resized allocation");
+                BufferBuilder.RenderedBuffer rendered = builder.end();
+                require(rendered.drawState().vertexCount() == 4, "Vertex count changed during native growth");
+                ByteBuffer vertices = rendered.vertexBuffer();
+                require(vertices.remaining() == 80, "POSITION_TEX layout size changed");
+                for (int i = 0; i < 4; ++i) {
+                    int offset = i * 20;
+                    require(Float.floatToRawIntBits(vertices.getFloat(offset))
+                                    == Float.floatToRawIntBits(1.25F + i), "Grown buffer position mismatch");
+                    require(Float.floatToRawIntBits(vertices.getFloat(offset + 12))
+                                    == Float.floatToRawIntBits(0.125F), "Grown buffer UV mismatch");
+                }
+                rendered.release();
+                original = current;
+            }
+        } finally {
+            ((BufferBuilderMemory) builder).vulkanmod$releaseMemory();
         }
     }
 
