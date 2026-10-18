@@ -207,3 +207,61 @@ oracle, texture pixels/sync and all public Forge/compatibility gates. This does
 not prove live RX command-bypass adoption, hybrid GPU commands, particle offload,
 or FPS improvement. The subsequent APPEND-composition guard needs separate full
 qualification before it becomes the final executable checkpoint.
+
+## Precise remaining release gates
+
+1. Texture adoption/profitability: actual standard-update GPU/CPU/fallback coverage
+   after ranked admission, CPU texture/preparation cost, separate GPU upload/main
+   costs and render-only/tick-bearing p95/p99 on representative RX. Schedule ranking
+   is a heuristic, not runtime-visibility weighting or optimal packing; live sources
+   stay pinned. Multi-sprite dispatch/shared scratch is still open.
+2. Terrain input preparation: `publishLiveCandidates` still reconstructs and hashes
+   the owned region metadata before deciding it is unchanged. The resident table is
+   reused on the GPU, but host input scanning/allocation has not been eliminated.
+   Use producer-side mesh/ownership/readiness and traversal generation invalidation,
+   retaining pending-upload retries. Queue membership alone is insufficient:
+   `WorldRenderer.addNode` marks a node's last traversal frame before its frustum
+   rejection, so graph-visible metadata outside the CPU queue can change. Preserve
+   ring movement, portals and current-volume generation checks. Measure preparation
+   before promoting indirect CPU bypass; cached CPU command lists were already
+   cheap in some stationary intervals.
+3. Particle render ownership: qualify a bounded exact render adapter through the
+   existing Forge/portal particle loop and mixed/custom draw ordering. Java light,
+   world/collision and callbacks remain until a separately proven simulation
+   adapter can reproduce them without CPU shadow state or synchronous readback.
+4. Meshing/command composition: current candidate v1 does not represent generated
+   REPLACE/atomic APPEND pairs. Extend the existing input/output ABI and oracles
+   before combining GPU-generated geometry with GPU indirect command ownership.
+   Existing qualified worker bypass, stale-result recovery and atomic pair tests
+   must remain. Representative portal/dirty mixed-section/lifecycle gates stay open.
+5. Integrated release: no default promotion or 144-FPS claim before correctness,
+   production adoption, net CPU savings and tail frame-time evidence. No new owner
+   benchmark is requested for each isolated slice; retain existing #1028 reference.
+
+The two texture pilots are `vulkanmod.experimentalGpuAnimationAdmission` and
+`vulkanmod.experimentalGpuAnimationBatch`; they use the existing copy/interpolation,
+unified-upload and source-pool flags. The command pilot is
+`vulkanmod.experimentalGpuIndirectCpuBypass`, together with existing indirect
+commands/draw flags. All remain opt-in. Java clocks, original mip images, custom
+Forge behavior, world-state lookups and CPU recovery remain. There is no fully
+integrated GPU-first release candidate yet.
+
+## Final executable qualification for this session
+
+Executable **0e6f3657de3c8193df529954df0bca019a058045** passed full
+**#1033**, [run 39150537659](https://github.com/Vorith03/VulkanMod/actions/runs/39150537659).
+This supersedes pending qualification of the APPEND composition correction.
+Offline contracts, Forge distributable, both startups, native lazy command cache /
+current fallback / APPEND safety, existing exact 172-command/512-candidate GPU
+selection with 15 off-frustum direct seeds, post/depth, exact texture pixels and
+synchronization, public Create Chronicles and Crash Assistant all passed. Private
+packs skipped. CI artifact **12145046866**:
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1033-g0e6f3657-all.jar`.
+Later documentation-only HEAD reuses this executable evidence.
+
+The full release objective remains **incomplete**: no particle offload, no combined
+mesher/indirect ownership, no eliminated per-draw candidate host scan, no RX
+adoption/coverage/net CPU-time/GPU-cost/p95/p99/FPS result for these new pilots.
+Do not present the CI JAR as an integrated GPU-first release candidate or request
+an unchanged baseline. Current implementation and remaining gates are durable in
+this document, the roadmap and living status.

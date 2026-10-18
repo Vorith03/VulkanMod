@@ -1,5 +1,13 @@
 # GPU offload investigation and implementation plan
 
+**October 18 owner priority override:** the next release is GPU-first production
+ownership and actual CPU bypass. The older O1–O8 ordering/status below is historical;
+follow the active `ROADMAP.md` and
+[`GPU_FIRST_OWNERSHIP_2026-10-18.md`](GPU_FIRST_OWNERSHIP_2026-10-18.md) for the
+implemented texture/command milestones, measured coverage, current gates and next
+particle/terrain integration work. Preserve the correctness contracts below.
+
+
 Requested 2026-10-02. This plan records proposed tracks and their current qualification below; it is not a hardware speedup claim. Follow AGENTS.md section 3A and the live Phase 5 checkpoint before each executable slice.
 
 ## Objective and current evidence

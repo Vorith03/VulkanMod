@@ -42,15 +42,24 @@ intervals and fallback. Renderer-update slot/fallback counters, no readbacks.
 Historical #1029 passed admission policy but an extracted tick
 fixture lacked its new dependency; #1030 found the corresponding attribution
 fixture gap. Both fixed, negative evidence preserved in the ownership doc.
-Local JRE lacks javac and Gradle download is unreachable; full remote CI is the
-compilation/native evidence. The subsequent APPEND-composition guard needs its
-own full CI result: the v1 indirect candidate ABI is now rejected by both GPU
-command consumers whenever terrain handoff is active, even with zero currently
-published GPU draws, so a pending CPU exception half cannot be exposed. No measured coverage/net benefit for the new pilot,
+**Final executable checkpoint:** `0e6f3657de3c8193df529954df0bca019a058045`,
+full **#1033** / run **39150537659**, passed; JAR artifact **12145046866**. Both native startup/command cache
+oracles (including pending APPEND rejection), exact GPU selection/zero-tail,
+texture pixels/synchronization, Forge packaging, public Create Chronicles and
+Crash Assistant passed; real private packs skipped. This includes the composition
+guard rejecting v1 indirect selection during terrain handoff. Local JRE lacks
+javac and Gradle download is unreachable; remote CI supplies qualification.
+
+No measured coverage/net benefit for the new pilot,
 no default promotion or integrated release qualification. See
 `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` and new active roadmap sequence.
-Continue qualified particle billboard preparation (reuse instancing, preserve IP), further multi-sprite texture batching, and
-existing terrain execution ownership; do not declare the multi-subsystem mission
+Next: particle billboard preparation with exact ordering/Forge/IP fallback,
+further multi-sprite texture execution, and generation-safe incremental terrain
+candidate input. The current candidate fingerprint still scans/allocates owned
+region metadata per draw; this host cost is not displaced by command shadow
+bypass. CPU graph traversal, readiness and ownership must invalidate retained GPU
+inputs correctly. Extend candidate ABI before combining mesher REPLACE/APPEND with
+GPU indirect ownership. See the precise remaining gates in the ownership doc; do not declare the multi-subsystem mission
 complete after these milestones. No new owner test needed at this boundary.
 
 

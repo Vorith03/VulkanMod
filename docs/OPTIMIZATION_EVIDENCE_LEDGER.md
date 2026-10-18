@@ -1,5 +1,16 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+**Latest executable qualification: #1033 / 0e6f3657 / 39150537659, full success.**
+Texture ranked admission + all-mip/shared-copy execution and lazy terrain GPU
+command ownership, including the pending-APPEND composition guard, passed all
+public native/pixel/sync/Forge/compatibility gates. Private packs skipped.
+**Disposition: qualified but unmeasured**, not a GPU-first release completion.
+No RX adoption/net CPU/FPS/tail measurement yet. Particle adapter, multi-sprite
+compute, incremental candidate input and generated-mesh/indirect composition remain
+open. Source input scanning still occurs per draw; do not equate skipped CPU
+command construction with eliminated terrain preparation. See the ownership doc.
+
+
 ## ACTIVE GPU-first release priority — October 18
 
 Owner directed production CPU displacement across textures, particles and existing
