@@ -1,5 +1,11 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1026 bounded particle-buffer resize attribution in progress — 2026-10-17
+
+Following unfavorable #1025 RX screening (-6.4% cross-build relative to #1024, not causal proof), an exact diagnosis has been added **only to the opt-in automated 180-second profiling path**. The existing `MemoryTracker.resize` intercept now measures real native resize calls, elapsed wall time and capacity deltas; the `storeRenderedBuffer` path counts finalizations and its non-growth `ensureCapacity` checks. Measurements are limited to the Render thread while the Forge particle renderer executes, and are reported once at automated capture completion in `particle_buffer_growth`. Nested render scopes remain balanced; all counters remain off in normal gameplay. These bytes are native *capacities*, not proof of actual copied bytes. This is **diagnostic code, not an FPS optimization**, and does not supersede #1025's negative performance verdict.
+
+**Validation state:** implementation awaits full Forge/native startup and production-mixin CI. If qualified, only one new RX automated benchmark is needed to determine the dominant cause before editing buffer finalization or particle lighting. Do not request a fresh #1024 baseline. No claim of observed growth count exists yet.
+
 ## #1025 owner RX capture received — unfavorable buffer screening (2026-10-17)
 
 Owner supplied the new #1025 benchmark UUID `7b8d70be-4cc7-42c4-a583-19a38aac2d4c`, JFR, latest/debug, and both #1024 raw files were independently compared. Qualified executable `7bff3d7c` is production-active (BufferBuilderM and Frustum fast-path mixins logged); capture completed at **8,585/180.039s = ~47.68 FPS** vs #1024 **9,167/180.022s = ~50.92 FPS** (**-6.4% observed**). Late ~60-s windows: ~51.76 vs ~54.64 FPS. Particle render CPU **3.892 vs 3.776 ms/frame**; texture tick **14.491 vs 14.095 ms/tick**, client tick **26.443 vs 26.066**. Main graphics GPU **3.545 vs 2.890 ms/frame** and separate texture upload GPU **3.215 vs 2.914 ms/batch**; cross-executable GPU/workload differences confound attributing the overall FPS loss to a CPU-only change.

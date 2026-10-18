@@ -216,6 +216,7 @@ public final class PerformanceProfiler {
         TextureTickAttribution.emitSummary();
         WorldRenderAttribution.emitSummary();
         ParticleAttribution.emitSummary();
+        ParticleBufferGrowthAttribution.emitSummary();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,
                 "[VulkanModPerf] capture_complete reason=%s duration_seconds=%.3f frames=%d",

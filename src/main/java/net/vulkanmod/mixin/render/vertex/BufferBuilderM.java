@@ -5,16 +5,19 @@ import net.vulkanmod.interfaces.ExtendedVertexBuilder;
 import net.vulkanmod.interfaces.BufferBuilderMemory;
 import net.vulkanmod.interfaces.VertexFormatMixed;
 import net.vulkanmod.render.vertex.VertexUtil;
+import net.vulkanmod.render.profiling.ParticleBufferGrowthAttribution;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -53,6 +56,7 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
     @Shadow protected abstract it.unimi.dsi.fastutil.ints.IntConsumer intConsumer(int i, VertexFormat.IndexType indexType);
 
     private long bufferPtr;
+    @Unique private boolean vulkanmod$measuredParticleFinalization;
 
     @Override
     public long vulkanmod$retainedBytes() {
@@ -79,6 +83,23 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
         this.bufferPtr = MemoryUtil.memAddress0(this.buffer);
     }
 
+    @Inject(method = "storeRenderedBuffer", at = @At("HEAD"), require = 1)
+    private void vulkanmod$beginParticleBufferFinalization(CallbackInfoReturnable<BufferBuilder.RenderedBuffer> cir) {
+        this.vulkanmod$measuredParticleFinalization = ParticleBufferGrowthAttribution.beginFinalization();
+    }
+
+    @Inject(method = "storeRenderedBuffer", at = @At("RETURN"), require = 1)
+    private void vulkanmod$endParticleBufferFinalization(CallbackInfoReturnable<BufferBuilder.RenderedBuffer> cir) {
+        this.vulkanmod$measuredParticleFinalization = false;
+    }
+
+    @Inject(method = "ensureCapacity", at = @At("HEAD"), require = 1)
+    private void vulkanmod$countParticleFinalizationCapacityCheck(int requiredBytes, CallbackInfo ci) {
+        if (this.vulkanmod$measuredParticleFinalization) {
+            ParticleBufferGrowthAttribution.finalizationCapacityCheck();
+        }
+    }
+
     // Original ensureCapacity is also called when no native growth is needed.
     // Updating the pointer on every check does repeated ByteBuffer address work.
     // Intercept only the original resize site, preserving its allocation policy and
@@ -87,7 +108,14 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
             target = "Lcom/mojang/blaze3d/platform/MemoryTracker;resize(Ljava/nio/ByteBuffer;I)Ljava/nio/ByteBuffer;"),
             require = 1)
     private ByteBuffer vulkanmod$resizeAndUpdatePointer(ByteBuffer previous, int capacity) {
+        boolean measure = ParticleBufferGrowthAttribution.isActive();
+        long before = measure ? System.nanoTime() : 0L;
         ByteBuffer resized = com.mojang.blaze3d.platform.MemoryTracker.resize(previous, capacity);
+        if (measure) {
+            ParticleBufferGrowthAttribution.resized(previous.capacity(), capacity,
+                    resized.capacity(), System.nanoTime() - before,
+                    this.vulkanmod$measuredParticleFinalization);
+        }
         this.bufferPtr = MemoryUtil.memAddress0(resized);
         return resized;
     }

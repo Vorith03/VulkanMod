@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.vulkanmod.render.profiling.ParticleAttribution;
+import net.vulkanmod.render.profiling.ParticleBufferGrowthAttribution;
 import net.vulkanmod.render.profiling.WorldRenderAttribution;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,6 +30,7 @@ public class ParticleEngineRenderPerformanceMixin {
                                        LightTexture lightTexture, Camera camera, float partialTick,
                                        Frustum frustum, CallbackInfo ci) {
         ParticleAttribution.beginRenderPass();
+        ParticleBufferGrowthAttribution.beginRender();
         WorldRenderAttribution.begin(WorldRenderAttribution.Category.PARTICLE_RENDER);
     }
 
@@ -36,6 +38,7 @@ public class ParticleEngineRenderPerformanceMixin {
     private void vulkanmod$endRender(PoseStack poseStack, MultiBufferSource.BufferSource bufferSource,
                                      LightTexture lightTexture, Camera camera, float partialTick,
                                      Frustum frustum, CallbackInfo ci) {
+        ParticleBufferGrowthAttribution.endRender();
         WorldRenderAttribution.end(WorldRenderAttribution.Category.PARTICLE_RENDER);
     }
 }
