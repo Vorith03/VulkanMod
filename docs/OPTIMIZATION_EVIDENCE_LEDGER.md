@@ -1,5 +1,7 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+**#1024 RX evidence received (2026-10-17):** Build `3f77cab2`, opt-in Forge Frustum fast path applied in debug and exercised by raw JFR. Current particle-render `AABB.equals` sampled leaves **0/3,138** vs #1023 **764/2,910**, particle-render CPU **4.196→3.776 ms/frame**, capture **7,825→9,167 frames/~180s** (~43.47→50.92 FPS), texture tick **14.704→14.095 ms/tick**. Distinct workloads/executables confound the +17.15% aggregate: **activation and favorable screening, not formally proven isolated net FPS benefit**. Opt-in unchanged, visual check still unconfirmed. Next measured residual is particle lighting/chunk and `BufferBuilder` stacks plus 14.095-ms texture tick; investigate correct ownership before a bounded fix, without asking for repeat #1024 or #1023 capture. See [#1024 analysis](RX_RD32_CAPTURE_1024_FRUSTUM_2026-10-17.md). 
+
 **New owner-directed next-FPS candidate (October 17, #1024):** The
 RX #1023 JFR identifies the Forge per-particle frustum infinite-AABB
 `equals` check as 764 of 2,910 sampled Java particle-render leaves and a

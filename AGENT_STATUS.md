@@ -1,5 +1,15 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1024 RX frustum fast-path benchmark received — 2026-10-17
+
+Owner #1024 benchmark UUID `1851e3c8-ccef-42ed-9191-126d1d45ae77` plus raw 180-second JFR/latest/debug was received and analyzed. Tested qualified executable `3f77cab2`, capture completed with 9,167 frames / 180.022 s (~50.92 FPS), compared to owner-designated historical #1023 bulk-ON baseline 7,825 / 180.020 s (~43.47 FPS), **+17.15% observed cross-build throughput**. The restored-world assumption is owner-authorized, but snapshots, JIT/server state and cross-executable confounding preclude an isolated net-benefit claim. No new baseline or OFF run is requested.
+
+**Production activation confirmed:** `debug.log` explicitly applies `render.FrustumInfiniteBoundsFastPathMixin` to Forge Frustum. The #1024 raw JFR has **0 `AABB.equals` leaves in 3,138 Render-thread particle-render execution stacks**, versus #1023 **764/2,910**; 3 samples contain the new helper's frame. Particle-render attribution decreased **4.196 → 3.776 ms/frame (-10.0%)**; texture tick **14.704 → 14.095 ms/tick**, whole client tick **26.809 → 26.066 ms/tick** and separately scoped main-graphics GPU **3.173 → 2.890 ms/frame**. No Vulkan VUID/device-loss/synchronization validation error found in latest/debug; visual correctness is not established from logs.
+
+Remaining measured pressure: texture leaf 14.095 ms/tick (uploads 7.812 and other 6.283); particles tick 4.456 ms/tick and render 3.776 ms/frame; ~4,880 KiB/tick particle allocation; JFR particle render still shows 1,459 samples with BufferBuilder in the stack and 811 with lighting/chunk-path frames. Campfire smoke represents 29,471,618/30,127,224 tick calls. These are candidate-selection evidence, **not measured optimization savings**. The known 1,604 terrain pending-dirty entries remain retained.
+
+**Disposition:** #1024 frustum helper **implemented, CI-qualified and RX-activated with favorable cross-build screening**, not formally matched net-benefit or visual-qualified; leave flag opt-in. Formal #1023 CPU bulk default adoption remains separately conditional pair 1/3, owner chose to move on. Next development should inspect the residual high-cost production paths/ownership before another bounded optimization, selecting a testable CPU render or texture mechanism; do not repeat #1024 or request the #1023 baseline. See `docs/RX_RD32_CAPTURE_1024_FRUSTUM_2026-10-17.md` and the optimization ledger.
+
 ## #1024 opt-in Forge particle-frustum equality fast rejection qualified — 2026-10-17
 
 The owner directed us to **move on to the next framerate improvement**, rather
