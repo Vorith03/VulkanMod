@@ -1,5 +1,11 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1026 RX diagnostic disposition; hot-path probe removed (2026-10-18)
+
+The owner supplied #1026 capture UUID `9b7f3496-f876-4ca7-ba6a-482519c5373a`. Full 180.012s, 7,576 frames (~42.09 FPS) at qualified diagnostic executable `8da6c404`; 7,576 particle finalizations, **0 scoped native `MemoryTracker.resize` events**. The accompanying `finalization_capacity_checks=0` counter is **invalid**: raw JFR has 850 particle-render `BufferBuilder.ensureCapacity` sampled stacks and ~792 directly under `storeRenderedBuffer`. The per-builder marker / check-hook is removed to eliminate misleading instrumentation and extra hot-method work. This does **not** prove a net #1026 regression or FPS improvement. Leave native growth policy untouched.
+
+Next investigate modded particle lighting's `ClientLevel.handler$bpg000$onHasChunk` (~474 JFR sampled leaves), preserve actual mod/portal chunk semantics, or texture tick non-upload CPU. Do not request another baseline or diagnostic-only RX test. Focused evidence: `docs/RX_RD32_CAPTURE_1026_BUFFER_DISCRIMINATOR_2026-10-18.md`. This repair awaits full native/Forge CI; do not claim activation/performance until verified.
+
 ## #1026 particle-buffer native-resize discriminator — full CI qualified (2026-10-17)
 
 Following unfavorable #1025 RX screening (-6.4% cross-build relative to #1024, not causal proof), an exact diagnosis has been added **only to the opt-in automated 180-second profiling path**. The existing `MemoryTracker.resize` intercept now measures real native resize calls, elapsed wall time and capacity deltas; the `storeRenderedBuffer` path counts finalizations and its non-growth `ensureCapacity` checks. Measurements are limited to the Render thread while the Forge particle renderer executes, and are reported once at automated capture completion in `particle_buffer_growth`. Nested render scopes remain balanced; all counters remain off in normal gameplay. These bytes are native *capacities*, not proof of actual copied bytes. This is **diagnostic code, not an FPS optimization**, and does not supersede #1025's negative performance verdict.
