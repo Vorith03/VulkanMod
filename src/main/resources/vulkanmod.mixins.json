@@ -99,6 +99,8 @@
     "render.vertex.VertexFormatMixin",
     "render.BlockModelShaperMixin",
     "render.BufferUploaderM",
+    "render.ParticleBillboardMixin",
+    "render.ParticleRenderedBufferMixin",
     "render.RenderTargetMixin",
     "render.GameRendererMixin",
     "render.GameRendererScreenshotMixin",

@@ -58,7 +58,9 @@ public class Drawer {
         }
         this.vertexBuffers = new VertexBuffer[framesNum];
         for (int i = 0; i < framesNum; ++i) {
-            this.vertexBuffers[i] = new VertexBuffer(INITIAL_VB_SIZE, MemoryTypes.HOST_MEM);
+            this.vertexBuffers[i] = net.vulkanmod.render.particle.ParticleBillboardCompute.requested()
+                    ? new net.vulkanmod.render.particle.ParticleVertexBuffer(INITIAL_VB_SIZE)
+                    : new VertexBuffer(INITIAL_VB_SIZE, MemoryTypes.HOST_MEM);
         }
 
         if(this.uniformBuffers != null)
@@ -102,6 +104,20 @@ public class Drawer {
         autoIndexBuffer.checkCapacity(vertexCount);
 
         drawIndexed(vertexBuffer, autoIndexBuffer.getIndexBuffer(), indexCount, autoIndexBuffer.getVkIndexType());
+    }
+
+    /** Retains the original ordered quad stream and graphics pipeline, including converted portal shaders. */
+    public void drawParticles(ByteBuffer vertices, int count, net.vulkanmod.render.particle.ParticleQuadBatch batch) {
+        VertexBuffer target=vertexBuffers[currentFrame];
+        if(target instanceof net.vulkanmod.render.particle.ParticleVertexBuffer
+                && net.vulkanmod.render.particle.ParticleBillboardCompute.expand(target,vertices,batch)) {
+            quadsIndexBuffer.checkCapacity(count);
+            drawIndexed(target,quadsIndexBuffer.getIndexBuffer(),count*3/2,quadsIndexBuffer.getVkIndexType());
+        } else {
+            batch.expandCpu(vertices);
+            net.vulkanmod.render.particle.ParticleBillboardCompute.cpuRecovery(batch.count());
+            draw(vertices,VertexFormat.Mode.QUADS,com.mojang.blaze3d.vertex.DefaultVertexFormat.PARTICLE,count);
+        }
     }
 
     public AutoIndexBuffer getQuadsIndexBuffer() {

@@ -216,6 +216,7 @@ public final class PerformanceProfiler {
         TextureTickAttribution.emitSummary();
         WorldRenderAttribution.emitSummary();
         ParticleAttribution.emitSummary();
+        net.vulkanmod.render.particle.ParticleBillboardCompute.emitSummary();
         ParticleBufferGrowthAttribution.emitSummary();
         if (sampleCount > 0) emitSummary(now);
         writeLine(String.format(Locale.ROOT,

@@ -115,7 +115,12 @@ public class BufferUploaderM {
             GraphicsPipeline.requestPrimitiveMode(parameters.mode());
             renderer.bindGraphicsPipeline(pipeline);
             renderer.uploadAndBindUBOs(pipeline);
-            Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
+            net.vulkanmod.render.particle.ParticleQuadBatch billboards =
+                    ((net.vulkanmod.interfaces.ParticleBillboardBuffer)(Object)buffer).vulkanmod$billboards();
+            if(billboards != null)
+                Renderer.getDrawer().drawParticles(buffer.vertexBuffer(),parameters.vertexCount(),billboards);
+            else
+                Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
         } finally {
             if(convertedLegacyShader)
                 shader.clear();
@@ -212,7 +217,12 @@ public class BufferUploaderM {
             GraphicsPipeline.requestPrimitiveMode(parameters.mode());
             renderer.bindGraphicsPipeline(pipeline);
             renderer.uploadAndBindUBOs(pipeline);
-            Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
+            net.vulkanmod.render.particle.ParticleQuadBatch billboards =
+                    ((net.vulkanmod.interfaces.ParticleBillboardBuffer)(Object)buffer).vulkanmod$billboards();
+            if(billboards != null)
+                Renderer.getDrawer().drawParticles(buffer.vertexBuffer(),parameters.vertexCount(),billboards);
+            else
+                Renderer.getDrawer().draw(buffer.vertexBuffer(), parameters.mode(), parameters.format(), parameters.vertexCount());
         }
 
         ci.cancel();

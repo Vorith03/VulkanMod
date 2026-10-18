@@ -1,0 +1,34 @@
+#version 450
+// One invocation owns all words of a quad. CPU-produced quads are absent from the offset table.
+layout(local_size_x=64) in;
+layout(std430,binding=0) buffer Vertices { uint words[]; };
+layout(push_constant) uniform Push { uint base; uint list; uint count; uint vertexWords; } pc;
+float f(uint i) { return uintBitsToFloat(words[i]); }
+void main() {
+    uint item=gl_GlobalInvocationID.x;
+    if(item>=pc.count) return;
+    uint offset=words[pc.list+item]/4;
+    if(offset+28>pc.vertexWords) return;
+    uint at=pc.base+offset;
+    vec3 center=vec3(f(at),f(at+1),f(at+2));
+    float size=f(at+3);
+    vec4 q=vec4(f(at+4),f(at+5),f(at+6),f(at+7));
+    vec4 uv=vec4(f(at+8),f(at+9),f(at+10),f(at+11));
+    uint color=words[at+12], light=words[at+13];
+    // JOML 1.10.5 Quaternionf.transform, including non-unit quaternion normalization.
+    precise float xx=q.x*q.x, yy=q.y*q.y, zz=q.z*q.z, ww=q.w*q.w;
+    precise float xy=q.x*q.y, xz=q.x*q.z, yz=q.y*q.z, zw=q.z*q.w, yw=q.y*q.w, xw=q.x*q.w;
+    precise float k=1.0/(((xx+yy)+zz)+ww);
+    for(uint j=0;j<4;j++) {
+        float x=j<2?-1.0:1.0, y=(j==0||j==3)?-1.0:1.0;
+        precise vec3 rotated=vec3(((xx-yy-zz+ww)*k)*x+(2.0*(xy-zw)*k)*y,
+                                  (2.0*(xy+zw)*k)*x+((yy-xx-zz+ww)*k)*y,
+                                  (2.0*(xz-yw)*k)*x+(2.0*(yz+xw)*k)*y);
+        precise vec3 position=rotated*size+center;
+        uint dst=at+j*7;
+        words[dst]=floatBitsToUint(position.x); words[dst+1]=floatBitsToUint(position.y); words[dst+2]=floatBitsToUint(position.z);
+        words[dst+3]=floatBitsToUint(j<2?uv.y:uv.x);
+        words[dst+4]=floatBitsToUint(j==0||j==3?uv.w:uv.z);
+        words[dst+5]=color; words[dst+6]=light;
+    }
+}

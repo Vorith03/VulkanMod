@@ -23,7 +23,7 @@ import java.util.function.IntConsumer;
 
 @Mixin(BufferBuilder.class)
 public abstract class BufferBuilderM extends DefaultedVertexConsumer
-        implements BufferVertexConsumer, ExtendedVertexBuilder, BufferBuilderMemory {
+        implements BufferVertexConsumer, ExtendedVertexBuilder, BufferBuilderMemory, net.vulkanmod.interfaces.ParticleBillboardWriter {
 
     @Override
     public void putBulkData(PoseStack.Pose pose, net.minecraft.client.renderer.block.model.BakedQuad quad,
@@ -32,6 +32,63 @@ public abstract class BufferBuilderM extends DefaultedVertexConsumer
         net.vulkanmod.render.texture.SpriteAnimationUsage.use(quad.getSprite());
         BufferVertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, alpha, light, overlay, useColor);
     }
+
+    @Shadow private int vertices;
+    @Shadow private int renderedBufferPointer;
+    @Shadow private VertexFormat.Mode mode;
+    @Shadow private boolean building;
+    @Shadow @Nullable private VertexSorting sorting;
+    @Shadow @Nullable private Vector3f[] sortingPoints;
+    @Shadow private boolean indexOnly;
+    @Shadow private void ensureCapacity(int bytes) { throw new AssertionError(); }
+    @org.spongepowered.asm.mixin.Unique
+    private net.vulkanmod.render.particle.ParticleQuadBatch vulkanmod$billboards;
+
+    public boolean vulkanmod$canWriteBillboard() {
+        return ((Object)this == Tesselator.getInstance().getBuilder()
+                || Boolean.getBoolean("vulkanmod.ciScreenshotSmoke"))
+                && building && format == DefaultVertexFormat.PARTICLE && mode == VertexFormat.Mode.QUADS
+                && elementIndex == 0 && (vertices & 3) == 0 && sorting == null && sortingPoints == null
+                && !indexOnly && !defaultColorSet
+                && (vulkanmod$billboards == null || vulkanmod$billboards.count() < net.vulkanmod.render.particle.ParticleQuadBatch.MAX_QUADS);
+    }
+
+    public void vulkanmod$billboard(float x,float y,float z,org.joml.Quaternionf q,float size,
+                                   float u0,float u1,float v0,float v1,int color,int light) {
+        if(!vulkanmod$canWriteBillboard()) throw new IllegalStateException("Particle builder changed during callbacks");
+        int bytes=net.vulkanmod.render.particle.ParticleQuadBatch.QUAD_BYTES;
+        ensureCapacity(bytes + format.getVertexSize());
+        if(vulkanmod$billboards == null) vulkanmod$billboards=new net.vulkanmod.render.particle.ParticleQuadBatch();
+        vulkanmod$billboards.add(nextElementByte-renderedBufferPointer);
+        net.vulkanmod.render.particle.ParticleQuadBatch.pack(buffer,nextElementByte,x,y,z,q,size,u0,u1,v0,v1,color,light);
+        nextElementByte+=bytes;
+        vertices+=4;
+    }
+
+    @Inject(method="storeRenderedBuffer", at=@At("RETURN"))
+    private void vulkanmod$publishBillboards(org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<BufferBuilder.RenderedBuffer> ci) {
+        ((net.vulkanmod.interfaces.ParticleBillboardBuffer)(Object)ci.getReturnValue()).vulkanmod$billboards(vulkanmod$billboards);
+        vulkanmod$billboards=null;
+    }
+
+    private void vulkanmod$materializeBillboards() {
+        if(vulkanmod$billboards == null) return;
+        java.nio.ByteBuffer slice=buffer.duplicate().order(buffer.order());
+        slice.position(renderedBufferPointer).limit(nextElementByte);
+        vulkanmod$billboards.expandCpu(slice);
+        net.vulkanmod.render.particle.ParticleBillboardCompute.cpuRecovery(vulkanmod$billboards.count());
+        vulkanmod$billboards=null;
+    }
+
+    @Inject(method="setQuadSorting", at=@At("HEAD"))
+    private void vulkanmod$beforeSorting(VertexSorting sorting, CallbackInfo ci) { vulkanmod$materializeBillboards(); }
+    @Inject(method="getSortState", at=@At("HEAD"))
+    private void vulkanmod$beforeSortState(org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<BufferBuilder.SortState> ci) { vulkanmod$materializeBillboards(); }
+    @Inject(method="restoreSortState", at=@At("HEAD"))
+    private void vulkanmod$beforeRestore(BufferBuilder.SortState state, CallbackInfo ci) { vulkanmod$materializeBillboards(); }
+
+    @Inject(method={"discard", "reset"}, at=@At("RETURN"))
+    private void vulkanmod$discardBillboards(CallbackInfo ci) { vulkanmod$billboards=null; }
 
     @Shadow public abstract void endVertex();
     @Shadow public abstract void discard();

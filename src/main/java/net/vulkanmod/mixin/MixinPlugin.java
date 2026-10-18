@@ -78,6 +78,9 @@ public class MixinPlugin implements IMixinConfigPlugin {
             return false;
         }
 
+        if("net.vulkanmod.mixin.render.ParticleBillboardMixin".equals(mixinClassName)
+                && !Boolean.getBoolean("vulkanmod.experimentalGpuParticleBillboards")) return false;
+
         // Drop the per-particle Mixin callbacks entirely in normal gameplay.
         // Broad client tick attribution remains available independently.
         if(FRUSTUM_FAST_PATH_MIXIN.equals(mixinClassName)

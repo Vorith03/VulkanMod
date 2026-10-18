@@ -11,7 +11,11 @@ public class VertexBuffer extends Buffer {
     }
 
     public VertexBuffer(int size, MemoryType type) {
-        super(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, type);
+        this(size, type, 0);
+    }
+
+    public VertexBuffer(int size, MemoryType type, int extraUsage) {
+        super(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | extraUsage, type);
         this.createBuffer(size);
 
     }
@@ -30,7 +34,12 @@ public class VertexBuffer extends Buffer {
 
     }
 
-    private void resizeBuffer(int newSize) {
+    public void reserve(int bytes) {
+        if(bytes < 0) throw new IllegalArgumentException("Negative vertex reservation");
+        if(bytes > bufferSize - usedBytes) resizeBuffer(Math.max(bufferSize * 2, Math.addExact(usedBytes, bytes)));
+    }
+
+    protected void resizeBuffer(int newSize) {
         MemoryManager.getInstance().addToFreeable(this);
         this.createBuffer(newSize);
 

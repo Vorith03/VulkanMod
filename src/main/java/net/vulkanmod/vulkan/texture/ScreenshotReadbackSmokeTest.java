@@ -28,6 +28,7 @@ public final class ScreenshotReadbackSmokeTest {
     private ScreenshotReadbackSmokeTest() {}
 
     public static void verify(Minecraft minecraft) throws Exception {
+        net.vulkanmod.render.particle.ParticleBillboardSmokeTest.verify(minecraft);
         TextureUploadSmokeTest.verify();
         net.vulkanmod.gl.LegacyFramebufferSmokeTest.verify();
         net.vulkanmod.render.texture.SpriteAnimationSmokeTest.verify();
