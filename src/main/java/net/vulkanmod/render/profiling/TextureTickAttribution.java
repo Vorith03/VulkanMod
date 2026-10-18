@@ -225,6 +225,12 @@ public final class TextureTickAttribution {
         }
     }
 
+    private static long interpolationQueuedCopies, interpolationDirectCopies;
+    public static void recordInterpolationCopyRoute(boolean queued) {
+        if(!ENABLED || !tickActive) return;
+        if(queued) interpolationQueuedCopies++; else interpolationDirectCopies++;
+    }
+
     public static void recordResidentInterpolation(int dispatches, long pixels, long bytes) {
         if(!ENABLED || !tickActive || dispatches <= 0 || pixels <= 0L || bytes < 0L) return;
         residentInterpolationCalls++;
@@ -338,6 +344,8 @@ public final class TextureTickAttribution {
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
         net.vulkanmod.render.texture.GpuAnimationSourcePool.Stats pool =
                 net.vulkanmod.render.texture.GpuAnimationSourcePool.stats();
+        line.append(" interpolation_queued_copy_updates=").append(interpolationQueuedCopies)
+                .append(" interpolation_direct_copy_updates=").append(interpolationDirectCopies);
         var admission = net.vulkanmod.render.texture.GpuAnimationAdmission.stats();
         line.append(" gpu_admission_enabled=").append(admission.enabled())
                 .append(" gpu_admission_plans_lifetime=").append(admission.plans())
@@ -431,6 +439,7 @@ public final class TextureTickAttribution {
     }
 
     private static void reset() {
+        interpolationQueuedCopies = interpolationDirectCopies = 0;
         tickActive = false;
         activePhase = -1;
         currentOverlap = false;

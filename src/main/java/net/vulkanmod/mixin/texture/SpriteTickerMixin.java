@@ -9,6 +9,7 @@ import net.vulkanmod.render.texture.SpriteAnimationState;
 import net.vulkanmod.render.texture.CpuSpriteInterpolation;
 import net.vulkanmod.render.texture.GpuAnimationAdmission;
 import net.vulkanmod.render.texture.GpuAnimatedTextureResidency;
+import net.vulkanmod.render.texture.GpuTextureInterpolationCompute;
 import net.vulkanmod.render.profiling.TextureTickAttribution;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -49,7 +50,7 @@ public abstract class SpriteTickerMixin implements SpriteAnimationTicker {
                     sourceBytes += (long)image.getWidth() * image.getHeight() * 4L;
                     framePixels += (long)(owner.width() >> mip) * (owner.height() >> mip);
                 }
-                long charge = sourceBytes + (GpuAnimatedTextureResidency.interpolationEnabled() ? framePixels * 4L : 0);
+                long charge = sourceBytes + (GpuTextureInterpolationCompute.batchRequested() ? owner.byMipLevel.length * 24L : 0) + (GpuAnimatedTextureResidency.interpolationEnabled() ? framePixels * 4L : 0);
                 vulkanmod$state.registerAdmission(charge,
                         GpuAnimatedTextureResidency.interpolationEnabled() && duration > 0
                                 ? framePixels * ((double)interiorTicks / duration) : 0);

@@ -18,7 +18,13 @@ budget increase or custom-code migration. Stable live-source pins and GPU-safe
 retirement remain. Added production policy and native pressure/pixel oracles.
 **Disposition: blocked on full native/Forge qualification; representative adoption
 and net benefit unmeasured.** Local compiler absent/Gradle network unavailable.
-Next change: compute batching, then particles/terrain; keep entire release open.
+Second slice implemented: all-mip O4 dispatch plus shared O3/O4/CPU copy queue,
+exact-scratch pending-reader drain, same source/memory/lifetime contracts. Native
+and production queue tests extended; actual dispatch and separate queued/direct
+O4 counters. Per-sprite descriptors/scratch remain; multi-sprite compute
+aggregation remains open. #1029/#1030 exposed missing isolated-harness dependencies
+before Forge compilation, now corrected. Full qualification still pending.
+Then particles/terrain; keep entire release open.
 
 
 **#1028 pilot texture queue bound:** #1026 measured `copy_flush_region_limit=114177` of 244,701 nonempty epochs (21.37M regions, 628,843 real Vulkan copy commands, 8.289 ms/tick inclusive CPU flush) at cap 128. A bounded 128→256 queue capacity experiment affects only existing `experimentalUnifiedTextureUploads` opt-in; legacy cap 32 unchanged. Production-method oracle and 288-pixel native Vulkan verification expanded; full [CI #1028](https://github.com/Vorith03/VulkanMod/actions/runs/39143814563) passed at executable `50f39eb5`: production-method oracle and 288 native Vulkan pixel/sync tests qualified (artifact `12142713171`, real packs skipped). **Disposition: correctness-qualified, RX frame-time gain unmeasured**; overlap scanning increases with the cap and may negate native-call savings. See [#1028 evidence](TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md).

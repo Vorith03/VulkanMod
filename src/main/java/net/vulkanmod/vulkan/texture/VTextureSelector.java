@@ -428,6 +428,52 @@ public abstract class VTextureSelector {
         flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.GPU_INTERPOLATION);
     }
 
+    /** Existing bounded copy engine also consumes compute-produced mip rectangles. */
+    public static boolean canQueueComputedSpriteCopies() {
+        return UNIFIED_GPU_UPLOADS && spriteUploadDepth > 0;
+    }
+
+    public static void flushPendingSpriteUploadSource(long bufferId) {
+        for(int i = 0; i < spriteUploadRegionCount; ++i) {
+            if(spriteSourceBuffers[i] == bufferId) {
+                flushPendingSpriteUploadCopies();
+                return;
+            }
+        }
+    }
+
+    public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,
+                                               int[] offsets, int frameWidth, int frameHeight, int levels, int destX, int destY) {
+        if(!canQueueComputedSpriteCopies() || source == null || texture == null
+                || !Device.getGraphicsQueue().hasActiveUploadBatch() || texture.formatSize != 4
+                || offsets == null || levels <= 0 || levels > offsets.length || levels > texture.mipLevels
+                || frameWidth <= 0 || frameHeight <= 0) return -1;
+        // All geometry and destination checks have already passed in O4. Validate
+        // the scratch source again before any queued command can become visible.
+        int regions = 0;
+        for(int mip = 0; mip < levels; ++mip) {
+            int width = frameWidth >> mip, height = frameHeight >> mip;
+            if(width <= 0 || height <= 0) continue;
+            if(destX < 0 || destY < 0 || (destX >> mip) > Math.max(1, texture.width >> mip) - width
+                    || (destY >> mip) > Math.max(1, texture.height >> mip) - height
+                    || offsets[mip] < 0 || (offsets[mip] & 3) != 0
+                    || (long)offsets[mip] + (long)width * height * 4 > source.getBufferSize()) return -1;
+            regions++;
+        }
+        if(regions == 0) return -1;
+        if(spriteUploadTexture != null && spriteUploadTexture != texture)
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.TEXTURE_SWITCH);
+        texture.transferDstLayout(Device.getGraphicsQueue().getCommandBuffer());
+        spriteUploadTexture = texture;
+        for(int mip = 0; mip < levels; ++mip) {
+            int width = frameWidth >> mip, height = frameHeight >> mip;
+            if(width <= 0 || height <= 0) continue;
+            queueSpriteUploadCopy(mip, width, height,
+                    destX >> mip, destY >> mip, source.getId(), offsets[mip]);
+        }
+        return regions;
+    }
+
     public static void beginSpriteUploadBatch() {
         if(spriteUploadDepth++ == 0) {
             spriteUploadTexture = null;

@@ -36,16 +36,27 @@ layout(push_constant) uniform InterpolationPushConstants {
  */
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    uint pixelCount = pc.width * pc.height;
+    // reserved==0 retains the qualified legacy one-mip ABI. A nonzero
+    // source-table word offset selects immutable per-mip rows, one workgroup-Y
+    // plane per existing source mip. No mip generation or clock progression.
+    uint mip = gl_GlobalInvocationID.y;
+    bool fused = pc.reserved != 0u;
+    uint row = pc.reserved + mip * 6u;
+    uint width = fused ? sourceData.words[row + 2u] : pc.width;
+    uint height = fused ? sourceData.words[row + 3u] : pc.height;
+    uint pixelCount = width * height;
     if(index >= pixelCount || pc.duration == 0u)
         return;
-
-    uint x = index % pc.width;
-    uint y = index / pc.width;
-    uint current = sourceData.words[
-            pc.sourceBaseWord + (pc.currentY + y) * pc.sheetWidth + pc.currentX + x];
-    uint next = sourceData.words[
-            pc.sourceBaseWord + (pc.nextY + y) * pc.sheetWidth + pc.nextX + x];
+    uint sourceBase = fused ? sourceData.words[row] : pc.sourceBaseWord;
+    uint sheetWidth = fused ? sourceData.words[row + 1u] : pc.sheetWidth;
+    uint outputBase = fused ? sourceData.words[row + 4u] : pc.outputBaseWord;
+    uint shift = fused ? sourceData.words[row + 5u] : 0u;
+    uint x = index % width;
+    uint y = index / width;
+    uint current = sourceData.words[sourceBase
+            + ((pc.currentY >> shift) + y) * sheetWidth + (pc.currentX >> shift) + x];
+    uint next = sourceData.words[sourceBase
+            + ((pc.nextY >> shift) + y) * sheetWidth + (pc.nextX >> shift) + x];
 
     precise double fraction = double(pc.subFrame) / double(pc.duration);
     precise double currentWeight = 1.0 - fraction;
@@ -61,5 +72,5 @@ void main() {
         mixed |= (uint(value) & 255u) << shift;
     }
 
-    outputData.words[pc.outputBaseWord + index] = mixed;
+    outputData.words[outputBase + index] = mixed;
 }

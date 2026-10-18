@@ -171,6 +171,7 @@ public final class SpriteAnimationSmokeTest {
                             atlas, offsets, new int[]{2}, heights, offsets,
                             1, 1, 2, 0, 1, 1, 2, 2, 0) == null)
                         throw new AssertionError("Pooled O4 interpolation source descriptor rejected");
+                    if(GpuTextureInterpolationCompute.batchRequested()) assertPendingCopyRegions(3);
 
                     // Reverse the boundary too: O4 writes are outside the
                     // region list, so a later queued O3 overwrite must see
@@ -183,6 +184,17 @@ public final class SpriteAnimationSmokeTest {
                             atlas, offsets, new int[]{2}, heights, offsets,
                             1, 1, 2, 0, 1, 1, 2, 3, 0) == null)
                         throw new AssertionError("Repeated pooled O4 interpolation rejected");
+                    if(GpuTextureInterpolationCompute.batchRequested()) {
+                        // Neither destination overlaps the first output here. The
+                        // next reuse must drain the pending scratch read anyway.
+                        assertPendingCopyRegions(2);
+                        if(interpolationBinding.dispatch(
+                                atlas, offsets, new int[]{2}, heights, offsets,
+                                1, 1, 2, 0, 1, 1, 2, 3, 0) == null)
+                            throw new AssertionError("Queued scratch reuse rejected");
+                        assertPendingCopyRegions(1);
+                        Initializer.LOGGER.info("GPU animation batch smoke passed (compute output shares O3 queue, overlap ordering, pending scratch read drained before reuse)");
+                    }
                 } finally {
                     VTextureSelector.endSpriteUploadBatch();
                 }
@@ -373,6 +385,7 @@ public final class SpriteAnimationSmokeTest {
         GpuAnimatedTextureResidency.setCiForceCpuInterpolation(cpuBulk);
         long bulkFramesBefore = CpuSpriteInterpolation.ciFrames();
         long interpolationCallsBefore = GpuAnimatedTextureResidency.stats().interpolationCalls();
+        long interpolationDispatchesBefore = GpuAnimatedTextureResidency.stats().interpolationDispatches();
         // Align both destinations at every tested mip, including zero sprite extents.
         int half = 1;
         while(half < test.width || half < (1 << test.mips)) half <<= 1;
@@ -446,7 +459,11 @@ public final class SpriteAnimationSmokeTest {
                     long clock = ((SpriteAnimationTicker)candidateTicker).vulkanmod$clock();
                     if(clock != oracle.clock() || clock != ((SpriteAnimationTicker)referenceTicker).vulkanmod$clock())
                         throw new AssertionError("Animation clock differs: " + test.name + " tick " + tick);
+                    long beforeRefresh = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
                     SpriteAnimationUsage.use(candidate);
+                    if(!test.custom && !cpuBulk && GpuAnimatedTextureResidency.interpolationEnabled()
+                            && beforeRefresh != Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes())
+                        throw new AssertionError("GPU refresh also staged CPU pixels: " + test.name);
                     if(((SpriteAnimationTicker)candidateTicker).vulkanmod$clock() != clock)
                         throw new AssertionError("Refresh advanced animation clock");
                 } finally {
@@ -489,6 +506,10 @@ public final class SpriteAnimationSmokeTest {
                 if(interpolationAfter.interpolationCalls() <= interpolationCallsBefore)
                     throw new AssertionError(
                             "GPU texture interpolation path was not exercised: " + test.name);
+                if(GpuTextureInterpolationCompute.batchRequested()
+                        && interpolationAfter.interpolationDispatches() - interpolationDispatchesBefore
+                                != interpolationAfter.interpolationCalls() - interpolationCallsBefore)
+                    throw new AssertionError("Expected exactly one all-mip GPU dispatch per production interpolation");
                 Initializer.LOGGER.info(
                         "GPU texture interpolation smoke passed: {} (exact CPU oracle pixels/all mips, CPU clock ownership, device-local compute-to-atlas path)",
                         test.name);

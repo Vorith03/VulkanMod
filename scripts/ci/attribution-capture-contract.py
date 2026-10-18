@@ -43,6 +43,8 @@ public class AttributionCaptureContract {
         TextureTickAttribution.recordStandardInterpolationRoute(true);
         TextureTickAttribution.recordStandardInterpolationRoute(false);
         TextureTickAttribution.recordCpuBulkInterpolation();
+        TextureTickAttribution.recordInterpolationCopyRoute(true);
+        TextureTickAttribution.recordInterpolationCopyRoute(false);
         long phase = TextureTickAttribution.begin(TextureTickAttribution.Phase.BATCH_DRAIN);
         long copy = TextureTickAttribution.beginSpriteCopyFlush();
         TextureTickAttribution.endSpriteCopyFlush(copy, 3);
@@ -125,6 +127,7 @@ public class AttributionCaptureContract {
         check(PerformanceProfiler.lines.get(2).contains("resident_source_current_kib=0.000 resident_source_peak_kib=2.000 "), "source retirement/peak lost");
         check(PerformanceProfiler.lines.get(2).contains("resident_scratch_current_kib=0.000 resident_scratch_peak_kib=0.500 "), "scratch retirement/peak lost");
         check(PerformanceProfiler.lines.get(3).contains("world_calls=1 "), "prior world leaked");
+        check(PerformanceProfiler.lines.get(2).contains("interpolation_queued_copy_updates=1 interpolation_direct_copy_updates=1"), "compute copy routes leaked across reset");
         System.out.println("Attribution capture contract passed: warmup, parent scope, nested/overflow world, copy counters, reset");
     }
 }
@@ -141,6 +144,8 @@ with tempfile.TemporaryDirectory(prefix="vulkanmod-attribution-") as directory:
     # source-pool snapshot. Keep this isolated contract independent of Vulkan.
     pool_sources = destination / "net/vulkanmod/render/texture"
     pool_sources.mkdir(parents=True)
+    (pool_sources / "GpuAnimationAdmission.java").write_text(
+        (root / "src/main/java/net/vulkanmod/render/texture/GpuAnimationAdmission.java").read_text())
     (pool_sources / "GpuAnimationSourcePool.java").write_text("""package net.vulkanmod.render.texture;
 public final class GpuAnimationSourcePool {
     public static Stats stats() { return new Stats(false, 0L, 0, 0L, 0L, 0L); }

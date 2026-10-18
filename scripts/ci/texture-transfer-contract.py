@@ -22,7 +22,12 @@ def method(signature):
 # and the source/stride/offset encoding run unchanged.
 production = '\n'.join(method(sig) for sig in [
     "private static void queueSpriteUploadCopy(int mipLevel, int width, int height,\n                                              int xOffset, int yOffset,\n                                              long stagingBufferId, int bufferOffset,",
-    "private static void flushSpriteUploadCopies()"])
+    "private static void flushSpriteUploadCopies()",
+    "public static boolean canQueueComputedSpriteCopies()",
+    "public static void flushPendingSpriteUploadSource(",
+    "public static int queueComputedSpriteFrame(",
+    "public static void flushPendingSpriteUploadCopies()",
+    "private static void queueSpriteUploadCopy(int mipLevel, int width, int height,\n                                              int xOffset, int yOffset,\n                                              long stagingBufferId, int bufferOffset)"])
 harness = r'''package net.vulkanmod.vulkan.texture;
 import java.util.*;
 public final class TextureTransferBatchContract {
@@ -30,7 +35,7 @@ public final class TextureTransferBatchContract {
     static final int MAX_SPRITE_COPY_BATCH_REGIONS = 256;
     static final long VK_NULL_HANDLE = 0;
     static final int VK_IMAGE_ASPECT_COLOR_BIT=1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL=7;
-    static int spriteUploadRegionCount, barriers;
+    static int spriteUploadRegionCount, barriers, spriteUploadDepth=1;
     static long spriteUploadStagingBufferId;
     static VulkanImage spriteUploadTexture = new VulkanImage();
     static int[] spriteMipLevels=new int[256], spriteWidths=new int[256], spriteHeights=new int[256],
@@ -41,7 +46,7 @@ public final class TextureTransferBatchContract {
     static List<String> events=new ArrayList<>();
     static Map<String,Integer> pixels=new HashMap<>();
     static class TextureTickAttribution {
-        enum CopyFlushReason { STAGING_BUFFER_SWITCH, REGION_LIMIT, OVERLAPPING_REGION }
+        enum CopyFlushReason { STAGING_BUFFER_SWITCH, REGION_LIMIT, OVERLAPPING_REGION, GPU_INTERPOLATION, TEXTURE_SWITCH }
         static void recordCopyCommands(int groups) {}
     }
     static void flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason reason) {
@@ -52,7 +57,14 @@ public final class TextureTransferBatchContract {
         static MemoryStack stackPush() { return new MemoryStack(); }
         public void close() {}
     }
-    static class VulkanImage { long getId() { return 123; } }
+    static class VulkanImage {
+        int width=64, height=64, mipLevels=4, formatSize=4;
+        long getId() { return 123; }
+        void transferDstLayout(Object command) {}
+    }
+    static class TextureResidentBuffer {
+        long getId() { return 1000; } int getBufferSize() { return 64; }
+    }
     static class GraphicsQueue {
         boolean hasActiveUploadBatch() { return true; }
         GraphicsQueue getCommandBuffer() { return this; }
@@ -83,8 +95,8 @@ public final class TextureTransferBatchContract {
         events.add("copy:"+source+":"+(regions.end-regions.start));
         for(int i=regions.start;i<regions.end;i++) {
             var r=regions.get(i);
-            check(r.offset==r.y*1000+r.x*4L, "offset retained after grouping");
-            check(r.row==r.x+11 && r.height==r.y+22, "source strides retained");
+            if(source != 1000) check(r.offset==r.y*1000+r.x*4L, "offset retained after grouping");
+            if(source != 1000) check(r.row==r.x+11 && r.height==r.y+22, "source strides retained");
             pixels.put(r.mip+":"+r.x+":"+r.y, (int)source);
         }
     }
@@ -140,6 +152,20 @@ public final class TextureTransferBatchContract {
     }
     public static void main(String[] args) {
         scheduling();
+        clear();
+        var scratch = new TextureResidentBuffer();
+        check(queueComputedSpriteFrame(scratch, spriteUploadTexture, new int[]{0,24}, 3,2,2,8,4)==2, "computed mips queued");
+        check(spriteUploadRegionCount==2 && spriteSourceBuffers[0]==1000
+                && spriteBufferOffsets[1]==24 && spriteXOffsets[1]==4
+                && spriteYOffsets[1]==2 && spriteWidths[1]==1, "compute output geometry retained");
+        flushPendingSpriteUploadSource(999); check(events.isEmpty(), "unrelated source does not drain");
+        flushPendingSpriteUploadSource(1000);
+        check(spriteUploadRegionCount==0 && events.get(0).equals("GPU_INTERPOLATION"), "pending scratch reader drains before reuse");
+        clear();
+        check(queueComputedSpriteFrame(scratch, spriteUploadTexture, new int[]{0,64},3,2,2,8,4)==-1
+                && spriteUploadRegionCount==0 && events.isEmpty(), "all scratch ranges validated before enqueue");
+        check(queueComputedSpriteFrame(scratch, spriteUploadTexture, new int[]{0},3,2,1,63,4)==-1
+                && events.isEmpty(), "atlas extent validated before enqueue");
         int[] mips = {0, 1, 0, 0, 0};
         int[] xs = {100, 50, 300, Integer.MAX_VALUE - 1, 0};
         int[] ys = {100, 50, 300, 0, Integer.MAX_VALUE - 1};

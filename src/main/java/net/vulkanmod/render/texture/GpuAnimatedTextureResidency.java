@@ -52,6 +52,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
     private final GpuAnimationSourcePool.Lease sharedSourceLease;
     private final int sharedSourceOffset;
     private final int sourceBytes;
+    private final int mipTableOffset;
     private final int budgetChargeBytes;
     private final int interpolationScratchBytes;
     private final int frameWidth;
@@ -68,7 +69,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                                         TextureResidentBuffer buffer,
                                         GpuAnimationSourcePool.Lease sharedSourceLease,
                                         int sharedSourceOffset,
-                                        int sourceBytes, int budgetChargeBytes,
+                                        int sourceBytes, int mipTableOffset, int budgetChargeBytes,
                                         int interpolationScratchBytes,
                                         int frameWidth, int frameHeight, int columns) {
         this.images = images;
@@ -81,6 +82,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         this.sharedSourceLease = sharedSourceLease;
         this.sharedSourceOffset = sharedSourceOffset;
         this.sourceBytes = sourceBytes;
+        this.mipTableOffset = mipTableOffset;
         this.budgetChargeBytes = budgetChargeBytes;
         this.interpolationScratchBytes = interpolationScratchBytes;
         this.frameWidth = frameWidth;
@@ -222,6 +224,18 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             }
         }
 
+        int mipTableOffset = -1;
+        if(GpuTextureInterpolationCompute.batchRequested()) {
+            // Immutable per-mip geometry lives beside the original source bytes.
+            // It is uploaded once and consumed by one all-mip dispatch per sprite.
+            if(total > Integer.MAX_VALUE - images.length * 24L) {
+                capacityRejected++;
+                TextureTickAttribution.residentCapacityRejected();
+                return null;
+            }
+            mipTableOffset = (int)total;
+            total += images.length * 24L;
+        }
         long budgetCharge = total;
         if(GpuTextureInterpolationCompute.enabled()) {
             budgetCharge += scratchTotal;
@@ -245,7 +259,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             peakBytes = Math.max(peakBytes, currentBytes);
             reserved = true;
 
-            packed = MemoryUtil.memAlloc(sourceBytes);
+            packed = MemoryUtil.memAlloc(sourceBytes).order(java.nio.ByteOrder.nativeOrder());
             for(int mip = 0; mip < images.length; ++mip) {
                 VNativeImageI nativeImage = (VNativeImageI)(Object)images[mip];
                 ByteBuffer view = nativeImage.vulkanmod$getReadOnlyBuffer();
@@ -258,6 +272,13 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
                         Math.multiplyExact(widths[mip], heights[mip]), 4);
                 view.limit(view.position() + bytes);
                 packed.put(view);
+            }
+            if(mipTableOffset >= 0) {
+                for(int mip = 0; mip < images.length; ++mip) {
+                    packed.putInt(offsets[mip] >>> 2).putInt(widths[mip])
+                            .putInt(frameWidth >> mip).putInt(frameHeight >> mip)
+                            .putInt(interpolationOffsets[mip] >>> 2).putInt(mip);
+                }
             }
             packed.flip();
 
@@ -290,7 +311,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             return new GpuAnimatedTextureResidency(
                     images, generations, offsets, widths, heights,
                     interpolationOffsets, owned, ownedLease, sharedOffset,
-                    sourceBytes, chargeBytes, scratchBytes,
+                    sourceBytes, mipTableOffset, chargeBytes, scratchBytes,
                     frameWidth, frameHeight, columns);
         } catch(OutOfMemoryError | RuntimeException failure) {
             sourceRejected++;
@@ -361,7 +382,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             this.interpolationBindingAttempted = true;
             this.interpolationBinding = GpuTextureInterpolationCompute.createBinding(
                     this.buffer, this.sharedSourceOffset, this.sourceBytes,
-                    this.interpolationScratchBytes);
+                    this.interpolationScratchBytes, this.mipTableOffset);
             if(this.interpolationBinding == null) {
                 interpolationBindingRejected++;
                 return false;
@@ -379,11 +400,11 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         }
 
         interpolationCalls++;
-        interpolationDispatches += result.regions();
+        interpolationDispatches += result.dispatches();
         interpolationPixels += result.pixels();
         interpolationBytes += result.bytes();
         TextureTickAttribution.recordResidentInterpolation(
-                result.regions(), result.pixels(), result.bytes());
+                result.dispatches(), result.pixels(), result.bytes());
         return true;
     }
 

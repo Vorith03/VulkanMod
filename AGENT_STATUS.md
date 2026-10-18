@@ -18,7 +18,18 @@ Selected interpolation can initialize residency on first interior tick, then
 existing O4 cancels CPU pixels. Custom/clock/mutation/lifetime fallback retained.
 CPU policy and native transformed ticker pressure/oracle regressions added.
 
-**Validation pending:** local JRE lacks javac, Gradle download unreachable; full
+Second texture slice implemented: `experimentalGpuAnimationBatch` uploads a
+charged immutable mip table into the existing source lease, dispatches all mips
+once per sprite, and queues compute output alongside O3/CPU transfers. Only a
+pending read of the exact scratch buffer forces a reuse drain. Source/atlas
+ordering, scratch barriers and exact pixel kernel remain; per-sprite descriptors
+and source groups are still retained (multi-sprite compute batching remains open).
+Native/production-method regressions cover overlap and pending scratch reuse.
+
+**Validation pending:** #1029 passed admission policy but an extracted tick
+fixture lacked its new dependency; #1030 found the corresponding attribution
+fixture gap. Both fixed, negative evidence preserved in the ownership doc.
+Local JRE lacks javac, Gradle download unreachable; full
 native/Forge CI required. No measured coverage/net benefit for the new pilot,
 no default promotion or integrated release qualification. See
 `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` and new active roadmap sequence.

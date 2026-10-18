@@ -96,3 +96,40 @@ promote admission by itself to the complete release or request another hardware
 capture for each isolated slice. Default paths stay unchanged while qualification
 is incomplete. No new release candidate is qualified yet; CPU time saved,
 new GPU costs and end-to-end FPS benefit are **unmeasured**.
+
+## Second implemented texture slice: reusable all-mip dispatch and copy ownership
+
+Opt-in `experimentalGpuAnimationBatch` appends a charged immutable six-word row
+per source mip to the existing resident source lease. The same O4 shader reads
+these rows with a workgroup-Y mip plane, issuing one dispatch and push-constant
+record per sprite instead of one per positive mip. Original source bytes and
+Java-double RGB/current-alpha kernel are retained. The shader retains its legacy
+one-mip ABI for bindings without the table. Workgroup limits fail before bypass.
+All-mip dispatch has inactive lanes for smaller mips; GPU cost remains unmeasured.
+
+Compute output now enters the existing unified copy engine, preserving atlas,
+capacity and overlapping-write epochs. O4 no longer drains unrelated copies on
+every sprite or emits separate per-sprite atlas write barriers/copy commands.
+Before a binding reuses scratch, pending readers of that exact buffer are drained;
+the existing transfer-read/compute-write barrier then protects reuse. Compute-to-
+transfer dependency remains explicit. This batches copy dependencies/host recording
+across O3, O4 and CPU output; it does **not** yet share scratch/descriptor sets
+across sprites or aggregate multiple sprites into one compute dispatch. Each
+scratch VkBuffer still forms a separate native copy-source group.
+
+The native source-offset/overlap oracle now checks pending O3+O4 queue geometry,
+O4-to-O3 overwrites and repeated scratch reuse before its queued read. The real
+Forge ticker oracle asserts one dispatch per production interpolation and no
+CPU staging on standard GPU first-use refresh, plus exact odd/all-mip pixels.
+Screenshot CI exercises the batch pilot with synchronization validation and
+requires explicit admission/batch success markers. Existing production-method
+queue regression now exercises computed output bounds and scratch-source drains.
+Counters separately report queued/direct O4 output updates; dispatch count now
+means actual dispatches, not mip regions.
+
+Negative CI evidence: #1029 (39148852755, d340720c) passed the new pure admission
+contract but failed an extracted tick harness missing its new dependency. #1030
+(39149030428, ea3fb373) then exposed the same missing dependency in the attribution
+harness. Both fixtures are corrected by preserving the real policy in the latter
+and modelling the tick boundary in the former. Neither failed run reached Forge
+compilation or native validation; do not describe them as qualified.
