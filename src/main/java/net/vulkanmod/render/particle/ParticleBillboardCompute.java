@@ -27,7 +27,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     private static ParticleBillboardCompute instance;
     private static Boolean graphicsComputeSupported;
     private static boolean unavailable, ciUnavailable;
-    private static long inheritedAttempts, eligibleAttempts, layoutFallbacks, unavailableFallbacks;
+    private static long inheritedAttempts, eligibleAttempts, layoutFallbacks, unavailableFallbacks, originalCpu, packed;
     private static long gpuQuads, recoveryQuads, batches, preparationNanos, uploadedBytes, bindingsCreated;
     private static long capacityRejections, descriptorRejections;
     private long descriptorSetLayout, descriptorPool, pipelineLayout, pipeline;
@@ -43,6 +43,8 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     public static void attempt(boolean eligible) {
         inheritedAttempts++; if(eligible) eligibleAttempts++;
     }
+    public static void originalCpu() { originalCpu++; }
+    public static void packed() { packed++; }
     public static void layoutFallback() { layoutFallbacks++; }
     public static void cpuRecovery(int count) { recoveryQuads+=count; }
     public static boolean ready() {
@@ -148,8 +150,8 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     }
     public static long gpuQuads() { return gpuQuads; }
     public static String statistics() {
-        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback=%d unavailable_fallback=%d compute_batches=%d capacity_rejections=%d descriptor_rejections=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
-                inheritedAttempts,eligibleAttempts,gpuQuads,recoveryQuads,layoutFallbacks,unavailableFallbacks,batches,capacityRejections,descriptorRejections,
+        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
+                inheritedAttempts,eligibleAttempts,originalCpu,packed,gpuQuads,recoveryQuads,layoutFallbacks,unavailableFallbacks,batches,capacityRejections,descriptorRejections,
                 preparationNanos/1e6,uploadedBytes/1024.0,bindingsCreated,instance==null?0:instance.bindings.size(),instance==null?0:256);
     }
     public static void emitSummary() {

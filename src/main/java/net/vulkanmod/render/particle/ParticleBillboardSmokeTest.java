@@ -94,18 +94,21 @@ public final class ParticleBillboardSmokeTest {
                 ParticleBillboardCompute.ciUnavailable(false);
                 renderer.endFrame();
                 Vulkan.waitIdle(); // Native oracle only: production performs no waits/readback.
-                ByteBuffer output=MemoryManager.getInstance().Map(buffer.getAllocation())
-                        .getByteBuffer(0,buffer.getBufferSize()).slice((int)slice,reference.remaining()).order(ByteOrder.nativeOrder());
-                for(int v=0;v<131*4;v++) {
-                    int at=v*28;
-                    for(int f=0;f<5;f++) {
-                        float a=reference.getFloat(at+f*4), b=output.getFloat(at+f*4);
-                        if(!Float.isFinite(b) || Math.abs(a-b)>0.000002f)
-                            throw new AssertionError("Billboard geometry/UV mismatch vertex="+v+" component="+f+" expected="+a+" actual="+b);
+                ByteBuffer expectedBytes=reference;
+                MemoryManager.getInstance().MapAndCopy(buffer.getAllocation(),buffer.getBufferSize(),mapped->{
+                    ByteBuffer output=mapped.getByteBuffer(0,buffer.getBufferSize())
+                            .slice((int)slice,expectedBytes.remaining()).order(ByteOrder.nativeOrder());
+                    for(int v=0;v<131*4;v++) {
+                        int at=v*28;
+                        for(int f=0;f<5;f++) {
+                            float a=expectedBytes.getFloat(at+f*4), b=output.getFloat(at+f*4);
+                            if(!Float.isFinite(b) || Math.abs(a-b)>0.000002f)
+                                throw new AssertionError("Billboard geometry/UV mismatch vertex="+v+" component="+f+" expected="+a+" actual="+b);
+                        }
+                        if(expectedBytes.getInt(at+20)!=output.getInt(at+20) || expectedBytes.getInt(at+24)!=output.getInt(at+24))
+                            throw new AssertionError("Particle packed color/light mismatch");
                     }
-                    if(reference.getInt(at+20)!=output.getInt(at+20) || reference.getInt(at+24)!=output.getInt(at+24))
-                        throw new AssertionError("Particle packed color/light mismatch");
-                }
+                });
                 MemoryUtil.memFree(reference); reference=null;
                 // Force another VkBuffer generation while older descriptor retirement is pending.
                 buffer.reserve(buffer.getBufferSize()+16);

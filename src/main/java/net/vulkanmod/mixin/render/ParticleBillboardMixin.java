@@ -39,9 +39,10 @@ public abstract class ParticleBillboardMixin extends Particle {
         if(!eligible) return;
         if(!(consumer instanceof ParticleBillboardWriter writer) || !writer.vulkanmod$canWriteBillboard()) {
             ParticleBillboardCompute.layoutFallback();
+            ParticleBillboardCompute.originalCpu();
             return;
         }
-        if(!ParticleBillboardCompute.ready()) return;
+        if(!ParticleBillboardCompute.ready()) { ParticleBillboardCompute.originalCpu(); return; }
         var position=camera.getPosition();
         float cx=(float)(Mth.lerp((double)tick,this.xo,this.x)-position.x());
         float cy=(float)(Mth.lerp((double)tick,this.yo,this.y)-position.y());
@@ -53,6 +54,7 @@ public abstract class ParticleBillboardMixin extends Particle {
         int light=getLightColor(tick);
         writer.vulkanmod$billboard(cx,cy,cz,q,size,u0,u1,v0,v1,
                 VertexUtil.packColor(this.rCol,this.gCol,this.bCol,this.alpha),light);
+        ParticleBillboardCompute.packed();
         ci.cancel();
     }
 }
