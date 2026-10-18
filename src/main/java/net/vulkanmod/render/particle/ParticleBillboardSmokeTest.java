@@ -5,7 +5,8 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.SingleQuadParticle;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.ShaderInstance;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.BufferBuilderMemory;
 import net.vulkanmod.interfaces.ParticleBillboardBuffer;
@@ -44,7 +45,7 @@ public final class ParticleBillboardSmokeTest {
         }
         return builder.end();
     }
-    public static void verify(Minecraft minecraft) {
+    public static void verify(Minecraft minecraft) throws Exception {
         if(!ParticleBillboardCompute.requested()) throw new AssertionError("Particle pilot disabled in native oracle");
         BufferBuilder cpu=new BufferBuilder(16), gpu=new BufferBuilder(16), sorted=new BufferBuilder(16);
         ParticleVertexBuffer buffer=new ParticleVertexBuffer(16);
@@ -54,6 +55,9 @@ public final class ParticleBillboardSmokeTest {
         Quaternionf rotation=new Quaternionf().rotationYXZ(0.43f,-0.21f,0.19f);
         camera.rotation().set(rotation.x*1.3f,rotation.y*1.3f,rotation.z*1.3f,rotation.w*1.3f);
         Renderer renderer=Renderer.getInstance();
+        ShaderInstance previous=RenderSystem.getShader();
+        // Constructor-return smoke precedes GameRenderer's asynchronous core shader reload.
+        ShaderInstance shader=new ShaderInstance(minecraft.getResourceManager(),"particle",DefaultVertexFormat.PARTICLE);
         try {
             for(int pass=0;pass<3;pass++) {
                 renderer.resetBuffers(); renderer.beginFrame();
@@ -74,7 +78,7 @@ public final class ParticleBillboardSmokeTest {
                 long slice=buffer.getOffset();
                 // Also exercise the real BufferUploader path and its original shader/state.
                 long before=ParticleBillboardCompute.gpuQuads();
-                com.mojang.blaze3d.systems.RenderSystem.setShader(GameRenderer::getParticleShader);
+                RenderSystem.setShader(()->shader);
                 BufferUploader.drawWithShader(actual);
                 if(ParticleBillboardCompute.gpuQuads()!=before+87) throw new AssertionError("Production uploader kept CPU shadow");
                 // CPU sorting reads vertex positions: materialize before that callback, never sort compact records.
@@ -116,8 +120,10 @@ public final class ParticleBillboardSmokeTest {
             Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, production uploader, CPU sorting/recovery, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
         } finally {
             ParticleBillboardCompute.ciUnavailable(false);
+            RenderSystem.setShader(()->previous);
             Vulkan.waitIdle();
             if(reference!=null) MemoryUtil.memFree(reference);
+            shader.close();
             buffer.freeBuffer();
             for(BufferBuilder builder:new BufferBuilder[]{cpu,gpu,sorted}) ((BufferBuilderMemory)(Object)builder).vulkanmod$releaseMemory();
         }
