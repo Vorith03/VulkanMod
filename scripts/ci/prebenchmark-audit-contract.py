@@ -21,7 +21,8 @@ world = method('net/vulkanmod/render/chunk/WorldRenderer.java', 'private void so
 section = method('net/vulkanmod/render/chunk/RenderSection.java', 'public boolean resortTransparency(')
 transparency_state = method('net/vulkanmod/render/chunk/build/CompiledSection.java', 'public boolean hasTransparencyState()')
 tick_path = 'net/vulkanmod/mixin/texture/MTextureManager.java'
-tick = method(tick_path, 'public void tick()')
+tick = method(tick_path, 'public void tick()').replace(
+    'net.vulkanmod.render.texture.GpuAnimatedTextureResidency.', 'GpuAnimatedTextureResidency.')
 finish = method(tick_path, 'private void vulkanmod$finishTickUpload(')
 selector_path = 'net/vulkanmod/vulkan/texture/VTextureSelector.java'
 copy_flush_reason = method('net/vulkanmod/render/profiling/TextureTickAttribution.java',
@@ -118,6 +119,9 @@ public class AuditContract {
   static void flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason reason) { flushes++; if(failFlush) throw new IllegalStateException("flush"); spriteUploadRegionCount=0; }
   __SCOPE__
  }
+ static class GpuAnimatedTextureResidency {
+  static int prepares; static void prepareAdmission() { prepares++; }
+ }
  static class TextureManager {
   Set<Tickable> tickableTextures=new LinkedHashSet<>();
   __TICK__
@@ -131,6 +135,7 @@ public class AuditContract {
  }
  static void reset() {
   check(TextureTickAttribution.ticks==0);
+  GpuAnimatedTextureResidency.prepares=0;
   Device.queue=new GraphicsQueue(); VTextureSelector.spriteUploadDepth=0; VTextureSelector.failFlush=false;
   SpriteUtil.upload=true; SpriteUtil.transitionedLayouts.clear(); SpriteUtil.lastTransitionedLayout=null;
  }
@@ -147,6 +152,7 @@ public class AuditContract {
   check(!s.resortTransparency(TerrainRenderType.TRANSLUCENT,w.taskDispatcher) && !old.canceled && w.taskDispatcher.scheduled==15);
   s.compiled.transparencyState=new Object(); check(s.resortTransparency(TerrainRenderType.TRANSLUCENT,w.taskDispatcher) && old.canceled);
   reset(); TextureManager tm=new TextureManager(); tm.tick();
+  check(GpuAnimatedTextureResidency.prepares==1);
   check(!Device.queue.active && Device.queue.starts==1 && Device.queue.submits==1 && VTextureSelector.spriteUploadDepth==0);
   reset(); RuntimeException original=new RuntimeException("tick");
   tm=new TextureManager(); tm.tickableTextures.add(()->{ VTextureSelector.beginSpriteUploadBatch(); throw original; });
@@ -170,6 +176,7 @@ public class AuditContract {
   check(Device.queue.active && Device.queue.submits==0 && VTextureSelector.spriteUploadDepth==1);
   VTextureSelector.endSpriteUploadBatchesTo(0); Device.queue.endRecordingAndSubmit();
   reset(); SpriteUtil.upload=false; tm=new TextureManager(); final int[] ticks={0}; tm.tickableTextures.add(()->ticks[0]++); tm.tick();
+  check(GpuAnimatedTextureResidency.prepares==0);
   check(ticks[0]==1 && Device.queue.starts==0 && Device.queue.submits==0);
   reset(); Atlas atlas=new Atlas(); atlas.vulkanmod$ownsAtlasUploadBatch=true; Device.queue.startRecording(); VTextureSelector.beginSpriteUploadBatch();
   check(atlas.vulkanmod$closeAtlasUploadBatch());
