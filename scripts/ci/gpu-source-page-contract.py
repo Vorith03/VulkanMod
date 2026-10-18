@@ -58,3 +58,47 @@ with tempfile.TemporaryDirectory(prefix="vulkanmod-gpu-source-pool-") as directo
     subprocess.run([java, "-cp", directory,
                     "net.vulkanmod.render.texture.GpuSourcePageLayoutContract"],
                    check=True, timeout=30)
+
+# Exercise the production inventory planner with adversarial order, fixed memory,
+# delayed retirement, failed allocation, reload/close, and density ranking.
+admission_test = """package net.vulkanmod.render.texture;
+public final class AdmissionContract {
+    static void check(boolean b, String why) { if(!b) throw new AssertionError(why); }
+    public static void main(String[] args) {
+        var copy = GpuAnimationAdmission.register("copy-first", 100, 0);
+        var large = GpuAnimationAdmission.register("large-interpolation", 100, 10);
+        var small = GpuAnimationAdmission.register("small-interpolation", 20, 10);
+        GpuAnimationAdmission.prepare(100, 0);
+        check(small.selected() && !large.selected() && !copy.selected(), "useful density beats first admission");
+        small.admitted();
+        var newcomer = GpuAnimationAdmission.register("new-high-density", 80, 1000);
+        GpuAnimationAdmission.prepare(100, 20);
+        check(small.selected() && newcomer.selected(), "live source pinned, bounded new source");
+        newcomer.failed();
+        GpuAnimationAdmission.prepare(100, 20);
+        check(!newcomer.selected() && small.selected() && !copy.selected(), "failure does not evict active work");
+        small.close();
+        GpuAnimationAdmission.prepare(100, 20);
+        check(!large.selected() && !copy.selected(), "pending retirement still charged");
+        GpuAnimationAdmission.memoryReleased();
+        GpuAnimationAdmission.prepare(100, 0);
+        check(large.selected() && !copy.selected(), "reclaimed memory prioritizes interpolation");
+        copy.close(); large.close(); newcomer.close(); small.close();
+        check(GpuAnimationAdmission.stats().candidates() == 0, "reload unregisters every candidate, idempotent close");
+        var huge = GpuAnimationAdmission.register("huge", Long.MAX_VALUE, Double.MAX_VALUE);
+        var fits = GpuAnimationAdmission.register("fits", 4, 1);
+        GpuAnimationAdmission.prepare(4, 0);
+        check(!huge.selected() && fits.selected(), "overflow/oversize skips without starving later work");
+        huge.close(); fits.close();
+        check(GpuAnimationAdmission.register("bad", 4, Double.NaN) == null, "reject invalid score");
+        System.out.println("GPU animation fixed-budget admission contract passed");
+    }
+}
+"""
+with tempfile.TemporaryDirectory(prefix="vulkanmod-gpu-admission-") as directory:
+    d = Path(directory) / pkg
+    d.mkdir(parents=True)
+    (d / "GpuAnimationAdmission.java").write_text((root / "src/main/java" / pkg / "GpuAnimationAdmission.java").read_text())
+    (d / "AdmissionContract.java").write_text(admission_test)
+    subprocess.run([javac, "--release", "17", "-d", directory, str(d / "GpuAnimationAdmission.java"), str(d / "AdmissionContract.java")], check=True, timeout=30)
+    subprocess.run([java, "-Dvulkanmod.experimentalGpuAnimationAdmission=true", "-cp", directory, "net.vulkanmod.render.texture.AdmissionContract"], check=True, timeout=30)

@@ -17,6 +17,7 @@ public final class SpriteAnimationState {
     private boolean materialize = true;
     private boolean refreshing;
     private String spriteId;
+    private GpuAnimationAdmission.Ticket admission;
     private boolean residentCandidate;
     private boolean residentAttempted;
     private boolean residentDisabled;
@@ -26,6 +27,27 @@ public final class SpriteAnimationState {
         this.ticker = ticker;
         this.spriteId = spriteId;
         this.residentCandidate = true;
+    }
+    public void registerAdmission(long bytes, double pixelsPerTick) {
+        if(admission != null) admission.close();
+        admission = GpuAnimationAdmission.register(spriteId, bytes, pixelsPerTick);
+    }
+    private boolean admissionAllowed() {
+        return !GpuAnimationAdmission.enabled() || (admission != null && admission.selected());
+    }
+    private boolean createResidency(com.mojang.blaze3d.platform.NativeImage[] images,
+                                    int frameWidth, int frameHeight) {
+        if(residentFrames != null) return true;
+        if(residentAttempted || !admissionAllowed()) return false;
+        residentAttempted = true;
+        residentFrames = GpuAnimatedTextureResidency.tryCreate(spriteId, images, frameWidth, frameHeight);
+        if(residentFrames == null) {
+            residentDisabled = true;
+            if(admission != null) admission.failed();
+            return false;
+        }
+        if(admission != null) admission.admitted();
+        return true;
     }
     public boolean materialize() { return materialize; }
     public void beginTick(int x, int y) {
@@ -57,23 +79,13 @@ public final class SpriteAnimationState {
             return false;
         }
 
-        if(residentFrames == null) {
-            if(residentAttempted) {
-                return false;
-            }
-            residentAttempted = true;
-            residentFrames = GpuAnimatedTextureResidency.tryCreate(
-                    spriteId, images, frameWidth, frameHeight);
-            if(residentFrames == null) {
-                residentDisabled = true;
-                return false;
-            }
-        }
+        if(!createResidency(images, frameWidth, frameHeight)) return false;
 
         if(!residentFrames.copyToAtlas(target, x, y, sourceX, sourceY, frameWidth, frameHeight, images)) {
             residentFrames.close();
             residentFrames = null;
             residentDisabled = true;
+            if(admission != null) admission.failed();
             return false;
         }
 
@@ -84,11 +96,12 @@ public final class SpriteAnimationState {
 
     public boolean tryGpuInterpolation(int x, int y,
                                        int currentIndex, int nextIndex,
-                                       int subFrame, int duration) {
+                                       int subFrame, int duration,
+                                       com.mojang.blaze3d.platform.NativeImage[] images,
+                                       int frameWidth, int frameHeight) {
         if(!residentCandidate) return interpolationFallback(InterpolationFallback.INELIGIBLE);
         if(residentDisabled) return interpolationFallback(InterpolationFallback.RESIDENCY_DISABLED);
         if(!materialize) return interpolationFallback(InterpolationFallback.SUPPRESSED);
-        if(residentFrames == null) return interpolationFallback(InterpolationFallback.NO_RESIDENCY);
         if(!com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread())
             return interpolationFallback(InterpolationFallback.OFF_RENDER_THREAD);
         if(!GpuAnimatedTextureResidency.interpolationEnabled())
@@ -99,11 +112,18 @@ public final class SpriteAnimationState {
         VulkanImage target = VTextureSelector.getBoundTexture();
         if(target == null) return interpolationFallback(InterpolationFallback.NO_ATLAS);
 
+        if(residentFrames == null) {
+            if(!GpuAnimationAdmission.enabled()) return interpolationFallback(InterpolationFallback.NO_RESIDENCY);
+            if(!admissionAllowed()) return interpolationFallback(InterpolationFallback.ADMISSION_DEFERRED);
+            if(!createResidency(images, frameWidth, frameHeight))
+                return interpolationFallback(InterpolationFallback.NO_RESIDENCY);
+        }
         if(!residentFrames.sourcesValid()) {
             residentFrames.noteSourceInvalidated();
             residentFrames.close();
             residentFrames = null;
             residentDisabled = true;
+            if(admission != null) admission.failed();
             return interpolationFallback(InterpolationFallback.SOURCE_MUTATED);
         }
 
@@ -158,6 +178,7 @@ public final class SpriteAnimationState {
     }
     public void close() {
         visibility.close();
+        if(admission != null) { admission.close(); admission = null; }
         if(residentFrames != null) {
             residentFrames.close();
             residentFrames = null;

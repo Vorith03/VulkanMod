@@ -88,6 +88,10 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         this.columns = columns;
     }
 
+    public static void prepareAdmission() {
+        GpuAnimationAdmission.prepare(LIMIT_BYTES, currentBytes);
+    }
+
     public static boolean enabled() {
         return !ciForceCpuPath
                 && (COPY_ENABLED || GpuTextureInterpolationCompute.requested());
@@ -434,6 +438,7 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
             currentBytes = Math.max(0L, currentBytes - releaseBytes);
             TextureTickAttribution.residentReleased(releaseBytes);
             TextureTickAttribution.residentSourceReleased(this.sourceBytes);
+            GpuAnimationAdmission.memoryReleased();
         };
         if(this.sharedSourceLease != null) {
             this.sharedSourceLease.retire(afterGpuSafe);

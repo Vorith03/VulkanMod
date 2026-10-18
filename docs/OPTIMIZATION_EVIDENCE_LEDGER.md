@@ -1,5 +1,26 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## ACTIVE GPU-first release priority — October 18
+
+Owner directed production CPU displacement across textures, particles and existing
+terrain offload; old queue/buffer sequence is superseded. Read
+[ownership milestone](GPU_FIRST_OWNERSHIP_2026-10-18.md).
+Latest #1028 owner UUID `e05f2b31` is received/read: GPU interpolation
+106,483/2,841,737 (**3.747%**), CPU bulk 2,735,254, disabled-residency fallback
+2,719,880, 1,246 lifetime capacity rejections at full 128 MiB logical charge.
+Texture 16.687 ms/tick, separately scoped upload/main GPU 2.913/2.865 ms.
+Not a causal cross-build speedup/regression result; no repeat unchanged capture.
+
+**Candidate: fixed-budget benefit-ranked GPU animation admission.** Implemented
+in actual ticker/outer tick with first-interpolation residency creation. Removes
+CPU interpolation only on successful existing O4 cancellation; no shadow pixels,
+budget increase or custom-code migration. Stable live-source pins and GPU-safe
+retirement remain. Added production policy and native pressure/pixel oracles.
+**Disposition: blocked on full native/Forge qualification; representative adoption
+and net benefit unmeasured.** Local compiler absent/Gradle network unavailable.
+Next change: compute batching, then particles/terrain; keep entire release open.
+
+
 **#1028 pilot texture queue bound:** #1026 measured `copy_flush_region_limit=114177` of 244,701 nonempty epochs (21.37M regions, 628,843 real Vulkan copy commands, 8.289 ms/tick inclusive CPU flush) at cap 128. A bounded 128→256 queue capacity experiment affects only existing `experimentalUnifiedTextureUploads` opt-in; legacy cap 32 unchanged. Production-method oracle and 288-pixel native Vulkan verification expanded; full [CI #1028](https://github.com/Vorith03/VulkanMod/actions/runs/39143814563) passed at executable `50f39eb5`: production-method oracle and 288 native Vulkan pixel/sync tests qualified (artifact `12142713171`, real packs skipped). **Disposition: correctness-qualified, RX frame-time gain unmeasured**; overlap scanning increases with the cap and may negate native-call savings. See [#1028 evidence](TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md).
 
 **#1026 owner RX findings:** [full analysis](RX_RD32_CAPTURE_1026_BUFFER_DISCRIMINATOR_2026-10-18.md). Diagnostic build 8da6c404 recorded 7,576 frames/180.012s (~42.09 FPS), 7,576 particle finalizations, **zero scoped true native resize events**. Its `finalization_capacity_checks=0` value is invalid because raw JFR showed ~792 `ensureCapacity` stacks directly below `storeRenderedBuffer`. Disposition: **diagnostic activated but finalization-check instrumentation invalid**, no proven FPS improvement/regression. Retire faulty hot-method hooks; retain only true growth reporting, preserve prior baseline, investigate modded particle-lighting path next. 

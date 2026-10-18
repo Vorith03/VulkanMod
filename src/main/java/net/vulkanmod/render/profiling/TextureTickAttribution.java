@@ -87,7 +87,7 @@ public final class TextureTickAttribution {
     public enum InterpolationFallback {
         INELIGIBLE, RESIDENCY_DISABLED, SUPPRESSED, NO_RESIDENCY,
         OFF_RENDER_THREAD, GPU_UNAVAILABLE, NO_UPLOAD_BATCH,
-        NO_ATLAS, SOURCE_MUTATED, DISPATCH_FAILED
+        NO_ATLAS, SOURCE_MUTATED, DISPATCH_FAILED, ADMISSION_DEFERRED
     }
 
     public enum CopyFlushReason {
@@ -338,6 +338,12 @@ public final class TextureTickAttribution {
                 millis(percentile(outerCopyFlushSamples, sampledTicks, 0.95D))));
         net.vulkanmod.render.texture.GpuAnimationSourcePool.Stats pool =
                 net.vulkanmod.render.texture.GpuAnimationSourcePool.stats();
+        var admission = net.vulkanmod.render.texture.GpuAnimationAdmission.stats();
+        line.append(" gpu_admission_enabled=").append(admission.enabled())
+                .append(" gpu_admission_plans_lifetime=").append(admission.plans())
+                .append(" gpu_admission_candidates_current=").append(admission.candidates())
+                .append(" gpu_admission_selected_at_plan=").append(admission.selected())
+                .append(" gpu_admission_selected_bytes_at_plan=").append(admission.selectedBytes());
         line.append(" copy_commands=").append(copyCommands)
                 .append(" gpu_source_pool_enabled=").append(pool.enabled())
                 .append(" gpu_source_pool_allocated_kib=")

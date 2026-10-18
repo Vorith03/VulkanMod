@@ -85,6 +85,22 @@ public final class SpriteAnimationSmokeTest {
             if(GpuAnimationSourcePool.enabled()) {
                 verifySharedSourcePool();
             }
+            if(GpuAnimatedTextureResidency.interpolationEnabled()) {
+                GpuAnimationAdmission.setCiEnabled(true);
+                try(var competingCopy = GpuAnimationAdmission.register("ci_discrete_budget_hog", 128L * 1024 * 1024, 0)) {
+                    // Register the large discrete source first. The real ticker's
+                    // interpolation must still win, bypass CPU pixels, and match
+                    // odd/all-mip/alpha/hidden/custom/mutation oracles.
+                    verify(explicit("admission_odd", 3, 2, 2, 2, 1, true, false,
+                            frame(3,3), frame(0,1), frame(2,2), frame(3,1)), false);
+                    if(competingCopy.selected()) throw new AssertionError("Discrete source displaced interpolation");
+                    verify(explicit("custom_admission", 2, 2, 2, 2, 1, true, true,
+                            frame(3,3), frame(0,2), frame(2,1)), false);
+                    Initializer.LOGGER.info("GPU animation admission smoke passed (first-come discrete pressure displaced, transformed ticker GPU bypass, exact odd mip pixels, custom fallback)");
+                } finally {
+                    GpuAnimationAdmission.setCiEnabled(false);
+                }
+            }
             TextureUploadGpuProfiler.verifyNativeForCi();
             Initializer.LOGGER.info("Sprite usage animation smoke passed (independent ABGR/alpha/double-truncation oracle, hidden clocks, zero staging, first-use refresh, reordered/repeated/implicit/filtered frames, rectangular/odd/all-mip pixels, GPU resident copies/interpolation when qualified, Forge zero-extent guards, custom CPU exclusion)");
         } finally {
@@ -370,6 +386,7 @@ public final class SpriteAnimationSmokeTest {
         try(SpriteContents reference = source(test, "_reference"); SpriteContents candidate = source(test, "_candidate");
             SpriteTicker referenceTicker = reference.createTicker(); SpriteTicker candidateTicker = candidate.createTicker();
             MemoryStack stack = MemoryStack.stackPush()) {
+            GpuAnimatedTextureResidency.prepareAdmission();
             if(referenceTicker == null || candidateTicker == null) throw new AssertionError("Missing ticker: " + test.name);
             int[][] sheets = new int[test.mips + 1][];
             int[] widths = new int[sheets.length];
@@ -565,6 +582,8 @@ public final class SpriteAnimationSmokeTest {
             }
 
             long bulkFrames = CpuSpriteInterpolation.ciFrames() - bulkFramesBefore;
+            if(!cpuBulk && GpuAnimationAdmission.enabled() && !test.custom && bulkFrames != 0)
+                throw new AssertionError("GPU path also executed CPU bulk pixels");
             if(cpuBulk && (test.custom ? bulkFrames != 0 : bulkFrames <= 0))
                 throw new AssertionError("Bulk CPU interpolation adoption/custom exclusion differs: " + test.name);
             Initializer.LOGGER.info("Animation oracle case passed: {} bulk_cpu={} frames={}", test.name, cpuBulk, bulkFrames);

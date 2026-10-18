@@ -67,6 +67,7 @@ public abstract class MTextureManager implements VTextureManagerI {
         // animated sprites before Minecraft.tick() begins. Snapshot that decision so
         // the command-buffer batch has a symmetric start/end lifecycle.
         boolean uploadSprites = SpriteUtil.shouldUpload();
+        if(uploadSprites) net.vulkanmod.render.texture.GpuAnimatedTextureResidency.prepareAdmission();
         boolean ownsQueue = uploadSprites && !Device.getGraphicsQueue().hasActiveUploadBatch();
         int originalDepth = VTextureSelector.spriteUploadBatchDepth();
         Throwable tickFailure = null;

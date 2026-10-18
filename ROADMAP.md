@@ -12,6 +12,43 @@ Live Git/CI/runtime evidence remains authoritative for facts. This roadmap is au
 
 ---
 
+## Owner-directed GPU-first release — October 18, 2026 (ACTIVE)
+
+The next substantive release must transfer qualified production graphics work to
+GPU ownership and bypass equivalent CPU calculations. This supersedes the old
+queue-size/particle-buffer optimization sequence. #1028 correctness evidence is
+preserved; its returned RX capture is now read, so do not request it again.
+
+Sequence and release gates:
+
+1. **Textures first:** replace first-come residency admission with bounded,
+   interpolation-benefit admission; integrate reusable/batched compute execution
+   so broader coverage does not multiply Java descriptor/dispatch preparation.
+   Preserve exact source mips, alpha/double arithmetic, clocks, mutations and
+   retirement. No budget increase or default promotion without evidence.
+2. **Particles:** qualified GPU billboard/render preparation first, simulation
+   only for exact supported adapters; retain lighting, collisions, Forge/custom
+   callbacks and portal behavior. No generic approximate particle replacement.
+3. **Terrain:** activate/complete existing generation-safe REPLACE/APPEND and
+   indirect infrastructure; omit GPU-owned CPU geometry, preserve Java exception
+   geometry and graph visibility. Source evidence in the current capture says
+   mesher/bypass/draw/hybrid flags were all false, not that compute failed.
+4. **Integrated qualification:** native pixels/geometry/synchronization,
+   Forge/portal/modpack/lifecycle correctness, then one representative changed
+   candidate RX observation using the existing valid reference. Report CPU
+   displacement, adoption/fallback denominators, CPU preparation, separate GPU
+   costs, render-only/tick-bearing and tail frame times. 144 FPS is aspirational.
+
+Initial implemented slice: `experimentalGpuAnimationAdmission` plans the standard
+ticker inventory at the outer texture-tick boundary. Existing live sources stay
+pinned, unallocated candidates are ranked by expected interpolation pixels per
+charged source+scratch byte, with discrete copies after interpolation. It does
+not preload, evict, grow the 128 MiB cap, transfer custom callbacks or claim GPU
+speedup. See `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` for evidence and open gates.
+The entire multi-subsystem mission is **incomplete** until these gates close.
+
+---
+
 ## Roadmap governance
 
 ### Session continuation
@@ -312,7 +349,7 @@ This phase should make terrain data **persistent, compact, and batch-friendly**.
 
 # Phase 7 — GPU-driven terrain and hybrid meshing
 
-**Status: BOUNDED GROUNDWORK VERIFIED; PAUSED FOR CURRENT PHASE 5 MEASUREMENT PRIORITY**
+**Status: BOUNDED GROUNDWORK VERIFIED; GPU-FIRST OWNERSHIP INTEGRATION ACTIVE AFTER TEXTURES/PARTICLES**
 
 Target sequence: persistent regions -> GPU visibility/section selection -> GPU
 indirect commands -> GPU terrain representation -> hybrid meshing -> optional mesh
