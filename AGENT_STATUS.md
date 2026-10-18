@@ -1,10 +1,10 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
-## #1026 bounded particle-buffer resize attribution in progress — 2026-10-17
+## #1026 particle-buffer native-resize discriminator — full CI qualified (2026-10-17)
 
 Following unfavorable #1025 RX screening (-6.4% cross-build relative to #1024, not causal proof), an exact diagnosis has been added **only to the opt-in automated 180-second profiling path**. The existing `MemoryTracker.resize` intercept now measures real native resize calls, elapsed wall time and capacity deltas; the `storeRenderedBuffer` path counts finalizations and its non-growth `ensureCapacity` checks. Measurements are limited to the Render thread while the Forge particle renderer executes, and are reported once at automated capture completion in `particle_buffer_growth`. Nested render scopes remain balanced; all counters remain off in normal gameplay. These bytes are native *capacities*, not proof of actual copied bytes. This is **diagnostic code, not an FPS optimization**, and does not supersede #1025's negative performance verdict.
 
-**Validation state:** implementation awaits full Forge/native startup and production-mixin CI. If qualified, only one new RX automated benchmark is needed to determine the dominant cause before editing buffer finalization or particle lighting. Do not request a fresh #1024 baseline. No claim of observed growth count exists yet.
+**Validation:** Full #1026 native/Forge validation passed at executable `8da6c4041852908bf9e41f1713ca41ce37798c3d`, [run 39093829259](https://github.com/Vorith03/VulkanMod/actions/runs/39093829259): build/package, two Forge Vulkan startup modes (production vertex smoke including pointer growth), indirect shadow, post/depth, screenshot pixel/synchronization, public Create Chronicles and Crash Assistant 1.9.7 all green. Private resource-pack fixture remained skipped. Qualified artifact ID `12123293770`, `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1026-g8da6c404-all.jar`. This diagnostic injects an opt-in capacity-check branch into a hot method, so **do not use #1026 average FPS as evidence of a performance gain or loss**. One new RX automated benchmark under the existing #1025 camera/flags/snapshot is the sole next hardware action, to inspect the `particle_buffer_growth` line and existing JFR for count/CPU distinction. Do not request a fresh #1024/#1025 control. No claim of observed growth count exists yet.
 
 ## #1025 owner RX capture received — unfavorable buffer screening (2026-10-17)
 
