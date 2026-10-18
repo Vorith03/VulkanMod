@@ -1,5 +1,13 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1025 owner RX capture received — unfavorable buffer screening (2026-10-17)
+
+Owner supplied the new #1025 benchmark UUID `7b8d70be-4cc7-42c4-a583-19a38aac2d4c`, JFR, latest/debug, and both #1024 raw files were independently compared. Qualified executable `7bff3d7c` is production-active (BufferBuilderM and Frustum fast-path mixins logged); capture completed at **8,585/180.039s = ~47.68 FPS** vs #1024 **9,167/180.022s = ~50.92 FPS** (**-6.4% observed**). Late ~60-s windows: ~51.76 vs ~54.64 FPS. Particle render CPU **3.892 vs 3.776 ms/frame**; texture tick **14.491 vs 14.095 ms/tick**, client tick **26.443 vs 26.066**. Main graphics GPU **3.545 vs 2.890 ms/frame** and separate texture upload GPU **3.215 vs 2.914 ms/batch**; cross-executable GPU/workload differences confound attributing the overall FPS loss to a CPU-only change.
+
+Raw JFR particle-render Java stacks: 3,051 #1025 vs 3,138 #1024; `BufferBuilder.ensureCapacity` sampled leaves **909 vs 953** (~29.8% vs ~30.4%), most still through `Tesselator` finalization (**901 vs 937**); vertex-element leaves **357 vs 385**. Modded `ClientLevel.onHasChunk` sampled leaves **534 vs 423**, `AABB.equals` remains **0 vs 0**. The intended buffer hot path is **not materially displaced**; no native allocation rate was measured. Full #1025 CI remains green; owner visual correctness was not reported.
+
+**Disposition:** #1025 **CI-qualified and RX-activated but ineffective/unfavorable cross-build screening**, **not an isolated regression proof or demonstrated FPS improvement**. Preserve no duplicate #1024/#1025 baseline request. Next review repeated actual buffer finalization/growth before another mechanism, or the separate modded particle-lighting chunk lookup ownership and texture non-upload ticker work. No new JAR or broad instrumentation on speculation. Full comparative evidence: `docs/RX_RD32_CAPTURE_1025_BUFFER_2026-10-17.md`.
+
 ## #1025 particle BufferBuilder maintenance — native CI qualified (2026-10-17)
 
 At the #1024 RX 6900 XT baseline, 953 Render-thread particle-render execution samples end at obfuscated `BufferBuilder.m_85722_` (`ensureCapacity`); 937 of these follow `Tesselator.end() -> storeRenderedBuffer()`, and the samples recur through all 180 seconds. Another 385 samples end in BufferBuilder vertex-element processing. These are sampled stack observations, **not proof of native growth, copies, or a measured CPU-time saving**. No native buffer growth counter exists in the uploaded benchmark; the size of possible reallocations remains unknown.

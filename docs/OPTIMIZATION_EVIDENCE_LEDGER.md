@@ -1,5 +1,7 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+**#1025 RX hardware verdict (2026-10-17):** Owner #1025 UUID `7b8d70be` completed (8,585 frames / 180.039 s, ~47.68 FPS) against previously supplied #1024 UUID `1851e3c8` (9,167 / 180.022 s, ~50.92 FPS), **-6.4% observed**. Particle render CPU 3.776→3.892 ms/frame; texture CPU 14.095→14.491 ms/tick. Direct raw JFR particle-render `BufferBuilder.ensureCapacity` sampled leaves **953/3,138 → 909/3,051**, mostly still through `Tesselator` finalization. `onHasChunk` leaves 423→534. Main graphics GPU 2.890→3.545 ms/frame is a major cross-run confounder, not causally explained by CPU-only buffer changes. **Disposition: ineffective / unfavorable screening, not a proven isolated regression**; no default promotion or repeat baseline. Full details [#1025 RX analysis](RX_RD32_CAPTURE_1025_BUFFER_2026-10-17.md).
+
 ## #1025 candidate: production BufferBuilder growth-pointer and vertex-element work — 2026-10-17
 
 - **Evidence:** #1024 raw 180-second Render-thread JFR has 953 execution leaves in `BufferBuilder.ensureCapacity` during particle render, 937 through `storeRenderedBuffer` finalization; another 385 leaves in the element-advance method. Sampling is not allocation telemetry. The original `BufferBuilderM` pointer update was injected at every `ensureCapacity` return; the existing `nextElement` used `% list.size()` per element.
