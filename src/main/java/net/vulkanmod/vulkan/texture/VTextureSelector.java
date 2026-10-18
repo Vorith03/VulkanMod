@@ -41,7 +41,11 @@ public abstract class VTextureSelector {
     // Opt in until native validation and matched CPU/GPU evidence are available.
     private static final boolean UNIFIED_GPU_UPLOADS =
             Boolean.getBoolean("vulkanmod.experimentalUnifiedTextureUploads");
-    private static final int MAX_SPRITE_COPY_BATCH_REGIONS = UNIFIED_GPU_UPLOADS ? 128 : 32;
+    // #1026 RX: 114177 capacity-triggered drains across 180s while each
+    // epoch is limited to 128 disjoint destination regions. Expand only the
+    // already-opt-in shared queue. Source grouping and exact overlap ordering
+    // remain bounded by the same fixed arrays; legacy mode remains at 32.
+    private static final int MAX_SPRITE_COPY_BATCH_REGIONS = UNIFIED_GPU_UPLOADS ? 256 : 32;
 
     static {
         if(Boolean.getBoolean("vulkanmod.smokeTest")) {

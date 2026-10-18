@@ -1,5 +1,9 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## #1028 GPU texture copy queue bound experiment — CI pending (2026-10-18)
+
+After owner #1026 diagnostic disproved native particle resize growth in the measured render and invalidated its zero capacity-check counter, #1027 removed the probe (full Forge/native CI passed, run 39143353962 at executable `df07fc7b`). The independent #1026 texture profiler shows 114,177 flushes caused by the unified queue's 128-region cap and 8.289 ms/tick inclusive copy flush cost. A **pilot-only 128→256** capacity experiment changes only that integer bound and sizes its existing fixed scratch arrays. The legacy 32-region queue, source ordering/overlap safety, staging budget, barriers, GPU compute and custom pixel generation remain unchanged. The real production-method contract and native Vulkan pixel/synchronization smoke now exercise 256 capacity and 288 writes with overwrite/retirement. This is a candidate **not yet correctness-qualified or RX performance-measured**. See `docs/TEXTURE_COPY_REGION_BATCH_CAP_1028_2026-10-18.md`. Next: full CI, then a single RX #1028 capture against existing #1025; no new baseline. No new Jar/test is warranted if CI fails.
+
 ## #1026 RX diagnostic disposition; hot-path probe removed (2026-10-18)
 
 The owner supplied #1026 capture UUID `9b7f3496-f876-4ca7-ba6a-482519c5373a`. Full 180.012s, 7,576 frames (~42.09 FPS) at qualified diagnostic executable `8da6c404`; 7,576 particle finalizations, **0 scoped native `MemoryTracker.resize` events**. The accompanying `finalization_capacity_checks=0` counter is **invalid**: raw JFR has 850 particle-render `BufferBuilder.ensureCapacity` sampled stacks and ~792 directly under `storeRenderedBuffer`. The per-builder marker / check-hook is removed to eliminate misleading instrumentation and extra hot-method work. This does **not** prove a net #1026 regression or FPS improvement. Leave native growth policy untouched.

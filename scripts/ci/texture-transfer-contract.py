@@ -27,17 +27,17 @@ harness = r'''package net.vulkanmod.vulkan.texture;
 import java.util.*;
 public final class TextureTransferBatchContract {
     static boolean UNIFIED_GPU_UPLOADS = true;
-    static final int MAX_SPRITE_COPY_BATCH_REGIONS = 128;
+    static final int MAX_SPRITE_COPY_BATCH_REGIONS = 256;
     static final long VK_NULL_HANDLE = 0;
     static final int VK_IMAGE_ASPECT_COLOR_BIT=1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL=7;
     static int spriteUploadRegionCount, barriers;
     static long spriteUploadStagingBufferId;
     static VulkanImage spriteUploadTexture = new VulkanImage();
-    static int[] spriteMipLevels=new int[128], spriteWidths=new int[128], spriteHeights=new int[128],
-        spriteXOffsets=new int[128], spriteYOffsets=new int[128], spriteBufferOffsets=new int[128],
-        spriteBufferRowLengths=new int[128], spriteBufferImageHeights=new int[128],
-        spriteSourceOrder=new int[128], spriteGroupEnds=new int[128];
-    static long[] spriteSourceBuffers=new long[128], spriteGroupSources=new long[128];
+    static int[] spriteMipLevels=new int[256], spriteWidths=new int[256], spriteHeights=new int[256],
+        spriteXOffsets=new int[256], spriteYOffsets=new int[256], spriteBufferOffsets=new int[256],
+        spriteBufferRowLengths=new int[256], spriteBufferImageHeights=new int[256],
+        spriteSourceOrder=new int[256], spriteGroupEnds=new int[256];
+    static long[] spriteSourceBuffers=new long[256], spriteGroupSources=new long[256];
     static List<String> events=new ArrayList<>();
     static Map<String,Integer> pixels=new HashMap<>();
     static class TextureTickAttribution {
@@ -110,8 +110,8 @@ public final class TextureTransferBatchContract {
         clear(); add(10,0,0,0); add(11,1,0,0);
         check(events.isEmpty(),"different mip is independent"); flushSpriteUploadCopies();
         check(pixels.size()==2 && barriers==1,"both mips emitted");
-        clear(); for(int i=0;i<129;i++) add(10+i%2,0,i,0);
-        check(spriteUploadRegionCount==1 && events.get(0).equals("REGION_LIMIT"),"bounded capacity");
+        clear(); for(int i=0;i<257;i++) add(10+i%2,0,i,0);
+        check(spriteUploadRegionCount==1 && events.get(0).equals("REGION_LIMIT"),"256-region bounded capacity");
         add(11,0,0,0); flushSpriteUploadCopies();
         check(pixels.get("0:0:0")==11 && barriers==2,"overwrite earlier capacity epoch");
         clear(); UNIFIED_GPU_UPLOADS=false; add(10,0,0,0); add(11,0,1,0);
@@ -129,8 +129,8 @@ public final class TextureTransferBatchContract {
             flushSpriteUploadCopies(); check(pixels.equals(expected),"sequential oracle trial "+trial);
         }
         // Worst case: one command per distinct source, still bounded and correct.
-        clear(); for(int i=0;i<128;i++) add(i+1,0,i,0); flushSpriteUploadCopies();
-        check(events.size()==129 && pixels.size()==128 && barriers==1,"all distinct sources");
+        clear(); for(int i=0;i<256;i++) add(i+1,0,i,0); flushSpriteUploadCopies();
+        check(events.size()==257 && pixels.size()==256 && barriers==1,"all distinct sources");
         clear(); flushSpriteUploadCopies(); check(events.isEmpty(),"empty drain");
         System.out.println("Production texture queue: alternating sources 128->2 commands, 128->1 barriers; 100000 randomized writes match sequential oracle");
     }

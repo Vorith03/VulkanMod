@@ -208,14 +208,14 @@ public final class SpriteAnimationSmokeTest {
     }
 
     /**
-     * One native graphics-batch test exercises 160 disjoint texture regions
-     * (exceeding the prior 32-region and opt-in 128-region ceilings)
+     * One native graphics-batch test exercises 288 disjoint texture regions
+     * (exceeding the prior 32/128-region and new opt-in 256-region ceilings)
      * followed by an overlapping write to the first direct-upload region.
      * Vulkan synchronization validation catches a missing WAW barrier and
      * readback checks ordering, not merely command submission.
      */
     private static void verifyUnifiedTransferBatch() {
-        final int width = 192;
+        final int width = 320;
         VulkanImage atlas = VulkanImage.createTextureImage(
                 VK_FORMAT_R8G8B8A8_UNORM, 1, width, 1,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
@@ -249,7 +249,7 @@ public final class SpriteAnimationSmokeTest {
                 throw new AssertionError("Mixed-source smoke seed failed");
             VTextureSelector.beginSpriteUploadBatch();
             try {
-                for(int x = 0; x < 160; ++x) {
+                for(int x = 0; x < 288; ++x) {
                     pixel.put(0, (byte)x);
                     pixel.put(1, (byte)(x + 1));
                     pixel.put(2, (byte)(x + 2));
@@ -264,15 +264,15 @@ public final class SpriteAnimationSmokeTest {
                     }
                     // The first pixel takes the direct transition path. Every
                     // later disjoint write must survive alternating buffers.
-                    if(x == 126) assertPendingCopyRegions(126);
-                    if(x == 159) assertPendingCopyRegions(31);
+                    if(x == 254) assertPendingCopyRegions(254);
+                    if(x == 287) assertPendingCopyRegions(31);
                 }
                 // Cross-source overwrite in the pending set: grouping must
                 // not reorder either predecessor past its final writer.
-                VTextureSelector.uploadSubTexture(0, 1, 1, 158, 0, 0, 0, 1, pixel);
+                VTextureSelector.uploadSubTexture(0, 1, 1, 286, 0, 0, 0, 1, pixel);
                 if(VTextureSelector.copyResidentSpriteFrame(residentB, atlas,
                         new int[]{0}, new int[]{3}, new int[]{1},
-                        158, 0, 2, 0, 1, 1) != 1)
+                        286, 0, 2, 0, 1, 1) != 1)
                     throw new AssertionError("Mixed-source overlap rejected");
                 // Closing immutable sources while their final regions remain
                 // queued must preserve upload-safe retirement.
@@ -304,11 +304,12 @@ public final class SpriteAnimationSmokeTest {
             Vulkan.waitIdle();
             MemoryManager.getInstance().MapAndCopy(allocation, width * 4, pointer -> {
                 ByteBuffer bytes = pointer.getByteBuffer(0, width * 4);
-                for(int x = 0; x < 160; ++x) {
+                for(int x = 0; x < 288; ++x) {
                     for(int component = 0; component < 4; ++component) {
                         int actual = bytes.get(x * 4 + component) & 255;
-                        int expected = (x == 0 ? 0x60 : x == 1 ? 0x40
-                                : x % 3 == 1 ? 0x20 : x % 3 == 2 ? 0x80 : x) + component;
+                        int expected = ((x == 0 ? 0x60 : x == 1 ? 0x40
+                                : x == 286 ? 0x80
+                                : x % 3 == 1 ? 0x20 : x % 3 == 2 ? 0x80 : x) + component) & 255;
                         if(actual != expected)
                             throw new AssertionError("Unified transfer wrong pixel at "
                                     + x + " channel " + component
@@ -317,7 +318,7 @@ public final class SpriteAnimationSmokeTest {
                 }
             });
             Initializer.LOGGER.info(
-                    "Unified GPU texture transfer smoke passed (160 alternating CPU/two-resident-source regions, grouped queue counts, capacity/cross-source/direct overlap, early retirement, Vulkan pixels)");
+                    "Unified GPU texture transfer smoke passed (288 alternating CPU/two-resident-source regions, grouped queue counts, 256-capacity/cross-source/direct overlap, early retirement, Vulkan pixels)");
         } finally {
             Vulkan.waitIdle();
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
