@@ -1,8 +1,9 @@
-# Qualified particle billboard ownership pilot
+# GPU particle billboard ownership pilot
 
 Opt-in `-Dvulkanmod.experimentalGpuParticleBillboards=true`, default off.
-Implemented during the October 18 GPU-first continuation; native/Forge validation
-is pending until the corresponding executable CI result is recorded.
+Implemented during the October 18 GPU-first continuation; the initial native/Forge
+milestone passed #1036. A final storage-range safety correction needs its own full
+qualification; see living status for the final tip.
 
 ## Production boundary
 
@@ -46,6 +47,10 @@ a bounded 64-set pool; resize/free schedules retirement on existing frame fences
 No per-particle descriptor, scratch VkBuffer or dispatch is allocated.
 
 Capacity and descriptor limits fail before commands, using CPU materialization.
+Storage descriptors expose at most maxStorageBufferRange even when geometric
+vertex-buffer growth allocates a larger unused tail. Every accessed byte is bounded
+before reserve/bind; ordinary vertex draws can still use the larger allocation.
+The Vulkan uint32 storage limit is widened unsigned, including 0xffffffff devices.
 Host-write/compute-read-write and compute-write/vertex-fetch barriers are explicit.
 The helper submits on the same graphics VkQueue before the later main frame, using
 existing same-queue command-buffer retirement without CPU waits. An already active
@@ -75,8 +80,9 @@ generation retirement across three frames. It runs with synchronization validati
 A passing oracle does not establish broad modpack or portal adoption.
 
 Existing benchmark output gains explicitly lifetime counters: inherited method
-attempts, exact-class eligibility, GPU-expanded quads, CPU recovery, layout and
-unavailability fallbacks, capacity/pool rejection, compute batches, host preparation
+attempts, exact-class eligibility, original CPU calls, packed inputs, GPU-expanded
+quads, CPU recovery quads, layout fallback calls and unavailable checks, capacity/
+pool rejected batches, compute batches, host preparation
 and submission time, upload bytes, descriptor allocation/live count. Custom methods
 overriding inherited render are excluded from this denominator. There are no
 per-particle clocks or new profiler subsystem. Separate GPU compute cost is not yet
@@ -89,3 +95,26 @@ other mod injections into inherited render before claiming their callbacks prese
 The adapter intentionally does not cancel arbitrary custom subclasses. No request
 for an unchanged baseline or a per-experiment owner benchmark is authorized by this
 milestone. Integrate with the existing texture/terrain release gates first.
+
+## Qualification recovery
+
+Initial implementation `c225399f` triggered #1034 (39165258706), superseded during
+build by counter/oracle-mapping correction `0b6ba02e`. Full #1035 (39165513611)
+passed offline, build/package, startup/no-splash, native indirect and post/depth.
+Its screenshot stage failed before geometry comparison: the constructor-time test
+asked GameRenderer for the particle shader before asynchronous core reload had
+populated it (`RenderType supplied no ShaderInstance`, ParticleBillboardSmokeTest).
+This is a fixture initialization failure, not a qualified compute result.
+`761947c1` creates/owns the real particle ShaderInstance explicitly for the oracle,
+restores previous shader state and closes only after test idle. Full #1036
+(39178618231) **passed**, executable `761947c1`, JAR artifact 12155143862, logs
+12155024238. All public build/native/sync/Forge/compatibility gates passed; private
+packs skipped. The mandatory particle marker confirms all 524 vertices per frame
+across three frames, original uploader, exact callbacks and fallback/retirement.
+Its six validation dispatches include direct oracle and production draws, so lifetime
+GPU/eligible totals are not workload adoption. CI host preparation/submission was
+18.330 ms for six batches, including cold descriptor/command work under software
+Vulkan validation; do not treat this as RX steady-state cost or a speedup. Final
+unsigned/bounded storage-range guard needs separate full qualification.
+All 24 offline contracts also passed locally via the installed
+jdk.compiler module, despite the missing javac launcher.

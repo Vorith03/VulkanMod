@@ -1,5 +1,47 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Particle billboard continuation — native/Forge milestone qualified
+
+Owner requested a coherent handoff and a next-session prompt which itself requires
+another handoff prompt. `docs/NEXT_SESSION_PROMPT.md` carries that rolling requirement.
+
+Implemented `c225399f`, corrected counters/mapping `0b6ba02e`, shader fixture
+initialization `761947c10e5a4f2f5c1f0ce13f497bacb5f3a10b`. **Full #1036 passed**
+(run 39178618231, JAR artifact 12155143862, logs 12155024238): offline, Forge
+package, both startups, terrain indirect, post/depth, screenshot geometry/sync,
+public Create Chronicles and Crash Assistant. Private packs skipped.
+
+Opt-in `experimentalGpuParticleBillboards`, exact campfire class only, normal
+unsorted Tesselator particle buffer. Inherited CPU four-vector/quad expansion is
+canceled; one compute job per original draw writes original ordered slots before
+the existing graphics shader. Simulation, camera/roll, light/UV/size callbacks stay
+Java. Other classes/custom overrides retain CPU rendering; no ParticleEngine
+redirect. CPU sorting and unavailable post-pack compute materialize current CPU
+vertices. Frame buffer generations cache descriptors and retire with existing fences.
+See `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md` for bounds and remaining qualification.
+
+Native oracle compared 524 vertices (87 GPU / 44 CPU quads) per frame over three
+frames: positions/UV within 2e-6, packed color/light exact, callbacks once, nonunit
+rotation/roll, real uploader, sorting/recovery, growth/retirement. Validation probes
+also dispatch directly; their lifetime totals are NOT workload adoption ratios.
+CI host preparation/submission was 18.330 ms for six compute batches, not RX or
+steady-state performance. Real GPU costs / CPU savings / FPS / tails unmeasured.
+
+#1034 was superseded. #1035 (39165513611) passed build and early native gates but
+failed fixture shader initialization before geometry comparison; #1036 fixed it.
+Final review corrected unsigned uint32 storage-limit admission and bounds descriptor
+views despite oversized unused buffer-growth tails; that final guard needs its own
+full CI before final-tip qualification. Do not promote defaults or request RX tests.
+
+All 24 local offline contracts passed. The javac launcher is absent but jdk.compiler
+is installed: a temporary wrapper can invoke `java com.sun.tools.javac.Main "$@"`.
+Gradle distribution network access remains unavailable. Temporary wrappers may be
+lost across interruptions; recreate them instead of repeating Gradle fetches.
+
+Next: finish final guard qualification; then particle portal/mod-injection/pixel and
+reload/pressure checks, incremental terrain candidate input and remaining texture/
+mesher composition gates. The multi-subsystem release remains incomplete.
+
 ## GPU-first ownership release ACTIVE — 2026-10-18
 
 Owner explicitly superseded the previous queue-size/particle-buffer sequence.

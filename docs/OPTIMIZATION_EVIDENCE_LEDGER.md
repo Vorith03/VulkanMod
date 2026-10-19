@@ -1,11 +1,22 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
-**Latest executable qualification: #1033 / 0e6f3657 / 39150537659, full success.**
+**New particle pilot: full #1036 passed**, `761947c1`, run 39178618231, JAR
+12155143862. Initial `c225399f`, counter/mapping correction `0b6ba02e`. A final
+unsigned/bounded storage-range guard needs separate full-tip qualification.
+#1034 was superseded; #1035 passed build/package and early native gates but failed
+constructor-time test shader initialization before geometry comparison. Exact campfire inherited billboard expansion moves to one compute job
+per original draw; Java simulation/light/callbacks and original quad ordering/shader
+remain. No per-particle dispatch/descriptor, no production CPU shadow. Full contract:
+[particle ownership](GPU_PARTICLE_BILLBOARD_OWNERSHIP.md). Geometry/native/Forge CI
+and portal/mod/pixel/adoption/net benefit gates must remain separate. RX CPU savings,
+GPU/submission cost, FPS and tails are unmeasured; not a release completion.
+
+**Texture/terrain foundation qualification: #1033 / 0e6f3657 / 39150537659, full success.**
 Texture ranked admission + all-mip/shared-copy execution and lazy terrain GPU
 command ownership, including the pending-APPEND composition guard, passed all
 public native/pixel/sync/Forge/compatibility gates. Private packs skipped.
 **Disposition: qualified but unmeasured**, not a GPU-first release completion.
-No RX adoption/net CPU/FPS/tail measurement yet. Particle adapter, multi-sprite
+No RX adoption/net CPU/FPS/tail measurement yet. Particle qualification, multi-sprite
 compute, incremental candidate input and generated-mesh/indirect composition remain
 open. Source input scanning still occurs per draw; do not equate skipped CPU
 command construction with eliminated terrain preparation. See the ownership doc.

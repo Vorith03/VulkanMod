@@ -48,7 +48,10 @@ speedup. See `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md` for evidence and open gate
 A third opt-in slice removes the CPU indirect-command shadow when existing GPU
 command output is current, complete and bounded, with lazy current CPU fallback.
 Hybrid APPEND retains its atomic planner until the candidate ABI supports it.
-Particle rendering adapters and generated-terrain activation remain open.
+An opt-in exact-campfire billboard compute adapter passed native/Forge full #1036
+(final storage-range guard needs follow-up qualification): original ordered stream and graphics shader retained, CPU
+four-vertex expansion bypassed. See `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`.
+Particle portal/mod/pixel adoption and generated-terrain activation remain open.
 The entire multi-subsystem mission is **incomplete** until these gates close.
 
 ---

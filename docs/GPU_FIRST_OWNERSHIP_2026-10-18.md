@@ -265,3 +265,18 @@ adoption/coverage/net CPU-time/GPU-cost/p95/p99/FPS result for these new pilots.
 Do not present the CI JAR as an integrated GPU-first release candidate or request
 an unchanged baseline. Current implementation and remaining gates are durable in
 this document, the roadmap and living status.
+
+## Subsequent particle continuation
+
+A production exact-campfire billboard compute adapter is now implemented behind
+`experimentalGpuParticleBillboards`. It cancels inherited CPU vertex expansion,
+retains simulation/light/Java callbacks, expands original ordered quad slots, and
+keeps the existing graphics shader and mixed/custom ordering. This replaces the
+previous "no particle offload implemented" checkpoint above, without qualifying
+portal/mod/pixel adoption or net benefit. See
+`GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`, living status and next-session prompt for
+current executable/CI evidence. The particle milestone passed full #1036 at
+`761947c1` (39178618231), including mandatory geometry/sync/uploader/fallback tests;
+JAR 12155143862. Final unsigned/bounded storage-range guard needs follow-up full
+qualification. Broad particle portal/mod/pixel/adoption and RX benefit remain open.
+The wider release remains incomplete.

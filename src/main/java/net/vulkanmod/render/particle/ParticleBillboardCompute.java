@@ -92,7 +92,11 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             if(result!=VK_SUCCESS) return 0;
             long set=out.get(0);
             VkDescriptorBufferInfo.Buffer info=VkDescriptorBufferInfo.calloc(1,stack);
-            info.get(0).buffer(buffer.getId()).offset(0).range(buffer.getBufferSize());
+            info.get(0).buffer(buffer.getId()).offset(0)
+                    // Vertex-buffer growth can exceed the storage range even while this draw fits.
+                    // Admission bounds every accessed byte; never expose the unused allocation tail.
+                    .range(Math.min((long)buffer.getBufferSize(),
+                            Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange())));
             VkWriteDescriptorSet.Buffer write=VkWriteDescriptorSet.calloc(1,stack);
             write.get(0).sType$Default().dstSet(set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1).pBufferInfo(info);
@@ -111,7 +115,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         int padding=(int)((4-(buffer.getUsedBytes()&3))&3);
         int metadataBytes=batch.count()*4;
         long needed=buffer.getUsedBytes()+padding+metadataBytes+vertices.remaining();
-        if(needed>Device.deviceProperties.limits().maxStorageBufferRange() || needed>Integer.MAX_VALUE) { capacityRejections++; return false; }
+        if(needed>Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange()) || needed>Integer.MAX_VALUE) { capacityRejections++; return false; }
         buffer.reserve((int)(padding+metadataBytes+vertices.remaining()));
         long set=instance.binding(buffer);
         if(set==0) { descriptorRejections++; return false; }
