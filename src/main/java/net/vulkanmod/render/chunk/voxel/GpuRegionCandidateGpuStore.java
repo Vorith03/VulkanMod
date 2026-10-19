@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
 /** Generation-owned device-local residency for one region candidate table. */
 public final class GpuRegionCandidateGpuStore implements AutoCloseable {
     static final int MAX_TABLE_BYTES = (GpuRegionCandidateTable.HEADER_WORDS
-            + RegionBatchLayout.MAX_SECTIONS * GpuRegionCandidateTable.RECORD_WORDS)
+            + RegionBatchLayout.MAX_DRAW_COMMANDS * GpuRegionCandidateTable.RECORD_WORDS)
             * Integer.BYTES;
     static final int GLOBAL_BUDGET_BYTES = 16 * 1024 * 1024;
     private static final Budget GLOBAL_BUDGET = new Budget(GLOBAL_BUDGET_BYTES);

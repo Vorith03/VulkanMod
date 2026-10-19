@@ -43,7 +43,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
     private static final int OUTPUT_HEADER_WORDS = 4;
     private static final int COMMAND_WORDS = RegionBatchLayout.STRIDE / Integer.BYTES;
     private static final int OUTPUT_BYTES = (OUTPUT_HEADER_WORDS
-            + RegionBatchLayout.MAX_SECTIONS * COMMAND_WORDS) * Integer.BYTES;
+            + RegionBatchLayout.MAX_DRAW_COMMANDS * COMMAND_WORDS) * Integer.BYTES;
     private static final int COMMAND_OFFSET_BYTES = OUTPUT_HEADER_WORDS * Integer.BYTES;
     private static final int PARAMETER_WORDS = 36;
     private static final int PARAMETER_BYTES = PARAMETER_WORDS * Integer.BYTES;
@@ -162,7 +162,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         Initializer.LOGGER.info(
                 "VULKANMOD_GPU_INDIRECT_SHADOW_READY: region=({}, {}, {}) layer={} generation={} candidates={} outputCapacity={}",
                 table.regionX(), table.regionY(), table.regionZ(), layer,
-                table.generation(), table.candidateCount(), RegionBatchLayout.MAX_SECTIONS);
+                table.generation(), table.candidateCount(), RegionBatchLayout.MAX_DRAW_COMMANDS);
     }
 
     /**
@@ -268,7 +268,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
     }
 
     public int commandCapacity() {
-        return RegionBatchLayout.MAX_SECTIONS;
+        return RegionBatchLayout.MAX_DRAW_COMMANDS;
     }
 
     public long generation() {
@@ -308,7 +308,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
                                         float[] planes) {
         long generation = table.generation();
         target.putInt((int)generation).putInt((int)(generation >>> 32))
-                .putInt(layer).putInt(RegionBatchLayout.MAX_SECTIONS)
+                .putInt(layer).putInt(RegionBatchLayout.MAX_DRAW_COMMANDS)
                 .putInt(table.regionX()).putInt(table.regionY()).putInt(table.regionZ()).putInt(0)
                 .putFloat(regionX).putFloat(regionY).putFloat(regionZ).putInt(0);
         int planeWords = VFrustum.PLANE_COUNT * VFrustum.PLANE_WORDS;

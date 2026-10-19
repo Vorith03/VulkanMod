@@ -23,6 +23,8 @@ const uint OUTPUT_HEADER_WORDS = 4u;
 const uint READY = 1u;
 const uint GRAPH_VISIBLE = 2u;
 const uint DIRECT_SEED = 4u;
+const uint PAIR_FIRST = 8u;
+const uint PAIR_SECOND = 16u;
 const uint LAYER_SHIFT = 8u;
 const uint LAYER_MASK = 15u;
 
@@ -31,7 +33,8 @@ bool tableIsCurrent() {
         && inputTable.words[1] == VERSION
         && inputTable.words[2] == parameters.words[0]
         && inputTable.words[3] == parameters.words[1]
-        && inputTable.words[4] <= 512u
+        && inputTable.words[4] <= 1024u
+        && inputTable.words[4] <= parameters.words[3]
         && inputTable.words[5] == parameters.words[4]
         && inputTable.words[6] == parameters.words[5]
         && inputTable.words[7] == parameters.words[6];
@@ -68,6 +71,24 @@ void main() {
 
     uint source = HEADER_WORDS + candidate * RECORD_WORDS;
     uint flags = inputTable.words[source + 5u];
+    // A continuation row is never independently selectable.
+    if ((flags & PAIR_SECOND) != 0u)
+        return;
+    bool pairFirst = (flags & PAIR_FIRST) != 0u;
+    uint commandCount = pairFirst ? 2u : 1u;
+    if (pairFirst) {
+        if (candidate + 1u >= inputTable.words[4])
+            return;
+        uint next = source + RECORD_WORDS;
+        uint nextFlags = inputTable.words[next + 5u];
+        if ((nextFlags & PAIR_SECOND) == 0u
+                || (nextFlags & PAIR_FIRST) != 0u
+                || (nextFlags & ~PAIR_SECOND) != (flags & ~PAIR_FIRST)
+                || inputTable.words[next + 4u] != inputTable.words[source + 4u]
+                || inputTable.words[next] == 0u
+                || inputTable.words[next + 1u] != 1u)
+            return;
+    }
     uint requiredFlags = READY | GRAPH_VISIBLE;
     bool directSeed = (flags & DIRECT_SEED) != 0u;
     if ((flags & requiredFlags) != requiredFlags
@@ -77,15 +98,19 @@ void main() {
             || (!directSeed && !intersectsFrustum(inputTable.words[source + 4u])))
         return;
 
-    uint slot = atomicAdd(outputCommands.words[0], 1u);
+    // A pair owns adjacent indirect commands, always CPU exceptions then GPU.
+    uint slot = atomicAdd(outputCommands.words[0], commandCount);
     uint capacity = parameters.words[3];
-    if (slot >= capacity) {
+    if (slot >= capacity || commandCount > capacity - slot) {
         atomicOr(outputCommands.words[2], 1u);
         return;
     }
 
-    atomicAdd(outputCommands.words[1], 1u);
-    uint target = OUTPUT_HEADER_WORDS + slot * COMMAND_WORDS;
-    for (uint word = 0u; word < COMMAND_WORDS; ++word)
-        outputCommands.words[target + word] = inputTable.words[source + word];
+    atomicAdd(outputCommands.words[1], commandCount);
+    for (uint command = 0u; command < commandCount; ++command) {
+        uint src = source + command * RECORD_WORDS;
+        uint target = OUTPUT_HEADER_WORDS + (slot + command) * COMMAND_WORDS;
+        for (uint word = 0u; word < COMMAND_WORDS; ++word)
+            outputCommands.words[target + word] = inputTable.words[src + word];
+    }
 }

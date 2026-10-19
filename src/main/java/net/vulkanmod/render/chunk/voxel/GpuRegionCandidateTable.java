@@ -16,6 +16,9 @@ public final class GpuRegionCandidateTable {
     public static final int READY = 1;
     public static final int GRAPH_VISIBLE = 1 << 1;
     public static final int DIRECT_SEED = 1 << 2;
+    /** Pair records reserve two consecutive commands in one shader invocation. */
+    public static final int PAIR_FIRST = 1 << 3;
+    public static final int PAIR_SECOND = 1 << 4;
     public static final int LAYER_SHIFT = 8;
     public static final int LAYER_MASK = 0xf << LAYER_SHIFT;
 
@@ -96,14 +99,14 @@ public final class GpuRegionCandidateTable {
 
         public Builder add(int indexCount, int instanceCount, int firstIndex,
                            int vertexOffset, int packedSection, int flags) {
-            if(count >= RegionBatchLayout.MAX_SECTIONS)
+            if(count >= RegionBatchLayout.MAX_DRAW_COMMANDS)
                 throw new IllegalStateException("GPU candidate region exceeds 512 sections");
             if(packedSection < 0 || packedSection >= RegionBatchLayout.MAX_SECTIONS)
                 throw new IllegalArgumentException("Packed section is outside its region");
-            if((flags & ~(READY | GRAPH_VISIBLE | DIRECT_SEED | LAYER_MASK)) != 0)
+            if((flags & ~(READY | GRAPH_VISIBLE | DIRECT_SEED | PAIR_FIRST | PAIR_SECOND | LAYER_MASK)) != 0)
                 throw new IllegalArgumentException("Unknown GPU candidate flags");
             if(count * RECORD_WORDS == records.length)
-                records = Arrays.copyOf(records, Math.min(RegionBatchLayout.MAX_SECTIONS,
+                records = Arrays.copyOf(records, Math.min(RegionBatchLayout.MAX_DRAW_COMMANDS,
                         (records.length / RECORD_WORDS) * 2) * RECORD_WORDS);
             int base = count++ * RECORD_WORDS;
             records[base] = indexCount;
@@ -114,6 +117,18 @@ public final class GpuRegionCandidateTable {
             records[base + 5] = flags;
             records[base + 6] = 0;
             records[base + 7] = 0;
+            return this;
+        }
+
+        /** Two commands with shared identity, readiness and culling provenance. */
+        public Builder addPair(int cpuCount, int cpuFirst, int cpuOffset,
+                               int gpuCount, int gpuFirst, int gpuOffset,
+                               int packedSection, int flags) {
+            if(cpuCount <= 0 || gpuCount <= 0 || count > RegionBatchLayout.MAX_DRAW_COMMANDS - 2
+                    || (flags & (PAIR_FIRST | PAIR_SECOND)) != 0)
+                throw new IllegalArgumentException("Invalid or over-capacity atomic candidate pair");
+            add(cpuCount, 1, cpuFirst, cpuOffset, packedSection, flags | PAIR_FIRST);
+            add(gpuCount, 1, gpuFirst, gpuOffset, packedSection, flags | PAIR_SECOND);
             return this;
         }
 

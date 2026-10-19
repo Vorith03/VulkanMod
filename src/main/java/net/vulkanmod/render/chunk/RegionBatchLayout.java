@@ -5,12 +5,14 @@ import java.nio.ByteBuffer;
 /** CPU/GPU ABI: an 8x8x8 region, and Vulkan's five-word indexed draw command. */
 public final class RegionBatchLayout {
     public static final int MAX_SECTIONS = 512;
+    /** One region may emit a CPU-exception and a GPU command per section. */
+    public static final int MAX_DRAW_COMMANDS = MAX_SECTIONS * 2;
     public static final int STRIDE = 20;
 
     private RegionBatchLayout() {}
 
     public static int drawLimit(int vulkanLimit) {
-        return (int) Math.max(1L, Math.min(MAX_SECTIONS, Integer.toUnsignedLong(vulkanLimit)));
+        return (int) Math.max(1L, Math.min(MAX_DRAW_COMMANDS, Integer.toUnsignedLong(vulkanLimit)));
     }
 
     public static int packSection(int x, int y, int z) {

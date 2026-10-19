@@ -37,7 +37,8 @@ final class RegionDrawBatch {
             "vulkanmod.experimentalGpuTerrainDrawHandoff");
     private static final boolean GPU_GENERATED_INDIRECT_REPLACE = Boolean.getBoolean(
             "vulkanmod.experimentalGpuGeneratedIndirectReplace");
-    private static final int MAX_DRAW_COMMANDS = MAX_SECTIONS * 2;
+    private static final boolean GPU_GENERATED_INDIRECT_APPEND = GPU_GENERATED_INDIRECT_REPLACE
+            && Boolean.getBoolean("vulkanmod.experimentalGpuGeneratedIndirectAppend");
     private static final boolean PROFILE_GPU_CANDIDATES =
             Boolean.getBoolean("vulkanmod.performanceProfiler");
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
@@ -172,7 +173,7 @@ final class RegionDrawBatch {
         if(!complete) return 3;
         if(!currentVolume) return 4;
         if(!currentOutput) return 5;
-        if(candidates <= 0 || candidates > MAX_SECTIONS || candidates > capacity) return 6;
+        if(candidates <= 0 || candidates > MAX_DRAW_COMMANDS || candidates > capacity) return 6;
         return 0;
     }
 
@@ -334,11 +335,18 @@ final class RegionDrawBatch {
 
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         publishLiveCandidates(buffers, area, type,
-                GPU_TERRAIN_DRAW_HANDOFF, GPU_GENERATED_INDIRECT_REPLACE);
+                GPU_TERRAIN_DRAW_HANDOFF, GPU_GENERATED_INDIRECT_REPLACE,
+                GPU_GENERATED_INDIRECT_APPEND);
     }
 
     void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
                                boolean terrainHandoff, boolean generatedReplace) {
+        publishLiveCandidates(buffers, area, type, terrainHandoff, generatedReplace, false);
+    }
+
+    void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
+                               boolean terrainHandoff, boolean generatedReplace,
+                               boolean generatedAppend) {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
         boolean generatedPlan = terrainHandoff && generatedReplace;
@@ -423,7 +431,7 @@ final class RegionDrawBatch {
                 }
                 DrawBuffers.CandidateGeometry geometry = section.getCandidateGeometry(type);
                 if(generatedPlan) {
-                    IndirectCandidate candidate = indirectCandidate(area, section, type, true);
+                    IndirectCandidate candidate = indirectCandidate(area, section, type, true, generatedAppend);
                     geometry = candidate.geometry();
                     complete &= candidate.representable();
                     maxGpuVertices = Math.max(maxGpuVertices, candidate.maxGpuVertices());
@@ -436,8 +444,24 @@ final class RegionDrawBatch {
                         && !section.hasMainDirection() && !directSeed)
                     complete = false;
                 int flags = GpuRegionCandidateTable.flags(geometry.ready(), graphVisible, directSeed, layer);
-                builder.add(geometry.indexCount(), 1, geometry.firstIndex(),
-                        geometry.vertexOffset(), slot, flags);
+                if(generatedPlan) {
+                    IndirectCandidate candidate = indirectCandidate(area, section, type, true, generatedAppend);
+                    if(candidate.secondGeometry() != null) {
+                        DrawBuffers.CandidateGeometry second = candidate.secondGeometry();
+                        builder.addPair(geometry.indexCount(), geometry.firstIndex(), geometry.vertexOffset(),
+                                second.indexCount(), second.firstIndex(), second.vertexOffset(), slot, flags);
+                        fingerprint = mix(fingerprint, second.indexCount());
+                        fingerprint = mix(fingerprint, second.firstIndex());
+                        fingerprint = mix(fingerprint, second.vertexOffset());
+                        count++;
+                    } else {
+                        builder.add(geometry.indexCount(), 1, geometry.firstIndex(),
+                                geometry.vertexOffset(), slot, flags);
+                    }
+                } else {
+                    builder.add(geometry.indexCount(), 1, geometry.firstIndex(),
+                            geometry.vertexOffset(), slot, flags);
+                }
                 fingerprint = mix(fingerprint, geometry.indexCount());
                 fingerprint = mix(fingerprint, geometry.firstIndex());
                 fingerprint = mix(fingerprint, geometry.vertexOffset());
@@ -524,16 +548,22 @@ final class RegionDrawBatch {
         return candidateSupersetComplete[type.ordinal()];
     }
 
-    /** One candidate-v1 row can represent REPLACE, but never an atomic APPEND pair. */
+    /** Producer-visible REPLACE or exact-generation atomic APPEND pair. */
     static IndirectCandidate indirectCandidate(ChunkArea area, RenderSection section,
                                                TerrainRenderType type, boolean terrainHandoff) {
+        return indirectCandidate(area, section, type, terrainHandoff,
+                GPU_GENERATED_INDIRECT_APPEND);
+    }
+
+    static IndirectCandidate indirectCandidate(ChunkArea area, RenderSection section,
+                                               TerrainRenderType type, boolean terrainHandoff,
+                                               boolean generatedAppend) {
         DrawBuffers.CandidateGeometry cpu = section.getCandidateGeometry(type);
         if(!terrainHandoff)
             return new IndirectCandidate(cpu, true, 0);
         RenderSection.GpuTerrainDrawState state = section.gpuTerrainDrawState();
-        // Reject even zero-exception APPEND, so eligibility never depends on a
-        // temporary collapse of a two-command producer contract into one row.
-        if(state.ownership() != GpuTerrainDrawHandoff.Ownership.REPLACE)
+        if(state.ownership() != GpuTerrainDrawHandoff.Ownership.REPLACE
+                && !(generatedAppend && state.ownership() == GpuTerrainDrawHandoff.Ownership.APPEND))
             return new IndirectCandidate(cpu, false, 0);
         GpuTerrainOutputStore.Residency residency = area.getGpuTerrainOutputResidency(
                 section.xOffset, section.yOffset, section.zOffset, type);
@@ -542,14 +572,31 @@ final class RegionDrawBatch {
                 cpu.vertexOffset(), state.ownership());
         if(plan.gpuDrawCount() == 0)
             return new IndirectCandidate(cpu, section.gpuTerrainCpuMeshComplete(), 0);
-        GpuTerrainDrawHandoff.DrawCommand command = plan.command(0);
-        return new IndirectCandidate(new DrawBuffers.CandidateGeometry(command.indexCount(),
-                command.firstIndex(), command.vertexOffset(), true), true,
-                command.indexCount() * 2 / 3);
+        // Never expose a GPU half without a ready CPU exception command. A
+        // zero-exception APPEND is the planner's single GPU-only command.
+        if(plan.commandCount() == 2 && !cpu.ready())
+            return new IndirectCandidate(cpu, false, 0);
+        GpuTerrainDrawHandoff.DrawCommand first = plan.command(0);
+        GpuTerrainDrawHandoff.DrawCommand gpu = plan.command(plan.commandCount() - 1);
+        DrawBuffers.CandidateGeometry second = null;
+        if(plan.commandCount() == 2) {
+            GpuTerrainDrawHandoff.DrawCommand append = plan.command(1);
+            second = new DrawBuffers.CandidateGeometry(append.indexCount(),
+                    append.firstIndex(), append.vertexOffset(), true);
+        }
+        return new IndirectCandidate(new DrawBuffers.CandidateGeometry(first.indexCount(),
+                first.firstIndex(), first.vertexOffset(), true), true,
+                gpu.indexCount() * 2 / 3, second);
     }
 
     record IndirectCandidate(DrawBuffers.CandidateGeometry geometry,
-                             boolean representable, int maxGpuVertices) {}
+                             boolean representable, int maxGpuVertices,
+                             DrawBuffers.CandidateGeometry secondGeometry) {
+        IndirectCandidate(DrawBuffers.CandidateGeometry geometry,
+                          boolean representable, int maxGpuVertices) {
+            this(geometry, representable, maxGpuVertices, null);
+        }
+    }
 
     private static void recordCandidatePreparation(long start) {
         if(PROFILE_GPU_CANDIDATES)
