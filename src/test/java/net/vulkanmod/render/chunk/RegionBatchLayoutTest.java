@@ -40,7 +40,9 @@ public final class RegionBatchLayoutTest {
         int[] words = {36, 1, 12, -24, 511, 6, 1, 0, 8, 0};
         commands.flip();
         for (int word : words) require(commands.getInt() == word, "Vulkan indexed-command ABI");
-        require(RegionBatchLayout.drawLimit(-1) == 512, "Unsigned Vulkan limit");
+        require(RegionBatchLayout.drawLimit(-1) == RegionBatchLayout.MAX_DRAW_COMMANDS,
+                "Unsigned Vulkan limit must cover the paired-command bound");
+        require(RegionBatchLayout.drawLimit(1024) == 1024, "Full paired draw capacity");
         require(RegionBatchLayout.drawLimit(128) == 128, "Device batch limit");
         require(RegionBatchLayout.drawLimit(1) == 1, "Single draw limit");
 

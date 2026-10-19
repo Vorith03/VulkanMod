@@ -185,7 +185,8 @@ public final class GpuSectionSelectionShadowSmokeTest {
                 Device.getGraphicsQueue().submitCommands(command);
                 Synchronization.waitFence(command.getFence());
                 Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(command);
-                memory.MapAndCopy(readbackAllocation, bytesCount, pointer -> {
+                long allocation = readbackAllocation;
+                memory.MapAndCopy(allocation, bytesCount, pointer -> {
                     ByteBuffer bytes = pointer.getByteBuffer(0, bytesCount).order(ByteOrder.nativeOrder());
                     for(int i = 0; i < words.length; ++i)
                         words[i] = bytes.getInt(i * Integer.BYTES);
