@@ -43,6 +43,10 @@ final class RegionDrawBatch {
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateInputRevisions = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateMeshRevisions = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateVisibilityRevisions = new long[TerrainRenderType.VALUES.length];
+    private final boolean[] candidatePendingReadiness = new boolean[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] candidateTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
     private final VFrustum[] candidateFrustums =
@@ -281,17 +285,41 @@ final class RegionDrawBatch {
      * The separate indirect-draw gate may consume only a successfully
      * dispatched, generation-matched shadow result.
      */
+    // No candidate metadata scan/allocation for an unchanged owned region. A
+    // traversal always changes inputRevision, because graph visits outside the
+    // draw queue (and direct-seed provenance) are still candidate inputs.
+    static boolean isCandidateSnapshotCurrent(boolean initialized, boolean pendingReadiness,
+                                              long publishedInputs, long currentInputs,
+                                              long publishedMesh, long currentMesh,
+                                              long publishedVisibility, long currentVisibility,
+                                              boolean sameVolume) {
+        return initialized && !pendingReadiness && sameVolume
+                && publishedInputs == currentInputs && publishedMesh == currentMesh
+                && publishedVisibility == currentVisibility;
+    }
+
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
 
         int layer = type.ordinal();
+        long inputRevision = area.getCandidateInputRevision();
+        long visibilityRevision = area.getVisibilityRevision();
+        long meshRevision = buffers.getMeshRevision(type);
+        VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
+        boolean sameVolume = currentFrustum == null ? candidateFrustums[layer] == null
+                : currentFrustum.sameCullingVolume(candidateFrustums[layer]);
+        if(isCandidateSnapshotCurrent(candidateInitialized[layer],
+                candidatePendingReadiness[layer], candidateInputRevisions[layer], inputRevision,
+                candidateMeshRevisions[layer], meshRevision,
+                candidateVisibilityRevisions[layer], visibilityRevision, sameVolume))
+            return;
         long generation = candidateGenerations[layer] + 1L;
         GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
                 generation, area.position.x, area.position.y, area.position.z);
         long fingerprint = FNV_OFFSET_BASIS;
-        fingerprint = mix(fingerprint, area.getVisibilityRevision());
-        fingerprint = mix(fingerprint, buffers.getMeshRevision(type));
+        fingerprint = mix(fingerprint, visibilityRevision);
+        fingerprint = mix(fingerprint, meshRevision);
         fingerprint = mix(fingerprint, area.position.x);
         fingerprint = mix(fingerprint, area.position.y);
         fingerprint = mix(fingerprint, area.position.z);
@@ -309,6 +337,7 @@ final class RegionDrawBatch {
         }
 
         int count = 0;
+        boolean pendingReadiness = false;
         for(int slot = 0; slot < MAX_SECTIONS; ++slot) {
             RenderSection section = area.getOwnedSection(slot);
             if(section == null)
@@ -316,6 +345,8 @@ final class RegionDrawBatch {
             DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
             boolean ready = parameters.indexCount != 0
                     && parameters.vertexBufferSegment.isReady();
+            if(parameters.indexCount != 0 && !ready)
+                pendingReadiness = true;
             boolean graphVisible = area.isGraphVisible(section);
             boolean directSeed = directSeeds[slot];
             int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
@@ -331,11 +362,15 @@ final class RegionDrawBatch {
         }
         fingerprint = mix(fingerprint, count);
         fingerprint = mix(fingerprint, complete ? 1 : 0);
-        VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
-        boolean sameVolume = currentFrustum == null ? candidateFrustums[layer] == null
-                : currentFrustum.sameCullingVolume(candidateFrustums[layer]);
-        if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume)
+        // A new traversal can be byte-for-byte identical. Record its revision
+        // without re-uploading the table; the next draw then takes the fast path.
+        if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume) {
+            candidateInputRevisions[layer] = inputRevision;
+            candidateMeshRevisions[layer] = meshRevision;
+            candidateVisibilityRevisions[layer] = visibilityRevision;
+            candidatePendingReadiness[layer] = pendingReadiness;
             return;
+        }
 
         long oldToken = diagnosticTokens[layer];
         if(oldToken != 0L) {
@@ -363,6 +398,10 @@ final class RegionDrawBatch {
         candidateInitialized[layer] = queued;
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
+        candidateInputRevisions[layer] = inputRevision;
+        candidateMeshRevisions[layer] = meshRevision;
+        candidateVisibilityRevisions[layer] = visibilityRevision;
+        candidatePendingReadiness[layer] = pendingReadiness;
         candidateTables[layer] = queued ? table : null;
         candidateFrustums[layer] = queued ? frustumSnapshot : null;
 
@@ -411,6 +450,10 @@ final class RegionDrawBatch {
             candidateInitialized[layer] = false;
             candidateSupersetComplete[layer] = false;
             candidateFingerprints[layer] = 0L;
+            candidateInputRevisions[layer] = 0L;
+            candidateMeshRevisions[layer] = 0L;
+            candidateVisibilityRevisions[layer] = 0L;
+            candidatePendingReadiness[layer] = false;
             candidateTables[layer] = null;
             candidateFrustums[layer] = null;
             if(diagnosticTokens[layer] != 0L)

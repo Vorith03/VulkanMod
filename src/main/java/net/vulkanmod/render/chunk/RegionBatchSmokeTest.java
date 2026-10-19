@@ -705,6 +705,33 @@ public final class RegionBatchSmokeTest {
                     "Capacity bounds apply before CPU shadow bypass");
             require(RegionDrawBatch.gpuCommandOwnerRejection(false,false,true,true,true,512,512)==1,
                     "Absent opt-in must preserve CPU command ownership");
+            require(RegionDrawBatch.isCandidateSnapshotCurrent(true, false,
+                            10, 10, 20, 20, 30, 30, true),
+                    "Stable candidate input, mesh, traversal and culling volume must reuse resident metadata");
+            require(!RegionDrawBatch.isCandidateSnapshotCurrent(true, true,
+                            10, 10, 20, 20, 30, 30, true),
+                    "Pending vertex readiness must always retry even with unchanged revisions");
+            require(!RegionDrawBatch.isCandidateSnapshotCurrent(true, false,
+                            10, 11, 20, 20, 30, 30, true)
+                            && !RegionDrawBatch.isCandidateSnapshotCurrent(true, false,
+                            10, 10, 20, 21, 30, 30, true)
+                            && !RegionDrawBatch.isCandidateSnapshotCurrent(true, false,
+                            10, 10, 20, 20, 30, 31, true)
+                            && !RegionDrawBatch.isCandidateSnapshotCurrent(true, false,
+                            10, 10, 20, 20, 30, 30, false),
+                    "Traversal/ownership, upload, queue and portal volume changes must invalidate");
+            long inputRevision = area.getCandidateInputRevision();
+            area.resetQueue();
+            require(area.getCandidateInputRevision() != inputRevision,
+                    "Even an unchanged draw queue traversal must invalidate off-frustum graph metadata");
+            inputRevision = area.getCandidateInputRevision();
+            area.registerSection(section, 0, 0, 0);
+            require(area.getCandidateInputRevision() != inputRevision,
+                    "Producer registration must invalidate ownership without a draw-time scan");
+            inputRevision = area.getCandidateInputRevision();
+            area.setPosition(128, 0, 0);
+            require(area.getCandidateInputRevision() != inputRevision,
+                    "Region ring reuse must invalidate candidate input even before traversal");
             Initializer.LOGGER.info("VULKANMOD_GPU_COMMAND_OWNERSHIP_OK: no CPU command allocation/upload on GPU owner, lazy current fallback, re-adoption, hybrid/superset/volume/capacity rejection");
         } finally {
             if(batch.commands != null) batch.commands.freeBuffer();

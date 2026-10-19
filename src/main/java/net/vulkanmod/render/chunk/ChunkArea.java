@@ -32,6 +32,9 @@ public class ChunkArea {
 
     final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
     private long visibilityRevision;
+    // Producer/traversal invalidation for the region candidate fast path. An
+    // off-frustum graph visit can change without changing sectionQueue membership.
+    private long candidateInputRevision;
     private boolean visibilityRewritePending;
     private short traversalFrame = -1;
 
@@ -154,7 +157,10 @@ public class ChunkArea {
         int slot = voxelSlot(x, y, z);
         if(slot < 0)
             throw new IllegalStateException("Render section does not belong to selected ChunkArea");
-        this.ownedSections[slot] = section;
+        if(this.ownedSections[slot] != section) {
+            this.ownedSections[slot] = section;
+            this.candidateInputRevision++;
+        }
     }
 
     RenderSection getOwnedSection(int slot) {
@@ -166,6 +172,7 @@ public class ChunkArea {
         if(section.getChunkArea() != this
                 || voxelSlot(section.xOffset, section.yOffset, section.zOffset) != slot) {
             this.ownedSections[slot] = null;
+            this.candidateInputRevision++;
             return null;
         }
         return section;
@@ -178,9 +185,16 @@ public class ChunkArea {
 
     public void resetQueue() {
         this.finishVisibilityRewrite();
+        // Every traversal may change graph-visible slots, even when the final
+        // CPU draw queue has identical members (addNode marks before frustum).
+        this.candidateInputRevision++;
         this.sectionQueue.beginRewrite();
         this.visibilityRewritePending = true;
         this.traversalFrame = -1;
+    }
+
+    long getCandidateInputRevision() {
+        return this.candidateInputRevision;
     }
 
     long getVisibilityRevision() {
@@ -544,6 +558,7 @@ public class ChunkArea {
             }
         }
         Arrays.fill(this.ownedSections, null);
+        this.candidateInputRevision++;
         this.traversalFrame = -1;
     }
 
