@@ -24,7 +24,8 @@ class PlannerContract(unittest.TestCase):
         while time.monotonic() < deadline:
             try:
                 state = Path(f'/proc/{pid}/stat').read_text().split()[2]
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
+                # A process may exit between /proc path lookup and read.
                 return
             if state == 'Z':
                 return
