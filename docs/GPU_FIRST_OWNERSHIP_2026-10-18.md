@@ -1,14 +1,12 @@
 # GPU-first renderer ownership — October 18, 2026
 
-## Latest particle capacity safety and native qualification — #1044 pending
+## GPU particle descriptor bound qualified — full #1044
 
-#1041 (39194476949) failed a descriptor-exhaustion fixture assumption, and diagnostic #1042 (39194915798) demonstrated Lavapipe allowed 82 live sets against a 64-set descriptor pool. This is negative CI evidence, not proof of wrong particle geometry. Production fix `6817c071f28903656346886f38764c552e91e7ed` bounds host descriptor reservations to 64 including sets queued for fence retirement; a refused compute batch retains CPU materialization. Probe change `71f1bec858a9c2dbb589d218b172eec624c0dd29` moves 80-buffer pressure to a dedicated last recording frame so pending retirement cannot contaminate the three prior geometry passes. #1043 was superseded. **Full #1044 / run 39195687691 is pending**; last completely qualified executable remains #1040 `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, JAR 12160493015. No RX net CPU/GPU/FPS/p95/p99 evidence. Test-only pressure and idle reconstruction do not prove actual resource reload or Immersive Portals mixed translucent pixels. Full GPU-first release incomplete.
+**Qualified executable:** `71f1bec858a9c2dbb589d218b172eec624c0dd29`, full **#1044**, [run 39195687691](https://github.com/Vorith03/VulkanMod/actions/runs/39195687691) **PASSED**. Forge JAR artifact **12161603960**, smoke logs **12161404876**. Offline contracts, Forge package and both startups, native Vulkan terrain/indirect plus texture/particle pixel/sync, screenshot, public Create Chronicles with Immersive Portals and Crash Assistant all passed; private packs skipped.
 
+**Production correction:** `6817c071` enforces the 64-descriptor pool reservation on the host, including allocated sets pending frame-fence retirement; it refuses excess GPU work before native allocation and preserves CPU quad materialization. `71f1bec8` isolates an 80-buffer native descriptor-pressure oracle into its own recording frame after three existing exact-geometry passes; also exercises owner teardown/reinit after explicit device idle. The preceding negative evidence is important: #1041 (39194476949) failed the fixture's assumption of native pool rejection; #1042 (39194915798) demonstrated Lavapipe admitted **82 live sets against maxSets=64**. #1043 was superseded by the isolated-frame test before full qualification. The final assertion and all public native/Forge gates are now green.
 
-## Particle native pressure follow-up — pending
-
-Source `7bdf805` adds native GPU descriptor-pool exhaustion / numeric CPU fallback / after-idle compute-owner reconstruction coverage. #1041 / run 39194476949 pending. It does not change live GPU eligibility, exercise actual resource-pack reload, or qualify Immersive Portals translucent pixels. Integrated RX CPU/GPU/FPS/p95/p99 unknown; no default promotion.
-
+**Scope:** CPU simulation/light/callbacks and exact campfire eligibility are unchanged; this is a fail-closed resource-safety correction, not a new GPU work-ownership transfer or an observed RX speedup. The native oracle is NOT an actual resource-pack reload or production portal-translucency pixel comparison. Integrated GPU-first correctness/adoption/CPU displacement/added GPU time/FPS/p95/p99, generated REPLACE/APPEND ABI and multi-sprite texture compute remain open. All pilots remain opt-in; do not request a new per-milestone RX benchmark.
 
 ## Live recovery and current evidence
 
