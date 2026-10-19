@@ -1,5 +1,10 @@
 # Actual-world generated indirect recording witness — October 19, 2026
 
+## October 19 — #1069 producer reuse qualification does not close the world witness gate
+
+Executable `41ba122c03509fbbe7d19b67d60dda48735a6723`, full #1069 (run 39291766470) passed, with JAR artifact 12205981816 and smoke-log artifact 12206581647. Its producer-state revision and same-provenance reuse skip repeated generated per-candidate numeric planning for *unchanged* regions; the default-off actual-world `VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED` instrumentation and all witness requirements below are unchanged. No world marker, main-world CPU/GPU reference screenshot or real portal-view pair was acquired. Do **not** interpret the native selector fixture or the producer cache smoke as actual-world draw/pixel equivalence. Continue the scene checklist below when real-world evidence is available; keep 512-section/1,024-command bounds and atomic APPEND safety.
+
+
 ## October 19 — generated-world draw witness, full #1068 PASSED
 
 **Current fully qualified executable:** `0f76caf7e5377ce27edebbfc23235c5daaa0168d`; full [#1068 / run 39287370625](https://github.com/Vorith03/VulkanMod/actions/runs/39287370625) **COMPLETED / SUCCESS** on that exact executable (not the later documentation HEAD). Distributable Forge JAR artifact **12203627510**, smoke-log artifact **12202694551**. Successful full-validation steps included offline contracts, Forge compilation/package, both client startup modes, native GPU indirect/terrain (including `VULKANMOD_GPU_GENERATED_APPEND_INDIRECT_OK` 509-pair selector proof and `VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK`), texture multi-dispatch, particle, screenshot, synchronization/post/depth chain, public Create Chronicles with Immersive Portals, and Crash Assistant. Private resource-pack fixture coverage remains unavailable (token absent); no actual-world generated-terrain/portal pixel validation was performed by this run. Previous qualification #1066 `360434e664c13050e2eab1174673ed19525ed813` remains the regression baseline (JAR 12196457613, smoke logs 12196891834).
