@@ -69,32 +69,34 @@ public final class PublicationDrainSmokeTest {
             // Test the actual result queue, not just the generation predicate.
             boolean priorVoxelsEnabled = RegionVoxelStore.ENABLED;
             try {
-                RegionVoxelStore.ENABLED = true;
-                long staleGeneration = section.getVoxelGeneration();
-                AtomicInteger accepted = new AtomicInteger();
-                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
-                        new EnumMap<>(TerrainRenderType.class), null, staleGeneration,
-                        false, () -> { throw new AssertionError("Stale REPLACE result published"); });
-                section.setDirty(false);
-                long currentGeneration = section.getVoxelGeneration();
-                if(currentGeneration == staleGeneration)
-                    throw new AssertionError("Dirty section did not invalidate its voxel generation");
-                if(!dispatcher.uploadAllPendingUploads())
-                    throw new AssertionError("Stale REPLACE result was not drained");
-                if(accepted.get() != 0)
-                    throw new AssertionError("Stale REPLACE result changed publication state");
+                for(boolean voxelsEnabled : new boolean[] {false, true}) {
+                    RegionVoxelStore.ENABLED = voxelsEnabled;
+                    long staleGeneration = section.getVoxelGeneration();
+                    AtomicInteger accepted = new AtomicInteger();
+                    dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                            new EnumMap<>(TerrainRenderType.class), null, staleGeneration,
+                            false, () -> { throw new AssertionError("Stale REPLACE result published"); });
+                    section.setDirty(false);
+                    long currentGeneration = section.getVoxelGeneration();
+                    if(currentGeneration == staleGeneration)
+                        throw new AssertionError("Dirty section did not invalidate publication generation (voxels=" + voxelsEnabled + ")");
+                    if(!dispatcher.uploadAllPendingUploads())
+                        throw new AssertionError("Stale REPLACE result was not drained");
+                    if(accepted.get() != 0)
+                        throw new AssertionError("Stale REPLACE result changed publication state");
 
-                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
-                        new EnumMap<>(TerrainRenderType.class), null, currentGeneration,
-                        false, accepted::incrementAndGet);
-                if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 1)
-                    throw new AssertionError("Current-generation REPLACE publication was rejected");
+                    dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                            new EnumMap<>(TerrainRenderType.class), null, currentGeneration,
+                            false, accepted::incrementAndGet);
+                    if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 1)
+                        throw new AssertionError("Current-generation REPLACE publication was rejected");
 
-                // Existing unversioned uses of this dispatcher must still publish.
-                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
-                        new EnumMap<>(TerrainRenderType.class), accepted::incrementAndGet);
-                if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 2)
-                    throw new AssertionError("Legacy unversioned publication was rejected");
+                    // Existing unversioned uses of this dispatcher must still publish.
+                    dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                            new EnumMap<>(TerrainRenderType.class), accepted::incrementAndGet);
+                    if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 2)
+                        throw new AssertionError("Legacy unversioned publication was rejected");
+                }
             } finally {
                 RegionVoxelStore.ENABLED = priorVoxelsEnabled;
             }

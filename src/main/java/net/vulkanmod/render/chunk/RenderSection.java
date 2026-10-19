@@ -612,13 +612,15 @@ public class RenderSection {
             this.forceCpuTerrainUntilSuccess = true;
 
         this.clearGpuTerrainPreflight();
+        // Build publications use this generation even with voxel capture disabled.
+        // Invalidate CPU results independently of the optional voxel residency store.
+        this.voxelGeneration++;
         if (!RegionVoxelStore.ENABLED) {
             if(!retainVisibleGpu)
                 this.clearGpuTerrainVisibleHandoff();
             return;
         }
 
-        this.voxelGeneration++;
         if(!retainVisibleGpu)
             this.clearGpuTerrainVisibleHandoff();
         if (this.chunkArea != null)
