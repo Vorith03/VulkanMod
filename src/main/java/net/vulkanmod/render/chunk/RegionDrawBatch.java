@@ -107,7 +107,8 @@ final class RegionDrawBatch {
                 candidateTable == null ? 0 : candidateTable.candidateCount(),
                 shadowStore == null ? 0 : shadowStore.commandCapacity());
         boolean gpuOwnsCommands = prepareCommandOwner(batch, buffers, area, type,
-                rejection, GPU_TERRAIN_DRAW_HANDOFF);
+                rejection, GPU_TERRAIN_DRAW_HANDOFF,
+                GPU_TERRAIN_DRAW_HANDOFF && GPU_GENERATED_INDIRECT_REPLACE);
         if(GPU_INDIRECT_CPU_BYPASS) {
             RegionBatchStats.gpuCommandOwnerAttempts++;
             RegionBatchStats.gpuCommandOwnerReasons[rejection]++;
@@ -180,8 +181,22 @@ final class RegionDrawBatch {
     /** Shared by the production draw and native cache/ownership transition oracle. */
     static boolean prepareCommandOwner(FrameBatch batch, DrawBuffers buffers, ChunkArea area,
                                        TerrainRenderType type, int rejection, boolean hybridHandoff) {
+        return prepareCommandOwner(batch, buffers, area, type, rejection, hybridHandoff, false);
+    }
+
+    static boolean prepareCommandOwner(FrameBatch batch, DrawBuffers buffers, ChunkArea area,
+                                       TerrainRenderType type, int rejection,
+                                       boolean hybridHandoff, boolean generatedPlan) {
         if(rejection == 0) return true;
-        batch.update(buffers, area, type, hybridHandoff);
+        if(generatedPlan) {
+            // Generated ownership may change without an ordinary mesh or visibility
+            // revision. Do not reuse a stale cached CPU FrameBatch after revocation.
+            // An accepted GPU owner still skips this entire CPU rebuild.
+            batch.rebuild(buffers, area, type, area.getVisibilityRevision(),
+                    buffers.getMeshRevision(type), hybridHandoff);
+        } else {
+            batch.update(buffers, area, type, hybridHandoff);
+        }
         return false;
     }
 

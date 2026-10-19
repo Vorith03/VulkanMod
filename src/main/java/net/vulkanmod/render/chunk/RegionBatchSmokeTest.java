@@ -993,12 +993,21 @@ public final class RegionBatchSmokeTest {
                     "Retired or stale GPU geometry must immediately revoke incomplete replacement");
             publisher.publishLiveCandidates(buffers, area, type, true, true);
             require(!publisher.hasCompleteCandidateSuperset(type), "Retirement must revoke published ownership");
+            require(!RegionDrawBatch.prepareCommandOwner(batch, buffers, area, type,
+                            3, true, true) && batch.drawCount == 0 && batch.pendingUploads,
+                    "Rejected generated ownership must discard stale accepted commands while CPU recovery is incomplete");
             section.setGpuTerrainCpuMeshComplete(generation, true);
             new DrawBuffers.ParametersUpdate(parameters, 12, 6, 40).setDrawParameters();
             parameters.vertexBufferSegment.setReady();
             require(RegionDrawBatch.indirectCandidate(area, section, type, true).geometry()
                             .equals(section.getCandidateGeometry(type)),
                     "Complete CPU recovery must preserve original geometry after GPU invalidation");
+            require(!RegionDrawBatch.prepareCommandOwner(batch, buffers, area, type,
+                            3, true, true) && batch.drawCount == 1 && !batch.pendingUploads
+                            && batch.commands.getByteBuffer().getInt(0) == 12
+                            && batch.commands.getByteBuffer().getInt(8) == 6
+                            && batch.commands.getByteBuffer().getInt(12) == 40,
+                    "Rejected ownership must rebuild complete CPU fallback rather than stale GPU commands");
             Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK: exact generation/metadata, pending/incomplete rejection, APPEND exclusion, retirement, lazy FrameBatch bypass; fixture not world adoption");
         } finally {
             publisher.free();
