@@ -21,6 +21,7 @@ public final class RegionBatchSmokeTest {
         verifyLazyGpuCommandOwnership();
         verifyCandidateProducerProvenance();
         verifyCandidateGeometryProducer();
+        verifyGeneratedReplaceCandidates();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
@@ -835,6 +836,103 @@ public final class RegionBatchSmokeTest {
                     "Late callbacks from a replaced owned identity must not publish into its new owner");
             Initializer.LOGGER.info("VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK: immutable mesh publication, event-owned readiness/reupload/reset, layer and stale-owner isolation, traversal reuse");
         } finally {
+            area.releaseBuffers();
+        }
+    }
+
+    private static void verifyGeneratedReplaceCandidates() {
+        if(!ChunkArea.trackGpuCandidateProvenance()) return;
+        ChunkArea area = new ChunkArea(41, new Vector3i(0, 0, 0));
+        DrawBuffers buffers = area.getDrawBuffers();
+        RenderSection section = new RenderSection(0, 16, 16, 16);
+        section.setChunkArea(area);
+        area.registerSection(section, 16, 16, 16);
+        area.addSection(section);
+        TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+        var parameters = section.getDrawParameters(type);
+        var batch = new RegionDrawBatch.FrameBatch();
+        var publisher = new RegionDrawBatch();
+        try {
+            new DrawBuffers.ParametersUpdate(parameters, 12, 6, 40).setDrawParameters();
+            parameters.vertexBufferSegment.setReady();
+            long generation = section.getVoxelGeneration();
+            var ordinary = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            require(ordinary.representable() && ordinary.geometry().equals(section.getCandidateGeometry(type))
+                            && ordinary.maxGpuVertices() == 0,
+                    "Ordinary complete meshes remain valid alongside generated REPLACE");
+            section.setGpuTerrainCpuMeshComplete(generation, false);
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "Missing GPU output must not admit an incomplete CPU replacement");
+            var reservation = area.reserveGpuTerrainOutput(16, 16, 16, type, generation, 3);
+            require(reservation != null, "Generated candidate reservation must fit");
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "Pending generated output cannot become authoritative");
+            require(area.publishGpuTerrainOutput(reservation, 3, false), "Generated candidate publication");
+            var residency = area.getGpuTerrainOutputResidency(16, 16, 16, type);
+            var generated = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            require(generated.representable() && generated.geometry().ready()
+                            && generated.geometry().indexCount() == 18
+                            && generated.geometry().firstIndex() == 0
+                            && generated.geometry().vertexOffset() == residency.vertexOffset()
+                            && generated.maxGpuVertices() == 12,
+                    "REPLACE row must use exact-generation GPU geometry and auto-index capacity");
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type),
+                    "Producer-proven generated REPLACE must publish a complete candidate superset");
+            var table = publisher.publishedCandidates(type);
+            require(table != null && table.candidateCount() == 1,
+                    "The existing production publisher must emit one REPLACE row");
+            java.nio.ByteBuffer wire = java.nio.ByteBuffer.allocate(table.byteSize());
+            table.writeTo(wire);
+            int row = net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.HEADER_WORDS * 4;
+            require(wire.getInt(row) == 18 && wire.getInt(row + 8) == 0
+                            && wire.getInt(row + 12) == residency.vertexOffset()
+                            && wire.getInt(row + 16) == RegionBatchLayout.packSection(16, 16, 16),
+                    "Uploaded candidate ABI must encode GPU metadata and original section identity");
+            parameters.vertexBufferSegment.setPending();
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true).equals(generated),
+                    "GPU-only REPLACE must not wait for an unused CPU upload");
+            require(batch.update(buffers, area, type, true) && batch.drawCount == 1
+                            && batch.commands.getByteBuffer().getInt(0) == generated.geometry().indexCount()
+                            && batch.commands.getByteBuffer().getInt(8) == generated.geometry().firstIndex()
+                            && batch.commands.getByteBuffer().getInt(12) == generated.geometry().vertexOffset(),
+                    "Candidate-v1 REPLACE fields must agree with the established production handoff planner");
+            long uploads = RegionBatchStats.commandUploads;
+            int admission = RegionDrawBatch.gpuCommandOwnerRejection(true, false,
+                    generated.representable(), true, true, 1, 512);
+            require(RegionDrawBatch.prepareCommandOwner(batch, buffers, area, type, admission, true)
+                            && RegionBatchStats.commandUploads == uploads,
+                    "Admitted replacement must bypass the duplicate CPU FrameBatch upload");
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                    400L, 3, GpuTerrainDrawHandoff.Ownership.APPEND), generation, true);
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "APPEND with CPU exceptions must retain the atomic planner");
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(!publisher.hasCompleteCandidateSuperset(type),
+                    "APPEND ownership must revoke the whole GPU candidate superset before cached reuse");
+            new DrawBuffers.ParametersUpdate(parameters, 0, 0, 0).setDrawParameters();
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "Zero-exception APPEND must not silently broaden candidate-v1 ownership");
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(401L, 3), generation, true);
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "Restoring REPLACE must re-evaluate ownership without an ordinary mesh revision");
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type), "REPLACE restoration must permit renewed publication");
+            area.invalidateGpuTerrainOutput(16, 16, 16, generation + 1);
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+                    "Retired or stale GPU geometry must immediately revoke incomplete replacement");
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(!publisher.hasCompleteCandidateSuperset(type), "Retirement must revoke published ownership");
+            section.setGpuTerrainCpuMeshComplete(generation, true);
+            new DrawBuffers.ParametersUpdate(parameters, 12, 6, 40).setDrawParameters();
+            parameters.vertexBufferSegment.setReady();
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true).geometry()
+                            .equals(section.getCandidateGeometry(type)),
+                    "Complete CPU recovery must preserve original geometry after GPU invalidation");
+            Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK: exact generation/metadata, pending/incomplete rejection, APPEND exclusion, retirement, lazy FrameBatch bypass; fixture not world adoption");
+        } finally {
+            publisher.free();
+            if(batch.commands != null) batch.commands.freeBuffer();
             area.releaseBuffers();
         }
     }

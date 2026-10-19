@@ -35,6 +35,8 @@ final class RegionDrawBatch {
             "vulkanmod.experimentalGpuIndirectCpuBypass");
     private static final boolean GPU_TERRAIN_DRAW_HANDOFF = Boolean.getBoolean(
             "vulkanmod.experimentalGpuTerrainDrawHandoff");
+    private static final boolean GPU_GENERATED_INDIRECT_REPLACE = Boolean.getBoolean(
+            "vulkanmod.experimentalGpuGeneratedIndirectReplace");
     private static final int MAX_DRAW_COMMANDS = MAX_SECTIONS * 2;
     private static final boolean PROFILE_GPU_CANDIDATES =
             Boolean.getBoolean("vulkanmod.performanceProfiler");
@@ -46,6 +48,7 @@ final class RegionDrawBatch {
 
     private FrameBatch[][] batches;
     private final boolean[] candidateSupersetComplete = new boolean[TerrainRenderType.VALUES.length];
+    private final int[] candidateMaxGpuVertices = new int[TerrainRenderType.VALUES.length];
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
@@ -97,7 +100,8 @@ final class RegionDrawBatch {
                 && shadowStore.isValidFor(candidateTable.generation(),
                         area.position.x, area.position.y, area.position.z);
         int rejection = gpuCommandOwnerRejection(
-                GPU_INDIRECT_CPU_BYPASS && GPU_INDIRECT_DRAW, GPU_TERRAIN_DRAW_HANDOFF,
+                GPU_INDIRECT_CPU_BYPASS && GPU_INDIRECT_DRAW,
+                GPU_TERRAIN_DRAW_HANDOFF && !GPU_GENERATED_INDIRECT_REPLACE,
                 candidateSupersetComplete[type.ordinal()], volumeCurrent, outputCurrent,
                 candidateTable == null ? 0 : candidateTable.candidateCount(),
                 shadowStore == null ? 0 : shadowStore.commandCapacity());
@@ -107,6 +111,12 @@ final class RegionDrawBatch {
             RegionBatchStats.gpuCommandOwnerAttempts++;
             RegionBatchStats.gpuCommandOwnerReasons[rejection]++;
             if(gpuOwnsCommands) RegionBatchStats.gpuCommandCandidateSlots += candidateTable.candidateCount();
+        }
+        if(gpuOwnsCommands && candidateMaxGpuVertices[type.ordinal()] > 0) {
+            // Generated quads share the area's vertex buffer but use auto indices.
+            // This capacity check must also run when FrameBatch is bypassed.
+            Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(candidateMaxGpuVertices[type.ordinal()]);
+            Renderer.getDrawer().bindAutoIndexBuffer(Renderer.getCommandBuffer(), 7);
         }
         if(!gpuOwnsCommands) {
             // This frame slot's fence has completed; fallback is rebuilt lazily
@@ -323,8 +333,15 @@ final class RegionDrawBatch {
     }
 
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
+        publishLiveCandidates(buffers, area, type,
+                GPU_TERRAIN_DRAW_HANDOFF, GPU_GENERATED_INDIRECT_REPLACE);
+    }
+
+    void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type,
+                               boolean terrainHandoff, boolean generatedReplace) {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
+        boolean generatedPlan = terrainHandoff && generatedReplace;
         long preparationStart = PROFILE_GPU_CANDIDATES ? System.nanoTime() : 0L;
         RegionBatchStats.gpuCandidateAttempts++;
 
@@ -348,7 +365,10 @@ final class RegionDrawBatch {
         VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
         boolean sameVolume = currentFrustum == null ? candidateFrustums[layer] == null
                 : currentFrustum.sameCullingVolume(candidateFrustums[layer]);
-        if(isCandidateSnapshotCurrent(candidateInitialized[layer],
+        // Generated ownership/completeness can change independently of ordinary
+        // mesh snapshots. Until producers publish that entire contract, re-evaluate
+        // active generated plans rather than trusting the ordinary-mesh cache.
+        if(!generatedPlan && isCandidateSnapshotCurrent(candidateInitialized[layer],
                 false, candidateInputRevisions[layer], inputRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision, sameVolume)) {
@@ -357,7 +377,7 @@ final class RegionDrawBatch {
             return;
         }
         long ownershipRevision = area.getCandidateOwnershipRevision();
-        if(canReuseCandidateProvenance(candidateInitialized[layer], false,
+        if(!generatedPlan && canReuseCandidateProvenance(candidateInitialized[layer], false,
                 candidateOwnershipRevisions[layer], ownershipRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision,
@@ -384,7 +404,8 @@ final class RegionDrawBatch {
         // duplicate/foreign ownership and untracked queue writes failing closed.
         // Validate current owned identity again while walking active producer
         // bits: no independent O(queue length) CPU audit is required here.
-        boolean complete = true;
+        boolean complete = !terrainHandoff || generatedReplace;
+        int maxGpuVertices = 0;
 
         // Iterate only the producer's graph-visited or direct-seeded slots.
         // Off-frustum graph stamps remain included, unlike the CPU draw queue.
@@ -401,6 +422,12 @@ final class RegionDrawBatch {
                     continue;
                 }
                 DrawBuffers.CandidateGeometry geometry = section.getCandidateGeometry(type);
+                if(generatedPlan) {
+                    IndirectCandidate candidate = indirectCandidate(area, section, type, true);
+                    geometry = candidate.geometry();
+                    complete &= candidate.representable();
+                    maxGpuVertices = Math.max(maxGpuVertices, candidate.maxGpuVertices());
+                }
                 boolean graphVisible = area.isGraphVisible(section);
                 boolean directSeed = area.candidateIsDirectSeed(slot);
                 // A post-enqueue direction change may create a new direct seed;
@@ -422,6 +449,7 @@ final class RegionDrawBatch {
         RegionBatchStats.gpuCandidatePreparedSlots += count;
         fingerprint = mix(fingerprint, count);
         fingerprint = mix(fingerprint, complete ? 1 : 0);
+        candidateMaxGpuVertices[layer] = maxGpuVertices;
         // A new traversal can be byte-for-byte identical. Record its revision
         // without re-uploading the table; the next draw then takes the fast path.
         if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume) {
@@ -448,7 +476,9 @@ final class RegionDrawBatch {
         // comparing or dispatching this generation against a later camera state.
         VFrustum frustumSnapshot = currentFrustum == null ? null : currentFrustum.snapshot();
         GpuRegionCandidateTable table = builder.finish();
-        long diagnosticToken = frustumSnapshot == null
+        // The old oracle compares ordinary CPU mesh membership, not generated
+        // replacement ownership; do not report it as a generated selection oracle.
+        long diagnosticToken = frustumSnapshot == null || generatedPlan
                 ? 0L : GpuLiveSectionSelectionDiagnostic.claim();
         boolean[] cpuExpected = diagnosticToken == 0L ? null : buildCpuExpected(area, type);
         boolean queued = area.publishGpuCandidates(type, table);
@@ -485,6 +515,41 @@ final class RegionDrawBatch {
         }
         recordCandidatePreparation(preparationStart);
     }
+
+    GpuRegionCandidateTable publishedCandidates(TerrainRenderType type) {
+        return candidateTables[type.ordinal()];
+    }
+
+    boolean hasCompleteCandidateSuperset(TerrainRenderType type) {
+        return candidateSupersetComplete[type.ordinal()];
+    }
+
+    /** One candidate-v1 row can represent REPLACE, but never an atomic APPEND pair. */
+    static IndirectCandidate indirectCandidate(ChunkArea area, RenderSection section,
+                                               TerrainRenderType type, boolean terrainHandoff) {
+        DrawBuffers.CandidateGeometry cpu = section.getCandidateGeometry(type);
+        if(!terrainHandoff)
+            return new IndirectCandidate(cpu, true, 0);
+        RenderSection.GpuTerrainDrawState state = section.gpuTerrainDrawState();
+        // Reject even zero-exception APPEND, so eligibility never depends on a
+        // temporary collapse of a two-command producer contract into one row.
+        if(state.ownership() != GpuTerrainDrawHandoff.Ownership.REPLACE)
+            return new IndirectCandidate(cpu, false, 0);
+        GpuTerrainOutputStore.Residency residency = area.getGpuTerrainOutputResidency(
+                section.xOffset, section.yOffset, section.zOffset, type);
+        GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(true, type,
+                state.generation(), residency, cpu.indexCount(), cpu.firstIndex(),
+                cpu.vertexOffset(), state.ownership());
+        if(plan.gpuDrawCount() == 0)
+            return new IndirectCandidate(cpu, section.gpuTerrainCpuMeshComplete(), 0);
+        GpuTerrainDrawHandoff.DrawCommand command = plan.command(0);
+        return new IndirectCandidate(new DrawBuffers.CandidateGeometry(command.indexCount(),
+                command.firstIndex(), command.vertexOffset(), true), true,
+                command.indexCount() * 2 / 3);
+    }
+
+    record IndirectCandidate(DrawBuffers.CandidateGeometry geometry,
+                             boolean representable, int maxGpuVertices) {}
 
     private static void recordCandidatePreparation(long start) {
         if(PROFILE_GPU_CANDIDATES)

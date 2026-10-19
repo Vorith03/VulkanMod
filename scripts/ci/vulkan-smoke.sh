@@ -179,6 +179,7 @@ case "$mode" in
     grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_LIVE_DIAGNOSTIC_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "Vulkan smoke test passed" vulkan-gpu-indirect-shadow-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-gpu-indirect-shadow-smoke.log; then
       echo "GPU indirect shadow smoke produced invalid Vulkan" >&2
