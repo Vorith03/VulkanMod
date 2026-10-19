@@ -1,5 +1,14 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Frame-slot descriptor reclamation — #1058 pending qualification
+
+Executable `29e95e5c31221276dae83d65363407f0c43f740c` (instrumentation `ebb5d320591a31c46700be4bb340b7cdc5444cda`); [full #1058 / run 39236211314](https://github.com/Vorith03/VulkanMod/actions/runs/39236211314) **IN PROGRESS at checkpoint**. #1057 was coalesced/cancelled by the newer executable, not failed native validation. The prior **qualified** executable remains `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710` / full #1056, JAR 12178027221, smoke logs 12177772301. Do not claim #1058 passed until GitHub reports it and its exact artifacts.
+
+The opt-in GPU particle statistics now distinguish cached `live_descriptors`, all `allocated_descriptors` (including frame-retired reservations), and `pending_retirement_descriptors`. The native smoke exhausts the real host-enforced 64-descriptor pool with up to 80 distinct vertex buffers, checks the exact reservation increment and CPU-recovery path, frees temporary buffers through ordinary frame ops, advances submitted frame slots through their fences, and requires the same pool to accept a second pressure test at least as effectively. Device-idle waits are fixture-only; no production wait, bigger pool, or new eligible class. This strengthens resource lifecycle verification and pressure attribution, not normal-path GPU/CPU work displacement.
+
+**Open:** real Immersive Portals particle rendering (CI tests loading/shaders/clipping but no real portal-world particle pixels), mod-injected callbacks, translucent/lighting/camera equivalence, actual reload/re-entry and sustained frame pressure, and RX adoption, compute/submission cost, FPS/p95/p99. After #1058 resolution, continue the actual-portal particle gate then generated terrain REPLACE/atomic APPEND candidate ABI with GPU indirect consumption. Retain negative #1054, #1050–#1052, #1047/#1048, #1041/#1042 and analyzed #1028 UUID `e05f2b31`. All experiments opt-in; release incomplete.
+
+
 ## Particle post-callback CPU recovery — full #1056 correctness-qualified
 
 Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **PASSED** for executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, Forge JAR artifact **12178027221** and smoke logs **12177772301**. Public offline contracts, Forge distributable/both startups, native texture/particle/terrain pixels and synchronization, screenshot and Create Chronicles/Immersive Portals/Crash Assistant checks passed; private packs were skipped.
