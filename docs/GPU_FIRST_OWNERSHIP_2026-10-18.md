@@ -1,5 +1,12 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## Generated-world indirect recording observation (October 19, executable #1067 pending)
+
+`2f8a45397639d8a616db3b0e08adc915a08a50b8` adds **diagnostic-only** `vulkanmod.debugGpuGeneratedWorldDraw`: after actual live-world `vkCmdDrawIndexedIndirect` with accepted GPU command ownership, emit a rate-limited per-mode/per-portal-context `VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED` record. Inventories are computed when actual producer section plans publish an accepted candidate table, not from the ordinary mesh CPU selection diagnostic; accepted fingerprint reuse retains inventory, rejected/retired tables reset it. A separate gate asserts loaded world, GPU command owner, real recorded draw, and generated REPLACE/paired-APPEND/zero-exception APPEND. The portal classification uses the optional live Immersive Portals render-context API and is never inferred from frustum or camera coordinates. No generic startup test can produce this witness without a live world. A witness still cannot establish that a particular candidate survived GPU frustum culling, nor that vertex/pixel output matches CPU; production pixels and portal comparison are still missing.
+
+An equivalent nonresident GPU plan shortcut avoids redundant CPU `DrawPlan` allocation, retaining the exact existing completeness fallback. Command ABI, paired reservation, owner/generation/readiness, graph/direct provenance, volume/queue checks and GPU-safe resource retirement are unchanged. CI [#1067](https://github.com/Vorith03/VulkanMod/actions/runs/39286363394) pending; #1066 remains last qualified. Reproduction/test boundary in `docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md`.
+
+
 ## Generated APPEND atomic GPU indirect ownership — full #1066 correctness-qualified
 
 Executable `360434e664c13050e2eab1174673ed19525ed813`, full **#1066 / [run 39273496566](https://github.com/Vorith03/VulkanMod/actions/runs/39273496566)** **PASSED** (attempt 1), Forge JAR artifact **12196457613**, smoke logs **12196891834**. The workflow checked out the exact executable SHA; all public offline/build/package, both Forge startups, native indirect/terrain/particle/texture/screenshot/synchronization, post/depth, public Create Chronicles with Immersive Portals and Crash Assistant gates passed. The private-pack token was absent, so private resource packs were **not** exercised. Previous fully qualified executable `f9d581ba6a3a9136bd47166e04d5f26e4fda2995`, full #1059, JAR **12181441097**, smoke logs **12181540962**, remains retained as baseline.

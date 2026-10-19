@@ -1,5 +1,14 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## ACTIVE Phase 7 — actual-world generated indirect consumption witness (full #1067 pending)
+
+Executable `2f8a45397639d8a616db3b0e08adc915a08a50b8` extends the qualified #1066 APPEND/REPLACE candidate pipeline without changing selector ABI, GPU resources, output ordering, producer identity, portals' exact frustum comparisons, CPU exception pairing, queue or fence lifetime. Pending full [#1067 / run 39286363394](https://github.com/Vorith03/VulkanMod/actions/runs/39286363394) must qualify before executable promotion; #1066 remains the latest passing baseline until then.
+
+The optional `vulkanmod.debugGpuGeneratedWorldDraw` witness is emitted **after real-world Vulkan indirect recording**, separate from fixture-only producer/native tests, with distinct REPLACE/APPEND-pair/APPEND-zero-exception and portal-render context. No emitted live-world witness exists yet; it reports **recorded candidate-backed indirect batches, not GPU-selected-command readback or pixels**. Missing/stale GPU residency now skips allocating a redundant CPU `DrawPlan` during candidate preparation; valid admissions still perform graph traversal, per-candidate numeric planning, record allocation and fingerprints. CPU-time and profitability are unmeasured.
+
+**Gate remains open:** full #1067 check; real generated world mode adoption; screenshots/portal-pixel and fallback equivalence; actual-world particle gates and integrated RX CPU/GPU/dispatch/FPS/p95/p99. Next practical test is documented in `docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md`. Do not count opt-in witness availability as actual-world qualification. Preserve all old failures and rolling handoff requirements.
+
+
 ## Phase 7 generated APPEND indirect composition — full #1066 correctness-qualified
 
 Executable `360434e664c13050e2eab1174673ed19525ed813`, full **#1066 / [run 39273496566](https://github.com/Vorith03/VulkanMod/actions/runs/39273496566)** **PASSED** (attempt 1), Forge JAR artifact **12196457613**, smoke logs **12196891834**. The workflow checked out the exact executable SHA; all public offline/build/package, both Forge startups, native indirect/terrain/particle/texture/screenshot/synchronization, post/depth, public Create Chronicles with Immersive Portals and Crash Assistant gates passed. The private-pack token was absent, so private resource packs were **not** exercised. Previous fully qualified executable `f9d581ba6a3a9136bd47166e04d5f26e4fda2995`, full #1059, JAR **12181441097**, smoke logs **12181540962**, remains retained as baseline.
