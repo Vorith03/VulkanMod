@@ -154,6 +154,17 @@ public final class GpuAnimationSourcePool {
                         long retiredPages) {}
 }
 """)
+    # Keep the extracted attribution-only test independent of native Vulkan.
+    (pool_sources / "GpuTextureInterpolationCompute.java").write_text("""package net.vulkanmod.render.texture;
+public final class GpuTextureInterpolationCompute {
+    public static MultiStats multiStats() {
+        return new MultiStats(0, 0, 0, 0, 0, 0, 0);
+    }
+    public record MultiStats(long eligible, long accepted, long fallbacks,
+                             long dispatches, long dispatchedJobs,
+                             long metadataBytes, long flushes) {}
+}
+""")
     java_home = os.environ.get("JAVA_HOME")
     javac = str(Path(java_home) / "bin/javac") if java_home else "javac"
     java = str(Path(java_home) / "bin/java") if java_home else "java"
