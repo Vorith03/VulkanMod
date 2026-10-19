@@ -39,6 +39,9 @@ public class ChunkArea {
     // Changes only when the owned set changes, not merely on a traversal rewrite.
     private long candidateOwnershipRevision;
     private final long[] candidateGeometryRevisions = new long[TerrainRenderType.VALUES.length];
+    // Generated ownership, CPU completeness and visible-generation changes are
+    // not ordinary mesh revisions. Producer events invalidate candidate reuse.
+    private long generatedCandidateRevision;
     // Record graph visits before frustum rejection and draw-queue direct seeds.
     // Only enabled for the existing GPU candidate experiment; normal CPU traversal
     // does not pay the per-visited-section bitset cost.
@@ -259,6 +262,17 @@ public class ChunkArea {
 
     long getCandidateGeometryRevision(TerrainRenderType type) {
         return candidateGeometryRevisions[type.ordinal()];
+    }
+
+    void generatedCandidateChanged(RenderSection section) {
+        if(!TRACK_GPU_CANDIDATE_PROVENANCE) return;
+        int slot = voxelSlot(section.xOffset, section.yOffset, section.zOffset);
+        if(slot >= 0 && section.getChunkArea() == this && ownedSections[slot] == section)
+            generatedCandidateRevision++;
+    }
+
+    long getGeneratedCandidateRevision() {
+        return generatedCandidateRevision;
     }
 
     /** Draw-time O(1) gate replacing the old O(queue size) containment audit. */

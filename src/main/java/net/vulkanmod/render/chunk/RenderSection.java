@@ -201,6 +201,11 @@ public class RenderSection {
             chunkArea.candidateGeometryChanged(this, type);
     }
 
+    private void generatedCandidateChanged() {
+        if(chunkArea != null)
+            chunkArea.generatedCandidateChanged(this);
+    }
+
     public void setNeighbour(int index, @Nullable RenderSection chunk) { this.neighbours[index] = chunk; }
     public RenderSection getNeighbour(Direction dir) { return this.neighbours[dir.ordinal()]; }
     public RenderSection getNeighbour(int i) { return this.neighbours[i]; }
@@ -354,8 +359,10 @@ public class RenderSection {
      * rebuild may still report true when it retained a previously complete CPU mesh.
      */
     public synchronized void setGpuTerrainCpuMeshComplete(long generation, boolean complete) {
-        if(generation == this.voxelGeneration)
+        if(generation == this.voxelGeneration && this.gpuTerrainCpuMeshComplete != complete) {
             this.gpuTerrainCpuMeshComplete = complete;
+            this.generatedCandidateChanged();
+        }
     }
 
     /**
@@ -371,6 +378,7 @@ public class RenderSection {
             this.forceCpuTerrainUntilSuccess = false;
             this.gpuTerrainCpuMeshComplete = true;
             this.clearGpuTerrainVisibleHandoff();
+            this.generatedCandidateChanged();
             area = this.chunkArea;
         }
         if(area != null)
@@ -402,6 +410,7 @@ public class RenderSection {
         if(generation != this.voxelGeneration) return;
         if(preflight == null) {
             this.clearGpuTerrainPreflight();
+            this.generatedCandidateChanged();
             return;
         }
         this.gpuTerrainPreflightGeneration = generation;
@@ -409,6 +418,7 @@ public class RenderSection {
         this.gpuTerrainPreflightFaceCount = preflight.faceCount();
         this.gpuTerrainPreflightOwnership = preflight.ownership();
         this.gpuTerrainPreflightCpuBypassed = cpuBypassed;
+        this.generatedCandidateChanged();
     }
 
     synchronized boolean matchesStagedGpuTerrainPreflight(long generation,
@@ -451,6 +461,7 @@ public class RenderSection {
             return false;
         this.gpuTerrainVisibleGeneration = generation;
         this.gpuTerrainVisibleOwnership = ownership;
+        this.generatedCandidateChanged();
         return true;
     }
 
@@ -521,6 +532,7 @@ public class RenderSection {
         this.gpuTerrainCpuMeshComplete = false;
         this.gpuTerrainAppendCpuStage = null;
         this.gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
+        this.generatedCandidateChanged();
     }
 
     synchronized boolean stagedGpuTerrainCpuBypassed(long generation) {
@@ -575,6 +587,9 @@ public class RenderSection {
      * partial CPU geometry is never exposed by itself.
      */
     synchronized void invalidateVoxels(boolean preserveIncompleteGpuHandoff) {
+        // A retained visible generation, preflight reset or CPU recovery change
+        // may not touch an ordinary DrawParameters mesh revision.
+        this.generatedCandidateChanged();
         if(this.gpuTerrainAppendCpuStage != null) {
             DrawBuffers.StagedDrawParameters staged = this.gpuTerrainAppendCpuStage;
             this.gpuTerrainAppendCpuStage = null;

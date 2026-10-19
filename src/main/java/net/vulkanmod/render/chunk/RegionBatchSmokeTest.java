@@ -881,6 +881,11 @@ public final class RegionBatchSmokeTest {
             require(publisher.hasCompleteCandidateSuperset(type),
                     "Producer-proven generated REPLACE must publish a complete candidate superset");
             var table = publisher.publishedCandidates(type);
+            long prepared = RegionBatchStats.gpuCandidatePreparedSlots;
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(RegionBatchStats.gpuCandidatePreparedSlots == prepared
+                            && publisher.publishedCandidates(type) == table,
+                    "Unchanged generated ownership must reuse the producer snapshot without CPU per-section planning");
             require(table != null && table.candidateCount() == 1,
                     "The existing production publisher must emit one REPLACE row");
             java.nio.ByteBuffer wire = java.nio.ByteBuffer.allocate(table.byteSize());
@@ -906,6 +911,11 @@ public final class RegionBatchSmokeTest {
                     "Admitted replacement must bypass the duplicate CPU FrameBatch upload");
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
                     400L, 3, GpuTerrainDrawHandoff.Ownership.APPEND), generation, true);
+            prepared = RegionBatchStats.gpuCandidatePreparedSlots;
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(RegionBatchStats.gpuCandidatePreparedSlots > prepared
+                            && !publisher.hasCompleteCandidateSuperset(type),
+                    "APPEND preflight producer transition must revoke the cached REPLACE candidate table");
             require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
                     "APPEND with CPU exceptions must retain the atomic planner");
             publisher.publishLiveCandidates(buffers, area, type, true, true);

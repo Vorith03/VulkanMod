@@ -70,6 +70,9 @@ final class RegionDrawBatch {
     private final long[][] candidateDirectSeeds =
             new long[TerrainRenderType.VALUES.length][MAX_SECTIONS / Long.SIZE];
     private final long[] candidateMeshRevisions = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateGeneratedRevisions = new long[TerrainRenderType.VALUES.length];
+    // 0=ordinary, 1=generated REPLACE only, 2=generated atomic APPEND enabled.
+    private final int[] candidateProducerModes = new int[TerrainRenderType.VALUES.length];
     private final long[] candidateVisibilityRevisions = new long[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] candidateTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
@@ -415,6 +418,7 @@ final class RegionDrawBatch {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
         boolean generatedPlan = terrainHandoff && generatedReplace;
+        int producerMode = !generatedPlan ? 0 : generatedAppend ? 2 : 1;
         long preparationStart = PROFILE_GPU_CANDIDATES ? System.nanoTime() : 0L;
         RegionBatchStats.gpuCandidateAttempts++;
 
@@ -438,13 +442,16 @@ final class RegionDrawBatch {
         // Both sources advance monotonically: mesh producer changes and segment
         // readiness transitions invalidate cached GPU input without active polling.
         long meshRevision = buffers.getMeshRevision(type) + area.getCandidateGeometryRevision(type);
+        long generatedRevision = generatedPlan ? area.getGeneratedCandidateRevision() : 0L;
+        boolean sameProducer = candidateProducerModes[layer] == producerMode
+                && (!generatedPlan || candidateGeneratedRevisions[layer] == generatedRevision);
         VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
         boolean sameVolume = currentFrustum == null ? candidateFrustums[layer] == null
                 : currentFrustum.sameCullingVolume(candidateFrustums[layer]);
-        // Generated ownership/completeness can change independently of ordinary
-        // mesh snapshots. Until producers publish that entire contract, re-evaluate
-        // active generated plans rather than trusting the ordinary-mesh cache.
-        if(!generatedPlan && isCandidateSnapshotCurrent(candidateInitialized[layer],
+        // Producer-owned generated-state invalidation complements ordinary mesh,
+        // readiness, queue/graph provenance and exact portal culling volume.
+        // A changed state can never reuse a previously complete APPEND pair.
+        if(sameProducer && isCandidateSnapshotCurrent(candidateInitialized[layer],
                 false, candidateInputRevisions[layer], inputRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision, sameVolume)) {
@@ -453,7 +460,7 @@ final class RegionDrawBatch {
             return;
         }
         long ownershipRevision = area.getCandidateOwnershipRevision();
-        if(!generatedPlan && canReuseCandidateProvenance(candidateInitialized[layer], false,
+        if(sameProducer && canReuseCandidateProvenance(candidateInitialized[layer], false,
                 candidateOwnershipRevisions[layer], ownershipRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision,
@@ -559,12 +566,24 @@ final class RegionDrawBatch {
             }
         }
         RegionBatchStats.gpuCandidatePreparedSlots += count;
+        // If a producer changes ownership while candidates are being prepared,
+        // do not publish the mixed-generation result. Next draw retries safely.
+        if(generatedPlan && generatedRevision != area.getGeneratedCandidateRevision()) {
+            candidateInitialized[layer] = false;
+            candidateSupersetComplete[layer] = false;
+            candidateTables[layer] = null;
+            candidateFrustums[layer] = null;
+            recordCandidatePreparation(preparationStart);
+            return;
+        }
         fingerprint = mix(fingerprint, count);
         fingerprint = mix(fingerprint, complete ? 1 : 0);
         candidateMaxGpuVertices[layer] = maxGpuVertices;
         // A new traversal can be byte-for-byte identical. Record its revision
         // without re-uploading the table; the next draw then takes the fast path.
-        if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume) {
+        if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume
+                && candidateProducerModes[layer] == producerMode) {
+            candidateGeneratedRevisions[layer] = generatedRevision;
             candidateInputRevisions[layer] = inputRevision;
             candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
             candidateMeshRevisions[layer] = meshRevision;
@@ -604,6 +623,8 @@ final class RegionDrawBatch {
         candidateGeneratedAppendPairs[layer] = queued ? generatedAppendPairs : 0;
         candidateGeneratedAppendGpuOnly[layer] = queued ? generatedAppendGpuOnly : 0;
         candidateFingerprints[layer] = fingerprint;
+        candidateProducerModes[layer] = producerMode;
+        candidateGeneratedRevisions[layer] = generatedRevision;
         candidateGenerations[layer] = generation;
         candidateInputRevisions[layer] = inputRevision;
         candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
