@@ -1,5 +1,13 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## Particle callback-state CPU recovery — #1056 candidate (October 19)
+
+- **Change:** executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710` revalidates exact eligible particle builder state after callbacks. If callback-side sorting invalidates GPU input, the already captured numeric inputs generate one CPU quad; original methods are not invoked again. Existing earlier packed quads are materialized by the sorting hook.
+- **Evidence:** full #1056 [run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **pending**. New native smoke uses the transformed real inherited render, mutates sorting inside the lighting callback, verifies exactly once callback execution, no outstanding packed slots and CPU-reference geometry/UV (2e-6) plus exact packed light/color. Last full-green baseline remains #1055 (`629de440`, JAR 12173844688, logs 12175645031).
+- **CPU ownership:** no new eligible class, no new normal-path CPU elimination or benchmark improvement. Successful eligible draws still bypass CPU vertex expansion; an exceptional callback mutation now explicitly falls back. Lifetime `callback_state_cpu_recoveries` distinguishes this from pre-callback original CPU calls.
+- **Disposition:** **blocked** pending full CI; after green, **qualified but unmeasured** for synthetic callback sorting only. Actual Immersive Portals callbacks/translucency/pixels, resource reload, frame pressure and RX adoption/CPU/GPU time/FPS/p95/p99 remain open. No default promotion or isolated owner benchmark.
+
+
 
 ## Fixed GPU animation metadata slab — full #1055 correctness-qualified
 

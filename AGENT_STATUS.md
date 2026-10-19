@@ -1,5 +1,17 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Particle post-callback CPU recovery — #1056 validation pending
+
+**Executable:** `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`.
+Full **#1056 / [run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)** is **PENDING**; do not call the new native regression correctness-qualified until its full result is green. Last fully qualified executable remains `629de440` / full #1055, JAR 12173844688 and logs 12175645031.
+
+The opt-in exact-campfire GPU billboard adapter now rechecks the original builder contract **after** `getQuadSize`, UV and `getLightColor` callbacks. A callback may change sorting/format/consumer admission after the first check. Rather than throw when packing into the invalidated builder, it emits the same four CPU vertices from already-evaluated camera/quaternion/size/UV/light inputs, cancels inherited rendering, and does **not** rerun the callbacks. This is exceptional fail-closed CPU work; normal accepted GPU quads still skip CPU vertex expansion. `callback_state_cpu_recoveries` is tracked separately from inherited `original_cpu_eligible_calls`.
+
+The native oracle now uses the real transformed inherited render and builder with a probe that enables sorting *inside* `getLightColor` following an earlier accepted packed quad. Sorting materializes the earlier compact record; the current particle takes captured-input CPU recovery; subsequent particles stay CPU. The test checks callback-once, no surviving packed slots, exact color/light and tolerant geometry/UV against a CPU oracle. It does **not** exercise actual Immersive Portals rendering or mod injectors, production resource reload, portal translucency pixels, frame-slot profitability or RX adoption. Do not claim these gates closed.
+
+**Next:** resolve #1056 CI; then advance genuine portal/mod-injected particle correctness and reload/descriptor/frame-slot evidence, or the generated REPLACE/atomic APPEND terrain indirect ABI. Keep default off, preserve negative #1054, #1050–#1052, #1047/#1048, #1041/#1042 and analyzed #1028 UUID `e05f2b31`. Integrated GPU-first release remains incomplete.
+
+
 
 ## Fixed GPU animation metadata slab — full #1055 correctness-qualified
 

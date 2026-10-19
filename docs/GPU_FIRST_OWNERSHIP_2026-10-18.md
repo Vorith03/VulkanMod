@@ -1,5 +1,21 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## October 19 particle callback-state correctness candidate — #1056 pending
+
+Executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`,
+full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)
+**pending**. After exact-class and pre-callback admission, particle
+getQuadSize/UV/light callbacks may alter the builder (such as enabling
+sorting); a new recheck stops stale GPU packing. An exceptional CPU
+emission reuses captured values without invoking callbacks twice. A native
+synthetic callback mutation oracle checks the prior GPU record is CPU
+materialized, the current quad is restored, later quads remain CPU and
+no pending packed slots survive. This protects existing production GPU
+ownership, not a new transfer of CPU work. Actual Immersive Portals and
+Forge mod injections, reload, pixel translucency, RX adoption and
+profitability remain unverified. All experiments stay default-off.
+
+
 
 ## Fixed GPU animation metadata slab — full #1055 correctness-qualified
 

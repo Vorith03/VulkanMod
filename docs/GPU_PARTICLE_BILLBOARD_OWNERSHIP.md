@@ -1,5 +1,38 @@
 # GPU particle billboard ownership pilot
 
+## Post-callback eligibility recheck — October 19 (#1056 pending)
+
+Executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`.
+Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)
+**PENDING**, so this regression is not yet full-CI-qualified.
+
+The pre-callback `vulkanmod$canWriteBillboard()` check cannot by itself
+protect a later write: exact class methods such as `getLightColor` may be
+modified by Forge or Mixins and mutate `BufferBuilder` state during
+evaluation. The mixin now revalidates after getQuadSize, UV and light
+callbacks. If a sorting/mode/format/state mutation invalidated admission,
+it computes the four original vertices on the CPU from the already
+captured camera-relative position, quaternion/roll, size, UV and light
+rather than retrying the inherited render or invoking callbacks twice.
+It uses the original `VertexConsumer` chain, keeps the changed builder
+state authoritative, and cancels the original invocation. This
+exception does not expand accepted normal GPU jobs on the CPU.
+`callback_state_cpu_recoveries` is an explicitly separate lifetime counter,
+not an added `original_cpu_eligible_calls`.
+
+New native oracle: a synthetic exact test Probe enables sorting *within*
+`getLightColor` after the first quad has been packed, exercising the
+existing sorting hook's CPU materialization of prior compact records.
+The current particle uses captured-input CPU recovery, later particles
+use original CPU rendering, and no packed records survive in the sorted
+buffer. It verifies every callback is invoked exactly once; vertex
+positions/UVs match the forced-CPU oracle within 2e-6 and packed
+color/light match exactly. This is not a live mod-injection integration
+test or portal/translucency pixel test. Do not promote defaults based on
+it; actual modpack reload, IP render behavior, descriptor/frame pressure
+and net CPU/GPU profitability still need qualification.
+
+
 ## GPU particle descriptor bound qualified — full #1044
 
 **Qualified executable:** `71f1bec858a9c2dbb589d218b172eec624c0dd29`, full **#1044**, [run 39195687691](https://github.com/Vorith03/VulkanMod/actions/runs/39195687691) **PASSED**. Forge JAR artifact **12161603960**, smoke logs **12161404876**. Offline contracts, Forge package and both startups, native Vulkan terrain/indirect plus texture/particle pixel/sync, screenshot, public Create Chronicles with Immersive Portals and Crash Assistant all passed; private packs skipped.
