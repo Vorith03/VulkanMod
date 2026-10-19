@@ -84,3 +84,21 @@ resource-reload pressure, generated-terrain REPLACE/atomic APPEND candidate
 ABI, and integrated adoption/CPU displacement/profitability. Preserve
 #1041/#1042 descriptor-pool negative evidence and the analyzed #1028
 benchmark UUID `e05f2b31`; no isolated hardware benchmark request.
+
+## October 19 verified multi-dispatch successor
+
+This prior #1049 standalone/shared descriptor/resource ownership pilot
+is **superseded for the separate opt-in aggregated path**, not invalidated.
+Full **#1053 / run 39216055025** passed with executable
+`c06f1cbc9c57a09b0df819edc639022bef049096`, Forge artifact
+**12169313491**, smoke logs **12169019219** and native marker
+`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK`. The new
+`experimentalGpuAnimationMultiDispatch` flag uses up to 32
+page-local GPU job rows per Z-dimension compute dispatch and validated two
+independent sprites in one dispatch with exact native atlas pixels,
+repeated updates and overlap ordering. Its 48-byte rows use the scratch
+page's unused high-end tail, remain append-only per page lifetime, and
+can run out of room during extended high-churn animation sessions;
+legacy one-sprite GPU/CPU fallback remains available. This is
+correctness qualification only, not RX performance evidence.
+See `docs/GPU_TEXTURE_MULTI_DISPATCH_2026-10-19.md`.

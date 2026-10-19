@@ -1,5 +1,63 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Genuine GPU multi-sprite texture dispatch — full #1053 correctness-qualified
+
+**Executable:** `c06f1cbc9c57a09b0df819edc639022bef049096`.
+Production implementation `cf3351f726ed143e1006b0504b92bb157020e322`;
+validation fixes `4718529021079515bba58fcdef55ee004cbee3f4`
+(attribution extractor), `c3b4a43d1f50db011b9e51156951a6fe231918b5`
+(native staging-accounting assertion) and `c06f1cbc9c57a09b0df819edc639022bef049096`
+(CI planner child-exit race). **Full #1053 / [run 39216055025](https://github.com/Vorith03/VulkanMod/actions/runs/39216055025) PASSED**.
+Forge JAR artifact **12169313491**, smoke logs **12169019219**.
+The native screenshot test emitted
+`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK` and
+`VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK`; public offline/Forge
+packaging and both startups, native texture/particle/terrain pixel
+and synchronization, screenshots, Create Chronicles/Immersive Portals
+and Crash Assistant compatibility gates passed. Private resource packs
+were skipped.
+
+The default-off `experimentalGpuAnimationMultiDispatch` gate additionally
+requires GPU interpolation, unified texture uploads, GPU animation batch,
+source pool and shared scratch. Immutable **48-byte GPU job rows** are
+staged into unused high-end space in each shared 4 MiB scratch page,
+up to 32 compatible sprites per dispatch. The atlas copy queue drains
+pending jobs into a single Z-indexed compute dispatch per shared page
+before recording scratch-to-atlas reads. Disjoint source leases/output
+slots, original per-mip tables, exact double RGB truncation/current alpha,
+atlas copy/overlap ordering, barriers, GPU-safe retirement, and
+fail-closed per-sprite GPU/CPU fallback are retained. Accepted GPU work
+still bypasses the equivalent CPU pixel interpolation. A native oracle
+proved **two accepted distinct-source jobs -> one real dispatch**, exact
+pixels, repeated updates and a later overlapping resident copy; existing
+transformed sprite-clock, odd-mip and CPU-fallback tests remain green.
+
+**Limits and next action:** Metadata rows are append-only for the lifetime
+of each shared scratch page; this is physically bounded by the existing
+128 MiB pending-aware budget, but sustained animation churn can exhaust
+job-table headroom and increase fallback. Groups forcibly drained by
+atlas ordering can contain only one job, so nominal eligibility does
+not prove substantial aggregation. Verify actual batch-size distribution,
+long-session adoption/retirement, and net metadata staging/barrier cost
+before treating this as efficient. Lifetime eligible/accepted/fallback,
+dispatch, jobs-dispatched and resource counters are available for this
+decision. No representative RX 6900 XT CPU-time saving, extra GPU cost,
+FPS, p95/p99 or net profitability is measured. Keep experiments opt-in
+and do **not** request a per-experiment owner benchmark.
+
+Preserve negative **#1050** (isolated attribution extractor failure),
+**#1051** (native test misclassified 48-byte GPU job staging as CPU pixels),
+**#1052** (independent CI planner /proc child-exit race), together with
+previous **#1047/#1048** offline extractor and **#1041/#1042** descriptor
+negative evidence. Do not repeat analyzed #1028 UUID `e05f2b31`.
+Other open release gates: actual-world particle portal/mod lighting,
+translucency/reload/frame-slot behavior, generated-terrain REPLACE/atomic
+APPEND candidate ABI integrated with indirect selection, and integrated RX
+adoption/CPU displacement/profitability. This is a correctness-qualified
+subsystem, **not a completed integrated GPU-first release**.
+Contract: `docs/GPU_TEXTURE_MULTI_DISPATCH_2026-10-19.md`.
+
+
 ## Shared GPU texture interpolation resources — full #1049 correctness-qualified
 
 **Qualified executable:** `6faa82e5f05d800dc0fa26fd51f2a775d921d708`

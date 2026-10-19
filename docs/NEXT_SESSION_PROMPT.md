@@ -1,79 +1,100 @@
-# VulkanMod — GPU-first renderer continuation (rolling handoff)
+# VulkanMod — Continue GPU-first renderer ownership (rolling handoff)
 
-Continue implementation and verification on `Vorith03/VulkanMod`, branch
-`forge-1.20.1`. GPU-owned production results must replace eligible CPU
-graphics work and bypass its CPU execution. Do not regress to micro-tuning
-or declare the integrated release complete after a local resource milestone.
+Continue implementation and verification on `Vorith03/VulkanMod` branch
+`forge-1.20.1`. The mission remains an integrated GPU-first renderer
+release: GPU-owned production results must replace eligible CPU graphics
+calculations **and the replaced CPU calculations must stop executing**.
+No queue-size/BufferBuilder micro-tuning, and do not declare the release
+complete after one correctness-qualified subsystem.
 
-## Recover live state
+## Recover current authoritative state
 
-Follow `AGENTS.md` §3A. Read `ROADMAP.md`, `AGENT_STATUS.md`,
+Follow `AGENTS.md` Section 3A against live Git/CI. Read
+`ROADMAP.md`, `AGENT_STATUS.md`,
 `docs/OPTIMIZATION_EVIDENCE_LEDGER.md`,
 `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md`,
 `docs/GPU_TEXTURE_SHARED_SCRATCH_2026-10-18.md`,
+`docs/GPU_TEXTURE_MULTI_DISPATCH_2026-10-19.md`,
 `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`,
-`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`, and this prompt.
-Compare live Git/CI to the documented checkpoint, resolving relevant
-red/pending qualification before further work. Live evidence wins.
+`docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`,
+and this handoff. Inspect the *delta* from the checkpoint, including
+intervening executable commits and completed/pending/red CI, rather
+than repeating settled analysis. Live Git and runtime evidence win.
 
-## Current recovery point
+## Latest fully qualified milestone
 
-Latest **qualified executable**:
-`6faa82e5f05d800dc0fa26fd51f2a775d921d708`
-(full **#1049**, [run 39208913742](https://github.com/Vorith03/VulkanMod/actions/runs/39208913742),
-**PASSED**). Forge JAR artifact **12167505101**, smoke logs **12166663996**.
-Native marker `VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK` passed, alongside
-the public offline/native/Forge package/dual-startup/texture/terrain/particle
-pixel and synchronization, screenshot, Create Chronicles/Immersive Portals
-and Crash Assistant gates; private resource packs skipped. RX measured
-performance still open.
+**Executable `c06f1cbc9c57a09b0df819edc639022bef049096`**,
+full **#1053 / [run 39216055025](https://github.com/Vorith03/VulkanMod/actions/runs/39216055025) PASSED**,
+Forge JAR artifact **12169313491**, smoke logs artifact **12169019219**.
+Native screenshot validation emitted **`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK`**
+and prior **`VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK`**.
+Public offline contracts, Forge package and both Vulkan client startups,
+native texture/particle/terrain pixel+sync gates, screenshot,
+Create Chronicles/Immersive Portals and Crash Assistant passed.
+Private pack fixtures skipped; representative RX 6900 XT remains unmeasured.
 
-Implementation commit `8352108e56d6ffec566979cc35795b1499010049`,
-harness fixes `a74f41ce5b2ca4e11ae8b5f42dbab6f84d0b68a4` and
-`6faa82e5f05d800dc0fa26fd51f2a775d921d708`. Negative #1047/#1048
-failed only the offline Java extractor selection before native validation.
-The older qualified terrain milestone was executable `29a94f73`,
-full #1046, run 39205054428, JAR 12165621719, logs 12165785846.
+Production implementation `cf3351f726ed143e1006b0504b92bb157020e322`,
+fixes `4718529021079515bba58fcdef55ee004cbee3f4` (offline attribution
+extractor), `c3b4a43d1f50db011b9e51156951a6fe231918b5` (native
+metadata-vs-CPU-staging assertion), and `c06f1cbc` (unrelated
+procfs child-exit race in CI planner).
+Negative #1050, #1051 and #1052 remain meaningful and were
+**not** native shader pixel/sync failures. Preserve earlier
+#1047/#1048 extractor negatives and #1041/#1042 particle descriptor
+negative evidence; do not repeat #1028 UUID `e05f2b31`.
 
-The new `experimentalGpuAnimationSharedScratch` requires the
-all-mip batch and source-pool pilots. Sprite leases on the same source
-page share a compute descriptor and separate append-only scratch slots,
-with source/table/output offsets translated in push constants/shader.
-A range-aware queued scratch read drain replaces whole-buffer flush for
-shared pages. Cap 4 MiB per scratch page and 128 MiB physical pending-aware.
-Existing standalone binding and CPU fallback remain. The native
-source-pool oracle covers two leases/slots and atlas pixels. No RX
-effectiveness data exists. This **does not** yet batch several sprites
-into a single GPU dispatch; next work must make a safe bounded job
-aggregation with explicit queue/overlap/lifetime/fallback ordering.
+Default-off `-Dvulkanmod.experimentalGpuAnimationMultiDispatch=true`
+requires GPU animation interpolation, unified GPU texture uploads,
+all-mip animation batch, pooled immutable sources, and shared scratch.
+Accepted sprite interpolations stage one 48-byte immutable GPU job row;
+up to 32 jobs on one page execute in a single workgroup-Z compute
+dispatch at the atlas-copy drain. The exact Java-double RGB/current-alpha
+mip pixel contract, scratch/lease lifetimes and ordering/fallback remain.
+Native smoke proves two accepted distinct sprites -> one real dispatch,
+exact pixels, repeated updates and later overlapping O3 overwrite.
+Accepted GPU jobs still bypass duplicate CPU pixel interpolation.
 
-## Open qualification and performance gates
+## Next useful engineering boundary
 
-Preserve exact double/current-alpha/mip arithmetic, source leases,
-mutable source invalidation, overlap order, copy and compute barriers,
-CPU interpolation cancellation and CPU fallback. Do not enable flags
-by default. Preserve terrain immutable producer geometry/readiness,
-stale owner/listener removal, prefrustum graph visits/direct seeds,
-queue containment, portal volumes, generations, lazy CPU fallback,
-and REPLACE/atomic APPEND exclusion. Graph traversal and row
-serialization/hash remain. Particle campfire portal/mod injection,
-lighting, translucency, actual reload and frame pressure are open;
-#1041/#1042 native descriptor negative evidence remains. Generated
-terrain REPLACE/atomic APPEND candidate ABI remains open.
+The job metadata allocation is **append-only per 4 MiB shared scratch
+page**, subject to a 128 MiB pending-aware physical limit. Sustained
+high-rate animation can exhaust table headroom even without retiring
+sprites, forcing fallback. Investigate and implement (if coherent)
+**bounded reusable per-page job table slots** with explicit GPU
+compute-read -> transfer-write ordering across copy epochs,
+command buffers, submissions and safe retirement. Prefer a fixed
+table/slab or justified frame-fence generation rather than assuming
+a host copy queue flush means GPU completion. Verify immediate reuse,
+long multi-sprite sequences, mixed O3/CPU uploads/overlapping atlas
+destinations, mip/alpha, forced flush, scratch lifetimes and cancellation
+of CPU mixing; require a native pixel+sync and sustained fallback oracle.
+Preserve standalone and CPU fallback; do not trade correctness for
+descriptor savings or attempt a hidden default enablement.
 
-Do not rerun analyzed #1028 UUID `e05f2b31` or request user RX
-benchmarks per isolated pilot. Once integration is qualified, measure
-adoption/fallback, actual CPU work/time displaced, added GPU and submission
-cost, FPS and p95/p99 on matched RX 6900 XT workload. Qualification is
-not measured speedup or a completed GPU-first release.
+After texture integration is stable, advance the unfinished real
+Immersive Portals/mod-injected particle lighting, translucency, reload,
+frame-slot and resource pressure tests; and terrain generated REPLACE/
+atomic APPEND candidate ABI integrated with GPU indirect selection.
+Keep producer graph/direct provenance, queue containment, exact portal
+volumes, listener detachment, stale owner isolation, readiness,
+generations and lazy CPU fallback. Java graph traversal and active
+candidate row serialization/hash still remain CPU-owned.
 
-## Mandatory next-session handoff
+**Performance remains unknown.** Full #1053 is correctness evidence,
+not measured RX adoption, CPU graphics time saved, new GPU/submission
+cost or FPS/p95/p99. Collect matched representative hardware data only
+after meaningful integrated qualification; no isolated owner benchmark.
 
-Finish the next session with a coherent published milestone, exact
-executable and CI/run/artifact IDs (or explicitly pending/red state),
-updated `AGENT_STATUS.md`, `ROADMAP.md`, evidence ledger, affected
-contracts and this `docs/NEXT_SESSION_PROMPT.md`. Include a NEW
-copyable continuation prompt in that next session's final response.
-That NEW prompt must **explicitly require its successor to finish
-with another freshly updated rolling handoff prompt**. Carry this
-requirement forward indefinitely.
+## Mandatory rolling handoff forever
+
+Before ending the next session, publish a coherent recoverable Git
+milestone on `forge-1.20.1`; record the exact qualified executable,
+full CI/run and Forge JAR/log artifact IDs (or red/pending blocker)
+and update `AGENT_STATUS.md`, `ROADMAP.md`,
+`docs/OPTIMIZATION_EVIDENCE_LEDGER.md`, affected contracts and
+`docs/NEXT_SESSION_PROMPT.md`. Include a **NEW copyable continuation
+prompt in the final response**.
+
+**That NEW prompt must explicitly instruct its successor to finish
+with another freshly updated rolling handoff prompt. Every subsequent
+session must preserve the same successor-handoff requirement.**
