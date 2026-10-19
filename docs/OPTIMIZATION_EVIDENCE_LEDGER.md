@@ -1,5 +1,15 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## Producer-owned candidate geometry and readiness — full #1046 qualified
+
+**Executable:** `29a94f73c72ff30443ff12d45eb77c12805e4e17`, full **#1046**, [run 39205054428](https://github.com/Vorith03/VulkanMod/actions/runs/39205054428). **PASSED**. Forge JAR artifact **12165621719**, smoke logs **12165785846**. Public offline/build/package/both startups/native terrain/indirect/texture/particle pixel/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private packs skipped.
+
+- **Hypothesis/CPU displacement:** changed-traversal candidate preparation need not reconstruct numeric geometry/readiness from mutable DrawParameters/Segment. Producers now publish immutable per-layer snapshots. Segment completion/reupload/reset invalidates only the current owned area's layer; pending GPU inputs no longer rebuild/poll every draw while waiting. Active serialization/fingerprinting and CPU graph traversal remain.
+- **Activation:** existing opt-in GPU section-selection/indirect gates; disabled paths install no Segment listeners or per-change snapshots. Existing GPU command consumer and lazy CPU fallback remain.
+- **Evidence:** local 24 offline contracts plus compiled extracted production lifecycle checks passed. Passed full native indirect marker `VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK` and staged transaction assertions qualify readiness/reset/replacement/detachment, stale-owner isolation and traversal reuse in #1046.
+- **Limits/costs:** no RX adoption, CPU time, GPU/submission cost, FPS or p95/p99 measurement. Snapshot allocation and producer callback costs are new; candidate preparation timer excludes those costs. No shader, simulation or graph visibility transfer is claimed by this slice.
+- **Disposition:** qualified but unmeasured. Keep opt-in. Next substantial implementation is multi-sprite texture compute/shared resources; integrated correctness/adoption/CPU displacement/net-performance gates remain open. Preserve prior failed descriptor evidence and do not repeat #1028 UUID `e05f2b31`.
+
 ## Producer-owned GPU candidate queue containment — full #1045 qualified
 
 **Executable:** `cb248683db075033f0bb28ad42e8882ebba3f6d4`, full **#1045** / [run 39201976864](https://github.com/Vorith03/VulkanMod/actions/runs/39201976864) **PASSED**; distributable Forge JAR artifact **12164426976**, smoke logs **12164093569**. Public offline contracts, Forge build/package/both startups, native GPU terrain/indirect and texture/particle pixels/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private pack fixtures skipped.

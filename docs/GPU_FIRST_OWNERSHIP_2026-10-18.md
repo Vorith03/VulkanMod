@@ -1,5 +1,13 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## Producer-owned candidate geometry and readiness — full #1046 qualified
+
+**Executable:** `29a94f73c72ff30443ff12d45eb77c12805e4e17`, full **#1046**, [run 39205054428](https://github.com/Vorith03/VulkanMod/actions/runs/39205054428). **PASSED**. Forge JAR artifact **12165621719**, smoke logs **12165785846**. Public offline/build/package/both startups/native terrain/indirect/texture/particle pixel/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private packs skipped.
+
+The terrain input producer now owns immutable per-section/layer numeric geometry and vertex readiness snapshots. Upload/reset/deferred parameter publication/staged commit update them; Segment transitions invalidate the affected owned layer, with old listeners detached at replacement. Candidate publication consumes the snapshots, eliminating changed-traversal Segment polling and pending-readiness retry-every-draw rebuilds. Graph traversal, active-row serialization/hash and GPU command generation checks remain. Full contract and native lifecycle coverage are in `GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`; 24 offline contracts and extracted lifecycle checks passed locally.
+
+This advances CPU preparation elimination for existing GPU indirect ownership; it is not a new mesher or a measured RX speedup. Producer allocations/callbacks add unmeasured costs outside candidate prep timing. Next prioritize genuine multi-sprite texture compute/shared descriptors/scratch; actual-world particle portal/mod/pixel/reload and generated REPLACE/atomic APPEND ABI integration stay open. All pilots opt-in; integrated release incomplete.
+
 ## Producer-owned GPU candidate queue containment — full #1045 qualified
 
 **Executable:** `cb248683db075033f0bb28ad42e8882ebba3f6d4`, full **#1045** / [run 39201976864](https://github.com/Vorith03/VulkanMod/actions/runs/39201976864) **PASSED**; distributable Forge JAR artifact **12164426976**, smoke logs **12164093569**. Public offline contracts, Forge build/package/both startups, native GPU terrain/indirect and texture/particle pixels/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private pack fixtures skipped.
