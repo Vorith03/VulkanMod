@@ -1,20 +1,19 @@
 # GPU-first renderer ownership — October 18, 2026
 
-## October 19 particle callback-state correctness candidate — #1056 pending
+## October 19 particle post-callback admission safety — full #1056 qualified
 
-Executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`,
-full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)
-**pending**. After exact-class and pre-callback admission, particle
-getQuadSize/UV/light callbacks may alter the builder (such as enabling
-sorting); a new recheck stops stale GPU packing. An exceptional CPU
-emission reuses captured values without invoking callbacks twice. A native
-synthetic callback mutation oracle checks the prior GPU record is CPU
-materialized, the current quad is restored, later quads remain CPU and
-no pending packed slots survive. This protects existing production GPU
-ownership, not a new transfer of CPU work. Actual Immersive Portals and
-Forge mod injections, reload, pixel translucency, RX adoption and
-profitability remain unverified. All experiments stay default-off.
+Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **PASSED** for executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, Forge JAR artifact **12178027221** and smoke logs **12177772301**. Public offline contracts, Forge distributable/both startups, native texture/particle/terrain pixels and synchronization, screenshot and Create Chronicles/Immersive Portals/Crash Assistant checks passed; private packs were skipped.
 
+Exact-campfire inherited rendering rechecks the GPU particle writer after
+size/UV/light callbacks. Late callback-triggered sorting or other builder
+mutation now recovers the current quad on CPU from captured numeric inputs
+without duplicated callback execution, instead of throwing on stale GPU
+admission. The native synthetic mutation oracle proves prior packed-quad
+CPU recovery, current captured fallback, later CPU quads and matching
+vertex/light/color. `callback_state_cpu_recoveries=3` is test-generated,
+not a workload adoption measure. Production Immersive Portals injection,
+translucent pixels, real reload and representative RX cost remain unverified.
+No new CPU ownership transferred; keep all experiments default-off.
 
 
 ## Fixed GPU animation metadata slab — full #1055 correctness-qualified

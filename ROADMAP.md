@@ -1,22 +1,19 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
-## Particle late-callback admission recovery — October 19 (#1056 pending)
+## Particle late-callback admission recovery — full #1056 qualified
 
-Executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, full #1056
-[run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)
-**PENDING**. The default-off exact-campfire GPU adapter now rechecks
-`BufferBuilder` admission after original particle callbacks. If a callback
-invalidates unsorted/aligned quad state, a captured-input CPU quad is
-materialized without invoking the callbacks a second time; existing GPU
-quads are recovered by the sorting hook. The native oracle exercises
-callback-triggered sorting and checks geometry/UV/color/light, exact
-callback counts and no leftover GPU records. This is a bounded
-mod-callback safety gate, not actual-world Immersive Portals pixel proof,
-a new class admission, or quantified CPU displacement. The prior #1055
-texture/Forge/native suite remains the last qualified executable.
-Preserve the ACTIVE GPU-first sequence and wait for full #1056 before
-qualifying this regression.
+Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **PASSED** for executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, Forge JAR artifact **12178027221** and smoke logs **12177772301**. Public offline contracts, Forge distributable/both startups, native texture/particle/terrain pixels and synchronization, screenshot and Create Chronicles/Immersive Portals/Crash Assistant checks passed; private packs were skipped.
 
+Default-off exact-campfire GPU rendering now rechecks `BufferBuilder`
+admission after particle size/UV/lighting callbacks. If one mutates
+sorting/alignment/format, a captured-input CPU quad is emitted without
+calling the callbacks twice; previous compact GPU quads are materialized
+by the sort hook. Native oracle verifies the callback mutation, exact
+counts and color/light, geometry/UV tolerance and clean stream state.
+This closes **synthetic callback mutation fail-closed correctness**, not
+real-world IP callbacks/translucent pixels, a new GPU eligible class or
+any CPU-time or RX FPS/p95/p99 benefit. Continue the ACTIVE GPU-first
+sequence; do not promote defaults.
 
 
 ## Fixed GPU animation metadata slab — full #1055 correctness-qualified

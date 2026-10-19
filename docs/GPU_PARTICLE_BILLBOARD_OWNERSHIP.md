@@ -1,36 +1,35 @@
 # GPU particle billboard ownership pilot
 
-## Post-callback eligibility recheck — October 19 (#1056 pending)
+## Post-callback eligibility recheck — full #1056 qualified (October 19)
 
-Executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`.
-Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086)
-**PENDING**, so this regression is not yet full-CI-qualified.
+Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **PASSED** for executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, Forge JAR artifact **12178027221** and smoke logs **12177772301**. Public offline contracts, Forge distributable/both startups, native texture/particle/terrain pixels and synchronization, screenshot and Create Chronicles/Immersive Portals/Crash Assistant checks passed; private packs were skipped.
 
-The pre-callback `vulkanmod$canWriteBillboard()` check cannot by itself
-protect a later write: exact class methods such as `getLightColor` may be
-modified by Forge or Mixins and mutate `BufferBuilder` state during
-evaluation. The mixin now revalidates after getQuadSize, UV and light
-callbacks. If a sorting/mode/format/state mutation invalidated admission,
-it computes the four original vertices on the CPU from the already
-captured camera-relative position, quaternion/roll, size, UV and light
-rather than retrying the inherited render or invoking callbacks twice.
-It uses the original `VertexConsumer` chain, keeps the changed builder
-state authoritative, and cancels the original invocation. This
-exception does not expand accepted normal GPU jobs on the CPU.
-`callback_state_cpu_recoveries` is an explicitly separate lifetime counter,
-not an added `original_cpu_eligible_calls`.
+A pre-callback `vulkanmod$canWriteBillboard()` check does not protect a
+later write if modded `getQuadSize`/UV/`getLightColor` changes the builder
+state. The mixin rechecks after these methods. If sorting/mode/format
+is no longer eligible, it emits the four original CPU vertices using
+previously evaluated camera-relative position, quaternion/roll, size,
+UV and light, **without re-invoking callbacks**. The original
+`VertexConsumer` chain and changed builder state remain authoritative.
+It cancels the inherited render; normal accepted GPU expansion is still
+CPU-free. Separate `callback_state_cpu_recoveries` lifetime attribution
+records the exception and does not inflate `original_cpu_eligible_calls`.
 
-New native oracle: a synthetic exact test Probe enables sorting *within*
-`getLightColor` after the first quad has been packed, exercising the
-existing sorting hook's CPU materialization of prior compact records.
-The current particle uses captured-input CPU recovery, later particles
-use original CPU rendering, and no packed records survive in the sorted
-buffer. It verifies every callback is invoked exactly once; vertex
-positions/UVs match the forced-CPU oracle within 2e-6 and packed
-color/light match exactly. This is not a live mod-injection integration
-test or portal/translucency pixel test. Do not promote defaults based on
-it; actual modpack reload, IP render behavior, descriptor/frame pressure
-and net CPU/GPU profitability still need qualification.
+Native screenshot oracle constructs a synthetic exact Probe which enables
+quad sorting *inside* `getLightColor` after another quad has already
+been packed. The existing sorting hook CPU-materializes the prior record,
+the current quad recovers from captured inputs and later quads stay CPU.
+All callbacks execute once; no compact records survive in the sorted
+stream; CPU-reference geometry/UV agree within 2e-6, and color/light
+match exactly. The successful smoke log reports **3 recoveries**
+across three fixture passes; that count is not production workload adoption.
+
+Remaining gates: actual Immersive Portals and Forge mod-injected
+callback invocation, rasterization/translucency and lighting pixels,
+resource reload/world entry, descriptor/frame-slot pressure under load,
+and representative RX GPU overhead versus CPU-time displacement.
+This synthetic correctness qualification is not default-promotion
+or end-to-end performance evidence.
 
 
 ## GPU particle descriptor bound qualified — full #1044
