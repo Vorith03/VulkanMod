@@ -1,5 +1,29 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October 19 — cached producer proof revocation; full #1072 pending
+
+**New executable:** `47f00dff1c8349133948dc0dd257d5771ac8217a` (implementation `5308522c67c4310c4bd20b3cb0a590c4aff2834b`), [full #1072 / run 39295126051](https://github.com/Vorith03/VulkanMod/actions/runs/39295126051) **PENDING**. No qualified JAR or smoke artifact for this executable yet. The strengthened native smoke requires a nonempty initialized generated-mode table. #1071 / run 39295004950 was superseded by that test refinement; it is not qualification.
+
+**Implemented:** changing a queued section's direct-seed status in either direction now revokes its area's producer queue proof; transferring a section to another area notifies the departing owner and advances its ownership/input revisions. The next candidate publication clears the cached table and denies GPU ownership until a fresh traversal proves the queue again. Stable direction status and same-area assignment preserve the proof. This closes bypasses of per-slot direction/identity checks by the unchanged-draw/provenance fast paths; it adds no new CPU-displacement mechanism or measured speedup. Local 24 offline contracts and an extracted-production-method direction/owner check passed. Local `agent-check.sh` cannot download Gradle (`Network is unreachable`), so no local Forge compilation is claimed.
+
+**Qualified baseline:** `a93d5472fdebd3576b80b8e21ef62bddccb65500`, full #1070 / run 39293185968 **PASSED ON ATTEMPT 2**; Forge JAR **12206524656**, successful smoke logs **12208005267**. Attempt 1 failed screenshot-client startup in `FMLConfig.getBoolConfigValue -> ImmediateWindowHandler.setupMinecraftWindow` with a null Boolean before pixel assertions (failed logs **12206393088**); same executable passed on the one bounded retry. The residency fingerprint fix additionally keys representability/GPU vertex bound so identical numeric CPU geometry cannot retain retired generated command state. Preserve this failed attempt, #1067/#1060/#1064 and older negative evidence.
+
+**Still open:** no actual-world generated APPEND/REPLACE witness, matched main-world/genuine-portal CPU/GPU screenshots, representative RX adoption, eliminated CPU milliseconds, added GPU/dispatch/submission costs or FPS/p95/p99 benefit. Private packs and outstanding real particle portal/callback/lighting/translucency/camera/reload/frame-pressure gates remain unavailable/unqualified. All experiments remain default-off; bounds, atomic APPEND, exact provenance/frustum, queue synchronization, fence retirement and complete CPU fallback are unchanged. Follow the actual-world witness contract when evidence becomes available; do not repeat settled #1028 UUID `e05f2b31` tests. Every successor must update the repository handoff and finish with its own NEW copyable rolling handoff perpetuating that requirement.
+
+### Producer invalidation audit
+
+| Transition | Production invalidation / admission boundary |
+| --- | --- |
+| Delayed CPU build result | TaskDispatcher queues publication; cancelled tasks and stale staged generations reject before publication. RenderSection preflight/completeness/recovery transitions advance generated revision. |
+| Generated residency publish, commit, retirement | GpuTerrainOutputStore advances layer mesh revision; candidate fingerprints include representability and GPU vertex bound, even if CPU geometry has identical numbers. |
+| CPU upload readiness | Immutable CandidateGeometry and per-layer geometry revisions change on pending/ready/reset. |
+| Queued direct-seed status changes | RenderSection.setGraphInfo now revokes the area's queue proof in either direction; no cached table is accepted until fresh traversal. Same status does not revoke. |
+| Area identity transfer | RenderSection.setChunkArea notifies the departing area, advancing ownership/input revisions and revoking its queue proof before reassignment. Same-area assignment does not revoke. |
+| New traversal / recovery | resetQueue clears captured provenance and starts fresh producer audit; lazy CPU fallback remains authoritative on rejection. |
+
+The new smoke begins with an initialized generated-mode candidate cache, checks revocation rather than relying on a rescan to discover mutation, and checks traversal recovery/destination independence. It exercises producer cache safety with complete CPU geometry; it is not an actual generated-world draw or portal pixel proof. Audit conclusions are limited to these paths, not proof that every asynchronous producer transition is covered. No new locks, cross-thread publication contract, selector ABI, GPU resource, queue wait or default-on feature was introduced.
+
+
 ## October 19 — producer-invalidation generated candidate reuse; full #1069 PASSED
 
 **Qualified executable:** `41ba122c03509fbbe7d19b67d60dda48735a6723`; [full #1069 / run 39291766470](https://github.com/Vorith03/VulkanMod/actions/runs/39291766470) **COMPLETED / SUCCESS** on that exact executable. Forge distributable JAR artifact **12205981816**, smoke logs **12206581647**. Public offline/Forge package, native generated APPEND/REPLACE and indirect, terrain/particle/texture/screenshot/synchronization, both startup modes, post/depth, Create Chronicles with public Immersive Portals fixtures, and Crash Assistant gates completed successfully. Private resource packs were not exercised. Prior full #1068 executable `0f76caf7e5377ce27edebbfc23235c5daaa0168d` passed (JAR 12203627510; smoke 12202694551).
