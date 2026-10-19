@@ -62,6 +62,7 @@ public class DrawBuffers {
         drawParameters.indexCount = buffer.indexCount;
         drawParameters.firstIndex = firstIndex;
         drawParameters.vertexOffset = vertexOffset;
+        drawParameters.publishCandidateGeometry();
 
         Renderer.getDrawer().getQuadsIndexBuffer().checkCapacity(buffer.indexCount * 2 / 3);
 
@@ -160,9 +161,11 @@ public class DrawBuffers {
         target.firstIndex = staged.firstIndex;
         target.vertexOffset = staged.vertexOffset;
         target.vertexBufferSegment = staged.vertexBufferSegment;
+        target.bindCandidateSegment();
         target.ready = staged.empty || staged.vertexBufferSegment.isReady();
         staged.consumed = true;
         this.markMeshChanged(target.renderType);
+        target.publishCandidateGeometry();
 
         if(previous != null && previous.getOffset() != -1)
             retireSegment(previousOwner, previous);
@@ -495,6 +498,11 @@ public class DrawBuffers {
     }
 
     public static class DrawParameters {
+        private static final CandidateGeometry EMPTY_CANDIDATE = new CandidateGeometry(0, 0, 0, false);
+        private final RenderSection section;
+        private final Runnable candidateReadinessChanged;
+        private AreaBuffer.Segment candidateSegment;
+        private CandidateGeometry candidateGeometry = EMPTY_CANDIDATE;
         final TerrainRenderType renderType;
         int indexCount;
         int firstIndex;
@@ -504,10 +512,46 @@ public class DrawBuffers {
         boolean ready = false;
 
         DrawParameters(TerrainRenderType renderType) {
+            this(renderType, null);
+        }
+
+        DrawParameters(TerrainRenderType renderType, RenderSection section) {
             this.renderType = renderType;
+            this.section = section;
+            this.candidateReadinessChanged = ChunkArea.trackGpuCandidateProvenance()
+                    && section != null ? this::publishCandidateGeometry : null;
             if(renderType == TerrainRenderType.TRANSLUCENT) {
                 indexBufferSegment = new AreaBuffer.Segment();
             }
+            bindCandidateSegment();
+        }
+
+        private void bindCandidateSegment() {
+            if(candidateReadinessChanged == null)
+                return;
+            if(candidateSegment != null)
+                candidateSegment.setReadinessListener(null);
+            candidateSegment = vertexBufferSegment;
+            candidateSegment.setReadinessListener(candidateReadinessChanged);
+        }
+
+        // Only authoritative mutation/readiness producers read DrawParameters
+        // and Segment. Changed graph traversals consume this immutable snapshot.
+        void publishCandidateGeometry() {
+            if(candidateReadinessChanged == null)
+                return;
+            boolean drawable = indexCount != 0 && vertexBufferSegment.isReady();
+            CandidateGeometry previous = candidateGeometry;
+            if(previous.indexCount == indexCount && previous.firstIndex == firstIndex
+                    && previous.vertexOffset == vertexOffset && previous.ready == drawable)
+                return;
+            candidateGeometry = indexCount == 0 && firstIndex == 0 && vertexOffset == 0
+                    ? EMPTY_CANDIDATE : new CandidateGeometry(indexCount, firstIndex, vertexOffset, drawable);
+            section.candidateGeometryChanged(renderType);
+        }
+
+        CandidateGeometry candidateGeometry() {
+            return candidateGeometry;
         }
 
         public void reset(ChunkArea chunkArea) {
@@ -535,8 +579,11 @@ public class DrawBuffers {
             if(this.indexBufferSegment != null) {
                 this.indexBufferSegment.reset();
             }
+            publishCandidateGeometry();
         }
     }
+
+    record CandidateGeometry(int indexCount, int firstIndex, int vertexOffset, boolean ready) {}
 
     public record ParametersUpdate(DrawParameters drawParameters, int indexCount, int firstIndex, int vertexOffset) {
 
@@ -545,6 +592,7 @@ public class DrawBuffers {
             this.drawParameters.firstIndex = firstIndex;
             this.drawParameters.vertexOffset = vertexOffset;
             this.drawParameters.ready = true;
+            this.drawParameters.publishCandidateGeometry();
         }
     }
 

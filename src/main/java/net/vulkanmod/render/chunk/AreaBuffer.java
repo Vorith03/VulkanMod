@@ -93,7 +93,7 @@ public class AreaBuffer {
 
         uploadSegment.offset = dstOffset;
         uploadSegment.size = uploadSize;
-        uploadSegment.status = Segment.PENDING_BIT;
+        uploadSegment.setPending();
 
         RegionBatchStats.recordMeshUpload(uploadSize, reused);
     }
@@ -125,7 +125,7 @@ public class AreaBuffer {
         this.used += reserveSize;
         reservation.offset = dstOffset;
         reservation.size = reserveSize;
-        reservation.status = Segment.PENDING_BIT;
+        reservation.setPending();
         return true;
     }
 
@@ -247,6 +247,9 @@ public class AreaBuffer {
 
         int offset, size;
         byte status;
+        // Installed only for the opt-in candidate producer. No polling of every
+        // active section is needed when a same-queue upload becomes drawable.
+        private Runnable readinessChanged;
 
         public Segment() {
             reset();
@@ -262,6 +265,7 @@ public class AreaBuffer {
             this.offset = -1;
             this.size = -1;
             this.status = 0;
+            notifyReadinessChanged();
         }
 
         public int getOffset() {
@@ -274,6 +278,7 @@ public class AreaBuffer {
 
         void setPending() {
             this.status = PENDING_BIT;
+            notifyReadinessChanged();
         }
 
         public boolean isPending() {
@@ -282,6 +287,16 @@ public class AreaBuffer {
 
         public void setReady() {
             this.status = READY_BIT;
+            notifyReadinessChanged();
+        }
+
+        void setReadinessListener(Runnable listener) {
+            this.readinessChanged = listener;
+        }
+
+        private void notifyReadinessChanged() {
+            if(readinessChanged != null)
+                readinessChanged.run();
         }
 
         public boolean isReady() {

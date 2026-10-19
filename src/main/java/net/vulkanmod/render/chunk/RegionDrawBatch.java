@@ -57,7 +57,6 @@ final class RegionDrawBatch {
             new long[TerrainRenderType.VALUES.length][MAX_SECTIONS / Long.SIZE];
     private final long[] candidateMeshRevisions = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateVisibilityRevisions = new long[TerrainRenderType.VALUES.length];
-    private final boolean[] candidatePendingReadiness = new boolean[TerrainRenderType.VALUES.length];
     private final GpuRegionCandidateTable[] candidateTables =
             new GpuRegionCandidateTable[TerrainRenderType.VALUES.length];
     private final VFrustum[] candidateFrustums =
@@ -343,12 +342,14 @@ final class RegionDrawBatch {
         }
         long inputRevision = area.getCandidateInputRevision();
         long visibilityRevision = area.getVisibilityRevision();
-        long meshRevision = buffers.getMeshRevision(type);
+        // Both sources advance monotonically: mesh producer changes and segment
+        // readiness transitions invalidate cached GPU input without active polling.
+        long meshRevision = buffers.getMeshRevision(type) + area.getCandidateGeometryRevision(type);
         VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
         boolean sameVolume = currentFrustum == null ? candidateFrustums[layer] == null
                 : currentFrustum.sameCullingVolume(candidateFrustums[layer]);
         if(isCandidateSnapshotCurrent(candidateInitialized[layer],
-                candidatePendingReadiness[layer], candidateInputRevisions[layer], inputRevision,
+                false, candidateInputRevisions[layer], inputRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision, sameVolume)) {
             RegionBatchStats.gpuCandidateDrawReuses++;
@@ -356,7 +357,7 @@ final class RegionDrawBatch {
             return;
         }
         long ownershipRevision = area.getCandidateOwnershipRevision();
-        if(canReuseCandidateProvenance(candidateInitialized[layer], candidatePendingReadiness[layer],
+        if(canReuseCandidateProvenance(candidateInitialized[layer], false,
                 candidateOwnershipRevisions[layer], ownershipRevision,
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision,
@@ -388,7 +389,6 @@ final class RegionDrawBatch {
         // Iterate only the producer's graph-visited or direct-seeded slots.
         // Off-frustum graph stamps remain included, unlike the CPU draw queue.
         int count = 0;
-        boolean pendingReadiness = false;
         for(int word = 0; word < MAX_SECTIONS / Long.SIZE; ++word) {
             long active = area.candidateActiveWord(word);
             while(active != 0L) {
@@ -400,11 +400,7 @@ final class RegionDrawBatch {
                     complete = false; // stale producer bit/owner generation
                     continue;
                 }
-                DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
-                boolean ready = parameters.indexCount != 0
-                        && parameters.vertexBufferSegment.isReady();
-                if(parameters.indexCount != 0 && !ready)
-                    pendingReadiness = true;
+                DrawBuffers.CandidateGeometry geometry = section.getCandidateGeometry(type);
                 boolean graphVisible = area.isGraphVisible(section);
                 boolean directSeed = area.candidateIsDirectSeed(slot);
                 // A post-enqueue direction change may create a new direct seed;
@@ -412,12 +408,12 @@ final class RegionDrawBatch {
                 if((area.candidateQueuedWord(word) & (1L << bit)) != 0L
                         && !section.hasMainDirection() && !directSeed)
                     complete = false;
-                int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
-                builder.add(parameters.indexCount, 1, parameters.firstIndex,
-                        parameters.vertexOffset, slot, flags);
-                fingerprint = mix(fingerprint, parameters.indexCount);
-                fingerprint = mix(fingerprint, parameters.firstIndex);
-                fingerprint = mix(fingerprint, parameters.vertexOffset);
+                int flags = GpuRegionCandidateTable.flags(geometry.ready(), graphVisible, directSeed, layer);
+                builder.add(geometry.indexCount(), 1, geometry.firstIndex(),
+                        geometry.vertexOffset(), slot, flags);
+                fingerprint = mix(fingerprint, geometry.indexCount());
+                fingerprint = mix(fingerprint, geometry.firstIndex());
+                fingerprint = mix(fingerprint, geometry.vertexOffset());
                 fingerprint = mix(fingerprint, slot);
                 fingerprint = mix(fingerprint, flags);
                 count++;
@@ -433,7 +429,6 @@ final class RegionDrawBatch {
             candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
             candidateMeshRevisions[layer] = meshRevision;
             candidateVisibilityRevisions[layer] = visibilityRevision;
-            candidatePendingReadiness[layer] = pendingReadiness;
             area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
             recordCandidatePreparation(preparationStart);
             return;
@@ -469,7 +464,6 @@ final class RegionDrawBatch {
         candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
         candidateMeshRevisions[layer] = meshRevision;
         candidateVisibilityRevisions[layer] = visibilityRevision;
-        candidatePendingReadiness[layer] = pendingReadiness;
         if(queued)
             area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
         candidateTables[layer] = queued ? table : null;
@@ -534,7 +528,6 @@ final class RegionDrawBatch {
             candidateOwnershipRevisions[layer] = 0L;
             candidateMeshRevisions[layer] = 0L;
             candidateVisibilityRevisions[layer] = 0L;
-            candidatePendingReadiness[layer] = false;
             candidateTables[layer] = null;
             candidateFrustums[layer] = null;
             if(diagnosticTokens[layer] != 0L)

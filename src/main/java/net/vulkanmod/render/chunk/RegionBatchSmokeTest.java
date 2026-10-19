@@ -20,6 +20,7 @@ public final class RegionBatchSmokeTest {
         verifyGpuIndirectFallbackContract();
         verifyLazyGpuCommandOwnership();
         verifyCandidateProducerProvenance();
+        verifyCandidateGeometryProducer();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
@@ -309,6 +310,9 @@ public final class RegionBatchSmokeTest {
             parameters.vertexOffset = parameters.vertexBufferSegment.getOffset()
                     / TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize();
             parameters.ready = true;
+            parameters.publishCandidateGeometry();
+            DrawBuffers.CandidateGeometry priorCandidate = section.getCandidateGeometry(type);
+            AreaBuffer.Segment priorSegment = parameters.vertexBufferSegment;
 
             int oldVertexOffset = parameters.vertexOffset;
             long oldRevision = buffers.getMeshRevision(type);
@@ -328,6 +332,9 @@ public final class RegionBatchSmokeTest {
             require(parameters.vertexOffset == oldVertexOffset
                             && parameters.indexCount == 6,
                     "Ready staged CPU replacement must remain invisible before commit");
+            if(ChunkArea.trackGpuCandidateProvenance())
+                require(section.getCandidateGeometry(type) == priorCandidate,
+                        "Ready uncommitted staging must not replace candidate metadata");
 
             require(buffers.commitStaged(parameters, staged),
                     "Ready staged CPU replacement must commit");
@@ -337,6 +344,19 @@ public final class RegionBatchSmokeTest {
                             && parameters.indexCount == 12
                             && buffers.getMeshRevision(type) == oldRevision + 1,
                     "CPU staged commit must swap draw metadata once and invalidate the cache");
+            if(ChunkArea.trackGpuCandidateProvenance()) {
+                DrawBuffers.CandidateGeometry committed = section.getCandidateGeometry(type);
+                require(committed.indexCount() == 12 && committed.vertexOffset() == committedVertexOffset
+                                && committed.ready(),
+                        "Staged commit must publish the new ready candidate geometry");
+                priorSegment.setPending();
+                require(section.getCandidateGeometry(type) == committed,
+                        "Retired segment callbacks must be detached from committed candidate metadata");
+                parameters.vertexBufferSegment.setPending();
+                require(!section.getCandidateGeometry(type).ready(),
+                        "The replacement segment must own subsequent readiness invalidation");
+                parameters.vertexBufferSegment.setReady();
+            }
 
             DrawBuffers.StagedDrawParameters abandoned;
             try(MemoryStack stack = MemoryStack.stackPush()) {
@@ -759,6 +779,61 @@ public final class RegionBatchSmokeTest {
             area.sectionQueue.add(dormant);
             require(!area.candidateQueueCovered(),
                     "Direct non-producer queue writes must not bypass GPU containment");
+        } finally {
+            area.releaseBuffers();
+        }
+    }
+
+    private static void verifyCandidateGeometryProducer() {
+        if(!ChunkArea.trackGpuCandidateProvenance())
+            return;
+        ChunkArea area = new ChunkArea(0, new Vector3i(0, 0, 0));
+        RenderSection section = new RenderSection(0, 0, 0, 0);
+        section.setChunkArea(area);
+        area.registerSection(section, 0, 0, 0);
+        TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+        DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+        try {
+            parameters.vertexBufferSegment.setPending();
+            new DrawBuffers.ParametersUpdate(parameters, 18, 6, 40).setDrawParameters();
+            DrawBuffers.CandidateGeometry pending = section.getCandidateGeometry(type);
+            require(pending.indexCount() == 18 && pending.firstIndex() == 6
+                            && pending.vertexOffset() == 40 && !pending.ready(),
+                    "Parameter publication must snapshot numeric metadata without declaring pending vertices ready");
+            long revision = area.getCandidateGeometryRevision(type);
+            parameters.vertexBufferSegment.setReady();
+            DrawBuffers.CandidateGeometry ready = section.getCandidateGeometry(type);
+            require(ready.ready() && !pending.ready()
+                            && area.getCandidateGeometryRevision(type) != revision,
+                    "Same-queue completion must invalidate candidates and publish a fresh immutable ready snapshot");
+            revision = area.getCandidateGeometryRevision(type);
+            parameters.vertexBufferSegment.setReady();
+            area.resetQueue();
+            section.setLastFrame((short) 31);
+            area.addSection(section);
+            area.resetQueue();
+            section.setLastFrame((short) 32);
+            area.addSection(section);
+            require(section.getCandidateGeometry(type) == ready
+                            && area.getCandidateGeometryRevision(type) == revision,
+                    "Traversal rewrites and repeated readiness notifications must not reprepare geometry");
+            require(area.getCandidateGeometryRevision(TerrainRenderType.SOLID) == 0,
+                    "Geometry readiness must invalidate only its terrain layer");
+            parameters.vertexBufferSegment.setPending();
+            require(!section.getCandidateGeometry(type).ready()
+                            && area.getCandidateGeometryRevision(type) != revision,
+                    "Reupload into an existing segment must revoke ready candidate metadata");
+            parameters.reset(area);
+            require(section.getCandidateGeometry(type).indexCount() == 0
+                            && !section.getCandidateGeometry(type).ready(),
+                    "Reset must remove old candidate geometry before ring reuse");
+            area.registerSection(new RenderSection(1, 0, 0, 0), 0, 0, 0);
+            revision = area.getCandidateGeometryRevision(type);
+            new DrawBuffers.ParametersUpdate(parameters, 30, 3, 72).setDrawParameters();
+            parameters.vertexBufferSegment.setReady();
+            require(area.getCandidateGeometryRevision(type) == revision,
+                    "Late callbacks from a replaced owned identity must not publish into its new owner");
+            Initializer.LOGGER.info("VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK: immutable mesh publication, event-owned readiness/reupload/reset, layer and stale-owner isolation, traversal reuse");
         } finally {
             area.releaseBuffers();
         }

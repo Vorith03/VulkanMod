@@ -78,7 +78,7 @@ public class RenderSection {
 
         this.drawParametersArray = new DrawBuffers.DrawParameters[TerrainRenderType.VALUES.length];
         for(int i = 0; i < this.drawParametersArray.length; ++i) {
-            this.drawParametersArray[i] = new DrawBuffers.DrawParameters(TerrainRenderType.VALUES[i]);
+            this.drawParametersArray[i] = new DrawBuffers.DrawParameters(TerrainRenderType.VALUES[i], this);
         }
     }
 
@@ -190,6 +190,15 @@ public class RenderSection {
 
     public DrawBuffers.DrawParameters getDrawParameters(TerrainRenderType renderType) {
         return drawParametersArray[renderType.ordinal()];
+    }
+
+    DrawBuffers.CandidateGeometry getCandidateGeometry(TerrainRenderType type) {
+        return drawParametersArray[type.ordinal()].candidateGeometry();
+    }
+
+    void candidateGeometryChanged(TerrainRenderType type) {
+        if(chunkArea != null)
+            chunkArea.candidateGeometryChanged(this, type);
     }
 
     public void setNeighbour(int index, @Nullable RenderSection chunk) { this.neighbours[index] = chunk; }
