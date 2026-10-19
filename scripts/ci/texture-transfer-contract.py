@@ -27,7 +27,7 @@ production = '\n'.join(method(sig) for sig in [
     "public static void flushPendingSpriteUploadSource(",
     "public static void flushPendingSpriteUploadRange(",
     "public static int queueComputedSpriteFrame(",
-    "public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,\n                                               int[] offsets, int frameWidth, int frameHeight, int levels,",
+    "public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,\n                                               int[] offsets, int frameWidth, int frameHeight, int levels,\n                                               int destX, int destY, int sourceOffset)",
     "public static void flushPendingSpriteUploadCopies()",
     "private static void queueSpriteUploadCopy(int mipLevel, int width, int height,\n                                              int xOffset, int yOffset,\n                                              long stagingBufferId, int bufferOffset)"])
 harness = r'''package net.vulkanmod.vulkan.texture;
