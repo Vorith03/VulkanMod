@@ -442,8 +442,40 @@ public abstract class VTextureSelector {
         }
     }
 
+    /**
+     * Shared compute scratch pages hold nonoverlapping live sprite slots.
+     * Only drain a pending transfer which still reads the reused slot;
+     * unknown row layouts conservatively drain.
+     */
+    public static void flushPendingSpriteUploadRange(long bufferId, long offset, long bytes) {
+        long end = offset + bytes;
+        if(offset < 0 || bytes <= 0 || end < offset)
+            throw new IllegalArgumentException("Invalid sprite scratch range");
+        for(int i = 0; i < spriteUploadRegionCount; ++i) {
+            if(spriteSourceBuffers[i] != bufferId) continue;
+            if(spriteBufferRowLengths[i] != 0 || spriteBufferImageHeights[i] != 0) {
+                flushPendingSpriteUploadCopies();
+                return;
+            }
+            long start = spriteBufferOffsets[i];
+            long stop = start + (long)spriteWidths[i] * spriteHeights[i] * 4L;
+            if(start < end && offset < stop) {
+                flushPendingSpriteUploadCopies();
+                return;
+            }
+        }
+    }
+
     public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,
                                                int[] offsets, int frameWidth, int frameHeight, int levels, int destX, int destY) {
+        return queueComputedSpriteFrame(source, texture, offsets, frameWidth, frameHeight,
+                levels, destX, destY, 0);
+    }
+
+    public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,
+                                               int[] offsets, int frameWidth, int frameHeight, int levels,
+                                               int destX, int destY, int sourceOffset) {
+        if(sourceOffset < 0 || (sourceOffset & 3) != 0) return -1;
         if(!canQueueComputedSpriteCopies() || source == null || texture == null
                 || !Device.getGraphicsQueue().hasActiveUploadBatch() || texture.formatSize != 4
                 || offsets == null || levels <= 0 || levels > offsets.length || levels > texture.mipLevels
@@ -457,7 +489,8 @@ public abstract class VTextureSelector {
             if(destX < 0 || destY < 0 || (destX >> mip) > Math.max(1, texture.width >> mip) - width
                     || (destY >> mip) > Math.max(1, texture.height >> mip) - height
                     || offsets[mip] < 0 || (offsets[mip] & 3) != 0
-                    || (long)offsets[mip] + (long)width * height * 4 > source.getBufferSize()) return -1;
+                    || (long)sourceOffset + offsets[mip]
+                            + (long)width * height * 4 > source.getBufferSize()) return -1;
             regions++;
         }
         if(regions == 0) return -1;
@@ -469,7 +502,7 @@ public abstract class VTextureSelector {
             int width = frameWidth >> mip, height = frameHeight >> mip;
             if(width <= 0 || height <= 0) continue;
             queueSpriteUploadCopy(mip, width, height,
-                    destX >> mip, destY >> mip, source.getId(), offsets[mip]);
+                    destX >> mip, destY >> mip, source.getId(), sourceOffset + offsets[mip]);
         }
         return regions;
     }

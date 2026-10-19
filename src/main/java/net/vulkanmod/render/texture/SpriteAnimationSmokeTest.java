@@ -122,8 +122,8 @@ public final class SpriteAnimationSmokeTest {
                         | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
         ByteBuffer sourceA = MemoryUtil.memAlloc(4);
         ByteBuffer sourceB = MemoryUtil.memAlloc(8);
-        GpuAnimationSourcePool.Lease a = null, b = null;
-        GpuTextureInterpolationCompute.Binding interpolationBinding = null;
+        GpuAnimationSourcePool.Lease a = null, b = null, c = null;
+        GpuTextureInterpolationCompute.Binding interpolationBinding = null, secondBinding = null;
         long buffer = 0L, allocation = 0L;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             for(int i = 0; i < 4; ++i) {
@@ -194,6 +194,27 @@ public final class SpriteAnimationSmokeTest {
                             throw new AssertionError("Queued scratch reuse rejected");
                         assertPendingCopyRegions(1);
                         Initializer.LOGGER.info("GPU animation batch smoke passed (compute output shares O3 queue, overlap ordering, pending scratch read drained before reuse)");
+                        if(GpuTextureInterpolationCompute.sharedScratchRequested()) {
+                            // A third independent source lease shares the device source page,
+                            // descriptor and scratch page, but not the prior sprite's slot.
+                            c = GpuAnimationSourcePool.acquire(sourceB.duplicate());
+                            if(c == null || c.buffer() != b.buffer() || c.offset() == b.offset())
+                                throw new AssertionError("Third GPU sprite source lease not pooled");
+                            secondBinding = GpuTextureInterpolationCompute.createBinding(
+                                    c.buffer(), c.offset(), c.bytes(), 4);
+                            if(secondBinding == null ||
+                                    !interpolationBinding.sharesScratchAndDescriptor(secondBinding))
+                                throw new AssertionError("Distinct sprites did not share a descriptor and scratch page");
+                            if(secondBinding.dispatch(
+                                    atlas, offsets, new int[]{2}, heights, offsets,
+                                    1, 1, 2, 0, 1, 1, 2, 3, 0) == null)
+                                throw new AssertionError("Second sprite interpolation rejected");
+                            // The new slot cannot drain the previous scratch read.
+                            // The overlapping destination must nevertheless flush
+                            // the previous atlas write before adding the new one.
+                            assertPendingCopyRegions(1);
+                            Initializer.LOGGER.info("VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK");
+                        }
                     }
                 } finally {
                     VTextureSelector.endSpriteUploadBatch();
@@ -226,8 +247,10 @@ public final class SpriteAnimationSmokeTest {
         } finally {
             Vulkan.waitIdle();
             if(interpolationBinding != null) interpolationBinding.retire();
+            if(secondBinding != null) secondBinding.retire();
             if(a != null) a.retire(null);
             if(b != null) b.retire(null);
+            if(c != null) c.retire(null);
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
             MemoryUtil.memFree(sourceA);
             MemoryUtil.memFree(sourceB);

@@ -32,6 +32,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -54,6 +56,14 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private static final boolean BATCH_REQUESTED =
             Boolean.getBoolean("vulkanmod.experimentalGpuAnimationBatch");
     public static boolean batchRequested() { return BATCH_REQUESTED; }
+    private static final boolean SHARED_SCRATCH_REQUESTED =
+            Boolean.getBoolean("vulkanmod.experimentalGpuAnimationSharedScratch");
+    private static final int SHARED_SCRATCH_PAGE_BYTES = 4 * 1024 * 1024;
+    private static final long MAX_SHARED_SCRATCH_BYTES = 128L * 1024L * 1024L;
+
+    public static boolean sharedScratchRequested() {
+        return SHARED_SCRATCH_REQUESTED && BATCH_REQUESTED && GpuAnimationSourcePool.enabled();
+    }
 
     private static final int MAX_BINDINGS = 2048;
     private static final int WORKGROUP_SIZE = 64;
@@ -69,6 +79,9 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private long pipelineLayout;
     private long pipeline;
     private int liveBindings;
+    private final List<SharedScratchPage> sharedScratchPages = new ArrayList<>();
+    // Include pages waiting for GPU-safe retirement in the physical budget.
+    private long allocatedSharedScratchBytes;
     private boolean closed;
 
     private GpuTextureInterpolationCompute() {
@@ -150,20 +163,16 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             return null;
         }
 
-        long descriptorSet = VK_NULL_HANDLE;
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkDescriptorSetAllocateInfo allocateInfo = VkDescriptorSetAllocateInfo.calloc(stack)
-                    .sType$Default()
-                    .descriptorPool(this.descriptorPool)
-                    .pSetLayouts(stack.longs(this.descriptorSetLayout));
-            LongBuffer pSet = stack.mallocLong(1);
-            int result = vkAllocateDescriptorSets(Device.device, allocateInfo, pSet);
-            if(result != VK_SUCCESS) {
-                return null;
-            }
-            descriptorSet = pSet.get(0);
+        if(sharedScratchRequested() && (sourceOffset & 3) == 0
+                && scratchBytes <= SHARED_SCRATCH_PAGE_BYTES
+                && (long)source.getBufferSize() <= Device.deviceProperties.limits().maxStorageBufferRange()
+                && SHARED_SCRATCH_PAGE_BYTES <= Device.deviceProperties.limits().maxStorageBufferRange()) {
+            Binding shared = this.allocateSharedBinding(
+                    source, sourceOffset, sourceBytes, scratchBytes, mipTableOffset);
+            if(shared != null) return shared;
         }
-
+        long descriptorSet = this.allocateDescriptorSet();
+        if(descriptorSet == VK_NULL_HANDLE) return null;
         TextureResidentBuffer scratch = null;
         boolean success = false;
         try {
@@ -173,7 +182,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.liveBindings++;
             success = true;
             return new Binding(this, descriptorSet, source, sourceOffset, sourceBytes,
-                    scratch, scratchBytes, mipTableOffset);
+                    scratch, scratchBytes, mipTableOffset, null, 0);
         } finally {
             if(!success) {
                 if(scratch != null) {
@@ -183,6 +192,86 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     this.freeDescriptorSet(descriptorSet);
                 }
             }
+        }
+    }
+
+    private long allocateDescriptorSet() {
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            VkDescriptorSetAllocateInfo info = VkDescriptorSetAllocateInfo.calloc(stack)
+                    .sType$Default().descriptorPool(this.descriptorPool)
+                    .pSetLayouts(stack.longs(this.descriptorSetLayout));
+            LongBuffer pSet = stack.mallocLong(1);
+            return vkAllocateDescriptorSets(Device.device, info, pSet) == VK_SUCCESS
+                    ? pSet.get(0) : VK_NULL_HANDLE;
+        }
+    }
+
+    private synchronized Binding allocateSharedBinding(TextureResidentBuffer source,
+                                                        int sourceOffset, int sourceBytes,
+                                                        int scratchBytes, int mipTableOffset) {
+        for(SharedScratchPage page : this.sharedScratchPages) {
+            if(page.source == source && page.remaining() >= scratchBytes) {
+                int offset = page.reserve(scratchBytes);
+                return new Binding(this, page.descriptorSet, source, sourceOffset,
+                        sourceBytes, page.scratch, scratchBytes, mipTableOffset, page, offset);
+            }
+        }
+        if(this.liveBindings >= MAX_BINDINGS
+                || this.allocatedSharedScratchBytes > MAX_SHARED_SCRATCH_BYTES - SHARED_SCRATCH_PAGE_BYTES)
+            return null;
+        long set = this.allocateDescriptorSet();
+        if(set == VK_NULL_HANDLE) return null;
+        this.liveBindings++;
+        TextureResidentBuffer scratch = null;
+        boolean success = false;
+        try {
+            scratch = new TextureResidentBuffer(SHARED_SCRATCH_PAGE_BYTES);
+            this.updateDescriptorSet(set, source, 0, source.getBufferSize(), scratch);
+            SharedScratchPage page = new SharedScratchPage(source, scratch, set);
+            int offset = page.reserve(scratchBytes);
+            this.sharedScratchPages.add(page);
+            this.allocatedSharedScratchBytes += SHARED_SCRATCH_PAGE_BYTES;
+            TextureTickAttribution.residentScratchAllocated(SHARED_SCRATCH_PAGE_BYTES);
+            success = true;
+            return new Binding(this, set, source, sourceOffset, sourceBytes,
+                    scratch, scratchBytes, mipTableOffset, page, offset);
+        } finally {
+            if(!success) {
+                if(scratch != null) scratch.retire(null);
+                this.freeDescriptorSet(set);
+            }
+        }
+    }
+
+    private synchronized void retireSharedBinding(SharedScratchPage page) {
+        if(--page.liveSlots != 0) return;
+        this.sharedScratchPages.remove(page);
+        page.scratch.retire(() -> {
+            this.freeDescriptorSet(page.descriptorSet);
+            synchronized(this) {
+                this.allocatedSharedScratchBytes -= SHARED_SCRATCH_PAGE_BYTES;
+            }
+            TextureTickAttribution.residentScratchReleased(SHARED_SCRATCH_PAGE_BYTES);
+        });
+    }
+
+    private static final class SharedScratchPage {
+        final TextureResidentBuffer source;
+        final TextureResidentBuffer scratch;
+        final long descriptorSet;
+        int usedBytes;
+        int liveSlots;
+        SharedScratchPage(TextureResidentBuffer source, TextureResidentBuffer scratch, long set) {
+            this.source = source;
+            this.scratch = scratch;
+            this.descriptorSet = set;
+        }
+        int remaining() { return SHARED_SCRATCH_PAGE_BYTES - usedBytes; }
+        int reserve(int bytes) {
+            int offset = usedBytes;
+            usedBytes = Math.addExact(usedBytes, bytes);
+            liveSlots++;
+            return offset;
         }
     }
 
@@ -340,7 +429,12 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         if(queuedCopy) {
             // A repeated update may reuse this scratch before its queued read has
             // been recorded. Drain only that dependency, not every other sprite.
-            VTextureSelector.flushPendingSpriteUploadSource(binding.scratch.getId());
+            if(binding.sharedPage == null) {
+                VTextureSelector.flushPendingSpriteUploadSource(binding.scratch.getId());
+            } else {
+                VTextureSelector.flushPendingSpriteUploadRange(
+                        binding.scratch.getId(), binding.scratchOffset, binding.scratchBytes);
+            }
         } else {
             VTextureSelector.flushPendingSpriteUploadCopies();
         }
@@ -364,7 +458,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(binding.scratch.getId())
-                    .offset(0L)
+                    .offset(binding.scratchOffset)
                     .size(binding.scratchBytes);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -379,13 +473,17 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
 
             ByteBuffer push = stack.malloc(PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder());
             if(fused) {
-                push.putInt(0, 0).putInt(4, 0);
+                push.putInt(0, binding.sharedPage == null ? 0 : binding.sourceOffset >>> 2)
+                        .putInt(4, 0);
                 push.putInt(8, Math.multiplyExact(currentIndex % columns, frameWidth));
                 push.putInt(12, Math.multiplyExact(currentIndex / columns, frameHeight));
                 push.putInt(16, Math.multiplyExact(nextIndex % columns, frameWidth));
                 push.putInt(20, Math.multiplyExact(nextIndex / columns, frameHeight));
-                push.putInt(24, frameWidth).putInt(28, frameHeight).putInt(32, 0);
-                push.putInt(36, subFrame).putInt(40, duration).putInt(44, binding.mipTableOffset >>> 2);
+                push.putInt(24, frameWidth).putInt(28, frameHeight)
+                        .putInt(32, binding.scratchOffset >>> 2);
+                push.putInt(36, subFrame).putInt(40, duration)
+                        .putInt(44, (binding.mipTableOffset + (binding.sharedPage == null
+                                ? 0 : binding.sourceOffset)) >>> 2);
                 vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
                         VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
                 int pixelCount = Math.multiplyExact(frameWidth, frameHeight);
@@ -405,7 +503,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     int nextY = (int)(((long)(nextIndex / columns) * frameHeight) >> mip);
                     int pixelCount = Math.multiplyExact(width, height);
 
-                    push.putInt(0, sourceMipOffsets[mip] >>> 2);
+                    push.putInt(0, (sourceMipOffsets[mip] + (binding.sharedPage == null
+                            ? 0 : binding.sourceOffset)) >>> 2);
                     push.putInt(1 * Integer.BYTES, sourceWidths[mip]);
                     push.putInt(2 * Integer.BYTES, currentX);
                     push.putInt(3 * Integer.BYTES, currentY);
@@ -413,7 +512,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     push.putInt(5 * Integer.BYTES, nextY);
                     push.putInt(6 * Integer.BYTES, width);
                     push.putInt(7 * Integer.BYTES, height);
-                    push.putInt(8 * Integer.BYTES, outputOffsets[mip] >>> 2);
+                    push.putInt(8 * Integer.BYTES,
+                            (outputOffsets[mip] + binding.scratchOffset) >>> 2);
                     push.putInt(9 * Integer.BYTES, subFrame);
                     push.putInt(10 * Integer.BYTES, duration);
                     push.putInt(11 * Integer.BYTES, 0);
@@ -434,7 +534,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(binding.scratch.getId())
-                    .offset(0L)
+                    .offset(binding.scratchOffset)
                     .size(binding.scratchBytes);
             vkCmdPipelineBarrier(commandBuffer.getHandle(),
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -443,7 +543,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
 
             if(queuedCopy) {
                 int queued = VTextureSelector.queueComputedSpriteFrame(binding.scratch, atlas,
-                        outputOffsets, frameWidth, frameHeight, levels, destX, destY);
+                        outputOffsets, frameWidth, frameHeight, levels, destX, destY,
+                        binding.scratchOffset);
                 if(queued != regionCount)
                     throw new IllegalStateException("Validated interpolation output failed copy admission");
                 TextureTickAttribution.recordInterpolationCopyRoute(true);
@@ -488,7 +589,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                 }
 
                 VkBufferImageCopy copy = regions.get(region++);
-                copy.bufferOffset(outputOffsets[mip]);
+                copy.bufferOffset((long)binding.scratchOffset + outputOffsets[mip]);
                 copy.bufferRowLength(0);
                 copy.bufferImageHeight(0);
                 copy.imageSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
@@ -674,6 +775,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.descriptorSetLayout = VK_NULL_HANDLE;
         }
         this.liveBindings = 0;
+        this.sharedScratchPages.clear();
     }
 
     public record DispatchResult(int regions, long pixels, long bytes, int dispatches) {
@@ -688,11 +790,14 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         private final TextureResidentBuffer scratch;
         private final int scratchBytes;
         private final int mipTableOffset;
+        private final SharedScratchPage sharedPage;
+        private final int scratchOffset;
         private boolean retired;
 
         private Binding(GpuTextureInterpolationCompute owner, long descriptorSet,
                         TextureResidentBuffer source, int sourceOffset, int sourceBytes,
-                        TextureResidentBuffer scratch, int scratchBytes, int mipTableOffset) {
+                        TextureResidentBuffer scratch, int scratchBytes, int mipTableOffset,
+                        SharedScratchPage sharedPage, int scratchOffset) {
             this.owner = owner;
             this.descriptorSet = descriptorSet;
             this.source = source;
@@ -701,6 +806,15 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.scratch = scratch;
             this.scratchBytes = scratchBytes;
             this.mipTableOffset = mipTableOffset;
+            this.sharedPage = sharedPage;
+            this.scratchOffset = scratchOffset;
+        }
+
+        /** Native ownership oracle: two sprite slots share one descriptor/page. */
+        public boolean sharesScratchAndDescriptor(Binding other) {
+            return other != null && this != other && this.sharedPage != null
+                    && this.sharedPage == other.sharedPage
+                    && this.scratchOffset != other.scratchOffset;
         }
 
         public DispatchResult dispatch(VulkanImage atlas,
@@ -723,11 +837,15 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                 return;
             }
             this.retired = true;
-            long set = this.descriptorSet;
-            this.scratch.retire(() -> {
-                this.owner.freeDescriptorSet(set);
-                TextureTickAttribution.residentScratchReleased(this.scratchBytes);
-            });
+            if(this.sharedPage != null) {
+                this.owner.retireSharedBinding(this.sharedPage);
+            } else {
+                long set = this.descriptorSet;
+                this.scratch.retire(() -> {
+                    this.owner.freeDescriptorSet(set);
+                    TextureTickAttribution.residentScratchReleased(this.scratchBytes);
+                });
+            }
         }
     }
 }

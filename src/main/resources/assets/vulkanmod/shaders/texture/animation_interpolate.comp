@@ -47,9 +47,9 @@ void main() {
     uint pixelCount = width * height;
     if(index >= pixelCount || pc.duration == 0u)
         return;
-    uint sourceBase = fused ? sourceData.words[row] : pc.sourceBaseWord;
+    uint sourceBase = fused ? pc.sourceBaseWord + sourceData.words[row] : pc.sourceBaseWord;
     uint sheetWidth = fused ? sourceData.words[row + 1u] : pc.sheetWidth;
-    uint outputBase = fused ? sourceData.words[row + 4u] : pc.outputBaseWord;
+    uint outputBase = fused ? pc.outputBaseWord + sourceData.words[row + 4u] : pc.outputBaseWord;
     uint shift = fused ? sourceData.words[row + 5u] : 0u;
     uint x = index % width;
     uint y = index / width;

@@ -218,7 +218,7 @@ case "$mode" in
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
-    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.experimentalGpuParticleBillboards=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.gpuAnimatedTextureInterpolation=true -Dvulkanmod.experimentalUnifiedTextureUploads=true -Dvulkanmod.experimentalGpuTextureSourcePool=true -Dvulkanmod.experimentalGpuAnimationBatch=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
+    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.experimentalGpuParticleBillboards=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.gpuAnimatedTextureInterpolation=true -Dvulkanmod.experimentalUnifiedTextureUploads=true -Dvulkanmod.experimentalGpuTextureSourcePool=true -Dvulkanmod.experimentalGpuAnimationBatch=true -Dvulkanmod.experimentalGpuAnimationSharedScratch=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
     grep -F "Graphics pipeline prewarm smoke passed" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
     # The screenshot alone does not prove legacy FBO routing/lifetime checks ran.
