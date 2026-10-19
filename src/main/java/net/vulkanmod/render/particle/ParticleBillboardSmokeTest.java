@@ -114,7 +114,7 @@ public final class ParticleBillboardSmokeTest {
      * batch is restored on the CPU before upload, with no compute dispatch.
      * Freeing the temporary buffers schedules normal fence-owned retirement.
      */
-    private static void verifyDescriptorPressure() {
+    private static int verifyDescriptorPressure() {
         ParticleVertexBuffer[] buffers = new ParticleVertexBuffer[80];
         ByteBuffer compact = MemoryUtil.memAlloc(ParticleQuadBatch.QUAD_BYTES)
                 .order(ByteOrder.nativeOrder());
@@ -125,6 +125,7 @@ public final class ParticleBillboardSmokeTest {
                     new Quaternionf(), 0.5f, 0.125f, 0.875f, 0.25f, 0.75f,
                     0xffffffff, 0x00f000f0);
             long rejectedBefore = ParticleBillboardCompute.descriptorRejectionsForSmoke();
+            int reservedBefore = ParticleBillboardCompute.allocatedBindingsForSmoke();
             int accepted = 0;
             boolean rejected = false;
             for(int i = 0; i < buffers.length; ++i) {
@@ -145,6 +146,10 @@ public final class ParticleBillboardSmokeTest {
                     || ParticleBillboardCompute.descriptorRejectionsForSmoke() <= rejectedBefore)
                 throw new AssertionError("Descriptor pool pressure did not fail closed: accepted=" + accepted
                         + " rejected=" + rejected + " " + ParticleBillboardCompute.statistics());
+            // The rejected draw must not consume an additional descriptor reservation.
+            if(ParticleBillboardCompute.allocatedBindingsForSmoke()!=reservedBefore+accepted)
+                throw new AssertionError("Descriptor pool reservation accounting drifted under pressure");
+            return accepted;
         } finally {
             for(ParticleVertexBuffer pressure : buffers)
                 if(pressure != null) pressure.freeBuffer();
@@ -233,10 +238,32 @@ public final class ParticleBillboardSmokeTest {
             // do not require unrelated geometry passes to use those slots.
             renderer.resetBuffers();
             renderer.beginFrame();
-            verifyDescriptorPressure();
+            int firstAccepted=verifyDescriptorPressure();
+            int pressureReservations=ParticleBillboardCompute.allocatedBindingsForSmoke();
             renderer.endFrame();
             Vulkan.waitIdle();
-            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, callback-time sorting state recovery, production uploader, CPU sorting/recovery, descriptor pressure, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
+            // The owner frees rejected/accepted temporary buffers via frame ops, not
+            // immediately. Cycle the actual submitted frame slots (and their fences)
+            // before expecting the same fixed descriptor pool to admit new work.
+            for(int slot=0;slot<MemoryManager.getFrames();slot++) {
+                renderer.resetBuffers();
+                renderer.beginFrame();
+                renderer.endFrame();
+                Vulkan.waitIdle(); // Fixture only; production does not add waits.
+            }
+            int afterRetirement=ParticleBillboardCompute.allocatedBindingsForSmoke();
+            if(afterRetirement>=pressureReservations)
+                throw new AssertionError("Particle descriptor frame retirement never released reservations: before="
+                        +pressureReservations+" after="+afterRetirement);
+            renderer.resetBuffers();
+            renderer.beginFrame();
+            int secondAccepted=verifyDescriptorPressure();
+            if(secondAccepted<firstAccepted)
+                throw new AssertionError("Particle descriptor pool did not recover after frame fences: first="
+                        +firstAccepted+" second="+secondAccepted);
+            renderer.endFrame();
+            Vulkan.waitIdle();
+            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, callback-time sorting state recovery, production uploader, CPU sorting/recovery, descriptor pressure and frame-slot reuse, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
         } finally {
             ParticleBillboardCompute.ciUnavailable(false);
             RenderSystem.setShader(()->previous);
