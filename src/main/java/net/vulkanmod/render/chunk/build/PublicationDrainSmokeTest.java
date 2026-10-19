@@ -3,6 +3,7 @@ package net.vulkanmod.render.chunk.build;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.ChunkArea;
 import net.vulkanmod.render.chunk.RenderSection;
+import net.vulkanmod.render.chunk.voxel.RegionVoxelStore;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 import org.joml.Vector3i;
 
@@ -10,6 +11,7 @@ import java.util.EnumMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Real completed-result queue and worker backpressure, without a world/mesh build. */
 public final class PublicationDrainSmokeTest {
@@ -62,6 +64,40 @@ public final class PublicationDrainSmokeTest {
                 throw new AssertionError("Empty drain must report no publication activity");
             if(dispatcher.getDebugLines().stream().noneMatch(line -> line.endsWith("early wakes 1")))
                 throw new AssertionError("Drain must record exactly one early wakeup");
+            // A dirty section can change generation after a completed worker
+            // enqueues its CPU REPLACE upload, before another rebuild cancels it.
+            // Test the actual result queue, not just the generation predicate.
+            boolean priorVoxelsEnabled = RegionVoxelStore.ENABLED;
+            try {
+                RegionVoxelStore.ENABLED = true;
+                long staleGeneration = section.getVoxelGeneration();
+                AtomicInteger accepted = new AtomicInteger();
+                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                        new EnumMap<>(TerrainRenderType.class), null, staleGeneration,
+                        false, () -> { throw new AssertionError("Stale REPLACE result published"); });
+                section.setDirty(false);
+                long currentGeneration = section.getVoxelGeneration();
+                if(currentGeneration == staleGeneration)
+                    throw new AssertionError("Dirty section did not invalidate its voxel generation");
+                if(!dispatcher.uploadAllPendingUploads())
+                    throw new AssertionError("Stale REPLACE result was not drained");
+                if(accepted.get() != 0)
+                    throw new AssertionError("Stale REPLACE result changed publication state");
+
+                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                        new EnumMap<>(TerrainRenderType.class), null, currentGeneration,
+                        false, accepted::incrementAndGet);
+                if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 1)
+                    throw new AssertionError("Current-generation REPLACE publication was rejected");
+
+                // Existing unversioned uses of this dispatcher must still publish.
+                dispatcher.scheduleSectionUpdate(new ChunkTask(section, dispatcher), section,
+                        new EnumMap<>(TerrainRenderType.class), accepted::incrementAndGet);
+                if(!dispatcher.uploadAllPendingUploads() || accepted.get() != 2)
+                    throw new AssertionError("Legacy unversioned publication was rejected");
+            } finally {
+                RegionVoxelStore.ENABLED = priorVoxelsEnabled;
+            }
             Initializer.LOGGER.info("Terrain publication drain smoke passed");
         } finally {
             dispatcher.stopThreads();

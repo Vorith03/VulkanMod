@@ -354,7 +354,12 @@ public class TaskDispatcher {
                     this.droppedResults.incrementAndGet();
                     return;
                 }
-                if(stagePreservedLayer && section.getVoxelGeneration() != generation) {
+                // Ordinary REPLACE publications also carry a build generation.
+                // Dirty/invalidation can advance it after a worker queued its result,
+                // without cancelling that already-enqueued upload. Never let an old
+                // CPU mesh overwrite the current section or change its compiled state.
+                // Negative generations are legacy unversioned publication callers.
+                if(generation >= 0L && section.getVoxelGeneration() != generation) {
                     this.droppedResults.incrementAndGet();
                     return;
                 }
