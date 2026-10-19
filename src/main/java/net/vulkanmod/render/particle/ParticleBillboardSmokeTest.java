@@ -23,6 +23,7 @@ public final class ParticleBillboardSmokeTest {
     private ParticleBillboardSmokeTest() {}
     public static class Probe extends SingleQuadParticle {
         int lights, sizes;
+        BufferBuilder sortDuringLight;
         public Probe(float x) { super(null,x,0,0.5); this.xo=x-0.1; this.yo=-0.05; this.zo=0.45; this.quadSize=0.2f; }
         public void configure(float roll) { this.roll=roll; this.oRoll=roll-0.3f; rCol=0.3f;gCol=0.7f;bCol=0.9f;alpha=0.6f; }
         @Override public float getQuadSize(float tick) { sizes++; return super.getQuadSize(tick); }
@@ -30,7 +31,14 @@ public final class ParticleBillboardSmokeTest {
         @Override protected float getU1() { return 0.875f; }
         @Override protected float getV0() { return 0.25f; }
         @Override protected float getV1() { return 0.75f; }
-        @Override public int getLightColor(float tick) { lights++; return 0x00A00070; }
+        @Override public int getLightColor(float tick) {
+            lights++;
+            if(sortDuringLight != null) {
+                sortDuringLight.setQuadSorting(VertexSorting.DISTANCE_TO_ORIGIN);
+                sortDuringLight = null;
+            }
+            return 0x00A00070;
+        }
         @Override public ParticleRenderType getRenderType() { return ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT; }
     }
     /** Exact-class exclusion must preserve inherited/custom subclasses. */
@@ -44,6 +52,60 @@ public final class ParticleBillboardSmokeTest {
             if(p.lights!=1 || p.sizes!=1) throw new AssertionError("Particle callbacks were skipped/duplicated");
         }
         return builder.end();
+    }
+
+    /**
+     * A callback changes the builder after the mixin's first admission test.
+     * Sorting must recover any earlier packed quad and the current particle
+     * must use the captured CPU fallback without invoking its callbacks twice.
+     */
+    private static BufferBuilder.RenderedBuffer buildCallbackMutation(BufferBuilder builder, Camera camera) {
+        builder.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.PARTICLE);
+        for(int i=0;i<3;i++) {
+            Probe p=new Probe(i/11f);
+            p.configure(i==0?0:0.73f);
+            if(i==1) p.sortDuringLight=builder;
+            p.render(builder,camera,0.37f);
+            if(p.lights!=1 || p.sizes!=1)
+                throw new AssertionError("Callback-state recovery duplicated/skipped callbacks");
+        }
+        return builder.end();
+    }
+
+    private static void verifyCallbackMutation(BufferBuilder cpu, BufferBuilder gpu, Camera camera) {
+        ByteBuffer reference=null;
+        try {
+            ParticleBillboardCompute.ciUnavailable(true);
+            var expected=buildCallbackMutation(cpu,camera);
+            reference=MemoryUtil.memAlloc(expected.vertexBuffer().remaining()).order(ByteOrder.nativeOrder());
+            reference.put(expected.vertexBuffer()).flip();
+            expected.release();
+            ParticleBillboardCompute.ciUnavailable(false);
+            long recoveredBefore=ParticleBillboardCompute.callbackStateRecoveriesForSmoke();
+            var actual=buildCallbackMutation(gpu,camera);
+            try {
+                if(((ParticleBillboardBuffer)(Object)actual).vulkanmod$billboards()!=null)
+                    throw new AssertionError("Callback mutation left compact GPU records in sorted stream");
+                if(ParticleBillboardCompute.callbackStateRecoveriesForSmoke()!=recoveredBefore+1)
+                    throw new AssertionError("Late callback mutation did not take captured CPU fallback");
+                ByteBuffer produced=actual.vertexBuffer();
+                if(reference.remaining()!=produced.remaining())
+                    throw new AssertionError("Callback recovery changed particle vertex count");
+                for(int at=0;at<reference.remaining();at+=ParticleQuadBatch.STRIDE) {
+                    for(int f=0;f<5;f++) {
+                        float a=reference.getFloat(at+4*f),b=produced.getFloat(at+4*f);
+                        if(!Float.isFinite(b) || Math.abs(a-b)>0.000002f)
+                            throw new AssertionError("Callback CPU recovery geometry/UV at "+at+" component="+f);
+                    }
+                    if(reference.getInt(at+20)!=produced.getInt(at+20)
+                            || reference.getInt(at+24)!=produced.getInt(at+24))
+                        throw new AssertionError("Callback CPU recovery altered color/light");
+                }
+            } finally { actual.release(); }
+        } finally {
+            ParticleBillboardCompute.ciUnavailable(false);
+            if(reference!=null) MemoryUtil.memFree(reference);
+        }
     }
 
     /**
@@ -126,6 +188,7 @@ public final class ParticleBillboardSmokeTest {
                 RenderSystem.setShader(()->shader);
                 BufferUploader.drawWithShader(actual);
                 if(ParticleBillboardCompute.gpuQuads()!=before+87) throw new AssertionError("Production uploader kept CPU shadow");
+                verifyCallbackMutation(cpu,gpu,camera);
                 // CPU sorting reads vertex positions: materialize before that callback, never sort compact records.
                 sorted.begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.PARTICLE);
                 new Probe(0).render(sorted,camera,0.37f);
@@ -173,7 +236,7 @@ public final class ParticleBillboardSmokeTest {
             verifyDescriptorPressure();
             renderer.endFrame();
             Vulkan.waitIdle();
-            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, production uploader, CPU sorting/recovery, descriptor pressure, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
+            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, callback-time sorting state recovery, production uploader, CPU sorting/recovery, descriptor pressure, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
         } finally {
             ParticleBillboardCompute.ciUnavailable(false);
             RenderSystem.setShader(()->previous);

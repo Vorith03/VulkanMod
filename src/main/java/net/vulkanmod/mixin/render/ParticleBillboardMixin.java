@@ -12,6 +12,7 @@ import net.vulkanmod.render.particle.ParticleBillboardCompute;
 import net.vulkanmod.render.particle.ParticleBillboardSmokeTest;
 import net.vulkanmod.render.vertex.VertexUtil;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -52,6 +53,22 @@ public abstract class ParticleBillboardMixin extends Particle {
         float size=getQuadSize(tick);
         float u0=getU0(), u1=getU1(), v0=getV0(), v1=getV1();
         int light=getLightColor(tick);
+        // A Forge/mod callback can change the BufferBuilder after the initial
+        // admission check (for example by enabling quad sorting). Never pack
+        // into that stale state or run the callbacks a second time. Produce the
+        // original CPU vertices from the already captured inputs instead.
+        if(!writer.vulkanmod$canWriteBillboard()) {
+            ParticleBillboardCompute.callbackStateRecovery();
+            Vector3f vertex = new Vector3f();
+            for(int i=0;i<4;i++) {
+                vertex.set(i<2?-1:1, i==0||i==3?-1:1, 0).rotate(q).mul(size).add(cx,cy,cz);
+                consumer.vertex(vertex.x,vertex.y,vertex.z)
+                        .uv(i<2?u1:u0, i==0||i==3?v1:v0)
+                        .color(this.rCol,this.gCol,this.bCol,this.alpha).uv2(light).endVertex();
+            }
+            ci.cancel();
+            return;
+        }
         writer.vulkanmod$billboard(cx,cy,cz,q,size,u0,u1,v0,v1,
                 VertexUtil.packColor(this.rCol,this.gCol,this.bCol,this.alpha),light);
         ParticleBillboardCompute.packed();
