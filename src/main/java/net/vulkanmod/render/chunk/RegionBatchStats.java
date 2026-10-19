@@ -8,6 +8,11 @@ final class RegionBatchStats {
     static final int[] gpuCommandOwnerReasons = new int[7];
     static int meshUploads, reusedSlices, allocatedSlices, bufferGrowths;
     static long meshBytes;
+    // Lifetime values survive renderer-update reset for benchmark window deltas.
+    static long gpuCandidateAttempts, gpuCandidateDrawReuses, gpuCandidateTraversalReuses;
+    static long gpuCandidateRebuilds, gpuCandidatePreparedSlots, gpuCandidatePublications;
+    static long gpuCandidatePublishedSlots, gpuCandidateProducerMarks;
+    static long gpuCandidatePreparationNanos;
     static long regionBufferReuses, regionBufferFallbacks;
 
     static void reset() {
@@ -56,6 +61,12 @@ final class RegionBatchStats {
                 gpuCommandOwnerReasons[0], gpuCommandOwnerAttempts, gpuCommandCandidateSlots,
                 gpuCommandOwnerReasons[1], gpuCommandOwnerReasons[2], gpuCommandOwnerReasons[3],
                 gpuCommandOwnerReasons[4], gpuCommandOwnerReasons[5], gpuCommandOwnerReasons[6]);
+        if(gpuCandidateAttempts > 0) drawStats += String.format(
+                " gpuCandidateLifetime:drawReuse/traversalReuse/rebuild/attempt:%d/%d/%d/%d prepared/publishedSlots:%d/%d publishes:%d marks:%d prepMs:%.3f",
+                gpuCandidateDrawReuses, gpuCandidateTraversalReuses, gpuCandidateRebuilds,
+                gpuCandidateAttempts, gpuCandidatePreparedSlots, gpuCandidatePublishedSlots,
+                gpuCandidatePublications, gpuCandidateProducerMarks,
+                gpuCandidatePreparationNanos / 1_000_000.0D);
         return drawStats + " " + WorldRenderer.getInstance().getChunkAreaManager().getStorageStats();
     }
 }

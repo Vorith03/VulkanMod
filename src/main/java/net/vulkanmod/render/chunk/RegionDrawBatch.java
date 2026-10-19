@@ -36,6 +36,8 @@ final class RegionDrawBatch {
     private static final boolean GPU_TERRAIN_DRAW_HANDOFF = Boolean.getBoolean(
             "vulkanmod.experimentalGpuTerrainDrawHandoff");
     private static final int MAX_DRAW_COMMANDS = MAX_SECTIONS * 2;
+    private static final boolean PROFILE_GPU_CANDIDATES =
+            Boolean.getBoolean("vulkanmod.performanceProfiler");
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
     private static boolean loggedGpuIndirectDraw;
@@ -324,6 +326,8 @@ final class RegionDrawBatch {
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
+        long preparationStart = PROFILE_GPU_CANDIDATES ? System.nanoTime() : 0L;
+        RegionBatchStats.gpuCandidateAttempts++;
 
         int layer = type.ordinal();
         long inputRevision = area.getCandidateInputRevision();
@@ -335,8 +339,11 @@ final class RegionDrawBatch {
         if(isCandidateSnapshotCurrent(candidateInitialized[layer],
                 candidatePendingReadiness[layer], candidateInputRevisions[layer], inputRevision,
                 candidateMeshRevisions[layer], meshRevision,
-                candidateVisibilityRevisions[layer], visibilityRevision, sameVolume))
+                candidateVisibilityRevisions[layer], visibilityRevision, sameVolume)) {
+            RegionBatchStats.gpuCandidateDrawReuses++;
+            recordCandidatePreparation(preparationStart);
             return;
+        }
         long ownershipRevision = area.getCandidateOwnershipRevision();
         if(canReuseCandidateProvenance(candidateInitialized[layer], candidatePendingReadiness[layer],
                 candidateOwnershipRevisions[layer], ownershipRevision,
@@ -345,8 +352,11 @@ final class RegionDrawBatch {
                 sameVolume, area.matchesCandidateProvenance(
                         candidateGraphVisits[layer], candidateDirectSeeds[layer]))) {
             candidateInputRevisions[layer] = inputRevision;
+            RegionBatchStats.gpuCandidateTraversalReuses++;
+            recordCandidatePreparation(preparationStart);
             return;
         }
+        RegionBatchStats.gpuCandidateRebuilds++;
         long generation = candidateGenerations[layer] + 1L;
         GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
                 generation, area.position.x, area.position.y, area.position.z);
@@ -358,41 +368,54 @@ final class RegionDrawBatch {
         fingerprint = mix(fingerprint, area.position.z);
         fingerprint = mix(fingerprint, layer);
 
-        boolean[] directSeeds = new boolean[MAX_SECTIONS];
+        // Every CPU queued section must be in the active producer superset.
+        // Incomplete/stale ownership must reject GPU commands, not hide a draw.
         boolean complete = area.sectionQueue.size() <= MAX_SECTIONS;
         var visibleIterator = area.sectionQueue.iterator(false);
         while(visibleIterator.hasNext()) {
             RenderSection visible = visibleIterator.next();
             int packed = packSection(visible.xOffset - area.position.x,
                     visible.yOffset - area.position.y, visible.zOffset - area.position.z);
-            if(area.getOwnedSection(packed) != visible) complete = false;
-            if(!visible.hasMainDirection()) directSeeds[packed] = true;
+            if(area.getOwnedSection(packed) != visible
+                    || (area.candidateActiveWord(packed >>> 6) & (1L << (packed & 63))) == 0L
+                    || (!visible.hasMainDirection() && !area.candidateIsDirectSeed(packed)))
+                complete = false;
         }
 
+        // Iterate only the producer's graph-visited or direct-seeded slots.
+        // Off-frustum graph stamps remain included, unlike the CPU draw queue.
         int count = 0;
         boolean pendingReadiness = false;
-        for(int slot = 0; slot < MAX_SECTIONS; ++slot) {
-            RenderSection section = area.getOwnedSection(slot);
-            if(section == null)
-                continue;
-            DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
-            boolean ready = parameters.indexCount != 0
-                    && parameters.vertexBufferSegment.isReady();
-            if(parameters.indexCount != 0 && !ready)
-                pendingReadiness = true;
-            boolean graphVisible = area.isGraphVisible(section);
-            boolean directSeed = directSeeds[slot];
-            int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
-            builder.add(parameters.indexCount, 1, parameters.firstIndex,
-                    parameters.vertexOffset, slot, flags);
-
-            fingerprint = mix(fingerprint, parameters.indexCount);
-            fingerprint = mix(fingerprint, parameters.firstIndex);
-            fingerprint = mix(fingerprint, parameters.vertexOffset);
-            fingerprint = mix(fingerprint, slot);
-            fingerprint = mix(fingerprint, flags);
-            count++;
+        for(int word = 0; word < MAX_SECTIONS / Long.SIZE; ++word) {
+            long active = area.candidateActiveWord(word);
+            while(active != 0L) {
+                int bit = Long.numberOfTrailingZeros(active);
+                active &= active - 1L;
+                int slot = (word << 6) + bit;
+                RenderSection section = area.getOwnedSection(slot);
+                if(section == null) {
+                    complete = false; // stale producer bit/owner generation
+                    continue;
+                }
+                DrawBuffers.DrawParameters parameters = section.getDrawParameters(type);
+                boolean ready = parameters.indexCount != 0
+                        && parameters.vertexBufferSegment.isReady();
+                if(parameters.indexCount != 0 && !ready)
+                    pendingReadiness = true;
+                boolean graphVisible = area.isGraphVisible(section);
+                boolean directSeed = area.candidateIsDirectSeed(slot);
+                int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
+                builder.add(parameters.indexCount, 1, parameters.firstIndex,
+                        parameters.vertexOffset, slot, flags);
+                fingerprint = mix(fingerprint, parameters.indexCount);
+                fingerprint = mix(fingerprint, parameters.firstIndex);
+                fingerprint = mix(fingerprint, parameters.vertexOffset);
+                fingerprint = mix(fingerprint, slot);
+                fingerprint = mix(fingerprint, flags);
+                count++;
+            }
         }
+        RegionBatchStats.gpuCandidatePreparedSlots += count;
         fingerprint = mix(fingerprint, count);
         fingerprint = mix(fingerprint, complete ? 1 : 0);
         // A new traversal can be byte-for-byte identical. Record its revision
@@ -404,6 +427,7 @@ final class RegionDrawBatch {
             candidateVisibilityRevisions[layer] = visibilityRevision;
             candidatePendingReadiness[layer] = pendingReadiness;
             area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
+            recordCandidatePreparation(preparationStart);
             return;
         }
 
@@ -442,6 +466,10 @@ final class RegionDrawBatch {
             area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
         candidateTables[layer] = queued ? table : null;
         candidateFrustums[layer] = queued ? frustumSnapshot : null;
+        if(queued) {
+            RegionBatchStats.gpuCandidatePublications++;
+            RegionBatchStats.gpuCandidatePublishedSlots += count;
+        }
 
         if(diagnosticToken != 0L) {
             if(queued) {
@@ -453,6 +481,12 @@ final class RegionDrawBatch {
                 GpuLiveSectionSelectionDiagnostic.cancel(diagnosticToken);
             }
         }
+        recordCandidatePreparation(preparationStart);
+    }
+
+    private static void recordCandidatePreparation(long start) {
+        if(PROFILE_GPU_CANDIDATES)
+            RegionBatchStats.gpuCandidatePreparationNanos += System.nanoTime() - start;
     }
 
     private static boolean[] buildCpuExpected(ChunkArea area, TerrainRenderType type) {

@@ -199,6 +199,7 @@ public class ChunkArea {
     }
 
     private void markCandidateBit(long[] bits, RenderSection section) {
+        RegionBatchStats.gpuCandidateProducerMarks++;
         int slot = voxelSlot(section.xOffset, section.yOffset, section.zOffset);
         if(slot < 0 || section.getChunkArea() != this || ownedSections[slot] != section)
             return;
@@ -227,6 +228,16 @@ public class ChunkArea {
             graph[i] = traversalFrame == -1 ? 0L : graphVisitBits[i];
             seeds[i] = directSeedBits[i];
         }
+    }
+
+    // Candidate v1 can only select producer-observed graph/direct slots.
+    // Graph stamps from before frustum rejection must remain in the union.
+    long candidateActiveWord(int word) {
+        return (traversalFrame == -1 ? 0L : graphVisitBits[word]) | directSeedBits[word];
+    }
+
+    boolean candidateIsDirectSeed(int slot) {
+        return (directSeedBits[slot >>> 6] & (1L << (slot & 63))) != 0L;
     }
 
     boolean matchesCandidateProvenance(long[] graph, long[] seeds) {

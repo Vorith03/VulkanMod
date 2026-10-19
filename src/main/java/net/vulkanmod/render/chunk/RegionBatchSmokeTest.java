@@ -685,14 +685,21 @@ public final class RegionBatchSmokeTest {
         ChunkArea area = new ChunkArea(0, new Vector3i(0, 0, 0));
         RenderSection seed = new RenderSection(0, 0, 0, 0);
         RenderSection offFrustum = new RenderSection(1, 16, 0, 0);
+        RenderSection dormant = new RenderSection(2, 32, 0, 0);
         seed.setChunkArea(area);
         offFrustum.setChunkArea(area);
+        dormant.setChunkArea(area);
         area.registerSection(seed, 0, 0, 0);
         area.registerSection(offFrustum, 16, 0, 0);
+        area.registerSection(dormant, 32, 0, 0);
         try {
             area.resetQueue();
             seed.setLastFrame((short) 21);
             area.addSection(seed);
+            require(Long.bitCount(area.candidateActiveWord(0)) == 1
+                            && area.candidateIsDirectSeed(0)
+                            && (area.candidateActiveWord(0) & (1L << 2)) == 0L,
+                    "Unvisited owned sections must not enter sparse GPU candidate input");
             long[] graph = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
             long[] direct = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
             area.copyCandidateProvenance(graph, direct);
@@ -704,12 +711,17 @@ public final class RegionBatchSmokeTest {
             // The off-frustum node never joins the CPU draw queue. Its
             // setLastFrame must still invalidate the GPU candidate snapshot.
             offFrustum.setLastFrame((short) 22);
+            require(Long.bitCount(area.candidateActiveWord(0)) == 2
+                            && (area.candidateActiveWord(0) & (1L << 1)) != 0L,
+                    "Off-frustum graph stamps must still enter the sparse candidate superset");
             require(!area.matchesCandidateProvenance(graph, direct),
                     "Off-frustum graph visit must invalidate candidate provenance");
             area.resetQueue();
             seed.setGraphInfo(net.minecraft.core.Direction.EAST, (byte) 0);
             seed.setLastFrame((short) 23);
             area.addSection(seed);
+            require(!area.candidateIsDirectSeed(0) && (area.candidateActiveWord(0) & 1L) != 0L,
+                    "A non-direct graph visit stays selected without false direct-seed provenance");
             require(!area.matchesCandidateProvenance(graph, direct),
                     "Direct-seed provenance changes must invalidate even with identical graph membership");
             long ownerRevision = area.getCandidateOwnershipRevision();
@@ -717,6 +729,8 @@ public final class RegionBatchSmokeTest {
             require(area.getCandidateOwnershipRevision() != ownerRevision,
                     "Producer registration must invalidate cached section ownership");
             area.resetQueue();
+            require(area.candidateActiveWord(0) == 0L,
+                    "Reset traversal must clear sparse candidate production");
             require(!area.matchesCandidateProvenance(graph, direct),
                     "Reset traversal cannot retain previous direct-seed provenance");
         } finally {

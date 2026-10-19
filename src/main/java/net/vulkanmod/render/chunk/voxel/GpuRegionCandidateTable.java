@@ -78,7 +78,8 @@ public final class GpuRegionCandidateTable {
         private final int regionX;
         private final int regionY;
         private final int regionZ;
-        private final int[] records = new int[RegionBatchLayout.MAX_SECTIONS * RECORD_WORDS];
+        // Grow records only for producer-visible slots, retaining the wire ABI.
+        private int[] records = new int[32 * RECORD_WORDS];
         private int count;
 
         public Builder(long generation, int regionX, int regionY, int regionZ) {
@@ -101,6 +102,9 @@ public final class GpuRegionCandidateTable {
                 throw new IllegalArgumentException("Packed section is outside its region");
             if((flags & ~(READY | GRAPH_VISIBLE | DIRECT_SEED | LAYER_MASK)) != 0)
                 throw new IllegalArgumentException("Unknown GPU candidate flags");
+            if(count * RECORD_WORDS == records.length)
+                records = Arrays.copyOf(records, Math.min(RegionBatchLayout.MAX_SECTIONS,
+                        (records.length / RECORD_WORDS) * 2) * RECORD_WORDS);
             int base = count++ * RECORD_WORDS;
             records[base] = indexCount;
             records[base + 1] = instanceCount;
