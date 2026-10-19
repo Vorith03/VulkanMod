@@ -141,7 +141,6 @@ public final class ParticleBillboardSmokeTest {
                 BufferUploader.drawWithShader(recovery);
                 if(ParticleBillboardCompute.gpuQuads()!=recoveredBefore) throw new AssertionError("Unavailable compute executed");
                 ParticleBillboardCompute.ciUnavailable(false);
-                if(pass == 0) verifyDescriptorPressure();
                 renderer.endFrame();
                 Vulkan.waitIdle(); // Native oracle only: production performs no waits/readback.
                 ByteBuffer expectedBytes=reference;
@@ -166,6 +165,14 @@ public final class ParticleBillboardSmokeTest {
                 // Force another VkBuffer generation while older descriptor retirement is pending.
                 buffer.reserve(buffer.getBufferSize()+16);
             }
+            // Pressure is isolated in its own final recording frame. Fence-retired
+            // sets legitimately stay charged until later frame slots recycle;
+            // do not require unrelated geometry passes to use those slots.
+            renderer.resetBuffers();
+            renderer.beginFrame();
+            verifyDescriptorPressure();
+            renderer.endFrame();
+            Vulkan.waitIdle();
             Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, production uploader, CPU sorting/recovery, descriptor pressure, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
         } finally {
             ParticleBillboardCompute.ciUnavailable(false);
