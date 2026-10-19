@@ -158,11 +158,11 @@ public final class GpuAnimationSourcePool {
     (pool_sources / "GpuTextureInterpolationCompute.java").write_text("""package net.vulkanmod.render.texture;
 public final class GpuTextureInterpolationCompute {
     public static MultiStats multiStats() {
-        return new MultiStats(0, 0, 0, 0, 0, 0, 0);
+        return new MultiStats(0, 0, 0, 0, 0, 0, 0, 0);
     }
     public record MultiStats(long eligible, long accepted, long fallbacks,
                              long dispatches, long dispatchedJobs,
-                             long metadataBytes, long flushes) {}
+                             long metadataBytes, long flushes, long tableRecycles) {}
 }
 """)
     java_home = os.environ.get("JAVA_HOME")
