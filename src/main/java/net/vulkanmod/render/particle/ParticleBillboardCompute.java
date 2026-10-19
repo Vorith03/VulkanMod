@@ -32,6 +32,10 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     private static long capacityRejections, descriptorRejections;
     private long descriptorSetLayout, descriptorPool, pipelineLayout, pipeline;
     private final Map<Long,Long> bindings=new HashMap<>();
+    // vkFreeDescriptorSets is fence-retired. Include sets queued for retirement
+    // in the actual pool reservation count; some software drivers do not reject
+    // allocations after maxSets, so the host must enforce its own bound.
+    private int allocatedBindings;
     private ByteBuffer offsets=MemoryUtil.memAlloc(ParticleQuadBatch.MAX_QUADS*4).order(ByteOrder.nativeOrder());
     private boolean closed;
 
@@ -80,11 +84,15 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         if(closed) return;
         try(MemoryStack stack=MemoryStack.stackPush()) {
             check(vkFreeDescriptorSets(Device.device,descriptorPool,stack.longs(set)),"free billboard descriptor");
+            allocatedBindings--;
         }
     }
     private long binding(VertexBuffer buffer) {
         Long cached=bindings.get(buffer.getId());
         if(cached!=null) return cached;
+        // A removed binding is still resident until its frame-op free runs.
+        // Never rely on a driver's optional over-allocation behavior.
+        if(allocatedBindings >= MAX_BINDINGS) return 0;
         try(MemoryStack stack=MemoryStack.stackPush()) {
             LongBuffer out=stack.mallocLong(1);
             int result=vkAllocateDescriptorSets(Device.device,VkDescriptorSetAllocateInfo.calloc(stack)
@@ -101,7 +109,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             write.get(0).sType$Default().dstSet(set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1).pBufferInfo(info);
             vkUpdateDescriptorSets(Device.device,write,null);
-            bindings.put(buffer.getId(),set); bindingsCreated++;
+            bindings.put(buffer.getId(),set); bindingsCreated++; allocatedBindings++;
             return set;
         }
     }
