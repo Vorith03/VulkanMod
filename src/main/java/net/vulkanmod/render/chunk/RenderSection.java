@@ -607,6 +607,10 @@ public class RenderSection {
     public boolean setLastFrame(short i) {
         boolean res = i == this.lastFrame;
         if(!res) this.lastFrame = i;
+        // Include graph stamps discarded by later frustum filtering. This is
+        // gated off for the default CPU renderer in ChunkArea.
+        if(this.chunkArea != null)
+            this.chunkArea.markCandidateGraphVisit(this);
         return res;
     }
 

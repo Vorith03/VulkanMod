@@ -24,6 +24,10 @@ final class RegionDrawBatch {
     private static final boolean LIVE_GPU_SECTION_SELECTION = Boolean.getBoolean(
             "vulkanmod.experimentalGpuSectionSelection")
             || GpuSectionSelectionShadowStore.enabled();
+    static boolean trackCandidateProvenance() {
+        return LIVE_GPU_SECTION_SELECTION;
+    }
+
     private static final boolean GPU_INDIRECT_DRAW = Boolean.getBoolean(
             "vulkanmod.experimentalGpuIndirectDraw")
             && GpuSectionSelectionShadowStore.enabled();
@@ -44,6 +48,11 @@ final class RegionDrawBatch {
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateInputRevisions = new long[TerrainRenderType.VALUES.length];
+    private final long[] candidateOwnershipRevisions = new long[TerrainRenderType.VALUES.length];
+    private final long[][] candidateGraphVisits =
+            new long[TerrainRenderType.VALUES.length][MAX_SECTIONS / Long.SIZE];
+    private final long[][] candidateDirectSeeds =
+            new long[TerrainRenderType.VALUES.length][MAX_SECTIONS / Long.SIZE];
     private final long[] candidateMeshRevisions = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateVisibilityRevisions = new long[TerrainRenderType.VALUES.length];
     private final boolean[] candidatePendingReadiness = new boolean[TerrainRenderType.VALUES.length];
@@ -298,6 +307,20 @@ final class RegionDrawBatch {
                 && publishedVisibility == currentVisibility;
     }
 
+    // Traversal revisions alone are not proof of changed GPU input. The
+    // producer captures full graph provenance including off-frustum visits,
+    // and direct seeds independently of queue order. Stable mesh/owner/readiness
+    // and exact culling volume allow reusing the already published GPU table.
+    static boolean canReuseCandidateProvenance(boolean initialized, boolean pendingReadiness,
+                                               long publishedOwner, long currentOwner,
+                                               long publishedMesh, long currentMesh,
+                                               long publishedVisibility, long currentVisibility,
+                                               boolean sameVolume, boolean provenanceMatches) {
+        return initialized && !pendingReadiness && sameVolume && provenanceMatches
+                && publishedOwner == currentOwner && publishedMesh == currentMesh
+                && publishedVisibility == currentVisibility;
+    }
+
     private void publishLiveCandidates(DrawBuffers buffers, ChunkArea area, TerrainRenderType type) {
         if(!LIVE_GPU_SECTION_SELECTION)
             return;
@@ -314,6 +337,16 @@ final class RegionDrawBatch {
                 candidateMeshRevisions[layer], meshRevision,
                 candidateVisibilityRevisions[layer], visibilityRevision, sameVolume))
             return;
+        long ownershipRevision = area.getCandidateOwnershipRevision();
+        if(canReuseCandidateProvenance(candidateInitialized[layer], candidatePendingReadiness[layer],
+                candidateOwnershipRevisions[layer], ownershipRevision,
+                candidateMeshRevisions[layer], meshRevision,
+                candidateVisibilityRevisions[layer], visibilityRevision,
+                sameVolume, area.matchesCandidateProvenance(
+                        candidateGraphVisits[layer], candidateDirectSeeds[layer]))) {
+            candidateInputRevisions[layer] = inputRevision;
+            return;
+        }
         long generation = candidateGenerations[layer] + 1L;
         GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
                 generation, area.position.x, area.position.y, area.position.z);
@@ -366,9 +399,11 @@ final class RegionDrawBatch {
         // without re-uploading the table; the next draw then takes the fast path.
         if(candidateInitialized[layer] && candidateFingerprints[layer] == fingerprint && sameVolume) {
             candidateInputRevisions[layer] = inputRevision;
+            candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
             candidateMeshRevisions[layer] = meshRevision;
             candidateVisibilityRevisions[layer] = visibilityRevision;
             candidatePendingReadiness[layer] = pendingReadiness;
+            area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
             return;
         }
 
@@ -399,9 +434,12 @@ final class RegionDrawBatch {
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
         candidateInputRevisions[layer] = inputRevision;
+        candidateOwnershipRevisions[layer] = area.getCandidateOwnershipRevision();
         candidateMeshRevisions[layer] = meshRevision;
         candidateVisibilityRevisions[layer] = visibilityRevision;
         candidatePendingReadiness[layer] = pendingReadiness;
+        if(queued)
+            area.copyCandidateProvenance(candidateGraphVisits[layer], candidateDirectSeeds[layer]);
         candidateTables[layer] = queued ? table : null;
         candidateFrustums[layer] = queued ? frustumSnapshot : null;
 
@@ -451,6 +489,7 @@ final class RegionDrawBatch {
             candidateSupersetComplete[layer] = false;
             candidateFingerprints[layer] = 0L;
             candidateInputRevisions[layer] = 0L;
+            candidateOwnershipRevisions[layer] = 0L;
             candidateMeshRevisions[layer] = 0L;
             candidateVisibilityRevisions[layer] = 0L;
             candidatePendingReadiness[layer] = false;

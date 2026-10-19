@@ -35,6 +35,15 @@ public class ChunkArea {
     // Producer/traversal invalidation for the region candidate fast path. An
     // off-frustum graph visit can change without changing sectionQueue membership.
     private long candidateInputRevision;
+    // Changes only when the owned set changes, not merely on a traversal rewrite.
+    private long candidateOwnershipRevision;
+    // Record graph visits before frustum rejection and draw-queue direct seeds.
+    // Only enabled for the existing GPU candidate experiment; normal CPU traversal
+    // does not pay the per-visited-section bitset cost.
+    private static final boolean TRACK_GPU_CANDIDATE_PROVENANCE =
+            RegionDrawBatch.trackCandidateProvenance();
+    private final long[] graphVisitBits = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+    private final long[] directSeedBits = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
     private boolean visibilityRewritePending;
     private short traversalFrame = -1;
 
@@ -146,6 +155,11 @@ public class ChunkArea {
     public void addSection(RenderSection section) {
         this.traversalFrame = section.getLastFrame();
         this.sectionQueue.add(section);
+        if(TRACK_GPU_CANDIDATE_PROVENANCE) {
+            markCandidateGraphVisit(section);
+            if(!section.hasMainDirection())
+                markCandidateBit(this.directSeedBits, section);
+        }
     }
 
     /**
@@ -160,6 +174,7 @@ public class ChunkArea {
         if(this.ownedSections[slot] != section) {
             this.ownedSections[slot] = section;
             this.candidateInputRevision++;
+            this.candidateOwnershipRevision++;
         }
     }
 
@@ -173,9 +188,56 @@ public class ChunkArea {
                 || voxelSlot(section.xOffset, section.yOffset, section.zOffset) != slot) {
             this.ownedSections[slot] = null;
             this.candidateInputRevision++;
+            this.candidateOwnershipRevision++;
             return null;
         }
         return section;
+    }
+
+    static boolean trackGpuCandidateProvenance() {
+        return TRACK_GPU_CANDIDATE_PROVENANCE;
+    }
+
+    private void markCandidateBit(long[] bits, RenderSection section) {
+        int slot = voxelSlot(section.xOffset, section.yOffset, section.zOffset);
+        if(slot < 0 || section.getChunkArea() != this || ownedSections[slot] != section)
+            return;
+        long bit = 1L << (slot & 63);
+        int word = slot >>> 6;
+        if((bits[word] & bit) == 0) {
+            bits[word] |= bit;
+            candidateInputRevision++;
+        }
+    }
+
+    // RenderSection.setLastFrame runs before WorldRenderer.addNode rejects a
+    // graph-visited section by frustum. Those off-frustum marks are authoritative
+    // GRAPH_VISIBLE inputs and cannot be inferred from sectionQueue alone.
+    void markCandidateGraphVisit(RenderSection section) {
+        if(TRACK_GPU_CANDIDATE_PROVENANCE)
+            markCandidateBit(graphVisitBits, section);
+    }
+
+    long getCandidateOwnershipRevision() {
+        return candidateOwnershipRevision;
+    }
+
+    void copyCandidateProvenance(long[] graph, long[] seeds) {
+        for(int i = 0; i < graphVisitBits.length; ++i) {
+            graph[i] = traversalFrame == -1 ? 0L : graphVisitBits[i];
+            seeds[i] = directSeedBits[i];
+        }
+    }
+
+    boolean matchesCandidateProvenance(long[] graph, long[] seeds) {
+        if(!TRACK_GPU_CANDIDATE_PROVENANCE)
+            return false;
+        for(int i = 0; i < graphVisitBits.length; ++i) {
+            if(graph[i] != (traversalFrame == -1 ? 0L : graphVisitBits[i])
+                    || seeds[i] != directSeedBits[i])
+                return false;
+        }
+        return true;
     }
 
     boolean isGraphVisible(RenderSection section) {
@@ -188,6 +250,10 @@ public class ChunkArea {
         // Every traversal may change graph-visible slots, even when the final
         // CPU draw queue has identical members (addNode marks before frustum).
         this.candidateInputRevision++;
+        if(TRACK_GPU_CANDIDATE_PROVENANCE) {
+            Arrays.fill(graphVisitBits, 0L);
+            Arrays.fill(directSeedBits, 0L);
+        }
         this.sectionQueue.beginRewrite();
         this.visibilityRewritePending = true;
         this.traversalFrame = -1;
@@ -558,7 +624,10 @@ public class ChunkArea {
             }
         }
         Arrays.fill(this.ownedSections, null);
+        Arrays.fill(graphVisitBits, 0L);
+        Arrays.fill(directSeedBits, 0L);
         this.candidateInputRevision++;
+        this.candidateOwnershipRevision++;
         this.traversalFrame = -1;
     }
 

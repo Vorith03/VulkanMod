@@ -19,6 +19,7 @@ public final class RegionBatchSmokeTest {
     public static void verify() {
         verifyGpuIndirectFallbackContract();
         verifyLazyGpuCommandOwnership();
+        verifyCandidateProducerProvenance();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
@@ -658,6 +659,68 @@ public final class RegionBatchSmokeTest {
                 batch.commands.freeBuffer();
             area.releaseBuffers();
             RegionVoxelStore.ENABLED = voxelStoreEnabled;
+        }
+    }
+
+    private static void verifyCandidateProducerProvenance() {
+        require(RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 4, 8, 8, 12, 12, true, true),
+                "Identical producer graph/direct-seed data may reuse the GPU candidate generation");
+        require(!RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 5, 8, 8, 12, 12, true, true)
+                        && !RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 4, 8, 9, 12, 12, true, true)
+                        && !RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 4, 8, 8, 12, 13, true, true)
+                        && !RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 4, 8, 8, 12, 12, false, true)
+                        && !RegionDrawBatch.canReuseCandidateProvenance(true, true,
+                        4, 4, 8, 8, 12, 12, true, true)
+                        && !RegionDrawBatch.canReuseCandidateProvenance(true, false,
+                        4, 4, 8, 8, 12, 12, true, false),
+                "Ownership, mesh, draw queue, pending readiness, portal volume and provenance changes must rescan");
+
+        if(!ChunkArea.trackGpuCandidateProvenance())
+            return;
+        ChunkArea area = new ChunkArea(0, new Vector3i(0, 0, 0));
+        RenderSection seed = new RenderSection(0, 0, 0, 0);
+        RenderSection offFrustum = new RenderSection(1, 16, 0, 0);
+        seed.setChunkArea(area);
+        offFrustum.setChunkArea(area);
+        area.registerSection(seed, 0, 0, 0);
+        area.registerSection(offFrustum, 16, 0, 0);
+        try {
+            area.resetQueue();
+            seed.setLastFrame((short) 21);
+            area.addSection(seed);
+            long[] graph = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+            long[] direct = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+            area.copyCandidateProvenance(graph, direct);
+            area.resetQueue();
+            seed.setLastFrame((short) 22);
+            area.addSection(seed);
+            require(area.matchesCandidateProvenance(graph, direct),
+                    "Equivalent producer traversal must match graph visits and direct seeds");
+            // The off-frustum node never joins the CPU draw queue. Its
+            // setLastFrame must still invalidate the GPU candidate snapshot.
+            offFrustum.setLastFrame((short) 22);
+            require(!area.matchesCandidateProvenance(graph, direct),
+                    "Off-frustum graph visit must invalidate candidate provenance");
+            area.resetQueue();
+            seed.setGraphInfo(net.minecraft.core.Direction.EAST, (byte) 0);
+            seed.setLastFrame((short) 23);
+            area.addSection(seed);
+            require(!area.matchesCandidateProvenance(graph, direct),
+                    "Direct-seed provenance changes must invalidate even with identical graph membership");
+            long ownerRevision = area.getCandidateOwnershipRevision();
+            area.registerSection(new RenderSection(2, 0, 0, 0), 0, 0, 0);
+            require(area.getCandidateOwnershipRevision() != ownerRevision,
+                    "Producer registration must invalidate cached section ownership");
+            area.resetQueue();
+            require(!area.matchesCandidateProvenance(graph, direct),
+                    "Reset traversal cannot retain previous direct-seed provenance");
+        } finally {
+            area.releaseBuffers();
         }
     }
 
