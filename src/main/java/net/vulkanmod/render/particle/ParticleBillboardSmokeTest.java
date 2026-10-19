@@ -81,7 +81,8 @@ public final class ParticleBillboardSmokeTest {
             }
             if(!rejected || accepted == 0
                     || ParticleBillboardCompute.descriptorRejectionsForSmoke() <= rejectedBefore)
-                throw new AssertionError("Descriptor pool pressure did not fail closed after successful GPU draws");
+                throw new AssertionError("Descriptor pool pressure did not fail closed: accepted=" + accepted
+                        + " rejected=" + rejected + " " + ParticleBillboardCompute.statistics());
         } finally {
             for(ParticleVertexBuffer pressure : buffers)
                 if(pressure != null) pressure.freeBuffer();
