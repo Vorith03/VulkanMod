@@ -421,7 +421,8 @@ public final class TextureTickAttribution {
                 .append(" gpu_multi_dispatch_total=").append(multi.dispatches())
                 .append(" gpu_multi_jobs_dispatched_total=").append(multi.dispatchedJobs())
                 .append(" gpu_multi_metadata_bytes_total=").append(multi.metadataBytes())
-                .append(" gpu_multi_flush_total=").append(multi.flushes());
+                .append(" gpu_multi_flush_total=").append(multi.flushes())
+                .append(" gpu_multi_table_recycles_total=").append(multi.tableRecycles());
         for (InterpolationFallback reason : INTERPOLATION_REASONS) {
             line.append(" interpolation_fallback_")
                     .append(reason.name().toLowerCase(Locale.ROOT)).append('=')

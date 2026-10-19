@@ -333,6 +333,32 @@ public final class SpriteAnimationSmokeTest {
                         || after.dispatchedJobs() != before.dispatchedJobs() + 2)
                     throw new AssertionError("Two sprites did not share one native dispatch");
 
+                // Sustained updates must reuse 32 rows, including across
+                // independent graphics-queue submissions without a host wait.
+                for(int cycle = 0; cycle < 160; cycle += 16) {
+                    VTextureSelector.beginSpriteUploadBatch();
+                    try {
+                        for(int n = 0; n < 16; n++) {
+                            if(first.dispatch(atlas, offsets, widths, heights, offsets,
+                                    1, 1, 2, 0, 1, 1, 2, 0, 0) == null
+                                    || second.dispatch(atlas, offsets, widths, heights, offsets,
+                                    1, 1, 2, 0, 1, 1, 2, 1, 0) == null)
+                                throw new AssertionError("Recycled GPU table admission rejected");
+                        }
+                    } finally {
+                        VTextureSelector.endSpriteUploadBatch();
+                    }
+                    if((cycle & 31) == 0) {
+                        Device.getGraphicsQueue().endRecordingAndSubmit();
+                        Device.getGraphicsQueue().startRecording();
+                    }
+                }
+                var recycled = GpuTextureInterpolationCompute.multiStats();
+                if(recycled.tableRecycles() < before.tableRecycles() + 9
+                        || recycled.fallbacks() != before.fallbacks()
+                        || recycled.accepted() < before.accepted() + 322)
+                    throw new AssertionError("Sustained GPU job table reuse/fallback contract failed");
+
                 VTextureSelector.beginSpriteUploadBatch();
                 try {
                     if(first.dispatch(atlas, offsets, widths, heights, offsets,

@@ -216,15 +216,31 @@ public abstract class VTextureSelector {
         return uploadTextureResidentRange(destination, destinationOffset, source, false);
     }
 
-    /** Append an immutable job row; only a staging-reset boundary drains prior atlas copies. */
+    /** Nonzero tail bytes serialize earlier GPU job-table reads against reuse. */
+    public static boolean uploadTextureComputeJob(TextureResidentBuffer destination,
+                                                   int destinationOffset, ByteBuffer source,
+                                                   int reusedTailBytes) {
+        if(reusedTailBytes < 0 || (reusedTailBytes != 0
+                && (destination == null || reusedTailBytes > destination.getBufferSize())))
+            return false;
+        return uploadTextureResidentRange(destination, destinationOffset, source, true,
+                reusedTailBytes);
+    }
+
     public static boolean uploadTextureComputeJob(TextureResidentBuffer destination,
                                                    int destinationOffset, ByteBuffer source) {
-        return uploadTextureResidentRange(destination, destinationOffset, source, true);
+        return uploadTextureComputeJob(destination, destinationOffset, source, 0);
     }
 
     private static boolean uploadTextureResidentRange(TextureResidentBuffer destination,
                                                        int destinationOffset, ByteBuffer source,
                                                        boolean computeJob) {
+        return uploadTextureResidentRange(destination, destinationOffset, source, computeJob, 0);
+    }
+
+    private static boolean uploadTextureResidentRange(TextureResidentBuffer destination,
+                                                       int destinationOffset, ByteBuffer source,
+                                                       boolean computeJob, int reusedTailBytes) {
         if(destination == null || source == null || source.remaining() <= 0
                 || destinationOffset < 0
                 || destinationOffset > destination.getBufferSize() - source.remaining()) {
@@ -276,6 +292,23 @@ public abstract class VTextureSelector {
         long sourceOffset = stagingBuffer.getOffset();
         CommandPool.CommandBuffer commandBuffer = graphicsQueue.getCommandBuffer();
         try(MemoryStack stack = MemoryStack.stackPush()) {
+            if(reusedTailBytes != 0) {
+                // Same graphics VkQueue orders preceding submitted compute too.
+                // Emit this AFTER any staging reset and BEFORE the first
+                // transfer overwrite of a recycled fixed-page job-table tail.
+                VkBufferMemoryBarrier.Buffer reuse = VkBufferMemoryBarrier.callocStack(1, stack);
+                reuse.sType(VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER);
+                reuse.srcAccessMask(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+                reuse.dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+                reuse.srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+                reuse.dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+                reuse.buffer(destination.getId());
+                reuse.offset(destination.getBufferSize() - reusedTailBytes);
+                reuse.size(reusedTailBytes);
+                vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, reuse, null);
+            }
             VkBufferCopy.Buffer copy = VkBufferCopy.callocStack(1, stack);
             copy.srcOffset(sourceOffset);
             copy.dstOffset(destinationOffset);

@@ -70,6 +70,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private static final int MAX_BATCH_JOBS = 32;
     private static final int JOB_WORDS = 12;
     private static final int JOB_BYTES = JOB_WORDS * Integer.BYTES;
+    private static final int JOB_TABLE_BYTES = MAX_BATCH_JOBS * JOB_BYTES;
     public static boolean multiRequested() {
         return MULTI_REQUESTED && sharedScratchRequested();
     }
@@ -91,7 +92,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private final List<SharedScratchPage> sharedScratchPages = new ArrayList<>();
     private final List<PendingJobs> pendingJobs = new ArrayList<>();
     private long multiEligible, multiAccepted, multiFallback, multiDispatches, multiJobsDispatched;
-    private long multiMetadataBytes, multiFlushes;
+    private long multiMetadataBytes, multiFlushes, multiTableRecycles;
     // Include pages waiting for GPU-safe retirement in the physical budget.
     private long allocatedSharedScratchBytes;
     private boolean closed;
@@ -177,6 +178,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
 
         if(sharedScratchRequested() && (sourceOffset & 3) == 0
                 && scratchBytes <= SHARED_SCRATCH_PAGE_BYTES
+                        - (multiRequested() ? JOB_TABLE_BYTES : 0)
                 && (long)source.getBufferSize() <= Device.deviceProperties.limits().maxStorageBufferRange()
                 && SHARED_SCRATCH_PAGE_BYTES <= Device.deviceProperties.limits().maxStorageBufferRange()) {
             Binding shared = this.allocateSharedBinding(
@@ -278,12 +280,22 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.scratch = scratch;
             this.descriptorSet = set;
         }
-        int metadataBytes;
-        int remaining() { return SHARED_SCRATCH_PAGE_BYTES - usedBytes - metadataBytes; }
-        int reserveJob() {
-            if(remaining() < JOB_BYTES) return -1;
-            metadataBytes += JOB_BYTES;
-            return SHARED_SCRATCH_PAGE_BYTES - metadataBytes;
+        // Reserve a fixed tail, even before the first job: later pixel slots
+        // must never overlap a reusable GPU-readable metadata table.
+        final int jobTableBytes = multiRequested() ? JOB_TABLE_BYTES : 0;
+        int jobRowsUsed;
+        long jobTableGenerations;
+        int remaining() { return SHARED_SCRATCH_PAGE_BYTES - usedBytes - jobTableBytes; }
+        int nextJobOffset() {
+            if(jobTableBytes == 0 || jobRowsUsed == MAX_BATCH_JOBS) return -1;
+            return SHARED_SCRATCH_PAGE_BYTES - (jobRowsUsed + 1) * JOB_BYTES;
+        }
+        void commitJob() { jobRowsUsed++; }
+        void recycleJobs() {
+            if(jobRowsUsed != MAX_BATCH_JOBS)
+                throw new IllegalStateException("Cannot recycle a partial job table");
+            jobRowsUsed = 0;
+            jobTableGenerations++;
         }
         int reserve(int bytes) {
             int offset = usedBytes;
@@ -680,8 +692,21 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         if(jobPixels <= 0 || (long)(jobPixels - 1) / WORKGROUP_SIZE + 1L
                 > Device.deviceProperties.limits().maxComputeWorkGroupCount(0))
             return null;
-        int tableOffset = page.reserveJob();
+        // The accepted rows each own a pending atlas copy. Record all prior
+        // compute and copies before wrapping; the subsequent transfer-side
+        // barrier orders GPU reads across command-buffer submissions.
+        if(page.jobRowsUsed == MAX_BATCH_JOBS) {
+            VTextureSelector.flushPendingSpriteUploadCopies();
+            for(PendingJobs pending : this.pendingJobs)
+                if(pending.page == page) return null;
+            page.recycleJobs();
+            this.multiTableRecycles++;
+            group = null;
+        }
+        int tableOffset = page.nextJobOffset();
         if(tableOffset < 0) return null;
+        int reuseTailBytes = page.jobRowsUsed == 0 && page.jobTableGenerations > 0
+                ? JOB_TABLE_BYTES : 0;
         try(MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer row = stack.malloc(JOB_BYTES).order(ByteOrder.nativeOrder());
             row.putInt(binding.sourceOffset >>> 2);
@@ -692,9 +717,11 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             row.putInt(levels).flip();
             // If staging must reset, it first flushes all preceding atlas copy
             // epochs (and their pending compute) before switching command buffers.
-            if(!VTextureSelector.uploadTextureComputeJob(page.scratch, tableOffset, row))
+            if(!VTextureSelector.uploadTextureComputeJob(
+                    page.scratch, tableOffset, row, reuseTailBytes))
                 return null;
         }
+        page.commitJob();
         // No fallible operation follows acceptance: copy geometry was checked in
         // dispatch(), and the queue may drain immediately on overlap/capacity.
         if(group == null || !this.pendingJobs.contains(group)) {
@@ -787,14 +814,15 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     }
 
     public static synchronized MultiStats multiStats() {
-        if(instance == null) return new MultiStats(0, 0, 0, 0, 0, 0, 0);
+        if(instance == null) return new MultiStats(0, 0, 0, 0, 0, 0, 0, 0);
         GpuTextureInterpolationCompute c = instance;
         return new MultiStats(c.multiEligible, c.multiAccepted, c.multiFallback,
-                c.multiDispatches, c.multiJobsDispatched, c.multiMetadataBytes, c.multiFlushes);
+                c.multiDispatches, c.multiJobsDispatched, c.multiMetadataBytes,
+                c.multiFlushes, c.multiTableRecycles);
     }
     public record MultiStats(long eligible, long accepted, long fallbacks,
                              long dispatches, long dispatchedJobs, long metadataBytes,
-                             long flushes) {}
+                             long flushes, long tableRecycles) {}
 
     private void createDescriptorResources() {
         try(MemoryStack stack = MemoryStack.stackPush()) {
