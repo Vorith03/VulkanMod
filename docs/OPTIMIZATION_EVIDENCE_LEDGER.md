@@ -24,6 +24,20 @@ command construction with eliminated terrain preparation. See the ownership doc.
 
 ## ACTIVE GPU-first release priority — October 18
 
+**New qualified producer provenance reuse:** `e78a7641`, full **#1039** /
+run **39184804795**, distributable artifact **12157573613**, passed
+build/package, Forge startups, native indirect/terrain, exact texture/particle/
+pixel/synchronization and public compatibility gates. Native region contract
+exercises same-result traversal rewrites, off-frustum graph stamps, direct-seed
+differences, owner and safety invalidation. Pre-frustum visits and direct seeds
+are recorded in compact opt-in per-area bitsets, allowing unchanged GPU candidate
+generations to bypass the 512-slot scan/hash/Builder even *after a traversal*.
+Changed graph/mesh/owner/queue/readiness/culling volume retains the authoritative
+CPU scan and GPU generation publication. **Disposition: qualified but unmeasured.**
+There is no observed fast-path hit numerator/denominator, per-node producer cost,
+RX CPU/GPU saving, FPS or p95/p99 result. Java traversal, changed-generation scan,
+particle portal/pixel and REPLACE/APPEND hybrid ABI gates remain open.
+
 **Latest qualified GPU-first candidate (terrain input cache):** `246ff243`
 passed full public/native/Forge **#1038** (39180288680), artifact **12155952145**.
 Opt-in GPU selection/command ownership now bypasses repeated 512-slot CPU candidate

@@ -1,5 +1,40 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Producer-side traversal provenance reuse — full #1039 qualified
+
+Latest qualified executable **e78a7641dffc86a62efaad35066e4733e1d9f702**,
+full **#1039**, [run 39184804795](https://github.com/Vorith03/VulkanMod/actions/runs/39184804795)
+**passed**. Distributable JAR artifact **12157573613**, smoke logs **12157802321**.
+Build/package, both Forge starts, native persistent indirect/region smoke, GPU
+terrain, exact texture/particle/pixel/synchronization and public Create Chronicles
+and Crash Assistant gates passed. Private packs skipped.
+
+The production GPU region candidate path now records **producer** graph-visitation
+bits at RenderSection.setLastFrame (including nodes culled *after* the graph
+stamp) and direct-seed provenance when ChunkArea enqueues a section. Two bounded
+512-bit sets per area are enabled only for the existing GPU candidate experiment.
+An independent ownership revision and per-layer provenance snapshots allow an
+equivalent traversal rewrite to reuse the already published GPU candidate input
+**without the 512-slot scan, hash or Builder**, even though the input revision
+changed. Mesh, queue visibility, owner identity, pending readiness and exact
+camera/portal culling volume must still match. Changed provenance takes the
+existing authoritative scan/fingerprint/upload/generation/fallback path.
+Native #1039 oracle covers equivalent rewrites, off-frustum graph stamps,
+direct-seed changes, ownership, readiness and volume rejection.
+
+This is a narrower producer-side incremental fast path, **not** elimination of
+Java graph traversal or changed-input candidate scanning. Actual cache adoption,
+extra per-visited-node bitset cost, net CPU time, GPU cost, FPS and p95/p99 remain
+**unmeasured**. Existing GPU and texture/particle opt-in flags are unchanged;
+no default promotion or integrated GPU-first release completion is authorized.
+
+Next: add *decision-useful* producer fast-path coverage/cost counts within the
+existing instrumentation when preparing an integrated RX test; qualify portal/
+mod-injection particle pixels and reload/frame-slot pressure; progress multi-sprite
+texture compute and REPLACE/atomic APPEND-aware candidate ABI. Keep the old #1028
+capture, do not request isolated owner re-runs. Rolling prompt updated at
+`docs/NEXT_SESSION_PROMPT.md`; the following session must update it again.
+
 ## Terrain candidate unchanged-draw reuse — full #1038 qualified
 
 Latest qualified executable **246ff243fc59e8e9667b299ceb3e846a04b57497**,

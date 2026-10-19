@@ -306,3 +306,40 @@ failed an unrelated Forge FMLConfig null Boolean during the indirect smoke start
 identical executable passed all gates on retry. Do not call #1037 first attempt
 a particle-compute failure. Particle portal/mod/pixel/reload/pressure and net RX
 benefit remain open. This is not an integrated GPU-first release qualification.
+
+## Producer-side equivalent traversal input reuse — full #1039
+
+Executable `e78a7641dffc86a62efaad35066e4733e1d9f702` passed full #1039
+([run 39184804795](https://github.com/Vorith03/VulkanMod/actions/runs/39184804795));
+Forge JAR artifact 12157573613, smoke logs 12157802321. Native indirect
+region tests, Forge startup, texture/particle pixels/synchronization and public
+compatibility checks all passed. This supersedes the earlier #1038-only
+unchanged-draw candidate reuse checkpoint, but does not imply a hardware speedup.
+
+On GPU candidate gates only, each ChunkArea maintains two 512-bit producer masks:
+all owned graph visits at RenderSection.setLastFrame **before** frustum rejection,
+and queued sections that entered as direct seeds. Masks reset at traversal rewrite
+and area ring clearing; an independent ownership revision changes on registration,
+stale-slot discovery and reuse. RegionDrawBatch retains per-layer last-published
+masks and owner revision. A new traversal with unchanged graph and seed masks,
+owner identity, mesh/queue revisions, ready output and exact frozen culling
+volume can adopt the existing GPU table without scanning 512 owned slots,
+re-hashing candidate records, allocating a Builder or publishing another
+candidate generation. This does not replace CPU graph traversal. It also does
+not bypass a required CPU fallback when GPU output is missing/stale.
+
+A changed graph/seed bit, ownership, mesh, visibility, pending readiness or
+camera/portal volume retains the existing full scan and atomic publication;
+GPU indirect still rejects pending APPEND/handoff v1 and incomplete supersets.
+Native smoke specifically asserts off-frustum graph stamps invalidate the
+candidate comparison and tests changed direct-seed and ownership metadata.
+The masks are per producer and no GPU readback is added. Resource reload and
+portal/mod-injection pixel equivalence remain separate gates.
+
+No cache hit/attempt denominator or net CPU accounting has yet been measured
+on representative RX hardware. Recording per-visited-section mask writes may
+itself cost CPU; do not presume profitability. Next meaningful step is a
+bounded existing-profiler coverage/cost discriminator before an integrated
+hardware run, alongside further GPU-owned compute work (multi-sprite texture
+batching, generated terrain REPLACE/atomic APPEND command ABI, particle portal
+qualifications). Keep opt-in gates until equivalent and profitable.

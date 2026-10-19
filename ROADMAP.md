@@ -52,10 +52,13 @@ An opt-in exact-campfire billboard compute adapter passed native/Forge full #103
 its final storage-range correction passed full #1037 attempt 2. Original ordered
 stream and shader are retained and CPU four-vertex expansion is bypassed. See
 `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`.
-A terrain candidate-input fast path passed full #1038: unchanged draws now skip
-the 512-slot CPU candidate scan/builder/hash, invalidating on traversal, section
-ownership, mesh/visibility, pending readiness and portal/culling volume. Changed
-graphs still scan, and measured RX benefit remains open.
+Terrain candidate input fast path passed full #1038 for unchanged draws.
+New producer-side traversal provenance reuse passed full #1039 at `e78a7641`
+(run 39184804795; JAR 12157573613): exact pre-frustum graph-visit and
+direct-seed bitsets let equivalent traversal rewrites retain GPU candidate
+generation without the 512-slot CPU scan/hash/Builder. Changed graph, owner,
+mesh, readiness, queue or portal volume still forces authoritative scanning.
+Per-visit CPU tracking cost, adoption and net RX benefit remain unmeasured.
 Particle portal/mod/pixel adoption and generated-terrain activation remain open.
 The entire multi-subsystem mission is **incomplete** until these gates close.
 
