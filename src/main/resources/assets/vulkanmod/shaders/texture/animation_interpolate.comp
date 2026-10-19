@@ -36,29 +36,42 @@ layout(push_constant) uniform InterpolationPushConstants {
  */
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    // reserved==0 retains the qualified legacy one-mip ABI. A nonzero
-    // source-table word offset selects immutable per-mip rows, one workgroup-Y
-    // plane per existing source mip. No mip generation or clock progression.
+    // 0: original single-mip ABI; nonzero: original per-mip source table.
+    // 0xffffffff: a bounded array of 12-word jobs stored in the disjoint
+    // high end of shared scratch, with job index in workgroup Z.
+    bool multi = pc.reserved == 0xffffffffu;
+    uint job = gl_GlobalInvocationID.z;
+    if(multi && job >= pc.duration) return;
+    uint jobWord = pc.outputBaseWord + job * 12u;
+    uint sourceBaseWord = multi ? outputData.words[jobWord] : pc.sourceBaseWord;
+    uint currentX = multi ? outputData.words[jobWord + 1u] : pc.currentX;
+    uint currentY = multi ? outputData.words[jobWord + 2u] : pc.currentY;
+    uint nextX = multi ? outputData.words[jobWord + 3u] : pc.nextX;
+    uint nextY = multi ? outputData.words[jobWord + 4u] : pc.nextY;
+    uint outputBaseWord = multi ? outputData.words[jobWord + 7u] : pc.outputBaseWord;
+    uint subFrame = multi ? outputData.words[jobWord + 8u] : pc.subFrame;
+    uint duration = multi ? outputData.words[jobWord + 9u] : pc.duration;
+    uint tableBase = multi ? outputData.words[jobWord + 10u] : pc.reserved;
     uint mip = gl_GlobalInvocationID.y;
-    bool fused = pc.reserved != 0u;
-    uint row = pc.reserved + mip * 6u;
+    if(multi && mip >= outputData.words[jobWord + 11u]) return;
+    bool fused = tableBase != 0u;
+    uint row = tableBase + mip * 6u;
     uint width = fused ? sourceData.words[row + 2u] : pc.width;
     uint height = fused ? sourceData.words[row + 3u] : pc.height;
     uint pixelCount = width * height;
-    if(index >= pixelCount || pc.duration == 0u)
-        return;
-    uint sourceBase = fused ? pc.sourceBaseWord + sourceData.words[row] : pc.sourceBaseWord;
+    if(index >= pixelCount || duration == 0u) return;
+    uint sourceBase = fused ? sourceBaseWord + sourceData.words[row] : sourceBaseWord;
     uint sheetWidth = fused ? sourceData.words[row + 1u] : pc.sheetWidth;
-    uint outputBase = fused ? pc.outputBaseWord + sourceData.words[row + 4u] : pc.outputBaseWord;
+    uint outputBase = fused ? outputBaseWord + sourceData.words[row + 4u] : outputBaseWord;
     uint shift = fused ? sourceData.words[row + 5u] : 0u;
     uint x = index % width;
     uint y = index / width;
     uint current = sourceData.words[sourceBase
-            + ((pc.currentY >> shift) + y) * sheetWidth + (pc.currentX >> shift) + x];
+            + ((currentY >> shift) + y) * sheetWidth + (currentX >> shift) + x];
     uint next = sourceData.words[sourceBase
-            + ((pc.nextY >> shift) + y) * sheetWidth + (pc.nextX >> shift) + x];
+            + ((nextY >> shift) + y) * sheetWidth + (nextX >> shift) + x];
 
-    precise double fraction = double(pc.subFrame) / double(pc.duration);
+    precise double fraction = double(subFrame) / double(duration);
     precise double currentWeight = 1.0 - fraction;
     precise double nextWeight = 1.0 - currentWeight;
 

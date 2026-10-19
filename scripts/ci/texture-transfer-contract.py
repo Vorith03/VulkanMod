@@ -102,6 +102,11 @@ public final class TextureTransferBatchContract {
             pixels.put(r.mip+":"+r.x+":"+r.y, (int)source);
         }
     }
+    // The production copy queue now issues queued compute jobs immediately
+    // before its native copy. Offline pixel/overlap testing stubs that device step.
+    static class GpuTextureInterpolationCompute {
+        static void flushPendingBatchedJobs() {}
+    }
     __PRODUCTION__
     static void add(long source,int mip,int x,int y) {
         queueSpriteUploadCopy(mip,1,1,x,y,source,y*1000+x*4,x+11,y+22);

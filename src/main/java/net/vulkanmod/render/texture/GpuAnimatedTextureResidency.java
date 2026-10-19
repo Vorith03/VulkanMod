@@ -472,7 +472,8 @@ public final class GpuAnimatedTextureResidency implements AutoCloseable {
         return new Stats(enabled(), currentBytes, peakBytes, admitted, capacityRejected,
                 sourceRejected, stagingRejected, sourceInvalidated,
                 totalCopyCalls, totalCopyRegions, totalCopyBytes,
-                interpolationCalls, interpolationDispatches,
+                interpolationCalls, interpolationDispatches
+                        + GpuTextureInterpolationCompute.multiStats().dispatches(),
                 interpolationPixels, interpolationBytes, interpolationBindingRejected);
     }
 

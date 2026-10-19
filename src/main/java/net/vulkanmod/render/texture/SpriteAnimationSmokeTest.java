@@ -84,6 +84,8 @@ public final class SpriteAnimationSmokeTest {
             }
             if(GpuAnimationSourcePool.enabled()) {
                 verifySharedSourcePool();
+                if(GpuTextureInterpolationCompute.multiRequested())
+                    verifyMultiSpriteDispatch();
             }
             if(GpuAnimatedTextureResidency.interpolationEnabled()) {
                 GpuAnimationAdmission.setCiEnabled(true);
@@ -251,6 +253,132 @@ public final class SpriteAnimationSmokeTest {
             if(a != null) a.retire(null);
             if(b != null) b.retire(null);
             if(c != null) c.retire(null);
+            if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
+            MemoryUtil.memFree(sourceA);
+            MemoryUtil.memFree(sourceB);
+            atlas.doFree();
+        }
+    }
+
+
+    /**
+     * Production shared-page job-table oracle: two distinct lease clocks must
+     * become one native dispatch with exact RGB double truncation, current
+     * alpha and correctly ordered later O3 overwrite.
+     */
+    private static void verifyMultiSpriteDispatch() {
+        VulkanImage atlas = VulkanImage.createTextureImage(VK_FORMAT_R8G8B8A8_UNORM,
+                1, 4, 1, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                        | VK_IMAGE_USAGE_SAMPLED_BIT, 4, false, false);
+        ByteBuffer sourceA = MemoryUtil.memAlloc(32).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer sourceB = MemoryUtil.memAlloc(32).order(java.nio.ByteOrder.nativeOrder());
+        GpuAnimationSourcePool.Lease a = null, b = null;
+        GpuTextureInterpolationCompute.Binding first = null, second = null;
+        long buffer = 0L, allocation = 0L;
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            int[] aa = {16, 32, 64, 128, 48, 64, 96, 240};
+            int[] bb = {80, 120, 160, 200, 120, 160, 200, 20};
+            for(int i = 0; i < 8; i++) {
+                sourceA.put(i, (byte)aa[i]);
+                sourceB.put(i, (byte)bb[i]);
+            }
+            // Single source mip: 2 horizontal frames, 1 pixel each;
+            // output begins at scratch-slot word zero.
+            for(ByteBuffer data : new ByteBuffer[] {sourceA, sourceB}) {
+                data.putInt(8, 0);
+                data.putInt(12, 2);
+                data.putInt(16, 1);
+                data.putInt(20, 1);
+                data.putInt(24, 0);
+                data.putInt(28, 0);
+            }
+            var pBuffer = stack.mallocLong(1);
+            var pAllocation = stack.mallocPointer(1);
+            MemoryManager.getInstance().createBuffer(16L, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pBuffer, pAllocation);
+            buffer = pBuffer.get(0);
+            allocation = pAllocation.get(0);
+            Device.getGraphicsQueue().startRecording();
+            try {
+                a = GpuAnimationSourcePool.acquire(sourceA);
+                b = GpuAnimationSourcePool.acquire(sourceB);
+                if(a == null || b == null || a.buffer() != b.buffer())
+                    throw new AssertionError("Multi-sprite input leases are not on one source page");
+                first = GpuTextureInterpolationCompute.createBinding(
+                        a.buffer(), a.offset(), a.bytes(), 4, 8);
+                second = GpuTextureInterpolationCompute.createBinding(
+                        b.buffer(), b.offset(), b.bytes(), 4, 8);
+                if(first == null || second == null || !first.sharesScratchAndDescriptor(second))
+                    throw new AssertionError("Multi-sprite descriptor/slot sharing rejected");
+                int[] offsets = {0}, widths = {2}, heights = {1};
+                GpuTextureInterpolationCompute.MultiStats before =
+                        GpuTextureInterpolationCompute.multiStats();
+                VTextureSelector.beginSpriteUploadBatch();
+                try {
+                    if(first.dispatch(atlas, offsets, widths, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 0, 0) == null
+                            || second.dispatch(atlas, offsets, widths, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 1, 0) == null)
+                        throw new AssertionError("Multi-sprite GPU job admission rejected");
+                    var pending = GpuTextureInterpolationCompute.multiStats();
+                    if(pending.accepted() != before.accepted() + 2
+                            || pending.dispatches() != before.dispatches())
+                        throw new AssertionError("Multi-sprite job queue dispatched prematurely");
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                }
+                var after = GpuTextureInterpolationCompute.multiStats();
+                if(after.dispatches() != before.dispatches() + 1
+                        || after.dispatchedJobs() != before.dispatchedJobs() + 2)
+                    throw new AssertionError("Two sprites did not share one native dispatch");
+
+                VTextureSelector.beginSpriteUploadBatch();
+                try {
+                    if(first.dispatch(atlas, offsets, widths, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 2, 0) == null
+                            || second.dispatch(atlas, offsets, widths, heights, offsets,
+                            1, 1, 2, 0, 1, 1, 2, 3, 0) == null)
+                        throw new AssertionError("Repeated GPU job admission rejected");
+                    // Later O3 overwrites the second queued compute at the same
+                    // atlas location, forcing compute/copy/write ordering.
+                    if(VTextureSelector.copyResidentSpriteFrame(
+                            b.buffer(), b.offset(), b.bytes(), atlas,
+                            offsets, widths, heights, 3, 0, 0, 0, 1, 1) != 1)
+                        throw new AssertionError("GPU-to-resident overwrite queue rejected");
+                } finally {
+                    VTextureSelector.endSpriteUploadBatch();
+                }
+            } finally {
+                SpriteUtil.addTransitionedLayout(atlas);
+                SpriteUtil.transitionLayouts(Device.getGraphicsQueue().getCommandBuffer());
+                Device.getGraphicsQueue().endRecordingAndSubmit();
+            }
+            Vulkan.waitIdle();
+            Renderer renderer = Renderer.getInstance();
+            renderer.resetBuffers();
+            renderer.beginFrame();
+            RenderTargetManager.copyColorMipToBuffer(atlas, buffer, 0);
+            renderer.endFrame();
+            Vulkan.waitIdle();
+            MemoryManager.getInstance().MapAndCopy(allocation, 16, pointer -> {
+                ByteBuffer pixels = pointer.getByteBuffer(0, 16);
+                int[][] expected = {
+                        {32, 48, 80, 128}, {100, 140, 180, 200},
+                        {32, 48, 80, 128}, {80, 120, 160, 200}
+                };
+                for(int px = 0; px < expected.length; px++)
+                    for(int channel = 0; channel < 4; channel++)
+                        if((pixels.get(px * 4 + channel) & 255) != expected[px][channel])
+                            throw new AssertionError("Multi-sprite pixel mismatch at " + px + ":" + channel);
+            });
+            Initializer.LOGGER.info("VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK");
+        } finally {
+            Vulkan.waitIdle();
+            if(first != null) first.retire();
+            if(second != null) second.retire();
+            if(a != null) a.retire(null);
+            if(b != null) b.retire(null);
             if(buffer != 0L) MemoryManager.freeBuffer(buffer, allocation);
             MemoryUtil.memFree(sourceA);
             MemoryUtil.memFree(sourceB);

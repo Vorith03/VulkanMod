@@ -65,6 +65,15 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         return SHARED_SCRATCH_REQUESTED && BATCH_REQUESTED && GpuAnimationSourcePool.enabled();
     }
 
+    private static final boolean MULTI_REQUESTED =
+            Boolean.getBoolean("vulkanmod.experimentalGpuAnimationMultiDispatch");
+    private static final int MAX_BATCH_JOBS = 32;
+    private static final int JOB_WORDS = 12;
+    private static final int JOB_BYTES = JOB_WORDS * Integer.BYTES;
+    public static boolean multiRequested() {
+        return MULTI_REQUESTED && sharedScratchRequested();
+    }
+
     private static final int MAX_BINDINGS = 2048;
     private static final int WORKGROUP_SIZE = 64;
     private static final int PUSH_WORDS = 12;
@@ -80,6 +89,9 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private long pipeline;
     private int liveBindings;
     private final List<SharedScratchPage> sharedScratchPages = new ArrayList<>();
+    private final List<PendingJobs> pendingJobs = new ArrayList<>();
+    private long multiEligible, multiAccepted, multiFallback, multiDispatches, multiJobsDispatched;
+    private long multiMetadataBytes, multiFlushes;
     // Include pages waiting for GPU-safe retirement in the physical budget.
     private long allocatedSharedScratchBytes;
     private boolean closed;
@@ -266,7 +278,13 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.scratch = scratch;
             this.descriptorSet = set;
         }
-        int remaining() { return SHARED_SCRATCH_PAGE_BYTES - usedBytes; }
+        int metadataBytes;
+        int remaining() { return SHARED_SCRATCH_PAGE_BYTES - usedBytes - metadataBytes; }
+        int reserveJob() {
+            if(remaining() < JOB_BYTES) return -1;
+            metadataBytes += JOB_BYTES;
+            return SHARED_SCRATCH_PAGE_BYTES - metadataBytes;
+        }
         int reserve(int bytes) {
             int offset = usedBytes;
             usedBytes = Math.addExact(usedBytes, bytes);
@@ -426,6 +444,15 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         boolean fused = BATCH_REQUESTED && binding.mipTableOffset >= 0
                 && (long)binding.mipTableOffset + levels * 24L <= binding.sourceBytes;
         boolean queuedCopy = BATCH_REQUESTED && VTextureSelector.canQueueComputedSpriteCopies();
+        if(multiRequested() && fused && queuedCopy && binding.sharedPage != null) {
+            this.multiEligible++;
+            DispatchResult multi = this.queueMultiJob(binding, atlas, outputOffsets,
+                    frameWidth, frameHeight, columns, currentIndex, nextIndex,
+                    subFrame, duration, destX, destY,
+                    levels, regionCount, totalPixels, totalBytes);
+            if(multi != null) return multi;
+            this.multiFallback++;
+        }
         if(queuedCopy) {
             // A repeated update may reuse this scratch before its queued read has
             // been recorded. Drain only that dependency, not every other sprite.
@@ -609,6 +636,166 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         return new DispatchResult(regionCount, totalPixels, totalBytes, fused ? 1 : regionCount);
     }
 
+
+    /** One pending table is contiguous within a page; rows are allocated from
+     * the high end downwards and dispatched in reverse admission order. Distinct
+     * accepted bindings own disjoint scratch output and source lease intervals. */
+    private static final class PendingJobs {
+        final SharedScratchPage page;
+        int baseWord;
+        int count;
+        int maxPixels;
+        int maxLevels;
+        PendingJobs(SharedScratchPage page) { this.page = page; }
+    }
+
+    private synchronized DispatchResult queueMultiJob(
+            Binding binding, VulkanImage atlas, int[] outputOffsets,
+            int width, int height, int columns, int currentIndex, int nextIndex,
+            int subFrame, int duration, int destX, int destY,
+            int levels, int regions, long pixels, long bytes) {
+        SharedScratchPage page = binding.sharedPage;
+        if(page == null || this.closed || !Device.getGraphicsQueue().hasActiveUploadBatch())
+            return null;
+        // A previous frame's queued transfer may still read this exact slot.
+        VTextureSelector.flushPendingSpriteUploadRange(page.scratch.getId(),
+                binding.scratchOffset, binding.scratchBytes);
+        PendingJobs group = null;
+        for(PendingJobs candidate : pendingJobs)
+            if(candidate.page == page) { group = candidate; break; }
+        if(group != null && group.count >= MAX_BATCH_JOBS) {
+            VTextureSelector.flushPendingSpriteUploadCopies();
+            group = null;
+        }
+        final int jobPixels, currentX, currentY, nextX, nextY;
+        try {
+            jobPixels = Math.multiplyExact(width, height);
+            currentX = Math.multiplyExact(currentIndex % columns, width);
+            currentY = Math.multiplyExact(currentIndex / columns, height);
+            nextX = Math.multiplyExact(nextIndex % columns, width);
+            nextY = Math.multiplyExact(nextIndex / columns, height);
+        } catch(ArithmeticException invalid) {
+            return null;
+        }
+        if(jobPixels <= 0 || (long)(jobPixels - 1) / WORKGROUP_SIZE + 1L
+                > Device.deviceProperties.limits().maxComputeWorkGroupCount(0))
+            return null;
+        int tableOffset = page.reserveJob();
+        if(tableOffset < 0) return null;
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            ByteBuffer row = stack.malloc(JOB_BYTES).order(ByteOrder.nativeOrder());
+            row.putInt(binding.sourceOffset >>> 2);
+            row.putInt(currentX).putInt(currentY).putInt(nextX).putInt(nextY);
+            row.putInt(width).putInt(height).putInt(binding.scratchOffset >>> 2);
+            row.putInt(subFrame).putInt(duration);
+            row.putInt((binding.sourceOffset + binding.mipTableOffset) >>> 2);
+            row.putInt(levels).flip();
+            // If staging must reset, it first flushes all preceding atlas copy
+            // epochs (and their pending compute) before switching command buffers.
+            if(!VTextureSelector.uploadTextureComputeJob(page.scratch, tableOffset, row))
+                return null;
+        }
+        // No fallible operation follows acceptance: copy geometry was checked in
+        // dispatch(), and the queue may drain immediately on overlap/capacity.
+        if(group == null || !this.pendingJobs.contains(group)) {
+            group = new PendingJobs(page);
+            this.pendingJobs.add(group);
+        }
+        group.baseWord = tableOffset >>> 2;
+        group.count++;
+        group.maxPixels = Math.max(group.maxPixels, jobPixels);
+        group.maxLevels = Math.max(group.maxLevels, levels);
+        this.multiAccepted++;
+        this.multiMetadataBytes += JOB_BYTES;
+        int queued = VTextureSelector.queueComputedSpriteFrame(page.scratch, atlas,
+                outputOffsets, width, height, levels, destX, destY, binding.scratchOffset);
+        if(queued != regions)
+            throw new IllegalStateException("Accepted GPU job lost its prevalidated atlas copies");
+        TextureTickAttribution.recordInterpolationCopyRoute(true);
+        return new DispatchResult(regions, pixels, bytes, 0);
+    }
+
+    /**
+     * Called by the atlas queue immediately before recording reads from scratch.
+     * All job-table transfer writes have been recorded on the same graphics
+     * command buffer. Workgroup Z selects a job; Y selects its source mip.
+     */
+    public static synchronized void flushPendingBatchedJobs() {
+        if(instance != null) instance.flushPendingJobs();
+    }
+
+    private synchronized void flushPendingJobs() {
+        if(this.pendingJobs.isEmpty()) return;
+        if(this.closed || !Device.getGraphicsQueue().hasActiveUploadBatch())
+            throw new IllegalStateException("GPU interpolation jobs lost their command-buffer owner");
+        CommandPool.CommandBuffer commandBuffer = Device.getGraphicsQueue().getCommandBuffer();
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            for(PendingJobs jobs : this.pendingJobs) {
+                VkBufferMemoryBarrier.Buffer before = VkBufferMemoryBarrier.calloc(2, stack);
+                before.get(0).sType$Default()
+                        .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_SHADER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(jobs.page.source.getId()).offset(0)
+                        .size(jobs.page.source.getBufferSize());
+                before.get(1).sType$Default()
+                        .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT
+                                | VK_ACCESS_SHADER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(jobs.page.scratch.getId()).offset(0)
+                        .size(jobs.page.scratch.getBufferSize());
+                vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        0, null, before, null);
+
+                vkCmdBindPipeline(commandBuffer.getHandle(), VK_PIPELINE_BIND_POINT_COMPUTE,
+                        this.pipeline);
+                vkCmdBindDescriptorSets(commandBuffer.getHandle(),
+                        VK_PIPELINE_BIND_POINT_COMPUTE, this.pipelineLayout, 0,
+                        stack.longs(jobs.page.descriptorSet), null);
+                ByteBuffer push = stack.calloc(PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder());
+                push.putInt(32, jobs.baseWord);
+                push.putInt(40, jobs.count);
+                push.putInt(44, -1);
+                vkCmdPushConstants(commandBuffer.getHandle(), this.pipelineLayout,
+                        VK_SHADER_STAGE_COMPUTE_BIT, 0, push);
+                vkCmdDispatch(commandBuffer.getHandle(),
+                        (jobs.maxPixels - 1) / WORKGROUP_SIZE + 1, jobs.maxLevels, jobs.count);
+
+                VkBufferMemoryBarrier.Buffer after = VkBufferMemoryBarrier.calloc(1, stack);
+                after.get(0).sType$Default()
+                        .srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(jobs.page.scratch.getId()).offset(0)
+                        .size(jobs.page.scratch.getBufferSize());
+                vkCmdPipelineBarrier(commandBuffer.getHandle(),
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, null, after, null);
+                multiDispatches++;
+                multiJobsDispatched += jobs.count;
+                TextureTickAttribution.recordResidentBatchedDispatch();
+            }
+        }
+        multiFlushes++;
+        pendingJobs.clear();
+    }
+
+    public static synchronized MultiStats multiStats() {
+        if(instance == null) return new MultiStats(0, 0, 0, 0, 0, 0, 0);
+        GpuTextureInterpolationCompute c = instance;
+        return new MultiStats(c.multiEligible, c.multiAccepted, c.multiFallback,
+                c.multiDispatches, c.multiJobsDispatched, c.multiMetadataBytes, c.multiFlushes);
+    }
+    public record MultiStats(long eligible, long accepted, long fallbacks,
+                             long dispatches, long dispatchedJobs, long metadataBytes,
+                             long flushes) {}
+
     private void createDescriptorResources() {
         try(MemoryStack stack = MemoryStack.stackPush()) {
             VkDescriptorSetLayoutBinding.Buffer bindings =
@@ -775,6 +962,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             this.descriptorSetLayout = VK_NULL_HANDLE;
         }
         this.liveBindings = 0;
+        this.pendingJobs.clear();
         this.sharedScratchPages.clear();
     }
 
@@ -836,6 +1024,8 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             if(this.retired) {
                 return;
             }
+            // End an accepted queue epoch before scheduling any binding retirement.
+            GpuTextureInterpolationCompute.flushPendingBatchedJobs();
             this.retired = true;
             if(this.sharedPage != null) {
                 this.owner.retireSharedBinding(this.sharedPage);

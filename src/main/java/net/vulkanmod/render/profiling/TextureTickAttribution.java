@@ -1,5 +1,7 @@
 package net.vulkanmod.render.profiling;
 
+import net.vulkanmod.render.texture.GpuTextureInterpolationCompute;
+
 import java.util.Arrays;
 import java.util.Locale;
 
@@ -232,11 +234,16 @@ public final class TextureTickAttribution {
     }
 
     public static void recordResidentInterpolation(int dispatches, long pixels, long bytes) {
-        if(!ENABLED || !tickActive || dispatches <= 0 || pixels <= 0L || bytes < 0L) return;
+        if(!ENABLED || !tickActive || dispatches < 0 || pixels <= 0L || bytes < 0L) return;
         residentInterpolationCalls++;
         residentInterpolationDispatches += dispatches;
         residentInterpolationPixels += pixels;
         residentInterpolationBytes += bytes;
+    }
+
+    /** Deferred multi-sprite compute is recorded at the copy-drain boundary. */
+    public static void recordResidentBatchedDispatch() {
+        if(ENABLED && tickActive) residentInterpolationDispatches++;
     }
 
     public static void residentAdmitted(long bytes) {
@@ -405,6 +412,16 @@ public final class TextureTickAttribution {
                 .append(" resident_source_rejected=").append(residentSourceRejected)
                 .append(" resident_staging_rejected=").append(residentStagingRejected)
                 .append(" resident_invalidated=").append(residentInvalidated);
+        // Lifetime multi-job counters are deliberately not reset with the
+        // benchmark window; their deltas can be compared across matched runs.
+        var multi = GpuTextureInterpolationCompute.multiStats();
+        line.append(" gpu_multi_eligible_total=").append(multi.eligible())
+                .append(" gpu_multi_accepted_total=").append(multi.accepted())
+                .append(" gpu_multi_fallback_total=").append(multi.fallbacks())
+                .append(" gpu_multi_dispatch_total=").append(multi.dispatches())
+                .append(" gpu_multi_jobs_dispatched_total=").append(multi.dispatchedJobs())
+                .append(" gpu_multi_metadata_bytes_total=").append(multi.metadataBytes())
+                .append(" gpu_multi_flush_total=").append(multi.flushes());
         for (InterpolationFallback reason : INTERPOLATION_REASONS) {
             line.append(" interpolation_fallback_")
                     .append(reason.name().toLowerCase(Locale.ROOT)).append('=')

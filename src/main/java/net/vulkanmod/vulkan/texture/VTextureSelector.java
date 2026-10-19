@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.texture;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.profiling.TextureTickAttribution;
+import net.vulkanmod.render.texture.GpuTextureInterpolationCompute;
 import net.vulkanmod.render.chunk.AreaUploadManager;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
@@ -212,6 +213,18 @@ public abstract class VTextureSelector {
     /** Upload immutable source bytes into a reserved range of a shared GPU page. */
     public static boolean uploadTextureResidentSource(TextureResidentBuffer destination,
                                                       int destinationOffset, ByteBuffer source) {
+        return uploadTextureResidentRange(destination, destinationOffset, source, false);
+    }
+
+    /** Append an immutable job row; only a staging-reset boundary drains prior atlas copies. */
+    public static boolean uploadTextureComputeJob(TextureResidentBuffer destination,
+                                                   int destinationOffset, ByteBuffer source) {
+        return uploadTextureResidentRange(destination, destinationOffset, source, true);
+    }
+
+    private static boolean uploadTextureResidentRange(TextureResidentBuffer destination,
+                                                       int destinationOffset, ByteBuffer source,
+                                                       boolean computeJob) {
         if(destination == null || source == null || source.remaining() <= 0
                 || destinationOffset < 0
                 || destinationOffset > destination.getBufferSize() - source.remaining()) {
@@ -225,7 +238,8 @@ public abstract class VTextureSelector {
 
         // Preserve atlas-copy order when this resident source is seeded between
         // CPU-backed sprite uploads in the outer texture-tick batch.
-        flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.SOURCE_SEED);
+        if(!computeJob)
+            flushSpriteUploadCopies(TextureTickAttribution.CopyFlushReason.SOURCE_SEED);
 
         int size = source.remaining();
         if(size > TEXTURE_STAGING_BATCH_LIMIT) {
@@ -753,6 +767,9 @@ public abstract class VTextureSelector {
                 || !graphicsQueue.hasActiveUploadBatch()) {
             throw new IllegalStateException("Sprite upload copy batch lost its graphics command-buffer owner");
         }
+
+        // Compute results must become visible before their atlas source reads.
+        GpuTextureInterpolationCompute.flushPendingBatchedJobs();
 
         int groups;
         if(UNIFIED_GPU_UPLOADS) {
