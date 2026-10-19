@@ -98,11 +98,14 @@ public class RenderSection {
     }
 
     public RenderSection setGraphInfo(@Nullable Direction from, byte step) {
+        boolean wasDirectSeed = !this.hasMainDirection();
         mainDir = from;
         sourceDirs = (byte) (from != null ? 1 << from.ordinal() : 0);
         this.step = step;
         this.directions = 0;
         this.directionChanges = 0;
+        if(wasDirectSeed != !this.hasMainDirection() && this.chunkArea != null)
+            this.chunkArea.candidateDirectionChanged(this);
         return this;
     }
 
@@ -211,6 +214,8 @@ public class RenderSection {
     public RenderSection getNeighbour(int i) { return this.neighbours[i]; }
 
     public void setChunkArea(ChunkArea chunkArea) {
+        if(this.chunkArea != null && this.chunkArea != chunkArea)
+            this.chunkArea.candidateOwnerDeparted();
         this.chunkArea = chunkArea;
         this.frustumIndex = chunkArea.getFrustumIndex(xOffset, yOffset, zOffset);
     }

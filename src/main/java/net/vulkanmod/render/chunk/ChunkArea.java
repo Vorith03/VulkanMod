@@ -250,6 +250,26 @@ public class ChunkArea {
             markCandidateBit(graphVisitBits, section);
     }
 
+    // A producer mutation must revoke the proof before a cached draw can bypass
+    // getOwnedSection/the per-slot direction audit. Rebuild it on fresh traversal;
+    // do not attempt to repair a queue whose captured provenance is now stale.
+    void candidateOwnerDeparted() {
+        if(!TRACK_GPU_CANDIDATE_PROVENANCE) return;
+        candidateInputRevision++;
+        candidateOwnershipRevision++;
+        candidateQueueComplete = false;
+    }
+
+    void candidateDirectionChanged(RenderSection section) {
+        if(!TRACK_GPU_CANDIDATE_PROVENANCE) return;
+        int slot = voxelSlot(section.xOffset, section.yOffset, section.zOffset);
+        if(slot >= 0 && section.getChunkArea() == this && ownedSections[slot] == section
+                && (queuedCandidateBits[slot >>> 6] & (1L << (slot & 63))) != 0L) {
+            candidateInputRevision++;
+            candidateQueueComplete = false;
+        }
+    }
+
     long getCandidateOwnershipRevision() {
         return candidateOwnershipRevision;
     }

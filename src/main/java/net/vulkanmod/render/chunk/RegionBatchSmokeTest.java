@@ -22,6 +22,7 @@ public final class RegionBatchSmokeTest {
         verifyLazyGpuCommandOwnership();
         verifyCandidateProducerProvenance();
         verifyCandidateGeometryProducer();
+        verifyCachedCandidateProducerRevocation();
         verifyGeneratedReplaceCandidates();
         verifyGeneratedCandidateResidencyFingerprint();
         verifyStagedCpuReplacementContract();
@@ -784,6 +785,69 @@ public final class RegionBatchSmokeTest {
                     "Direct non-producer queue writes must not bypass GPU containment");
         } finally {
             area.releaseBuffers();
+        }
+    }
+
+    private static void verifyCachedCandidateProducerRevocation() {
+        if(!ChunkArea.trackGpuCandidateProvenance()) return;
+        ChunkArea area = new ChunkArea(43, new Vector3i(0, 0, 0));
+        ChunkArea nextArea = new ChunkArea(44, new Vector3i(0, 0, 0));
+        RenderSection section = new RenderSection(0, 16, 16, 16);
+        section.setChunkArea(area);
+        area.registerSection(section, 16, 16, 16);
+        TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+        var publisher = new RegionDrawBatch();
+        try {
+            var parameters = section.getDrawParameters(type);
+            new DrawBuffers.ParametersUpdate(parameters, 18, 0, 0).setDrawParameters();
+            parameters.vertexBufferSegment.setReady();
+            section.setGraphInfo(net.minecraft.core.Direction.EAST, (byte) 0);
+            area.addSection(section);
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.publishedCandidates(type) != null
+                            && publisher.hasCompleteCandidateSuperset(type),
+                    "Producer revocation regression needs an initialized generated-mode cache");
+            long revision = area.getCandidateInputRevision();
+            section.setGraphInfo(net.minecraft.core.Direction.EAST, (byte) 1);
+            require(area.candidateQueueCovered() && area.getCandidateInputRevision() == revision,
+                    "Unchanged direct-seed status must not revoke a valid cached proof");
+            section.setGraphInfo(null, (byte) 0);
+            require(!area.candidateQueueCovered(),
+                    "Post-enqueue direct seed must revoke proof before cached reuse");
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.publishedCandidates(type) == null
+                            && !publisher.hasCompleteCandidateSuperset(type),
+                    "Cached generated-mode table must reject changed direct provenance");
+            area.resetQueue();
+            area.addSection(section);
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type),
+                    "Fresh producer traversal must recover direct-seed ownership");
+            section.setGraphInfo(net.minecraft.core.Direction.WEST, (byte) 0);
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.publishedCandidates(type) == null,
+                    "Removing direct-seed provenance must also revoke cached candidates");
+            area.resetQueue();
+            area.addSection(section);
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type),
+                    "Fresh traversal must recover graph provenance after direction mutation");
+            long owner = area.getCandidateOwnershipRevision();
+            section.setChunkArea(nextArea);
+            require(!area.candidateQueueCovered() && area.getCandidateOwnershipRevision() != owner,
+                    "Area transfer must notify the previous owner before its cache fast path");
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
+            require(publisher.publishedCandidates(type) == null
+                            && !publisher.hasCompleteCandidateSuperset(type),
+                    "Departed identity must never retain cached GPU command ownership");
+            nextArea.registerSection(section, 16, 16, 16);
+            nextArea.addSection(section);
+            require(nextArea.candidateQueueCovered(),
+                    "Destination ownership must remain independently provable");
+        } finally {
+            publisher.free();
+            area.releaseBuffers();
+            nextArea.releaseBuffers();
         }
     }
 
