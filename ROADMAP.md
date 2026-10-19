@@ -1,5 +1,10 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## Latest particle capacity safety and native qualification — #1044 pending
+
+#1041 (39194476949) failed a descriptor-exhaustion fixture assumption, and diagnostic #1042 (39194915798) demonstrated Lavapipe allowed 82 live sets against a 64-set descriptor pool. This is negative CI evidence, not proof of wrong particle geometry. Production fix `6817c071f28903656346886f38764c552e91e7ed` bounds host descriptor reservations to 64 including sets queued for fence retirement; a refused compute batch retains CPU materialization. Probe change `71f1bec858a9c2dbb589d218b172eec624c0dd29` moves 80-buffer pressure to a dedicated last recording frame so pending retirement cannot contaminate the three prior geometry passes. #1043 was superseded. **Full #1044 / run 39195687691 is pending**; last completely qualified executable remains #1040 `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, JAR 12160493015. No RX net CPU/GPU/FPS/p95/p99 evidence. Test-only pressure and idle reconstruction do not prove actual resource reload or Immersive Portals mixed translucent pixels. Full GPU-first release incomplete.
+
+
 **New native particle pressure evidence pending:** Source `7bdf805` adds real descriptor capacity exhaustion and post-idle compute reinitialization to CI screenshot oracle; #1041 / run 39194476949 pending. #1040 remains last qualified. No new GPU ownership adoption, portal pixels, actual resource reload or performance result; all integrated GPU-first gates stay open.
 
 

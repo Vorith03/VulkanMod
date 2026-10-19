@@ -1,5 +1,10 @@
 # GPU particle billboard ownership pilot
 
+## Latest particle capacity safety and native qualification — #1044 pending
+
+#1041 (39194476949) failed a descriptor-exhaustion fixture assumption, and diagnostic #1042 (39194915798) demonstrated Lavapipe allowed 82 live sets against a 64-set descriptor pool. This is negative CI evidence, not proof of wrong particle geometry. Production fix `6817c071f28903656346886f38764c552e91e7ed` bounds host descriptor reservations to 64 including sets queued for fence retirement; a refused compute batch retains CPU materialization. Probe change `71f1bec858a9c2dbb589d218b172eec624c0dd29` moves 80-buffer pressure to a dedicated last recording frame so pending retirement cannot contaminate the three prior geometry passes. #1043 was superseded. **Full #1044 / run 39195687691 is pending**; last completely qualified executable remains #1040 `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, JAR 12160493015. No RX net CPU/GPU/FPS/p95/p99 evidence. Test-only pressure and idle reconstruction do not prove actual resource reload or Immersive Portals mixed translucent pixels. Full GPU-first release incomplete.
+
+
 ## Native pool exhaustion and post-idle owner restart — pending #1041
 
 Source `7bdf805` adds 80 distinct transient ParticleVertexBuffer allocations in one recording frame, requiring successful real GPU expansion, actual native descriptor-pool rejection and CPU expansion of the refused compact row. Later frame exercises pipeline/descriptor teardown only after Vulkan.waitIdle, with new native binding on the next pass. Retirements use fence-owned existing buffer disposal. Full CI #1041 / run 39194476949 pending, #1040 remains the latest qualified executable. This **does not simulate actual resource reload**, real IP callbacks/mixed translucent pixels, or RX hardware cost.
