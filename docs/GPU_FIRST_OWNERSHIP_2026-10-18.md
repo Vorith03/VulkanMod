@@ -1,5 +1,12 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## Generated REPLACE indirect composition — full #1059 pending
+
+Executable `f9d581ba6a3a9136bd47166e04d5f26e4fda2995`, [run 39239916771](https://github.com/Vorith03/VulkanMod/actions/runs/39239916771), adds default-off `experimentalGpuGeneratedIndirectReplace` with existing handoff/indirect/CPU-bypass gates. Candidate v1 can encode single-command REPLACE; all APPEND combinations retain the atomic FrameBatch planner. Exact ownership/readiness, provenance, queue, volume, capacity and retirement requirements remain. Generated plans are re-evaluated per draw until their full producer invalidation contract exists. Duplicate FrameBatch serialization/upload is skipped on acceptance; per-section numeric planning remains in candidate preparation, so CPU displacement is incomplete and net cost unmeasured.
+
+Local 24 offline contracts/extracted planner passed; native qualification pending. See the terrain handoff contract for precise tests and boundaries. Previous full #1058 remains the qualified executable. Particle real portal/mod pixels/reload/sustained-pressure evidence remains unavailable; no new actionable defect justified delaying terrain. Next: resolve #1059, then atomic APPEND-aware candidate/selector extension and mixed-consumption qualification. Keep every pilot default-off, preserve negative evidence, and do not request isolated RX benchmarks. Integrated correctness/adoption/profitability and release completion remain open. Refresh the rolling handoff every session.
+
+
 ## October 19 particle post-callback admission safety — full #1056 qualified
 
 Full [#1056 / run 39232013086](https://github.com/Vorith03/VulkanMod/actions/runs/39232013086) **PASSED** for executable `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710`, Forge JAR artifact **12178027221** and smoke logs **12177772301**. Public offline contracts, Forge distributable/both startups, native texture/particle/terrain pixels and synchronization, screenshot and Create Chronicles/Immersive Portals/Crash Assistant checks passed; private packs were skipped.
