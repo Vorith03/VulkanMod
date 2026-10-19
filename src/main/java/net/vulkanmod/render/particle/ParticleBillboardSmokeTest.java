@@ -45,6 +45,50 @@ public final class ParticleBillboardSmokeTest {
         }
         return builder.end();
     }
+
+    /**
+     * Real Vulkan descriptor exhaustion, not the CI forced-unavailable switch.
+     * Every accepted compact quad occupies its original vertex slot; a rejected
+     * batch is restored on the CPU before upload, with no compute dispatch.
+     * Freeing the temporary buffers schedules normal fence-owned retirement.
+     */
+    private static void verifyDescriptorPressure() {
+        ParticleVertexBuffer[] buffers = new ParticleVertexBuffer[80];
+        ByteBuffer compact = MemoryUtil.memAlloc(ParticleQuadBatch.QUAD_BYTES)
+                .order(ByteOrder.nativeOrder());
+        try {
+            ParticleQuadBatch jobs = new ParticleQuadBatch();
+            jobs.add(0);
+            ParticleQuadBatch.pack(compact, 0, 0.25f, -0.5f, 0.75f,
+                    new Quaternionf(), 0.5f, 0.125f, 0.875f, 0.25f, 0.75f,
+                    0xffffffff, 0x00f000f0);
+            long rejectedBefore = ParticleBillboardCompute.descriptorRejectionsForSmoke();
+            int accepted = 0;
+            boolean rejected = false;
+            for(int i = 0; i < buffers.length; ++i) {
+                buffers[i] = new ParticleVertexBuffer(16);
+                if(!ParticleBillboardCompute.expand(buffers[i], compact, jobs)) {
+                    rejected = true;
+                    // Same compact source must remain usable by the CPU fallback.
+                    jobs.expandCpu(compact);
+                    for(int vertex = 0; vertex < 4; ++vertex) {
+                        if(!Float.isFinite(compact.getFloat(vertex * ParticleQuadBatch.STRIDE)))
+                            throw new AssertionError("Descriptor pressure corrupted CPU recovery");
+                    }
+                    break;
+                }
+                accepted++;
+            }
+            if(!rejected || accepted == 0
+                    || ParticleBillboardCompute.descriptorRejectionsForSmoke() <= rejectedBefore)
+                throw new AssertionError("Descriptor pool pressure did not fail closed after successful GPU draws");
+        } finally {
+            for(ParticleVertexBuffer pressure : buffers)
+                if(pressure != null) pressure.freeBuffer();
+            MemoryUtil.memFree(compact);
+        }
+    }
+
     public static void verify(Minecraft minecraft) throws Exception {
         if(!ParticleBillboardCompute.requested()) throw new AssertionError("Particle pilot disabled in native oracle");
         BufferBuilder cpu=new BufferBuilder(16), gpu=new BufferBuilder(16), sorted=new BufferBuilder(16);
@@ -96,6 +140,7 @@ public final class ParticleBillboardSmokeTest {
                 BufferUploader.drawWithShader(recovery);
                 if(ParticleBillboardCompute.gpuQuads()!=recoveredBefore) throw new AssertionError("Unavailable compute executed");
                 ParticleBillboardCompute.ciUnavailable(false);
+                if(pass == 0) verifyDescriptorPressure();
                 renderer.endFrame();
                 Vulkan.waitIdle(); // Native oracle only: production performs no waits/readback.
                 ByteBuffer expectedBytes=reference;
@@ -114,10 +159,13 @@ public final class ParticleBillboardSmokeTest {
                     }
                 });
                 MemoryUtil.memFree(reference); reference=null;
+                // Exercise safe device-idle teardown with frame-retired descriptors
+                // still scheduled, then rebuild the pipeline on the next pass.
+                if(pass == 1) ParticleBillboardCompute.shutdownAfterDeviceIdle();
                 // Force another VkBuffer generation while older descriptor retirement is pending.
                 buffer.reserve(buffer.getBufferSize()+16);
             }
-            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, production uploader, CPU sorting/recovery, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
+            Initializer.LOGGER.info("GPU particle billboard smoke passed: transformed inherited render, 87/131 mixed quads, all geometry/UV/color/light, nonunit rotation/roll, exact callbacks, production uploader, CPU sorting/recovery, descriptor pressure, device-idle reinitialization, growth and generation retirement; {}",ParticleBillboardCompute.statistics());
         } finally {
             ParticleBillboardCompute.ciUnavailable(false);
             RenderSystem.setShader(()->previous);

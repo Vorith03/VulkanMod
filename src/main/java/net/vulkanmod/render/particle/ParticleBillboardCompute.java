@@ -153,6 +153,8 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         return true;
     }
     public static long gpuQuads() { return gpuQuads; }
+    /** Native CI probe: pool exhaustion must reject before recording a dispatch. */
+    static long descriptorRejectionsForSmoke() { return descriptorRejections; }
     public static String statistics() {
         return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
                 inheritedAttempts,eligibleAttempts,originalCpu,packed,gpuQuads,recoveryQuads,layoutFallbacks,unavailableFallbacks,batches,capacityRejections,descriptorRejections,
