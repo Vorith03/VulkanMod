@@ -343,3 +343,14 @@ bounded existing-profiler coverage/cost discriminator before an integrated
 hardware run, alongside further GPU-owned compute work (multi-sprite texture
 batching, generated terrain REPLACE/atomic APPEND command ABI, particle portal
 qualifications). Keep opt-in gates until equivalent and profitable.
+
+## Sparse active candidate production — full #1040
+
+Qualified executable `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, full **#1040**, [run 39192146854](https://github.com/Vorith03/VulkanMod/actions/runs/39192146854) **PASSED**, JAR **12160493015**, smoke logs **12160477999**. Full offline, native terrain/indirect and texture/particle pixel/synchronization, Forge build/startups, public Create Chronicles and Crash Assistant gates passed; private packs skipped.
+
+Changed traversal now builds candidate v1 from pre-frustum graph visits plus direct seeds in compact producer bitsets; never infer graph visibility from the CPU frustum queue. A membership/owner audit fails closed for missing/stale queued slots. Iteration over the active union replaces the full 512-slot owned-section CPU metadata scan on sparse changed traversals and reduces GPU input rows. Builder starts with 32 records, doubles to the existing 512 cap. Mesh/visibility/revision, pending active-slot readiness, generation, portal culling-volume and GPU output/fallback contracts remain; generated REPLACE/atomic APPEND indirect combination still excluded. Earlier #1039 stable-provenance reuse remains.
+
+`gpuCandidateLifetime` adds lifetime draw/provenance reuse vs sparse rebuild/attempt, prepared/published slot counts, successful publications, producer mask mark attempts (graph plus direct attempts; not unique sections) and publisher preparation ms when `vulkanmod.performanceProfiler=true`. Take differences between benchmark summaries. Prep timer excludes producer per-visit writes and GPU dispatch/submission. This is a correctness-qualified CPU preparation reduction, NOT elimination of CPU graph traversal, and RX cache coverage/net CPU/GPU/FPS/p95/p99 benefit is **unmeasured**. Do not request the already analyzed #1028 UUID `e05f2b31` again.
+
+Remaining: particle portal/mod/pixel/reload/pressure, multi-sprite GPU texture dispatch and shared descriptor/scratch, incremental producer slot data and REPLACE/atomic APPEND candidate ABI, integrated RX evidence. All opt-in, no release completion.
+

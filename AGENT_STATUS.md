@@ -1,5 +1,14 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Sparse producer GPU candidate input — #1040 qualified
+
+Full #1040 [run 39192146854](https://github.com/Vorith03/VulkanMod/actions/runs/39192146854) **PASSED** at executable `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, Forge JAR artifact **12160493015**, smoke logs **12160477999**. Public offline/native Vulkan indirect/terrain, texture/particle pixel/sync, Forge package/startups, Create Chronicles and Crash Assistant succeeded; private pack fixtures skipped.
+
+Opt-in candidate v1 now serializes only pre-frustum graph-visited and direct-seeded section slots on changed traversals, not every owned slot. The CPU queue is audited for coverage; stale/incomplete sets retain CPU fallback. Active slots retain readiness/mesh/graph flags, increasing packed-slot order, generation and exact camera/portal-volume checks; GPU hybrid REPLACE/atomic APPEND remains unsupported. The Builder allocates 32 initial records and grows to the 512 bound. Lifetime `gpuCandidateLifetime` profiler/F3 counters cover draw/traversal reuse, sparse rebuild/attempt, prepared/published slots, producer mark attempts and timed publisher preparation; marks include graph/direct attempts, and `prepMs` excludes producer stamps and GPU submission. CPU graph traversal and active-slot parameter reads remain. There is **no measured RX net CPU/GPU/FPS/p95/p99 gain**, and no default or GPU-first release promotion.
+
+Next: qualify particle portal/mod/pixel/reload/frame pressure; advance shared multi-sprite texture compute and per-slot producer metadata; version the candidate ABI for REPLACE/atomic APPEND. Keep experiments opt-in. `docs/NEXT_SESSION_PROMPT.md` carries the mandatory rolling handoff.
+
+
 ## Producer-side traversal provenance reuse — full #1039 qualified
 
 Latest qualified executable **e78a7641dffc86a62efaad35066e4733e1d9f702**,

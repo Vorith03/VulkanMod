@@ -161,3 +161,10 @@ The larger project priority remains hybrid GPU terrain construction. Lighting-de
 telemetry still needs representative Create Chronicles section evidence before a
 production lighting input encoding is chosen, and `CPU_REQUIRED` remains authoritative
 for GPU-meshing qualification/fallback.
+
+
+## Sparse producer input amendment — October 18 full #1040
+
+Executable `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, full [#1040 / run 39192146854](https://github.com/Vorith03/VulkanMod/actions/runs/39192146854) passed public offline/native/Forge/compatibility gates (JAR artifact 12160493015).
+
+On changed traversals candidate v1 input now contains **only** producer-stamped graph visits before frustum rejection and separately marked direct seeds. This is a superset of the eligible CPU draw queue, **not** the CPU frustum-approved queue and **not** the entire owned 512-section region. The shader predicate requires graph-visible or direct-seed eligibility; inactive owned slots cannot emit commands. Ordered packed-section IDs, flags, count header, max 512 capacity and selection shader ABI remain unchanged. A CPU queue-to-producer containment check, owned identity check, active-slot readiness, changed mesh/queue/graph/direct masks, ring generation and exact portal culling volume preserve fail-closed CPU fallback. A stale graph bit is not treated as ownership; untracked queued entries reject GPU commands. This still cannot atomically represent generated REPLACE/APPEND terrain command pairs, so combined mesher/indirect consumption remains disabled. Java graph traversal remains CPU-owned; RX profitability unmeasured.
