@@ -34,7 +34,6 @@ bool tableIsCurrent() {
         && inputTable.words[2] == parameters.words[0]
         && inputTable.words[3] == parameters.words[1]
         && inputTable.words[4] <= 1024u
-        && inputTable.words[4] <= parameters.words[3]
         && inputTable.words[5] == parameters.words[4]
         && inputTable.words[6] == parameters.words[5]
         && inputTable.words[7] == parameters.words[6];
