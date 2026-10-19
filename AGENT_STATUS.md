@@ -1,5 +1,10 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Updated validation checkpoint: #1067 failed; #1068 pending (October 19)
+
+Full [#1067 / run 39286363394](https://github.com/Vorith03/VulkanMod/actions/runs/39286363394) **FAILED before native/Forge runtime**: public offline contracts passed, but `compileJava` rejected the newly added local `int generatedReplace` because that publisher method already has a boolean `generatedReplace` parameter. This is a **Java source naming error, not a negative GPU shader/pixel/synchronization result**. Artifact **12204160640** is failed-run smoke logs; **no #1067 JAR exists**. The targeted, behavior-preserving rename landed in corrected executable `0f76caf7e5377ce27edebbfc23235c5daaa0168d`. Full [#1068 / run 39287370625](https://github.com/Vorith03/VulkanMod/actions/runs/39287370625) was **queued/in progress** at this documentation checkpoint, with no passed result or verified JAR/smoke artifacts yet. Until full #1068 succeeds, the last qualified executable remains `360434e664c13050e2eab1174673ed19525ed813` in full #1066 (JAR 12196457613; logs 12196891834). **Next: check #1068 conclusion and exact artifacts before claiming qualification; fix any subsequent actual failure step.** All runtime generated-world/portal pixels and integrated profitability remain open.
+
+
 ## Actual-world generated indirect recording witness — full #1067 pending (October 19)
 
 Executable `2f8a45397639d8a616db3b0e08adc915a08a50b8` was pushed after qualified #1066 (the earlier exact executable remains `360434e664c13050e2eab1174673ed19525ed813`; #1066 JAR 12196457613, logs 12196891834). Full #1067 / [run 39286363394](https://github.com/Vorith03/VulkanMod/actions/runs/39286363394) was **queued** when this note was written; do not treat it as passed until the live workflow and artifact identifiers are checked. The local runtime could not access GitHub/ForgeGradle dependencies, so no local Forge compilation was claimed.
