@@ -1,5 +1,41 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Terrain candidate unchanged-draw reuse — full #1038 qualified
+
+Latest qualified executable **246ff243fc59e8e9667b299ceb3e846a04b57497**,
+full **#1038** / [run 39180288680](https://github.com/Vorith03/VulkanMod/actions/runs/39180288680),
+**passed**: offline/Forge JAR and both startups, native region command ownership
+(including new candidate-cache invalidation assertions), GPU terrain selection,
+texture/particle/pixel/sync, public Create Chronicles and Crash Assistant gates.
+Private resource packs skipped. JAR artifact **12155952145**.
+No new RX adoption/net CPU saving/GPU cost/FPS/p95/p99 result is measured.
+
+Implementation `246ff243` skips the 512-slot builder/owned-section scan/hash
+on unchanged production draws after a published candidate snapshot. Dedicated
+`ChunkArea` input revision advances on each graph traversal (including marked
+off-frustum nodes not represented by queue membership), owned-section changes,
+stale slot discovery and ring resets. Per-layer mesh/visibility revisions,
+pending buffer readiness and exact current-volume checks invalidate the fast path.
+First visit/changed traversal still uses authoritative full scan/fingerprint,
+failed upload still retries, and CPU fallback/generation/APPEND exclusion remain.
+This removes repeated host metadata preparation on steady draws, not traversal
+or all CPU graphics work. Cache-hit adoption and profitability are unmeasured.
+
+Particle final storage-range correction `6a78cfb8` passed full **#1037**
+[run 39179150695](https://github.com/Vorith03/VulkanMod/actions/runs/39179150695)
+on attempt 2, JAR **12156240273**. Attempt 1 failed Forge startup
+`FMLConfig.ConfigValue` null Boolean in indirect smoke before particle assertions;
+rerun of identical executable completed all public native/Forge gates. The
+failed attempt is negative CI evidence, not a proven particle defect.
+#1036 earlier passed the particle geometry/uploader/synchronization pilot.
+
+Next: portal/mod/pixel particle semantics and reload/frame-slot pressure;
+incremental region candidate production beyond the safe unchanged-draw cache;
+multi-sprite texture execution; REPLACE/atomic APPEND-aware candidate ABI and
+integrated adoption/cost evidence. Keep gates opt-in; do not request unchanged
+#1028 baseline or isolated user hardware tests. Updated rolling handoff is
+`docs/NEXT_SESSION_PROMPT.md` and explicitly requires another prompt.
+
 ## Particle billboard continuation — native/Forge milestone qualified
 
 Owner requested a coherent handoff and a next-session prompt which itself requires
@@ -30,8 +66,9 @@ steady-state performance. Real GPU costs / CPU savings / FPS / tails unmeasured.
 #1034 was superseded. #1035 (39165513611) passed build and early native gates but
 failed fixture shader initialization before geometry comparison; #1036 fixed it.
 Final review corrected unsigned uint32 storage-limit admission and bounds descriptor
-views despite oversized unused buffer-growth tails; that final guard needs its own
-full CI before final-tip qualification. Do not promote defaults or request RX tests.
+views despite oversized unused buffer-growth tails; identical executable passed
+full #1037 attempt 2 (attempt 1 Forge FMLConfig startup failure). Do not promote
+defaults or request unchanged RX tests.
 
 All 24 local offline contracts passed. The javac launcher is absent but jdk.compiler
 is installed: a temporary wrapper can invoke `java com.sun.tools.javac.Main "$@"`.

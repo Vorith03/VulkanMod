@@ -2,8 +2,10 @@
 
 Opt-in `-Dvulkanmod.experimentalGpuParticleBillboards=true`, default off.
 Implemented during the October 18 GPU-first continuation; the initial native/Forge
-milestone passed #1036. A final storage-range safety correction needs its own full
-qualification; see living status for the final tip.
+milestone passed #1036. The final storage-range safety correction `6a78cfb8`
+passed full #1037 attempt 2 (39179150695), JAR 12156240273. Its first
+attempt failed Forge FMLConfig startup with a null Boolean in an indirect smoke
+fixture, not a particle assertion. Broad portal/mod/pixel/RX evidence remains open.
 
 ## Production boundary
 
@@ -115,6 +117,7 @@ Its six validation dispatches include direct oracle and production draws, so lif
 GPU/eligible totals are not workload adoption. CI host preparation/submission was
 18.330 ms for six batches, including cold descriptor/command work under software
 Vulkan validation; do not treat this as RX steady-state cost or a speedup. Final
-unsigned/bounded storage-range guard needs separate full qualification.
+unsigned/bounded storage-range guard later passed full #1037 attempt 2 (same
+executable as the failed environmental first attempt).
 All 24 offline contracts also passed locally via the installed
 jdk.compiler module, despite the missing javac launcher.

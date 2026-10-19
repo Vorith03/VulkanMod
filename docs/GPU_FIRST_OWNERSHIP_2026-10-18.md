@@ -215,16 +215,18 @@ qualification before it becomes the final executable checkpoint.
    costs and render-only/tick-bearing p95/p99 on representative RX. Schedule ranking
    is a heuristic, not runtime-visibility weighting or optimal packing; live sources
    stay pinned. Multi-sprite dispatch/shared scratch is still open.
-2. Terrain input preparation: `publishLiveCandidates` still reconstructs and hashes
-   the owned region metadata before deciding it is unchanged. The resident table is
-   reused on the GPU, but host input scanning/allocation has not been eliminated.
-   Use producer-side mesh/ownership/readiness and traversal generation invalidation,
-   retaining pending-upload retries. Queue membership alone is insufficient:
-   `WorldRenderer.addNode` marks a node's last traversal frame before its frustum
-   rejection, so graph-visible metadata outside the CPU queue can change. Preserve
-   ring movement, portals and current-volume generation checks. Measure preparation
-   before promoting indirect CPU bypass; cached CPU command lists were already
-   cheap in some stationary intervals.
+2. Terrain input preparation: full #1038 qualifies a producer/traversal revision
+   cache that skips the owned-section scan/hash/Builder on unchanged production
+   draws. Changed traversal or mesh still rebuilds the candidate table, pending
+   readiness still retries, and the resident indirect selection still needs current
+   GPU generation/output and culling volume. All traversal resets invalidate,
+   including off-frustum graph stamps outside the CPU queue; ownership/ring reuse
+   also invalidate. Incremental updates on actual mesh/graph producer deltas beyond
+   the safe unchanged-draw fast path, cache-hit/adoption and CPU/GPU cost metrics
+   remain open. Queue membership alone is insufficient: `WorldRenderer.addNode`
+   marks a node's last traversal frame before frustum rejection. Preserve
+   ring movement, portals, current-volume checks and recovery. Cached CPU command
+   lists were already cheap in some stationary intervals; measure profitability.
 3. Particle render ownership: qualify a bounded exact render adapter through the
    existing Forge/portal particle loop and mixed/custom draw ordering. Java light,
    world/collision and callbacks remain until a separately proven simulation
@@ -280,3 +282,27 @@ current executable/CI evidence. The particle milestone passed full #1036 at
 JAR 12155143862. Final unsigned/bounded storage-range guard needs follow-up full
 qualification. Broad particle portal/mod/pixel/adoption and RX benefit remain open.
 The wider release remains incomplete.
+
+
+## Subsequent terrain candidate reuse qualification (supersedes per-draw scan pending state above)
+
+Commit `246ff243fc59e8e9667b299ceb3e846a04b57497` passed full **#1038**,
+[run 39180288680](https://github.com/Vorith03/VulkanMod/actions/runs/39180288680),
+JAR artifact **12155952145**. Unchanged candidate metadata now returns before
+any 512-slot scan, CPU Builder, direct-seed boolean array or hash. A cheap
+per-ChunkArea revision advances at every full graph traversal, even when its
+visible queue is the same but off-frustum lastFrame/graph provenance changes,
+and on owned-section registration, stale reference detection and ring clear.
+Layer mesh/visibility revisions, pending segment readiness and exact volume
+also invalidate. Full scan+fingerprint remains authoritative after a change;
+rejected uploads still retry. CI native RegionBatch oracle exercises stable
+reuse and mesh/visibility/volume/ownership/traversal/readiness rejection. This
+does not remove the CPU graph traversal, changed-input scans or all GPU dispatch
+preparation. No measured RX cache hits or net CPU/GPU/FPS/tail benefit.
+
+The prior particle range safety correction `6a78cfb8` passed full **#1037**
+(run 39179150695) on its second attempt, JAR **12156240273**. Initial attempt
+failed an unrelated Forge FMLConfig null Boolean during the indirect smoke startup;
+identical executable passed all gates on retry. Do not call #1037 first attempt
+a particle-compute failure. Particle portal/mod/pixel/reload/pressure and net RX
+benefit remain open. This is not an integrated GPU-first release qualification.

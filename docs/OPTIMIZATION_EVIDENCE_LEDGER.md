@@ -24,6 +24,25 @@ command construction with eliminated terrain preparation. See the ownership doc.
 
 ## ACTIVE GPU-first release priority — October 18
 
+**Latest qualified GPU-first candidate (terrain input cache):** `246ff243`
+passed full public/native/Forge **#1038** (39180288680), artifact **12155952145**.
+Opt-in GPU selection/command ownership now bypasses repeated 512-slot CPU candidate
+hash/Builder/queue preparation when input producer/traversal, mesh and visibility
+revisions, pending readiness and culling volume are unchanged. Every traversal
+invalidates, including off-frustum graph stamps absent from the CPU queue;
+ownership/stale slot/ring reuse also invalidate. On first/changed draw the old
+exact fingerprint, publication retry and lazy CPU fallback remain. **Disposition:
+qualified but unmeasured**. Cache-hit numerator/denominator, real CPU savings,
+GPU dispatch cost and RX p95/p99/FPS have **not** been measured. CPU graph traversal,
+changed-generation scans, mesher APPEND ABI and portal testing remain open.
+
+**Particle storage-bound final-tip qualification:** `6a78cfb8` full **#1037**
+(39179150695) passed **attempt 2**, JAR **12156240273**. Attempt 1 failed the
+Forge FMLConfig startup fixture (null Boolean) in indirect smoke, before particle
+assertions; no shader/compute regression was established. #1036 remains the
+particle geometry/uploader/synchronization oracle. **Disposition: qualified but
+unmeasured**, exact campfire class only, portal/mod/pixel/RX gates open.
+
 Owner directed production CPU displacement across textures, particles and existing
 terrain offload; old queue/buffer sequence is superseded. Read
 [ownership milestone](GPU_FIRST_OWNERSHIP_2026-10-18.md).
