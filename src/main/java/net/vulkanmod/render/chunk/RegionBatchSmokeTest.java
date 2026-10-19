@@ -802,9 +802,11 @@ public final class RegionBatchSmokeTest {
             new DrawBuffers.ParametersUpdate(parameters, 18, 0, 0).setDrawParameters();
             parameters.vertexBufferSegment.setReady();
             section.setGraphInfo(net.minecraft.core.Direction.EAST, (byte) 0);
+            section.setLastFrame((short) 61);
             area.addSection(section);
             publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true, true);
             require(publisher.publishedCandidates(type) != null
+                            && publisher.publishedCandidates(type).candidateCount() == 1
                             && publisher.hasCompleteCandidateSuperset(type),
                     "Producer revocation regression needs an initialized generated-mode cache");
             long revision = area.getCandidateInputRevision();
