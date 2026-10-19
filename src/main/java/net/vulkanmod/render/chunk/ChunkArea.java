@@ -30,7 +30,8 @@ public class ChunkArea {
     private final RenderSection[] ownedSections =
             new RenderSection[RegionBatchLayout.MAX_SECTIONS];
 
-    final ResettableQueue<RenderSection> sectionQueue = new ResettableQueue<>();
+    final ResettableQueue<RenderSection> sectionQueue =
+            new ResettableQueue<>(1024, RegionDrawBatch.trackCandidateProvenance());
     private long visibilityRevision;
     // Producer/traversal invalidation for the region candidate fast path. An
     // off-frustum graph visit can change without changing sectionQueue membership.
@@ -44,6 +45,13 @@ public class ChunkArea {
             RegionDrawBatch.trackCandidateProvenance();
     private final long[] graphVisitBits = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
     private final long[] directSeedBits = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+    // Producer-maintained queue containment: each queued identity must occupy
+    // one owned graph/direct slot. Draw-time CPU queue iteration is unnecessary
+    // when the queue has only been mutated through addSection/resetQueue.
+    private final long[] queuedCandidateBits = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+    private boolean candidateQueueComplete = true;
+    private int candidateQueueCount;
+    private long candidateQueueRevision;
     private boolean visibilityRewritePending;
     private short traversalFrame = -1;
 
@@ -159,6 +167,21 @@ public class ChunkArea {
             markCandidateGraphVisit(section);
             if(!section.hasMainDirection())
                 markCandidateBit(this.directSeedBits, section);
+            int slot = voxelSlot(section.xOffset, section.yOffset, section.zOffset);
+            candidateQueueCount++;
+            if(slot < 0 || candidateQueueCount > RegionBatchLayout.MAX_SECTIONS
+                    || section.getChunkArea() != this || ownedSections[slot] != section) {
+                candidateQueueComplete = false;
+            } else {
+                int word = slot >>> 6;
+                long bit = 1L << (slot & 63);
+                if((queuedCandidateBits[word] & bit) != 0L
+                        || (candidateActiveWord(word) & bit) == 0L
+                        || (!section.hasMainDirection() && !candidateIsDirectSeed(slot)))
+                    candidateQueueComplete = false;
+                queuedCandidateBits[word] |= bit;
+            }
+            candidateQueueRevision = sectionQueue.contentRevision();
         }
     }
 
@@ -172,6 +195,10 @@ public class ChunkArea {
         if(slot < 0)
             throw new IllegalStateException("Render section does not belong to selected ChunkArea");
         if(this.ownedSections[slot] != section) {
+            // A published queue entry cannot silently change its identity.
+            if(TRACK_GPU_CANDIDATE_PROVENANCE
+                    && (queuedCandidateBits[slot >>> 6] & (1L << (slot & 63))) != 0L)
+                candidateQueueComplete = false;
             this.ownedSections[slot] = section;
             this.candidateInputRevision++;
             this.candidateOwnershipRevision++;
@@ -223,6 +250,17 @@ public class ChunkArea {
         return candidateOwnershipRevision;
     }
 
+    /** Draw-time O(1) gate replacing the old O(queue size) containment audit. */
+    boolean candidateQueueCovered() {
+        return TRACK_GPU_CANDIDATE_PROVENANCE && candidateQueueComplete
+                && candidateQueueCount == sectionQueue.size()
+                && candidateQueueRevision == sectionQueue.contentRevision();
+    }
+
+    long candidateQueuedWord(int word) {
+        return queuedCandidateBits[word];
+    }
+
     void copyCandidateProvenance(long[] graph, long[] seeds) {
         for(int i = 0; i < graphVisitBits.length; ++i) {
             graph[i] = traversalFrame == -1 ? 0L : graphVisitBits[i];
@@ -264,8 +302,13 @@ public class ChunkArea {
         if(TRACK_GPU_CANDIDATE_PROVENANCE) {
             Arrays.fill(graphVisitBits, 0L);
             Arrays.fill(directSeedBits, 0L);
+            Arrays.fill(queuedCandidateBits, 0L);
+            candidateQueueComplete = true;
+            candidateQueueCount = 0;
         }
         this.sectionQueue.beginRewrite();
+        if(TRACK_GPU_CANDIDATE_PROVENANCE)
+            candidateQueueRevision = sectionQueue.contentRevision();
         this.visibilityRewritePending = true;
         this.traversalFrame = -1;
     }
@@ -637,6 +680,9 @@ public class ChunkArea {
         Arrays.fill(this.ownedSections, null);
         Arrays.fill(graphVisitBits, 0L);
         Arrays.fill(directSeedBits, 0L);
+        Arrays.fill(queuedCandidateBits, 0L);
+        candidateQueueComplete = false;
+        candidateQueueCount = 0;
         this.candidateInputRevision++;
         this.candidateOwnershipRevision++;
         this.traversalFrame = -1;

@@ -330,6 +330,17 @@ final class RegionDrawBatch {
         RegionBatchStats.gpuCandidateAttempts++;
 
         int layer = type.ordinal();
+        // A bypass writer, duplicate producer slot, or stale queued ownership
+        // invalidates ALL GPU command reuse before checking cached revisions.
+        // The CPU FrameBatch remains the authoritative fallback.
+        if(!area.candidateQueueCovered()) {
+            candidateInitialized[layer] = false;
+            candidateSupersetComplete[layer] = false;
+            candidateTables[layer] = null;
+            candidateFrustums[layer] = null;
+            recordCandidatePreparation(preparationStart);
+            return;
+        }
         long inputRevision = area.getCandidateInputRevision();
         long visibilityRevision = area.getVisibilityRevision();
         long meshRevision = buffers.getMeshRevision(type);
@@ -368,19 +379,11 @@ final class RegionDrawBatch {
         fingerprint = mix(fingerprint, area.position.z);
         fingerprint = mix(fingerprint, layer);
 
-        // Every CPU queued section must be in the active producer superset.
-        // Incomplete/stale ownership must reject GPU commands, not hide a draw.
-        boolean complete = area.sectionQueue.size() <= MAX_SECTIONS;
-        var visibleIterator = area.sectionQueue.iterator(false);
-        while(visibleIterator.hasNext()) {
-            RenderSection visible = visibleIterator.next();
-            int packed = packSection(visible.xOffset - area.position.x,
-                    visible.yOffset - area.position.y, visible.zOffset - area.position.z);
-            if(area.getOwnedSection(packed) != visible
-                    || (area.candidateActiveWord(packed >>> 6) & (1L << (packed & 63))) == 0L
-                    || (!visible.hasMainDirection() && !area.candidateIsDirectSeed(packed)))
-                complete = false;
-        }
+        // Every producer-enqueued queue slot was checked at insertion, with
+        // duplicate/foreign ownership and untracked queue writes failing closed.
+        // Validate current owned identity again while walking active producer
+        // bits: no independent O(queue length) CPU audit is required here.
+        boolean complete = true;
 
         // Iterate only the producer's graph-visited or direct-seeded slots.
         // Off-frustum graph stamps remain included, unlike the CPU draw queue.
@@ -404,6 +407,11 @@ final class RegionDrawBatch {
                     pendingReadiness = true;
                 boolean graphVisible = area.isGraphVisible(section);
                 boolean directSeed = area.candidateIsDirectSeed(slot);
+                // A post-enqueue direction change may create a new direct seed;
+                // never silently omit that now-authoritative CPU queued draw.
+                if((area.candidateQueuedWord(word) & (1L << bit)) != 0L
+                        && !section.hasMainDirection() && !directSeed)
+                    complete = false;
                 int flags = GpuRegionCandidateTable.flags(ready, graphVisible, directSeed, layer);
                 builder.add(parameters.indexCount, 1, parameters.firstIndex,
                         parameters.vertexOffset, slot, flags);

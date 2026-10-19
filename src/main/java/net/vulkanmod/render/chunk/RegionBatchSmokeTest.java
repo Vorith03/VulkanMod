@@ -696,6 +696,8 @@ public final class RegionBatchSmokeTest {
             area.resetQueue();
             seed.setLastFrame((short) 21);
             area.addSection(seed);
+            require(area.candidateQueueCovered(),
+                    "Producer-enqueued owned queue must be covered without draw-time iteration");
             require(Long.bitCount(area.candidateActiveWord(0)) == 1
                             && area.candidateIsDirectSeed(0)
                             && (area.candidateActiveWord(0) & (1L << 2)) == 0L,
@@ -711,6 +713,8 @@ public final class RegionBatchSmokeTest {
             // The off-frustum node never joins the CPU draw queue. Its
             // setLastFrame must still invalidate the GPU candidate snapshot.
             offFrustum.setLastFrame((short) 22);
+            require(area.candidateQueueCovered(),
+                    "Off-frustum producer graph stamps must preserve valid queue containment");
             require(Long.bitCount(area.candidateActiveWord(0)) == 2
                             && (area.candidateActiveWord(0) & (1L << 1)) != 0L,
                     "Off-frustum graph stamps must still enter the sparse candidate superset");
@@ -726,13 +730,35 @@ public final class RegionBatchSmokeTest {
                     "Direct-seed provenance changes must invalidate even with identical graph membership");
             long ownerRevision = area.getCandidateOwnershipRevision();
             area.registerSection(new RenderSection(2, 0, 0, 0), 0, 0, 0);
+            require(!area.candidateQueueCovered(),
+                    "Replacing a queued section identity must fail closed before GPU cache reuse");
             require(area.getCandidateOwnershipRevision() != ownerRevision,
                     "Producer registration must invalidate cached section ownership");
             area.resetQueue();
+            require(area.candidateQueueCovered(),
+                    "Reset traversal must reset queue membership proof");
             require(area.candidateActiveWord(0) == 0L,
                     "Reset traversal must clear sparse candidate production");
             require(!area.matchesCandidateProvenance(graph, direct),
                     "Reset traversal cannot retain previous direct-seed provenance");
+            seed.setLastFrame((short) 24);
+            area.addSection(seed);
+            require(!area.candidateQueueCovered(),
+                    "Producer must reject an old queued identity after ring slot replacement");
+            area.resetQueue();
+            offFrustum.setLastFrame((short) 25);
+            area.addSection(offFrustum);
+            require(area.candidateQueueCovered(), "New traversal should recover producer queue audit");
+            area.addSection(offFrustum);
+            require(!area.candidateQueueCovered(),
+                    "Two CPU queue records for one GPU slot cannot be represented by candidate v1");
+            area.resetQueue();
+            offFrustum.setLastFrame((short) 26);
+            area.addSection(offFrustum);
+            require(area.candidateQueueCovered(), "A fresh valid traversal clears duplicate rejection");
+            area.sectionQueue.add(dormant);
+            require(!area.candidateQueueCovered(),
+                    "Direct non-producer queue writes must not bypass GPU containment");
         } finally {
             area.releaseBuffers();
         }

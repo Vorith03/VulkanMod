@@ -13,13 +13,20 @@ public class ResettableQueue<T> implements Iterable<T> {
 
     private int previousLimit = -1;
     private boolean rewriteMatches;
+    private final boolean trackContentRevision;
+    private long contentRevision;
 
     public ResettableQueue() {
-        this(1024);
+        this(1024, false);
+    }
+
+    public ResettableQueue(int initialCapacity) {
+        this(initialCapacity, false);
     }
 
     @SuppressWarnings("unchecked")
-    public ResettableQueue(int initialCapacity) {
+    public ResettableQueue(int initialCapacity, boolean trackContentRevision) {
+        this.trackContentRevision = trackContentRevision;
         this.capacity = initialCapacity;
 
         this.queue = (T[])(new Object[capacity]);
@@ -50,7 +57,11 @@ public class ResettableQueue<T> implements Iterable<T> {
         this.queue[limit] = t;
 
         this.limit++;
+        if(trackContentRevision) contentRevision++;
     }
+
+    /** Optional producer-side mutation guard; no per-add revision cost in default queues. */
+    public long contentRevision() { return contentRevision; }
 
     @SuppressWarnings("unchecked")
     private void resize() {
@@ -71,6 +82,7 @@ public class ResettableQueue<T> implements Iterable<T> {
         this.limit = 0;
         this.previousLimit = -1;
         this.rewriteMatches = false;
+        if(trackContentRevision) contentRevision++;
     }
 
     /**
@@ -85,6 +97,7 @@ public class ResettableQueue<T> implements Iterable<T> {
         this.rewriteMatches = true;
         this.position = 0;
         this.limit = 0;
+        if(trackContentRevision) contentRevision++;
     }
 
     /**
