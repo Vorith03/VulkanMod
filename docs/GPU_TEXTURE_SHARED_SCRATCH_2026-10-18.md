@@ -1,7 +1,7 @@
 # GPU texture source-page descriptor and shared scratch pilot — October 18, 2026
 
 
-## Shared scratch multi-job fixed tail (candidate #1055)
+## Shared scratch multi-job fixed tail (full #1055 qualified)
 
 The separate multi-dispatch flag now reserves a reusable 1,536-byte,
 32-row metadata tail in each 4 MiB shared scratch page rather than
@@ -13,7 +13,10 @@ transfer-write buffer barrier on the same graphics queue after any
 staging reset, also ordering earlier submitted command buffers.
 Large bindings fall back to standalone scratch/CPU as before.
 See `docs/GPU_TEXTURE_MULTI_DISPATCH_2026-10-19.md`.
-Candidate `629de440` / full #1055 pending; not yet native-qualified.
+Executable `629de44061e404e291dae647c8e026b23d841395` passed full
+#1055 / run 39227110919, JAR 12173844688 and logs 12175645031;
+native multi-dispatch/shared-scratch markers, pixels and sync passed.
+Private fixtures skipped; integrated RX performance remains unmeasured.
 
 ## Implementation boundary
 

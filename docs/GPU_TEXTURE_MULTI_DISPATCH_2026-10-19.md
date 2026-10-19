@@ -1,13 +1,19 @@
 # Bounded multi-sprite GPU interpolation dispatch — October 19, 2026
 
 
-## Fixed-table reuse amendment — candidate #1055, full validation pending
+## Fixed-table reuse amendment — full #1055 correctness-qualified
 
 Implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`;
 isolated attribution-stub correction `629de44061e404e291dae647c8e026b23d841395`.
 Full #1055 / [run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
-is pending. #1054 (39226851915) failed **before** native/Forge
-testing: the extracted attribution stub omitted the new
+PASSED with Forge JAR artifact **12173844688** and smoke logs
+**12175645031**. Native screenshot marker
+`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK` confirms the 320-row
+reuse stress and exact atlas pixels; shared scratch marker and
+synchronization validation passed, as did Forge/terrain/particle,
+public Create Chronicles/Immersive Portals and Crash Assistant.
+Private pack fixtures skipped. #1054 (39226851915) failed **before**
+native/Forge testing: the extracted attribution stub omitted the new
 `MultiStats.tableRecycles` field. Its failure is not a GPU pixel/sync
 result.
 

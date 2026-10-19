@@ -27,8 +27,13 @@ This is the prior qualified baseline, not the new candidate.
 Candidate executable `629de44061e404e291dae647c8e026b23d841395`,
 metadata-reuse implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`;
 full #1055 [run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
-is **pending** at this handoff. Check its final steps, native
-screenshot markers and artifact IDs before declaring it qualified.
+**PASSED**. Forge JAR artifact **12173844688**; smoke logs
+**12175645031**. Native screenshot emitted
+`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK` and
+`VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK`; all public
+offline/Forge/package/two-startup/native texture/particle/terrain/
+synchronization/screenshot/Create Chronicles with Immersive Portals/
+Crash Assistant gates passed; private resource packs skipped.
 #1054 run 39226851915 failed only isolated
 `attribution-capture-contract.py` due seven-field stub; fixed
 by `629de440`. Preserve earlier #1050-#1052, #1047/#1048,
@@ -48,9 +53,8 @@ is added to production lifetime counters. All pilots default-off.
 
 ## Remaining release work
 
-If #1055 is red, inspect the failing gate first, fix and qualify.
-If green, document exact executable/full run/JAR/smoke evidence
-then address meaningful outstanding integrated work: actual-world
+#1055 is qualified for tested correctness, not representative RX
+performance. Advance meaningful outstanding integrated work: actual-world
 Immersive Portals/mod-injected particle lighting, translucency,
 reload, frame-slot/descriptor pressure; terrain generated REPLACE/
 atomic APPEND candidate ABI with GPU indirect handoff. Preserve

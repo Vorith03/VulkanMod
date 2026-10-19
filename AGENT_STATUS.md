@@ -1,14 +1,20 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
 
-## Fixed GPU animation metadata slab — candidate #1055 (full CI pending)
+## Fixed GPU animation metadata slab — full #1055 correctness-qualified
 
-**Executable candidate:** `629de44061e404e291dae647c8e026b23d841395`;
+**Qualified executable:** `629de44061e404e291dae647c8e026b23d841395`;
 implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`,
 isolated attribution-contract fix `629de440`.
 Full [#1055 / run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
-is running; do not claim qualified native pixels, synchronization or
-Forge/modpack gates until it finishes. Earlier #1054 / run 39226851915
+**PASSED** with Forge JAR artifact **12173844688** and smoke
+logs artifact **12175645031**. Native screenshot logs emitted
+`VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK` and
+`VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK`; offline contracts,
+Forge package and both client startups, native texture/particle/
+terrain pixel and synchronization, screenshots, public Create
+Chronicles/Immersive Portals and Crash Assistant passed. Private
+resource-pack fixtures skipped. Earlier #1054 / run 39226851915
 failed only `attribution-capture-contract.py` because its isolated
 `MultiStats` stub still had seven fields; production statistics now
 have eight. That negative evidence is retained.
@@ -40,9 +46,7 @@ and page-resource counters. Group size, metadata barrier cost, full
 production adoption, actual CPU displacement, GPU submission overhead,
 FPS and p95/p99 are **unmeasured**. All flags stay default-off.
 
-**Next:** resolve any #1055 red result before touching adjacent code,
-capture exact full-run/JAR/log/native marker evidence if green, then
-advance actual-world particle portal/light/reload/frame-slot gates or
+**Next:** with #1055 fully qualified, advance actual-world particle portal/light/reload/frame-slot gates or
 generated terrain REPLACE/atomic APPEND indirect ABI. Only request a
 representative RX benchmark after meaningful multi-subsystem
 integration. The integrated GPU-first release is not complete.
