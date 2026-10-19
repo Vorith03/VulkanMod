@@ -164,11 +164,15 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     public static long gpuQuads() { return gpuQuads; }
     /** Native CI probe: pool exhaustion must reject before recording a dispatch. */
     static long descriptorRejectionsForSmoke() { return descriptorRejections; }
+    /** Includes fence-retired descriptor sets still charged against the 64-set pool. */
+    static int allocatedBindingsForSmoke() { return instance==null?0:instance.allocatedBindings; }
     static long callbackStateRecoveriesForSmoke() { return callbackStateRecoveries; }
     public static String statistics() {
-        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d callback_state_cpu_recoveries=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
+        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d callback_state_cpu_recoveries=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d allocated_descriptors=%d pending_retirement_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
                 inheritedAttempts,eligibleAttempts,originalCpu,packed,gpuQuads,recoveryQuads,layoutFallbacks,callbackStateRecoveries,unavailableFallbacks,batches,capacityRejections,descriptorRejections,
-                preparationNanos/1e6,uploadedBytes/1024.0,bindingsCreated,instance==null?0:instance.bindings.size(),instance==null?0:256);
+                preparationNanos/1e6,uploadedBytes/1024.0,bindingsCreated,instance==null?0:instance.bindings.size(),
+                instance==null?0:instance.allocatedBindings,
+                instance==null?0:instance.allocatedBindings-instance.bindings.size(),instance==null?0:256);
     }
     public static void emitSummary() {
         if(REQUESTED) PerformanceProfiler.benchmarkEvent(statistics());
