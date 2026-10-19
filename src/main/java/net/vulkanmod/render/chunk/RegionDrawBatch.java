@@ -412,7 +412,11 @@ final class RegionDrawBatch {
         // duplicate/foreign ownership and untracked queue writes failing closed.
         // Validate current owned identity again while walking active producer
         // bits: no independent O(queue length) CPU audit is required here.
-        boolean complete = !terrainHandoff || generatedReplace;
+        // GPU section compaction is order-independent across sections. Never
+        // apply generated handoff ownership to sorted/unsupported terrain layers.
+        boolean complete = !terrainHandoff || (generatedReplace
+                && type != TerrainRenderType.TRANSLUCENT
+                && type != TerrainRenderType.TRIPWIRE);
         int maxGpuVertices = 0;
 
         // Iterate only the producer's graph-visited or direct-seeded slots.
@@ -436,6 +440,10 @@ final class RegionDrawBatch {
                 if(candidate != null) {
                     complete &= candidate.representable();
                     maxGpuVertices = Math.max(maxGpuVertices, candidate.maxGpuVertices());
+                    // Generated producer state is not included in the ordinary
+                    // mesh revision. Identical numeric offsets at a *new*
+                    // generation must not silently reuse prior residency.
+                    fingerprint = mix(fingerprint, candidate.stateStamp());
                 }
                 boolean graphVisible = area.isGraphVisible(section);
                 boolean directSeed = area.candidateIsDirectSeed(slot);
@@ -562,20 +570,23 @@ final class RegionDrawBatch {
         if(!terrainHandoff)
             return new IndirectCandidate(cpu, true, 0);
         RenderSection.GpuTerrainDrawState state = section.gpuTerrainDrawState();
+        boolean cpuComplete = section.gpuTerrainCpuMeshComplete();
+        long stamp = mix(mix(mix(FNV_OFFSET_BASIS, state.generation()),
+                state.ownership().ordinal()), cpuComplete ? 1L : 0L);
         if(state.ownership() != GpuTerrainDrawHandoff.Ownership.REPLACE
                 && !(generatedAppend && state.ownership() == GpuTerrainDrawHandoff.Ownership.APPEND))
-            return new IndirectCandidate(cpu, false, 0);
+            return new IndirectCandidate(cpu, false, 0, null, stamp);
         GpuTerrainOutputStore.Residency residency = area.getGpuTerrainOutputResidency(
                 section.xOffset, section.yOffset, section.zOffset, type);
         GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(true, type,
                 state.generation(), residency, cpu.indexCount(), cpu.firstIndex(),
                 cpu.vertexOffset(), state.ownership());
         if(plan.gpuDrawCount() == 0)
-            return new IndirectCandidate(cpu, section.gpuTerrainCpuMeshComplete(), 0);
+            return new IndirectCandidate(cpu, cpuComplete, 0, null, stamp);
         // Never expose a GPU half without a ready CPU exception command. A
         // zero-exception APPEND is the planner's single GPU-only command.
         if(plan.commandCount() == 2 && !cpu.ready())
-            return new IndirectCandidate(cpu, false, 0);
+            return new IndirectCandidate(cpu, false, 0, null, stamp);
         GpuTerrainDrawHandoff.DrawCommand first = plan.command(0);
         GpuTerrainDrawHandoff.DrawCommand gpu = plan.command(plan.commandCount() - 1);
         DrawBuffers.CandidateGeometry second = null;
@@ -586,15 +597,16 @@ final class RegionDrawBatch {
         }
         return new IndirectCandidate(new DrawBuffers.CandidateGeometry(first.indexCount(),
                 first.firstIndex(), first.vertexOffset(), true), true,
-                gpu.indexCount() * 2 / 3, second);
+                gpu.indexCount() * 2 / 3, second, stamp);
     }
 
     record IndirectCandidate(DrawBuffers.CandidateGeometry geometry,
                              boolean representable, int maxGpuVertices,
-                             DrawBuffers.CandidateGeometry secondGeometry) {
+                             DrawBuffers.CandidateGeometry secondGeometry,
+                             long stateStamp) {
         IndirectCandidate(DrawBuffers.CandidateGeometry geometry,
                           boolean representable, int maxGpuVertices) {
-            this(geometry, representable, maxGpuVertices, null);
+            this(geometry, representable, maxGpuVertices, null, 0L);
         }
     }
 
