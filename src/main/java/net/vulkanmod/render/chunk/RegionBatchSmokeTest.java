@@ -18,6 +18,7 @@ public final class RegionBatchSmokeTest {
 
     public static void verify() {
         verifyGpuIndirectFallbackContract();
+        verifyGeneratedWorldWitnessGate();
         verifyLazyGpuCommandOwnership();
         verifyCandidateProducerProvenance();
         verifyCandidateGeometryProducer();
@@ -1092,6 +1093,25 @@ public final class RegionBatchSmokeTest {
             if(batch.commands != null) batch.commands.freeBuffer();
             area.releaseBuffers();
         }
+    }
+
+    private static void verifyGeneratedWorldWitnessGate() {
+        require(RegionDrawBatch.generatedWorldWitnessModes(false, true, true, 1, 1, 1) == 0,
+                "Startup/fixture candidate metadata must never qualify as a live-world draw");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, false, true, 1, 1, 1) == 0,
+                "A generated candidate with CPU fallback is not a GPU-owned world draw");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, false, 1, 1, 1) == 0,
+                "Publication without actual indirect command recording is not a draw witness");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, true, 0, 0, 0) == 0,
+                "Ordinary CPU meshes cannot masquerade as generated-world consumption");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, true, 1, 0, 0) == 1,
+                "REPLACE production recording must retain its own witness bit");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, true, 0, 1, 0) == 2,
+                "APPEND paired production recording must retain its own witness bit");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, true, 0, 0, 1) == 4,
+                "APPEND zero-exception production recording must be distinguishable");
+        require(RegionDrawBatch.generatedWorldWitnessModes(true, true, true, 2, 3, 1) == 7,
+                "Mixed generated-world recording must retain all eligible mode bits");
     }
 
     private static void verifyGpuIndirectFallbackContract() {

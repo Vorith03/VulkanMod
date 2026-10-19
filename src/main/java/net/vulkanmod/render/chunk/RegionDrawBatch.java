@@ -2,6 +2,7 @@ package net.vulkanmod.render.chunk;
 
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.render.chunk.voxel.GpuLiveSectionSelectionDiagnostic;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateGpuStore;
 import net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable;
@@ -41,15 +42,24 @@ final class RegionDrawBatch {
             && Boolean.getBoolean("vulkanmod.experimentalGpuGeneratedIndirectAppend");
     private static final boolean PROFILE_GPU_CANDIDATES =
             Boolean.getBoolean("vulkanmod.performanceProfiler");
+    // Optional actual-client-world recording witness, never enabled by the
+    // generated indirect experiments themselves. This does NOT prove pixels.
+    private static final boolean DEBUG_GENERATED_WORLD_DRAW =
+            Boolean.getBoolean("vulkanmod.debugGpuGeneratedWorldDraw");
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
     private static boolean loggedGpuIndirectDraw;
     private static boolean loggedGpuTerrainDrawHandoff;
     private static boolean loggedGpuCommandOwner;
+    // Bit 0=REPLACE, 1=APPEND pair, 2=APPEND GPU-only; portal view uses bits 3..5.
+    private static int witnessedGeneratedWorldModes;
 
     private FrameBatch[][] batches;
     private final boolean[] candidateSupersetComplete = new boolean[TerrainRenderType.VALUES.length];
     private final int[] candidateMaxGpuVertices = new int[TerrainRenderType.VALUES.length];
+    private final int[] candidateGeneratedReplace = new int[TerrainRenderType.VALUES.length];
+    private final int[] candidateGeneratedAppendPairs = new int[TerrainRenderType.VALUES.length];
+    private final int[] candidateGeneratedAppendGpuOnly = new int[TerrainRenderType.VALUES.length];
     private final boolean[] candidateInitialized = new boolean[TerrainRenderType.VALUES.length];
     private final long[] candidateFingerprints = new long[TerrainRenderType.VALUES.length];
     private final long[] candidateGenerations = new long[TerrainRenderType.VALUES.length];
@@ -162,7 +172,47 @@ final class RegionDrawBatch {
                         indirectOffset + (long) first * STRIDE,
                         Math.min(limit, indirectCount - first), STRIDE);
             }
+            if(DEBUG_GENERATED_WORLD_DRAW && gpuOwnsCommands) {
+                reportGeneratedWorldRecording(area, type, candidateTable, indirectCount);
+            }
         }
+    }
+
+    // This reports a genuinely recorded live-world vkCmdDrawIndexedIndirect
+    // consuming current GPU-generated candidates; frustum compaction may still
+    // zero individual commands. It is NOT GPU count readback or raster/pixel proof.
+    static int generatedWorldWitnessModes(boolean worldLoaded, boolean gpuOwner,
+                                          boolean drawRecorded, int replaces,
+                                          int appendPairs, int appendGpuOnly) {
+        if(!worldLoaded || !gpuOwner || !drawRecorded) return 0;
+        return (replaces > 0 ? 1 : 0) | (appendPairs > 0 ? 2 : 0)
+                | (appendGpuOnly > 0 ? 4 : 0);
+    }
+
+    private void reportGeneratedWorldRecording(ChunkArea area, TerrainRenderType type,
+                                               GpuRegionCandidateTable table, int indirectCount) {
+        WorldRenderer world = WorldRenderer.getInstance();
+        int layer = type.ordinal();
+        int modes = generatedWorldWitnessModes(world != null && world.getLevel() != null,
+                true, indirectCount > 0, candidateGeneratedReplace[layer],
+                candidateGeneratedAppendPairs[layer], candidateGeneratedAppendGpuOnly[layer]);
+        if(modes == 0) return;
+        boolean portalApi = ImmersivePortalsLevelRendererCompat.isAvailable();
+        boolean portalView = portalApi
+                && ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload();
+        int shiftedModes = modes << (portalView ? 3 : 0);
+        int newlyWitnessed;
+        synchronized(RegionDrawBatch.class) {
+            newlyWitnessed = shiftedModes & ~witnessedGeneratedWorldModes;
+            witnessedGeneratedWorldModes |= newlyWitnessed;
+        }
+        if(newlyWitnessed == 0) return;
+        Initializer.LOGGER.info(
+                "VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED: region=({}, {}, {}) layer={} generation={} candidates={} replace={} appendPairs={} appendGpuOnly={} portalApi={} portalView={} newModeBits=0x{}; live-world Vulkan indirect recording only, NOT selected-command readback or pixel equivalence",
+                area.position.x, area.position.y, area.position.z, layer, table.generation(),
+                indirectCount, candidateGeneratedReplace[layer], candidateGeneratedAppendPairs[layer],
+                candidateGeneratedAppendGpuOnly[layer], portalApi, portalView,
+                Integer.toHexString(newlyWitnessed));
     }
 
     /** 0=GPU owner; other values are precise fail-closed CPU fallback reasons. */
@@ -375,6 +425,9 @@ final class RegionDrawBatch {
         if(!area.candidateQueueCovered()) {
             candidateInitialized[layer] = false;
             candidateSupersetComplete[layer] = false;
+            candidateGeneratedReplace[layer] = 0;
+            candidateGeneratedAppendPairs[layer] = 0;
+            candidateGeneratedAppendGpuOnly[layer] = 0;
             candidateTables[layer] = null;
             candidateFrustums[layer] = null;
             recordCandidatePreparation(preparationStart);
@@ -433,6 +486,9 @@ final class RegionDrawBatch {
                 && type != TerrainRenderType.TRANSLUCENT
                 && type != TerrainRenderType.TRIPWIRE);
         int maxGpuVertices = 0;
+        int generatedReplace = 0;
+        int generatedAppendPairs = 0;
+        int generatedAppendGpuOnly = 0;
 
         // Iterate only the producer's graph-visited or direct-seeded slots.
         // Off-frustum graph stamps remain included, unlike the CPU draw queue.
@@ -455,6 +511,15 @@ final class RegionDrawBatch {
                 if(candidate != null) {
                     complete &= candidate.representable();
                     maxGpuVertices = Math.max(maxGpuVertices, candidate.maxGpuVertices());
+                    if(candidate.representable() && candidate.maxGpuVertices() > 0) {
+                        if(section.gpuTerrainDrawState().ownership()
+                                == GpuTerrainDrawHandoff.Ownership.APPEND) {
+                            if(candidate.secondGeometry() != null) generatedAppendPairs++;
+                            else generatedAppendGpuOnly++;
+                        } else {
+                            generatedReplace++;
+                        }
+                    }
                     // Generated producer state is not included in the ordinary
                     // mesh revision. Identical numeric offsets at a *new*
                     // generation must not silently reuse prior residency.
@@ -535,6 +600,9 @@ final class RegionDrawBatch {
         // fingerprint uncommitted so an unchanged CPU queue can retry later.
         candidateSupersetComplete[layer] = queued && complete;
         candidateInitialized[layer] = queued;
+        candidateGeneratedReplace[layer] = queued ? generatedReplace : 0;
+        candidateGeneratedAppendPairs[layer] = queued ? generatedAppendPairs : 0;
+        candidateGeneratedAppendGpuOnly[layer] = queued ? generatedAppendGpuOnly : 0;
         candidateFingerprints[layer] = fingerprint;
         candidateGenerations[layer] = generation;
         candidateInputRevisions[layer] = inputRevision;
@@ -593,6 +661,12 @@ final class RegionDrawBatch {
             return new IndirectCandidate(cpu, false, 0, null, stamp);
         GpuTerrainOutputStore.Residency residency = area.getGpuTerrainOutputResidency(
                 section.xOffset, section.yOffset, section.zOffset, type);
+        // Missing, retired or different-generation residency can never produce a
+        // GPU command. Avoid constructing a CPU DrawCommand and DrawPlan for
+        // each ordinary section in mixed GPU-owned generated candidate regions.
+        if(residency == null || !residency.valid()
+                || residency.generation() != state.generation())
+            return new IndirectCandidate(cpu, cpuComplete, 0, null, stamp);
         GpuTerrainDrawHandoff.DrawPlan plan = GpuTerrainDrawHandoff.plan(true, type,
                 state.generation(), residency, cpu.indexCount(), cpu.firstIndex(),
                 cpu.vertexOffset(), state.ownership());
@@ -662,6 +736,9 @@ final class RegionDrawBatch {
         for(int layer = 0; layer < candidateInitialized.length; ++layer) {
             candidateInitialized[layer] = false;
             candidateSupersetComplete[layer] = false;
+            candidateGeneratedReplace[layer] = 0;
+            candidateGeneratedAppendPairs[layer] = 0;
+            candidateGeneratedAppendGpuOnly[layer] = 0;
             candidateFingerprints[layer] = 0L;
             candidateInputRevisions[layer] = 0L;
             candidateOwnershipRevisions[layer] = 0L;
