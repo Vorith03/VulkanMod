@@ -23,6 +23,7 @@ public final class RegionBatchSmokeTest {
         verifyCandidateProducerProvenance();
         verifyCandidateGeometryProducer();
         verifyGeneratedReplaceCandidates();
+        verifyGeneratedCandidateResidencyFingerprint();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuFirstTransitionContract();
@@ -1023,6 +1024,54 @@ public final class RegionBatchSmokeTest {
         } finally {
             publisher.free();
             if(batch.commands != null) batch.commands.freeBuffer();
+            area.releaseBuffers();
+        }
+    }
+
+    /**
+     * Producer revisions can force a re-evaluation whose numeric geometry is
+     * identical even though GPU command ownership was retired. Fingerprint
+     * equality must not retain an old generated-world witness/command generation.
+     */
+    private static void verifyGeneratedCandidateResidencyFingerprint() {
+        if(!ChunkArea.trackGpuCandidateProvenance()) return;
+        ChunkArea area = new ChunkArea(42, new Vector3i(0, 0, 0));
+        RenderSection section = new RenderSection(0, 16, 16, 16);
+        section.setChunkArea(area);
+        area.registerSection(section, 16, 16, 16);
+        area.addSection(section);
+        TerrainRenderType type = TerrainRenderType.CUTOUT_MIPPED;
+        var publisher = new RegionDrawBatch();
+        try {
+            long generation = section.getVoxelGeneration();
+            var reservation = area.reserveGpuTerrainOutput(16, 16, 16, type, generation, 3);
+            require(reservation != null && area.publishGpuTerrainOutput(reservation, 3, false),
+                    "Fingerprint regression needs a published generated resident");
+            var resident = area.getGpuTerrainOutputResidency(16, 16, 16, type);
+            var parameters = section.getDrawParameters(type);
+            new DrawBuffers.ParametersUpdate(parameters, 18, 0, resident.vertexOffset()).setDrawParameters();
+            parameters.vertexBufferSegment.setReady();
+            var generated = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            require(generated.representable() && generated.maxGpuVertices() == 12,
+                    "Matching numeric CPU metadata must not prevent initial GPU ownership");
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true);
+            var before = publisher.publishedCandidates(type);
+            require(before != null && publisher.hasCompleteCandidateSuperset(type),
+                    "Initial GPU ownership must produce a complete table");
+
+            area.invalidateGpuTerrainOutput(16, 16, 16, generation);
+            var cpu = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            require(cpu.representable() && cpu.maxGpuVertices() == 0
+                            && cpu.geometry().equals(generated.geometry()),
+                    "Retired resident must fall back to numerically identical complete CPU geometry");
+            publisher.publishLiveCandidates(area.getDrawBuffers(), area, type, true, true);
+            var after = publisher.publishedCandidates(type);
+            require(after != null && after != before
+                            && after.generation() != before.generation()
+                            && publisher.hasCompleteCandidateSuperset(type),
+                    "GPU residency retirement must not reuse a numerically identical generated command generation");
+        } finally {
+            publisher.free();
             area.releaseBuffers();
         }
     }

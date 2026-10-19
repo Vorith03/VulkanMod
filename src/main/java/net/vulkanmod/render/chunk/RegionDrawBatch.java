@@ -531,6 +531,12 @@ final class RegionDrawBatch {
                     // mesh revision. Identical numeric offsets at a *new*
                     // generation must not silently reuse prior residency.
                     fingerprint = mix(fingerprint, candidate.stateStamp());
+                    // Equal numeric offsets do not imply equal resource ownership.
+                    // A retired resident can fall back to numerically identical
+                    // CPU geometry; never reuse its prior generated-world counts,
+                    // GPU vertex bound, or candidate generation on that basis.
+                    fingerprint = mix(fingerprint, candidate.representable() ? 1L : 0L);
+                    fingerprint = mix(fingerprint, candidate.maxGpuVertices());
                 }
                 boolean graphVisible = area.isGraphVisible(section);
                 boolean directSeed = area.candidateIsDirectSeed(slot);
