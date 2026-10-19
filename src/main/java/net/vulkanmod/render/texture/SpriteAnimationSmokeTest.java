@@ -611,10 +611,19 @@ public final class SpriteAnimationSmokeTest {
                     if(clock != oracle.clock() || clock != ((SpriteAnimationTicker)referenceTicker).vulkanmod$clock())
                         throw new AssertionError("Animation clock differs: " + test.name + " tick " + tick);
                     long beforeRefresh = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes();
+                    long acceptedBefore = GpuTextureInterpolationCompute.multiStats().accepted();
                     SpriteAnimationUsage.use(candidate);
+                    long newMetadataJobs = GpuTextureInterpolationCompute.multiStats().accepted()
+                            - acceptedBefore;
+                    long stagedRefreshBytes = Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes()
+                            - beforeRefresh;
+                    // Grouped GPU work stages exactly one 48-byte immutable job
+                    // row per accepted animation, never the CPU pixel rectangle.
                     if(!test.custom && !cpuBulk && GpuAnimatedTextureResidency.interpolationEnabled()
-                            && beforeRefresh != Vulkan.getStagingBuffer(Renderer.getCurrentFrame()).getUsedBytes())
-                        throw new AssertionError("GPU refresh also staged CPU pixels: " + test.name);
+                            && stagedRefreshBytes != newMetadataJobs * 48L)
+                        throw new AssertionError("GPU refresh staged unexpected bytes: " + test.name
+                                + " metadataJobs=" + newMetadataJobs
+                                + " stagedBytes=" + stagedRefreshBytes);
                     if(((SpriteAnimationTicker)candidateTicker).vulkanmod$clock() != clock)
                         throw new AssertionError("Refresh advanced animation clock");
                 } finally {
