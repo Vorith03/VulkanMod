@@ -120,6 +120,125 @@ public final class GpuSectionSelectionShadowSmokeTest {
                 shadowStore.close();
             candidateStore.close();
         }
+        verifyAtomicAppendSelection(fixture.frustum);
+    }
+
+    /** Real selector/readback proof, not generated-world or portal rasterization. */
+    private static void verifyAtomicAppendSelection(VFrustum frustum) {
+        GpuRegionCandidateTable.Builder builder = new GpuRegionCandidateTable.Builder(
+                GENERATION + 1, REGION_X, REGION_Y, REGION_Z);
+        int flags = GpuRegionCandidateTable.flags(true, true, true, TARGET_LAYER);
+        for(int packed = 0; packed < 509; ++packed)
+            builder.addPair(12, 10 + packed, 30 + packed * 8,
+                    18, 0, 4000 + packed * 64, packed, flags);
+        builder.add(6, 1, 99, 66, 509, flags);
+        builder.add(18, 1, 0, 30000, 510, flags);
+        // Corrupt an atomic pair's section identity: neither command may draw.
+        builder.add(12, 1, 8, 16, 511, flags | GpuRegionCandidateTable.PAIR_FIRST);
+        builder.add(18, 1, 0, 30064, 510, flags | GpuRegionCandidateTable.PAIR_SECOND);
+        builder.addPair(12, 15, 24, 18, 0, 30128, 511,
+                GpuRegionCandidateTable.flags(false, true, true, TARGET_LAYER));
+        GpuRegionCandidateTable table = builder.finish();
+        if(table.candidateCount() != RegionBatchLayout.MAX_DRAW_COMMANDS)
+            throw new IllegalStateException("Atomic APPEND fixture must fill candidate capacity");
+
+        GpuRegionCandidateGpuStore candidateStore = new GpuRegionCandidateGpuStore();
+        GpuSectionSelectionShadowStore shadowStore = null;
+        long readbackBuffer = VK_NULL_HANDLE;
+        long readbackAllocation = VK_NULL_HANDLE;
+        try {
+            if(!candidateStore.upload(table))
+                throw new IllegalStateException("APPEND candidate upload rejected");
+            AreaUploadManager.INSTANCE.submitUploads();
+            var residency = candidateStore.getResidency();
+            if(!residency.valid() || residency.generation() != table.generation())
+                throw new IllegalStateException("APPEND candidate generation was not resident");
+            shadowStore = GpuSectionSelectionShadowStore.tryCreate(Renderer.getFramesNum());
+            if(shadowStore == null || !shadowStore.dispatch(residency, table, TARGET_LAYER, frustum))
+                throw new IllegalStateException("APPEND selector dispatch rejected");
+
+            int bytesCount = shadowStore.commandOffsetBytes()
+                    + shadowStore.commandCapacity() * RegionBatchLayout.STRIDE;
+            int[] words = new int[bytesCount / Integer.BYTES];
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                LongBuffer pBuffer = stack.mallocLong(1);
+                PointerBuffer pAllocation = stack.mallocPointer(1);
+                MemoryManager memory = MemoryManager.getInstance();
+                memory.createBuffer(bytesCount, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        pBuffer, pAllocation);
+                readbackBuffer = pBuffer.get(0);
+                readbackAllocation = pAllocation.get(0);
+                CommandPool.CommandBuffer command = Device.getGraphicsQueue().beginCommands();
+                VkBufferMemoryBarrier.Buffer barrier = VkBufferMemoryBarrier.calloc(1, stack);
+                barrier.get(0).sType$Default()
+                        .srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .buffer(shadowStore.output().getId()).offset(0L).size(bytesCount);
+                vkCmdPipelineBarrier(command.getHandle(),
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, null, barrier, null);
+                TransferQueue.uploadBufferCmd(command, shadowStore.output().getId(), 0L,
+                        readbackBuffer, 0L, bytesCount);
+                Device.getGraphicsQueue().submitCommands(command);
+                Synchronization.waitFence(command.getFence());
+                Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(command);
+                memory.MapAndCopy(readbackAllocation, bytesCount, pointer -> {
+                    ByteBuffer bytes = pointer.getByteBuffer(0, bytesCount).order(ByteOrder.nativeOrder());
+                    for(int i = 0; i < words.length; ++i)
+                        words[i] = bytes.getInt(i * Integer.BYTES);
+                });
+            }
+            if(words[0] != 1020 || words[1] != 1020 || words[2] != 0 || words[3] != 1)
+                throw new IllegalStateException("APPEND selector count/overflow/table marker mismatch");
+            boolean[] seen = new boolean[511];
+            int observedPairs = 0;
+            int observedSingles = 0;
+            for(int i = 0; i < 1020;) {
+                int base = OUTPUT_HEADER_WORDS + i * COMMAND_WORDS;
+                int packed = words[base + 4];
+                if(packed < 0 || packed > 510 || seen[packed])
+                    throw new IllegalStateException("APPEND selector duplicate/foreign section " + packed);
+                seen[packed] = true;
+                if(packed < 509) {
+                    int next = base + COMMAND_WORDS;
+                    if(i + 1 >= 1020 || words[base] != 12 || words[base + 1] != 1
+                            || words[base + 2] != 10 + packed
+                            || words[base + 3] != 30 + packed * 8
+                            || words[next] != 18 || words[next + 1] != 1
+                            || words[next + 2] != 0
+                            || words[next + 3] != 4000 + packed * 64
+                            || words[next + 4] != packed)
+                        throw new IllegalStateException("APPEND CPU/GPU commands not atomic and ordered at " + packed);
+                    observedPairs++;
+                    i += 2;
+                } else {
+                    if(words[base] != (packed == 509 ? 6 : 18)
+                            || words[base + 2] != (packed == 509 ? 99 : 0)
+                            || words[base + 3] != (packed == 509 ? 66 : 30000))
+                        throw new IllegalStateException("APPEND mixed ordinary/REPLACE field mismatch");
+                    observedSingles++;
+                    ++i;
+                }
+            }
+            if(observedPairs != 509 || observedSingles != 2)
+                throw new IllegalStateException("APPEND mixed command counts mismatch");
+            for(int i = 1020; i < RegionBatchLayout.MAX_DRAW_COMMANDS; ++i)
+                for(int word = 0; word < COMMAND_WORDS; ++word)
+                    if(words[OUTPUT_HEADER_WORDS + i * COMMAND_WORDS + word] != 0)
+                        throw new IllegalStateException("APPEND zero-tail corruption");
+            Device.getGraphicsQueue().waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_APPEND_INDIRECT_OK: 509 ordered atomic CPU/GPU pairs, mixed ordinary/REPLACE, malformed and unready pair rejection, max candidate capacity and zero tail; native fixture only");
+        } finally {
+            if(readbackBuffer != VK_NULL_HANDLE)
+                MemoryManager.freeBuffer(readbackBuffer, readbackAllocation);
+            if(shadowStore != null)
+                shadowStore.close();
+            candidateStore.close();
+        }
     }
 
     private static Fixture createFixture() {
@@ -188,7 +307,7 @@ public final class GpuSectionSelectionShadowSmokeTest {
 
     private static void validateResult(int[] result, Fixture fixture) {
         int expectedWords = OUTPUT_HEADER_WORDS
-                + RegionBatchLayout.MAX_SECTIONS * COMMAND_WORDS;
+                + RegionBatchLayout.MAX_DRAW_COMMANDS * COMMAND_WORDS;
         if(result.length != expectedWords)
             throw new IllegalStateException("Unexpected GPU shadow output size");
         if(result[0] != fixture.expectedCount || result[1] != fixture.expectedCount)
@@ -220,7 +339,7 @@ public final class GpuSectionSelectionShadowSmokeTest {
                 throw new IllegalStateException("GPU shadow selection mismatch at section " + packed);
         }
 
-        for(int slot = fixture.expectedCount; slot < RegionBatchLayout.MAX_SECTIONS; ++slot) {
+        for(int slot = fixture.expectedCount; slot < RegionBatchLayout.MAX_DRAW_COMMANDS; ++slot) {
             int base = OUTPUT_HEADER_WORDS + slot * COMMAND_WORDS;
             for(int word = 0; word < COMMAND_WORDS; ++word) {
                 if(result[base + word] != 0)

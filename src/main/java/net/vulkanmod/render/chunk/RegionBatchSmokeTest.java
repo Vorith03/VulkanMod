@@ -910,9 +910,79 @@ public final class RegionBatchSmokeTest {
             publisher.publishLiveCandidates(buffers, area, type, true, true);
             require(!publisher.hasCompleteCandidateSuperset(type),
                     "APPEND ownership must revoke the whole GPU candidate superset before cached reuse");
+            // The separate APPEND gate admits neither half while the CPU exception
+            // upload is pending, but accepts the exact two-command plan together.
+            publisher.publishLiveCandidates(buffers, area, type, true, true, true);
+            require(!publisher.hasCompleteCandidateSuperset(type),
+                    "Unready CPU exceptions must revoke the complete APPEND candidate set");
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, true).representable(),
+                    "Pending CPU exception upload must reject both APPEND commands");
+            parameters.vertexBufferSegment.setReady();
+            var append = RegionDrawBatch.indirectCandidate(area, section, type, true, true);
+            require(append.representable() && append.secondGeometry() != null
+                            && append.geometry().indexCount() == 12
+                            && append.geometry().firstIndex() == 6
+                            && append.geometry().vertexOffset() == 40
+                            && append.secondGeometry().indexCount() == 18
+                            && append.secondGeometry().firstIndex() == 0
+                            && append.secondGeometry().vertexOffset() == residency.vertexOffset()
+                            && append.maxGpuVertices() == 12,
+                    "APPEND must preserve the ready CPU-exception command followed by the exact GPU half");
+            publisher.publishLiveCandidates(buffers, area, type, true, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type),
+                    "Ready generation-matched APPEND must permit atomic candidate publication");
+            table = publisher.publishedCandidates(type);
+            require(table != null && table.candidateCount() == 2,
+                    "APPEND must publish two paired rows for one owned section");
+            wire = java.nio.ByteBuffer.allocate(table.byteSize());
+            table.writeTo(wire);
+            int secondRow = row + net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.RECORD_WORDS * 4;
+            require(wire.getInt(row) == 12 && wire.getInt(row + 8) == 6
+                            && wire.getInt(row + 12) == 40
+                            && wire.getInt(secondRow) == 18 && wire.getInt(secondRow + 8) == 0
+                            && wire.getInt(secondRow + 12) == residency.vertexOffset()
+                            && wire.getInt(row + 16) == wire.getInt(secondRow + 16)
+                            && (wire.getInt(row + 20) & net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.PAIR_FIRST) != 0
+                            && (wire.getInt(secondRow + 20) & net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.PAIR_SECOND) != 0,
+                    "Wire ABI must preserve ordered paired commands and shared section identity");
+            batch.rebuild(buffers, area, type, area.getVisibilityRevision(),
+                    buffers.getMeshRevision(type), true);
+            require(batch.drawCount == 2 && batch.gpuDrawCount == 1
+                            && batch.commands.getByteBuffer().getInt(0) == 12
+                            && batch.commands.getByteBuffer().getInt(8) == 6
+                            && batch.commands.getByteBuffer().getInt(RegionBatchLayout.STRIDE) == 18,
+                    "APPEND candidate commands must match the existing atomic FrameBatch handoff planner");
+            uploads = RegionBatchStats.commandUploads;
+            admission = RegionDrawBatch.gpuCommandOwnerRejection(true, false,
+                    true, true, true, 2, RegionBatchLayout.MAX_DRAW_COMMANDS);
+            require(RegionDrawBatch.prepareCommandOwner(batch, buffers, area, type, admission, true)
+                            && RegionBatchStats.commandUploads == uploads,
+                    "Accepted APPEND must bypass duplicate FrameBatch serialization/upload");
+            require(RegionDrawBatch.gpuCommandOwnerRejection(true, false,
+                    true, true, true, 1025, RegionBatchLayout.MAX_DRAW_COMMANDS) == 6
+                            && RegionDrawBatch.gpuCommandOwnerRejection(true, false,
+                            true, true, true, 2, 1) == 6,
+                    "APPEND selector admission must fail closed on candidate/output capacity");
+            parameters.vertexBufferSegment.setPending();
+            publisher.publishLiveCandidates(buffers, area, type, true, true, true);
+            require(!publisher.hasCompleteCandidateSuperset(type),
+                    "Later CPU upload invalidation must revoke both APPEND commands");
+            parameters.vertexBufferSegment.setReady();
+            publisher.publishLiveCandidates(buffers, area, type, true, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type),
+                    "Restored upload readiness must recover the atomic APPEND pair");
+
             new DrawBuffers.ParametersUpdate(parameters, 0, 0, 0).setDrawParameters();
             require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
                     "Zero-exception APPEND must not silently broaden candidate-v1 ownership");
+            var zeroException = RegionDrawBatch.indirectCandidate(area, section, type, true, true);
+            require(zeroException.representable() && zeroException.secondGeometry() == null
+                            && zeroException.geometry().indexCount() == 18,
+                    "Zero-exception APPEND must collapse to the planner's single GPU command");
+            publisher.publishLiveCandidates(buffers, area, type, true, true, true);
+            require(publisher.hasCompleteCandidateSuperset(type)
+                            && publisher.publishedCandidates(type).candidateCount() == 1,
+                    "Zero-exception APPEND must emit one bounded generated row");
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(401L, 3), generation, true);
             require(RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
                     "Restoring REPLACE must re-evaluate ownership without an ordinary mesh revision");

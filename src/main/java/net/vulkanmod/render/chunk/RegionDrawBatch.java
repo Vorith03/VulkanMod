@@ -429,10 +429,11 @@ final class RegionDrawBatch {
                     complete = false; // stale producer bit/owner generation
                     continue;
                 }
-                DrawBuffers.CandidateGeometry geometry = section.getCandidateGeometry(type);
-                if(generatedPlan) {
-                    IndirectCandidate candidate = indirectCandidate(area, section, type, true, generatedAppend);
-                    geometry = candidate.geometry();
+                IndirectCandidate candidate = generatedPlan
+                        ? indirectCandidate(area, section, type, true, generatedAppend) : null;
+                DrawBuffers.CandidateGeometry geometry = generatedPlan
+                        ? candidate.geometry() : section.getCandidateGeometry(type);
+                if(candidate != null) {
                     complete &= candidate.representable();
                     maxGpuVertices = Math.max(maxGpuVertices, candidate.maxGpuVertices());
                 }
@@ -444,8 +445,7 @@ final class RegionDrawBatch {
                         && !section.hasMainDirection() && !directSeed)
                     complete = false;
                 int flags = GpuRegionCandidateTable.flags(geometry.ready(), graphVisible, directSeed, layer);
-                if(generatedPlan) {
-                    IndirectCandidate candidate = indirectCandidate(area, section, type, true, generatedAppend);
+                if(candidate != null) {
                     if(candidate.secondGeometry() != null) {
                         DrawBuffers.CandidateGeometry second = candidate.secondGeometry();
                         builder.addPair(geometry.indexCount(), geometry.firstIndex(), geometry.vertexOffset(),
