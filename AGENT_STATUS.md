@@ -1,5 +1,10 @@
 # VulkanMod Forge 1.20.1 — Agent Status
 
+## Particle descriptor pressure and reinitialization probe — pending CI #1041
+
+Source commit `7bdf80575e1cfd891ffbfeddbb9bc656cad8c880` extends the real Vulkan native screenshot oracle with 80 distinct candidate buffers, descriptor pool exhaustion, CPU numeric materialization on rejection, fence retirement, and reinitialization after explicit device idle. Full #1041 / run 39194476949 is pending. #1040 / `1b182d53` (JAR 12160493015) remains the latest qualified executable until #1041 passes. No production behavior/default change and no RX benefit established. This is NOT actual reload or portal mixed pixels. Resolve CI, then progress portal-mod qualification and independent GPU ownership implementations.
+
+
 ## Sparse producer GPU candidate input — #1040 qualified
 
 Full #1040 [run 39192146854](https://github.com/Vorith03/VulkanMod/actions/runs/39192146854) **PASSED** at executable `1b182d53a18c0b83c5b4c1c52f94c08987ad5a1c`, Forge JAR artifact **12160493015**, smoke logs **12160477999**. Public offline/native Vulkan indirect/terrain, texture/particle pixel/sync, Forge package/startups, Create Chronicles and Crash Assistant succeeded; private pack fixtures skipped.

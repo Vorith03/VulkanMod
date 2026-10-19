@@ -1,5 +1,10 @@
 # GPU particle billboard ownership pilot
 
+## Native pool exhaustion and post-idle owner restart — pending #1041
+
+Source `7bdf805` adds 80 distinct transient ParticleVertexBuffer allocations in one recording frame, requiring successful real GPU expansion, actual native descriptor-pool rejection and CPU expansion of the refused compact row. Later frame exercises pipeline/descriptor teardown only after Vulkan.waitIdle, with new native binding on the next pass. Retirements use fence-owned existing buffer disposal. Full CI #1041 / run 39194476949 pending, #1040 remains the latest qualified executable. This **does not simulate actual resource reload**, real IP callbacks/mixed translucent pixels, or RX hardware cost.
+
+
 Opt-in `-Dvulkanmod.experimentalGpuParticleBillboards=true`, default off.
 Implemented during the October 18 GPU-first continuation; the initial native/Forge
 milestone passed #1036. The final storage-range safety correction `6a78cfb8`

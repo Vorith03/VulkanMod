@@ -1,5 +1,10 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## Particle native pressure follow-up — pending
+
+Source `7bdf805` adds native GPU descriptor-pool exhaustion / numeric CPU fallback / after-idle compute-owner reconstruction coverage. #1041 / run 39194476949 pending. It does not change live GPU eligibility, exercise actual resource-pack reload, or qualify Immersive Portals translucent pixels. Integrated RX CPU/GPU/FPS/p95/p99 unknown; no default promotion.
+
+
 ## Live recovery and current evidence
 
 Live branch `forge-1.20.1` matched `3edd41b78605fe3a28264792cdf583d5e5c435e2`;

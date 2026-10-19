@@ -1,5 +1,10 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## Descriptor pressure lifecycle probe — full #1041 pending
+
+Source `7bdf80575e1cfd891ffbfeddbb9bc656cad8c880` adds 80 distinct VkBuffer native descriptors and requires a fail-closed descriptor pool rejection and finite CPU recovery, then device-idle teardown/reinitialization in a later frame. CI #1041 / run 39194476949 pending; #1040 remains the qualified executable. **Test-only:** no new production CPU bypass and no actual resource reload/portal/RX pixel or performance claim. All release gates remain open.
+
+
 **New particle pilot: full #1036 passed**, `761947c1`, run 39178618231, JAR
 12155143862. Initial `c225399f`, counter/mapping correction `0b6ba02e`. A final
 unsigned/bounded storage-range guard needs separate full-tip qualification.

@@ -1,5 +1,8 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+**New native particle pressure evidence pending:** Source `7bdf805` adds real descriptor capacity exhaustion and post-idle compute reinitialization to CI screenshot oracle; #1041 / run 39194476949 pending. #1040 remains last qualified. No new GPU ownership adoption, portal pixels, actual resource reload or performance result; all integrated GPU-first gates stay open.
+
+
 This file is the **canonical execution roadmap** for the Forge 1.20.1 port and performance project.
 
 It answers three questions for every current and future agent:
