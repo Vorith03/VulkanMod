@@ -1,5 +1,49 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## Shared GPU texture interpolation resources — full #1049 correctness-qualified
+
+**Qualified executable:** `6faa82e5f05d800dc0fa26fd51f2a775d921d708`
+(implementation `8352108e56d6ffec566979cc35795b1499010049`,
+harness corrections `a74f41ce` and `6faa82e5`).
+Full **#1049 / [run 39208913742](https://github.com/Vorith03/VulkanMod/actions/runs/39208913742)** **PASSED**, Forge JAR artifact **12167505101** and smoke logs **12166663996**. The native `VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK` marker and full offline/Forge/terrain/particle/texture pixel/synchronization, screenshot, public Create Chronicles/Immersive Portals and Crash Assistant gates passed; private resource packs skipped.
+Previous qualified executable `29a94f73c72ff30443ff12d45eb77c12805e4e17`
+passed full #1046 / run 39205054428, JAR 12165621719,
+smoke logs 12165785846.
+
+New opt-in `experimentalGpuAnimationSharedScratch` (requires
+`experimentalGpuAnimationBatch` and `experimentalGpuTextureSourcePool`)
+lets different immutable source leases on the same source-page buffer share
+one compute descriptor and append-only, disjoint slices of a 4 MiB scratch
+VkBuffer. The source lease offset and output slot base are applied in
+both legacy and all-mip shader ABI, exact double/current-alpha arithmetic
+unchanged. The shared page is charged until GPU-safe retirement with a
+128 MiB physical reservation cap; over-limit/unsupported work tries the
+existing independent binding and retains the CPU fallback.
+The atlas queue now drains pending source reads by *overlapping scratch
+range*, retaining atlas image overlap and source/copy epoch ordering. Native
+source-pool smoke adds two lease/slot output tests and marker
+`VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK`.
+The production ticker still skips CPU interpolation on accepted GPU dispatches.
+
+**Limit:** this shares allocation/descriptor ownership but still issues
+one all-mip dispatch per sprite. Genuine multi-sprite *dispatch aggregation*
+remains open; no RX adoption, host/GPU cost, CPU saving, FPS/p95/p99 is measured.
+#1047 and #1048 failed only the extracted `texture-transfer-contract.py`
+harness (overload signature selection), before native/Forge gates; preserve
+this negative CI evidence. #1049 is the first candidate with the full
+corrected overload extractor. Keep all pilots off by default, do not request
+a user benchmark for this isolated experiment. Contract:
+`docs/GPU_TEXTURE_SHARED_SCRATCH_2026-10-18.md`.
+
+Next: design/implement bounded genuine multi-sprite dispatch with
+source-job metadata and atlas boundary/fallback protocol. Also retain
+particle portal/mod/light/translucency/reload/frame-slot gates and generated
+REPLACE/atomic APPEND candidate ABI. Do not repeat analyzed #1028 UUID
+`e05f2b31` or erase #1041/#1042 descriptor negative evidence.
+Integrated GPU-first correctness/adoption/CPU displacement/net profitability
+remain open. Refresh the rolling `docs/NEXT_SESSION_PROMPT.md` every session.
+
+
 ## Producer-owned candidate geometry and readiness — full #1046 qualified
 
 **Executable:** `29a94f73c72ff30443ff12d45eb77c12805e4e17`, full **#1046**, [run 39205054428](https://github.com/Vorith03/VulkanMod/actions/runs/39205054428). **PASSED**. Forge JAR artifact **12165621719**, smoke logs **12165785846**. Public offline/build/package/both startups/native terrain/indirect/texture/particle pixel/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private packs skipped.

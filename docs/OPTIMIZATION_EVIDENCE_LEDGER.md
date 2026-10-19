@@ -1,5 +1,34 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## Shared GPU texture interpolation resources — full #1049 correctness-qualified
+
+- **Hypothesis:** per-source-page descriptor/scratch sharing amortizes Vulkan
+  resource allocation across sprite leases, without changing the exact
+  interpolation GPU kernel or CPU-bypass path.
+- **Activation:** opt-in shared scratch + batch + source pool + GPU interpolation;
+  native source-pool oracle forces the flags. Standalone/default modes unchanged.
+- **Candidate:** executable `8352108e56d6ffec566979cc35795b1499010049`,
+  extraction fixes `a74f41ce`/`6faa82e5`. **Qualified executable**
+  `6faa82e5f05d800dc0fa26fd51f2a775d921d708`, full **#1049 / run 39208913742 passed**,
+  Forge JAR artifact **12167505101**, smoke logs **12166663996**.
+  The native `VULKANMOD_GPU_TEXTURE_SHARED_SCRATCH_OK` marker, exact texture
+  pixels, synchronization, Forge package/dual startups, screenshot,
+  terrain/particle and public modpack compatibility gates passed; private
+  packs skipped. Earlier #1047/#1048 failed offline signature extraction
+  before native checks, not a shader/pixel defect.
+- **CPU displacement:** accepted O4 GPU interpolation already returns before
+  CPU pixels; shared resource allocation only removes per-sprite VkBuffer/
+  descriptor creation, not per-sprite CPU dispatch preparation or Java clocks.
+- **Limits:** append-only 4 MiB scratch pages with 128 MiB pending-aware physical
+  cap, source-page descriptor range limit, exact per-slot barrier/copy bounds,
+  GPU-safe retirement; fallback to standalone binding/CPU path.
+  No measured adoption, CPU time saved, GPU cost, FPS/p95/p99, or net benefit.
+- **Disposition:** **qualified but unmeasured** by full #1049; no representative RX hardware profitability evidence. Single dispatch
+  per sprite remains, and genuine multi-sprite job aggregation is the next
+  implementation gate. Detailed contract:
+  `docs/GPU_TEXTURE_SHARED_SCRATCH_2026-10-18.md`.
+
+
 ## Producer-owned candidate geometry and readiness — full #1046 qualified
 
 **Executable:** `29a94f73c72ff30443ff12d45eb77c12805e4e17`, full **#1046**, [run 39205054428](https://github.com/Vorith03/VulkanMod/actions/runs/39205054428). **PASSED**. Forge JAR artifact **12165621719**, smoke logs **12165785846**. Public offline/build/package/both startups/native terrain/indirect/texture/particle pixel/synchronization, Create Chronicles/Immersive Portals and Crash Assistant gates passed; private packs skipped.
