@@ -486,7 +486,7 @@ final class RegionDrawBatch {
                 && type != TerrainRenderType.TRANSLUCENT
                 && type != TerrainRenderType.TRIPWIRE);
         int maxGpuVertices = 0;
-        int generatedReplace = 0;
+        int recordedReplaceCount = 0;
         int generatedAppendPairs = 0;
         int generatedAppendGpuOnly = 0;
 
@@ -517,7 +517,7 @@ final class RegionDrawBatch {
                             if(candidate.secondGeometry() != null) generatedAppendPairs++;
                             else generatedAppendGpuOnly++;
                         } else {
-                            generatedReplace++;
+                            recordedReplaceCount++;
                         }
                     }
                     // Generated producer state is not included in the ordinary
@@ -600,7 +600,7 @@ final class RegionDrawBatch {
         // fingerprint uncommitted so an unchanged CPU queue can retry later.
         candidateSupersetComplete[layer] = queued && complete;
         candidateInitialized[layer] = queued;
-        candidateGeneratedReplace[layer] = queued ? generatedReplace : 0;
+        candidateGeneratedReplace[layer] = queued ? recordedReplaceCount : 0;
         candidateGeneratedAppendPairs[layer] = queued ? generatedAppendPairs : 0;
         candidateGeneratedAppendGpuOnly[layer] = queued ? generatedAppendGpuOnly : 0;
         candidateFingerprints[layer] = fingerprint;
