@@ -16,15 +16,15 @@ Follow `AGENTS.md` Section 3A. Read `ROADMAP.md`,
 `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`,
 `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`
 and this prompt. Inspect live Git/CI delta before editing.
-Prior last FULL green executable `c06f1cbc9c57a09b0df819edc639022bef049096`,
+Previous full-green executable `c06f1cbc9c57a09b0df819edc639022bef049096`,
 #1053 run 39216055025, Forge artifact 12169313491 and
 smoke logs 12169019219; native
 `VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK`.
-This is the prior qualified baseline, not the new candidate.
+This is the prior qualified baseline, superseded by #1055.
 
 ## Active implementation checkpoint and CI
 
-Candidate executable `629de44061e404e291dae647c8e026b23d841395`,
+Qualified executable `629de44061e404e291dae647c8e026b23d841395`,
 metadata-reuse implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`;
 full #1055 [run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
 **PASSED**. Forge JAR artifact **12173844688**; smoke logs
