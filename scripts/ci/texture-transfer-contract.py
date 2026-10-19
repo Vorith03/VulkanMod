@@ -25,7 +25,9 @@ production = '\n'.join(method(sig) for sig in [
     "private static void flushSpriteUploadCopies()",
     "public static boolean canQueueComputedSpriteCopies()",
     "public static void flushPendingSpriteUploadSource(",
+    "public static void flushPendingSpriteUploadRange(",
     "public static int queueComputedSpriteFrame(",
+    "public static int queueComputedSpriteFrame(TextureResidentBuffer source, VulkanImage texture,\n                                               int[] offsets, int frameWidth, int frameHeight, int levels,",
     "public static void flushPendingSpriteUploadCopies()",
     "private static void queueSpriteUploadCopy(int mipLevel, int width, int height,\n                                              int xOffset, int yOffset,\n                                              long stagingBufferId, int bufferOffset)"])
 harness = r'''package net.vulkanmod.vulkan.texture;
@@ -166,6 +168,17 @@ public final class TextureTransferBatchContract {
                 && spriteUploadRegionCount==0 && events.isEmpty(), "all scratch ranges validated before enqueue");
         check(queueComputedSpriteFrame(scratch, spriteUploadTexture, new int[]{0},3,2,1,63,4)==-1
                 && events.isEmpty(), "atlas extent validated before enqueue");
+        clear();
+        check(queueComputedSpriteFrame(scratch, spriteUploadTexture,
+                new int[]{0,24}, 3,2,2,8,4,8)==2, "offset scratch mips queued");
+        check(spriteBufferOffsets[0]==8 && spriteBufferOffsets[1]==32,
+                "shared scratch offsets encoded exactly");
+        flushPendingSpriteUploadRange(1000,40,4);
+        check(spriteUploadRegionCount==2 && events.isEmpty(),
+                "disjoint shared scratch slot must not drain pending reads");
+        flushPendingSpriteUploadRange(1000,30,4);
+        check(spriteUploadRegionCount==0 && events.get(0).equals("GPU_INTERPOLATION"),
+                "overlapping shared scratch read must drain before rewrite");
         int[] mips = {0, 1, 0, 0, 0};
         int[] xs = {100, 50, 300, Integer.MAX_VALUE - 1, 0};
         int[] ys = {100, 50, 300, 0, Integer.MAX_VALUE - 1};
