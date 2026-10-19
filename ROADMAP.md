@@ -1,5 +1,54 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+
+## Fixed GPU animation metadata slab — candidate #1055 (full CI pending)
+
+**Executable candidate:** `629de44061e404e291dae647c8e026b23d841395`;
+implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`,
+isolated attribution-contract fix `629de440`.
+Full [#1055 / run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
+is running; do not claim qualified native pixels, synchronization or
+Forge/modpack gates until it finishes. Earlier #1054 / run 39226851915
+failed only `attribution-capture-contract.py` because its isolated
+`MultiStats` stub still had seven fields; production statistics now
+have eight. That negative evidence is retained.
+
+The opt-in multi-sprite path now reserves exactly **32 × 48 = 1,536
+bytes** at the tail of each 4 MiB shared scratch page while active
+pixel output slots remain disjoint. Each accepted sprite stages one
+metadata row in this fixed slab; its cursor advances only after staging
+succeeds. At wrap, the atlas queue first records prior pending compute
+and copies. Before the next transfer overwrite, the graphics queue
+records a buffer dependency from previous compute shader reads and
+transfer writes to new transfer writes, covering the entire slab,
+even if the earlier dispatch belonged to a prior submission.
+Host-side queue drainage alone is not treated as completion. Failed
+eligibility or staging still leaves the old GPU/CPU fallbacks intact;
+the 128 MiB pending-aware page cap is unchanged, and a scratch request
+too large for the table tail tries independent binding.
+
+A native oracle extends the former two-job exact-pixel fixture by
+**320** further accepted jobs on the same live page across forced copy
+epochs and separate same-queue command buffers, requires at least nine
+table cycles and no extra multi-job fallback, and finishes with exact
+alpha/RGB and overlapping O3 overwrite readback. Prior native mixed
+CPU/GPU upload and retirement tests also remain; real texture-pack
+reload and representative RX use are not yet proven.
+`gpu_multi_table_recycles_total` augments existing lifetime
+eligibility, acceptance, fallback, grouped-dispatch, job, metadata-byte
+and page-resource counters. Group size, metadata barrier cost, full
+production adoption, actual CPU displacement, GPU submission overhead,
+FPS and p95/p99 are **unmeasured**. All flags stay default-off.
+
+**Next:** resolve any #1055 red result before touching adjacent code,
+capture exact full-run/JAR/log/native marker evidence if green, then
+advance actual-world particle portal/light/reload/frame-slot gates or
+generated terrain REPLACE/atomic APPEND indirect ABI. Only request a
+representative RX benchmark after meaningful multi-subsystem
+integration. The integrated GPU-first release is not complete.
+Retain #1050-#1052, #1047/#1048, #1041/#1042 and analyzed #1028
+UUID `e05f2b31` negative/baseline evidence.
+
 ## Genuine GPU multi-sprite texture dispatch — full #1053 correctness-qualified
 
 **Executable:** `c06f1cbc9c57a09b0df819edc639022bef049096`.

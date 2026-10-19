@@ -1,5 +1,47 @@
 # Bounded multi-sprite GPU interpolation dispatch — October 19, 2026
 
+
+## Fixed-table reuse amendment — candidate #1055, full validation pending
+
+Implementation `8134a113cdaaa9fc3d5c3903752b420ab7a287cf`;
+isolated attribution-stub correction `629de44061e404e291dae647c8e026b23d841395`.
+Full #1055 / [run 39227110919](https://github.com/Vorith03/VulkanMod/actions/runs/39227110919)
+is pending. #1054 (39226851915) failed **before** native/Forge
+testing: the extracted attribution stub omitted the new
+`MultiStats.tableRecycles` field. Its failure is not a GPU pixel/sync
+result.
+
+Multi-dispatch pages reserve a fixed high-end 32 × 48-byte slab on
+creation; future pixel scratch reservations exclude the whole slab.
+Row addresses descend and shader job Z ordering is unchanged.
+The cursor advances only after a successful 48-byte staging upload.
+On 32 rows, `queueMultiJob` forces all outstanding atlas-copy reads
+and their pending compute to be recorded. If any page-local pending
+jobs remain, recycling rejects and preserves the normal fallbacks.
+Only then can the cursor wrap. The first reuse emits a page-slab
+buffer barrier **after** the staging-buffer reset decision and before
+the new `vkCmdCopyBuffer`: source stage
+`COMPUTE_SHADER | TRANSFER`, source access
+`SHADER_READ | TRANSFER_WRITE`, destination stage/access
+`TRANSFER / TRANSFER_WRITE`. Work is ordered on the **same
+graphics VkQueue**, including earlier command buffers and submissions;
+host queue-drain state alone does not establish GPU completion.
+Retirements still use the existing pending-aware upload-safe path.
+The 4 MiB page/128 MiB physical bounds and exact Java-double RGB,
+alpha, mip and atlas ordering contracts remain.
+
+Native oracle adds 160 rounds × two sprites = **320** accepted rows,
+forced epoch boundaries every 16 rounds, and distinct VkQueue
+submissions; it checks ≥9 wraps, zero extra GPU multi-fallback,
+exact final pixels and resident-source overlapping overwrite.
+The preexisting native mixed CPU/resident texture transfer and
+shader synchronization gates continue to run. Long real-world
+modpack adoption, reload/portal behavior and RX profitability remain
+unknown. Lifetime `gpu_multi_table_recycles_total` allows measuring
+table pressure along with `eligible/accepted/fallback/dispatch/
+dispatchedJobs/metadataBytes/flushes`. The metadata staging byte
+counter is **cumulative traffic**, not 1,536 bytes of live allocation.
+
 ## Scope and ownership
 
 Implementation `cf3351f726ed143e1006b0504b92bb157020e322`;
@@ -122,7 +164,7 @@ Open parallel gates: real particle portal/mod-light/translucency/reload/
 frame-slot verification, generated terrain REPLACE/atomic APPEND ABI,
 integrated ownership adoption and measured net benefit.
 
-## Pending sustained adoption and metadata-reuse qualification
+## Historical #1053 append-only limitation (addressed in #1055 candidate)
 
 Each update appends an immutable 48-byte row to the high end of its
 shared scratch page, and the interval is not reused before GPU-safe
