@@ -1,21 +1,80 @@
-# Rolling VulkanMod handoff — stale queued REPLACE publication guarded; full #1073 passed
+# VulkanMod — Implement Maintainability and Reuse Improvements
 
-VulkanMod — Continue Integrated GPU-First Renderer Development
+Work in `Vorith03/VulkanMod` on `forge-1.20.1`, preserving Minecraft 1.20.1, Forge 47.3.0 and Java 17.
 
-Continue implementation and verification in https://github.com/Vorith03/VulkanMod on `forge-1.20.1` (Minecraft 1.20.1, Forge 47.3.0, Java 17).
+Address the repository's reuse and maintainability reviews through implementation, verification and documented decisions. This is an implementation assignment: do not stop at another audit, a plan, documentation changes or one trivial cleanup while additional justified work remains feasible.
 
-**Mission:** Move eligible CPU graphics calculations to GPU-owned production results and genuinely stop redundant CPU execution while retaining correctness. Do not return to BufferBuilder/queue-size micro-optimizations, stop at fixtures, enable experimental pilots by default, or claim integrated release completion without real-world pixel and performance evidence.
+This assignment authorizes ordinary repository edits, logical commits and pushes to `forge-1.20.1`. Do not force-push, rewrite shared history, merge unrelated PRs, publish releases or deploy anything.
 
-1. **Recover live state** under current `AGENTS.md` Section 3A. Inspect current branch HEAD/CI and delta from this checkpoint; live evidence overrides it. Read `ROADMAP.md`, `AGENT_STATUS.md`, `docs/OPTIMIZATION_EVIDENCE_LEDGER.md`, `docs/GPU_FIRST_OWNERSHIP_2026-10-18.md`, `docs/GPU_TERRAIN_INDIRECT_DRAW_HANDOFF_2026-09-15.md`, `docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md`, `docs/GPU_PARTICLE_BILLBOARD_OWNERSHIP.md`, both GPU texture ownership documents and this `docs/NEXT_SESSION_PROMPT.md`. Do not repeat settled historical investigations.
+## 1. Recover live authoritative state
 
-2. **Latest qualified executable:** `85037cfdb2779294676f33ba3b951791d66dec10`, full **#1073** / run **39304235826**, **COMPLETED / SUCCESS, attempt 1**. Forge JAR artifact **12213616043**; smoke logs **12213091579**. Public offline/Forge build/package, both startup modes, native indirect/terrain/particle/texture/screenshot/synchronization, post/depth and public Create Chronicles/Immersive Portals and Crash Assistant passed. Private resource packs skipped. Later documentation commits inherit this qualification only if their executable tree remains identical; never attribute #1073 to an untested executable change.
+Follow current `AGENTS.md` Section 3A. Inspect live HEAD, intervening commits, CI and overlapping development before editing.
 
-3. **New correctness work:** `TaskDispatcher.scheduleSectionUpdate` rejects stale completed-result queue publications for *all nonnegative generation-bearing* section updates, not only staged APPEND. A dirty section can advance generation after the worker queued an ordinary REPLACE upload but before another rebuild cancels that already-queued result; the old CPU upload/compiled status can no longer be accepted. `PublicationDrainSmokeTest` exercises stale rejection, current-generation acceptance and legacy unversioned acceptance on the real publication queue. This does **not** eliminate additional CPU numeric planning or establish FPS gains. A bounded review of existing GPU mesher dispatch/completion guards found no separate evidenced defect; do not claim exhaustive async audit.
+Read current repository copies of:
 
-4. **Most important unclosed gate:** Capture actual-world generated REPLACE and atomic APPEND indirect recording and comparable CPU/GPU pixels in a real main-world scene and genuine Immersive Portals view under `docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md`. The optional `VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED` marker proves only live-world command recording, not post-cull nonzero commands or correct pixels. No user-world marker/screenshot has been captured. If representative worlds/AMD hardware remain inaccessible, document blocker and continue evidenced independent correctness or integration work. Do not substitute startup, native fixtures or synthetic candidates for actual world evidence or demand an isolated RX benchmark first.
+- `AGENTS.md`
+- `ROADMAP.md`
+- `AGENT_STATUS.md`
+- `docs/OPTIMIZATION_EVIDENCE_LEDGER.md`
+- `docs/REUSE_AUDIT_2026-10-20.md`
+- `docs/REUSE_AUDIT_INVENTORY_2026-10-20.tsv`
+- `docs/MAINTAINABILITY_AND_REUSE_REVIEW_2026-10-20.md`
+- Ownership and validation contracts relevant to each proposed change.
 
-5. **Preserve contracts/negatives:** exact producer owner/generation, GPU residency and readiness, queue identity/proof completeness, graph/direct provenance and precise portal culling volume, atomic APPEND CPU exceptions first, 512-section / 1,024-command caps, same-graphics-queue synchronization/barriers and fence-safe retirement. Preserve CPU graph/mod traversal, changed-state planning and complete fallback. All experimental gates default-off. Particle genuine portal/mod callback, lighting/translucency/camera/reload/frame/descriptor pressure and private packs remain open. CPU milliseconds displaced, GPU dispatch/submission cost, adoption and FPS/p95/p99 on RX 6900 XT remain unmeasured. Previous #1072 qualified executable `47f00dff1c8349133948dc0dd257d5771ac8217a` (JAR 12207901585, logs 12207722559); #1071 cancelled; #1070 attempt 1 failed FMLConfig null Boolean (failed logs 12206393088), attempt 2 passed unchanged executable `a93d5472fdebd3576b80b8e21ef62bddccb65500` (JAR 12206524656, logs 12208005267). Preserve #1067, #1060, #1064, older documented negatives and analyzed #1028 UUID `e05f2b31`.
+Both audits are tracked under `docs/` on this branch; read the live repository copies rather than requiring attachments or replaying historical audit commits. These are review findings, not implemented migrations or exhaustive correctness certification.
 
-6. **Execution and evidence:** Implement a bounded, production-relevant next change only after finding a causal gap in live code/evidence. Validate with focused regressions and full CI for executable edits; push coherent work to `forge-1.20.1`. Report exact executable SHA, full CI status/conclusion/attempt, Forge JAR and smoke log artifact IDs, negative evidence, actual-world coverage, unresolved performance gates and blocked/unavailable steps separately. Update `AGENT_STATUS.md`, `ROADMAP.md`, `docs/OPTIMIZATION_EVIDENCE_LEDGER.md`, affected ownership documents and `docs/NEXT_SESSION_PROMPT.md`.
+Reviewed executable: `682b0d6bb59b249c5be66517209f720e54ac6d1d`, full CI #1074 / run `39308824108` successful; JAR artifact `12214688900`, smoke logs `12214474322`. Private resource packs were skipped. Later audit/prompt documentation does not change the executable. Verify newer live evidence before relying on this checkpoint.
 
-**MANDATORY PERPETUAL HANDOFF:** Finish your response with a **NEW, complete, copyable rolling handoff prompt** for the following session. This newly written prompt **must explicitly command that successor to update the repository handoff and end with its own newly generated complete copyable rolling handoff prompt repeating this requirement, for every subsequent session without exception**. Do not simply paste the prior handoff or omit this recursive requirement.
+Inspect PR #12 and newer overlapping work before touching profiling; do not build a competing recorder.
+
+## 2. Scope and tracking
+
+The owner explicitly prioritizes this maintenance assignment. Preserve the standing GPU-first objective and unresolved actual-world/performance gates.
+
+Create one concise tracking document covering every finding in both reviews. Combine overlaps. Record the concrete evidence, bounded action, disposition, commits, validation and remaining risk. Dispositions must distinguish implemented/validated, implemented/validation-pending, retained-after-evaluation, deferred-with-specific-reason and blocked-by-identified-dependency.
+
+Verify each recommendation before acting. Retaining existing code after a concrete comparison is acceptable; an unevaluated “too risky” or “future work” label is not a completed assessment. Do not force every proposed refactor or dependency into the codebase.
+
+## 3. Start with clear bounded improvements
+
+1. Verify whether the old `render/chunk/build/LiquidRenderer` has supported consumers. If unused, remove it and its annotation-only Fabric compile dependency. Remove the Fabric Maven repository only if no consumer remains. Preserve the real Forge liquid path and vertex adaptation.
+2. Replace applicable `VUtil.UNSAFE` operations in `MappedBuffer`, `VRenderSystem` and `Drawer` with pinned LWJGL memory accessors. Remove the reflective bootstrap after all consumers are handled. Preserve exact representation/address arithmetic; do not claim this alone adds lifetime or bounds safety.
+3. Evaluate replacing `SortUtil` with existing fastutil primitive stable sorting. Preserve descending `Float.compare`, stable ties and translucent index order. Differentially verify empty/singleton, random, equal-distance, signed-zero, infinity and NaN cases against current behavior.
+4. Verify and remove unused copy overloads, `memcpyImage`, unused `MemoryType.copyFromBuffer` and inactive duplicate code where justified. Check reflective registration, packaging and supported external consumers. Preserve live copy/reset semantics.
+5. Correct stale shadow-only/production comments and clarify shared texture modes. Condense the living checkpoint while retaining historical evidence and negative results in linked archives/Git.
+
+Finish and validate coherent cleanup groups before structural changes.
+
+## 4. Address substantive maintenance risks
+
+- **Native ownership:** clarify owned/borrowed wrappers, closed-state behavior and pointer exposure. Evaluate explicit retirement requirements instead of implicit concrete-type exceptions. Preserve upload completion, frame fences and deferred destruction. No Cleaner/finalizer substitutes for GPU synchronization.
+- **Section/cache state:** document transitions before changing representation. Evaluate per-layer cache state and named producer modes. Preserve input versus visible generations, producer invalidation, exact provenance/frusta, CPU completeness, staged APPEND and its atomic transaction. Avoid per-frame/candidate allocation growth.
+- **Java/GLSL ABI:** strengthen agreement checks for constants, versions, capacities, offsets and representations. Extend existing native/layout tests before adding generators or native reflection. Preserve independent expectations and round-trip coverage.
+- **Feature admission:** make requested versus effective activation and rejected prerequisites clear. Share parsing without erasing feature-specific policy. Keep early mixin bootstrap independent of Vulkan class initialization and retain startup-only/default-off behavior.
+- **Tests:** distinguish source/bytecode-shape guards from behavioral proof. Strengthen selected failure paths with failure injection, release accounting, stale-state rejection and no-partial-mutation checks. Keep independent oracles independent. A framework migration alone is not a testing improvement.
+- **Optional integrations:** reduce duplicated discovery/exception mechanics where useful while retaining per-mod contracts. Distinguish absent mod, unsupported installed API and underlying integration failures. Preserve causes and optional class-loading isolation.
+- **Cohesion/units:** extract one responsibility only when invariants become clearer. Keep command ordering and retirement visible. Name byte/word counts and offsets, document buffer mutation and verify nonzero positions/slices before changing copy APIs. Coordinate profiler changes with overlapping work.
+
+## 5. Evaluate larger reuse candidates
+
+Assess existing Vulkan pipeline-cache reuse for production compute; a small shared compute-construction/cleanup helper; VMA virtual allocation for generic free-range bookkeeping; an existing GLSL parser; Minecraft widget behavior; and remaining utility/query duplication.
+
+Compare removed custom responsibility against added dependency, lifecycle, packaging and compatibility costs. Prefer existing dependencies. Verify exact versions and distribution/licensing compatibility before adoption; do not upgrade foundational components.
+
+For compute caching, preserve device identity, initialization/teardown, cache limits, host synchronization and failure fallback. Measure cold/warm creation or reload before claiming benefit.
+
+VMA does not replace readiness, ownership, stable reservations, growth or fence retirement. A GLSL parser does not automatically provide preprocessing, Minecraft binding semantics or arbitrary shaderpack support. Evaluate a representative shader corpus, generated bindings and native output. Do not introduce a general renderer framework.
+
+## 6. Validate and continue
+
+Follow current repository validation and CI policy: focused local checks, coherent milestones, batched pushes and required produced-JAR/Forge/native/compatibility gates for executable changes. Do not weaken assertions or remove coverage to obtain green CI. Diagnose and fix a failed change or revert that bounded change.
+
+Preserve generation/provenance/readiness checks, precise portal frusta, atomic APPEND CPU exceptions, 512-section/1,024-command bounds, queue barriers, fence-safe retirement and complete CPU fallback. Keep all experiments default-off.
+
+Do not claim CPU displacement, FPS gains or release completion from cleanup or synthetic fixtures. Do not repeat settled owner-machine tests. If hardware evidence is genuinely needed, request one narrow test with a discriminating observation. If validation is unavailable, state exactly what remains unverified and continue independent work.
+
+Work through every finding. Do not stop after the easiest items; do not force all migrations into one commit or claim deferred work is implemented. A finding may be retained or deferred only with an inspected contract, concrete tradeoff or identified blocker. Continue other feasible work when one item is blocked.
+
+Before ending, leave implementation/tracking recoverable; report changes separately from retained/deferred candidates and pending validation; give exact commits and CI evidence; update the durable checkpoint and this prompt. Preserve the unresolved real-world GPU/portal and RX profitability gates.
+
+**Perpetual handoff:** finish with a NEW complete copyable continuation prompt based on actual remaining work. Explicitly command the successor to update the repository handoff and end with its own newly generated continuation prompt carrying this same requirement forward.
