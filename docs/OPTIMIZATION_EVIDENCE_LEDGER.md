@@ -3,16 +3,20 @@
 ## October 20 maintenance implementation detour
 
 The owner selected implementation of both reuse/maintainability reviews. Current
-scope, dispositions and pending qualification are in [the tracker](MAINTENANCE_TRACKER_2026-10-20.md)
+scope, dispositions and qualification are in [the tracker](MAINTENANCE_TRACKER_2026-10-20.md)
 and [AGENT_STATUS.md](../AGENT_STATUS.md). Milestones `a15ce968`, `0b50f449`, `27a14fca`
 remove obsolete infrastructure and clarify native/cache/ABI/admission ownership.
-Combined full #1076 / run 39507963173 failed compileJava on remaining mapped
-buffer field access; correction `c303cf26` fixes both affected mixins. Full
-#1077 / run 39508596394 is queued/running, unqualified at this checkpoint.
-#1075 was superseded/cancelled.
-Latest fully qualified baseline remains `682b0d6b`, full #1074. This maintenance
-work is not an FPS result or closure of Phase 7 generated-world/portal pixels,
-private-pack, particle actual-world or integrated RX adoption/profitability gates.
+Full #1077 / run 39508596394 PASSED on correction `c303cf26`;
+JAR 12305230721, logs 12305300783; private packs skipped. This qualified the earlier
+maintenance milestones, replacing `682b0d6b` / #1074. #1076 remains a
+compile failure; #1075 was cancelled. Follow-up `6c65e00f` fixes stale mat3
+partial writes and adds behavioral compute failure/cache transition coverage;
+full #1078 / run 39509869276 PASSED on that exact executable (JAR 12304984467,
+logs 12306121182; private packs skipped). `6c65e00f` is the current qualified
+maintenance executable. The bounded assignment is complete; retained/deferred/
+blocked migrations stand. Resume the available Phase 7 gate; see the tracker.
+No FPS result or closure of actual-world/portal, private-pack, particle or RX
+profitability gates is claimed.
 Historical checkpoints below retain their original evidence boundaries.
 
 

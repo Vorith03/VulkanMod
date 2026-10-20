@@ -1,107 +1,97 @@
-# VulkanMod — Qualify and Finish Maintenance Improvements
+# VulkanMod — Continue From Qualified Maintenance
 
-Continue implementation in https://github.com/Vorith03/VulkanMod on
-`forge-1.20.1`, preserving Minecraft 1.20.1, Forge 47.3.0 and Java 17.
-Ordinary edits, logical commits and pushes are authorized. Do not force-push,
-rewrite shared history, merge unrelated PRs, publish releases or deploy.
+Continue https://github.com/Vorith03/VulkanMod on `forge-1.20.1`, preserving
+Minecraft 1.20.1, Forge 47.3.0 and Java 17. Ordinary edits, logical commits and
+pushes are authorized. Do not force-push, rewrite shared history, merge unrelated
+PRs, publish releases or deploy.
 
-Follow current AGENTS.md §3A against live Git, overlapping work and CI. Read this
-prompt in full, current ROADMAP.md, AGENT_STATUS.md,
+Read this prompt in full. Follow current AGENTS.md §3A against live Git, CI and
+overlapping work. Read AGENT_STATUS.md, the active ROADMAP.md heading,
 docs/MAINTENANCE_TRACKER_2026-10-20.md, docs/OPTIMIZATION_EVIDENCE_LEDGER.md,
-both October 20 review documents and affected ownership contracts. The inventory
-is the original audit baseline, not an assertion that current files are unchanged.
-Inspect intervening changes; live evidence supersedes every checkpoint here.
+both October 20 audits and affected ownership contracts. Inspect intervening
+changes; live evidence overrides every checkpoint here. Use the tracker as the
+single finding register, retaining validated, pending, retained, deferred and
+blocked distinctions. Do not repeat the audits or reopen settled decisions.
 
-## Current implementation and pending qualification
+## Recover actual qualification first
 
-Pushed maintenance milestones:
-- `a15ce968e5b7078790a9a097602480564a6f25da`: obsolete liquid/Fabric bridge,
-  unused copy/readback APIs, LWJGL scalar access, primitive stable sort and comments.
-- `0b50f449e8f937b932feb3d30a5b72b4a541dbc8`: checked mapped lifetime,
-  explicit retirement policy, partial uniform-binding cleanup, per-layer cache
-  state/named modes, candidate ABI and behavioral tests, IP cause-unwrapping reuse.
-- `27a14fca0dfea9f1b824239138c04fcbd9f623aa`: shared compute factory,
-  texture configuration admission, device/family-keyed capability query, abstract
-  retirement requirements, texture ABI checks and verified utility removals.
+Full #1077 / run **39508596394** completed **SUCCESS**, attempt 1, on
+`c303cf26f53887964e9e45a2cc156c21a55143fb`. JAR **12305230721**, smoke logs
+**12305300783**. It qualifies the prior maintenance milestones. Actual uniform
+failure/ABI tests, Forge packaging/both startups, native indirect/terrain/
+texture/particle/pixel/synchronization, screenshot/post/depth, public Create
+Chronicles/Immersive Portals and Crash Assistant passed; private packs skipped.
+#1076 failed compilation, #1075 was cancelled; neither is qualified. Previous
+baseline `682b0d6b` / #1074 remains historical evidence.
 
-Full #1076 / run `39507963173` on `27a14fca` FAILED compileJava:
-seven remaining direct accesses to private MappedBuffer.buffer in BufferUploaderM
-and RenderSystemMixin. Both now call byteBuffer() in correction
-`c303cf26f53887964e9e45a2cc156c21a55143fb`. Full #1077 / run `39508596394`
-is queued/running at handoff; no successful conclusion or qualified artifact yet. Failed smoke-log artifact `12304163339`; no native result/JAR.
-First inspect the latest correction run and exact failed step/logs if red. Fix or narrowly
-revert a failed change; do not weaken tests. Preserve the required produced-JAR,
-Forge startup, native rendering/synchronization and public compatibility gates.
-Full #1075 / `39506746716` was CANCELLED/SUPERSEDED during public modpack
-validation, after build/startups/indirect/post/depth/screenshot steps passed.
-It is not a successful full suite. Last fully qualified baseline remains
-`682b0d6bb59b249c5be66517209f720e54ac6d1d`, full #1074 / `39308824108`,
-JAR `12214688900`, logs `12214474322`, private packs skipped.
+Follow-up **`6c65e00f6212a7e2d52571bb7a279ec943efd19a`** is pushed and
+**full #1078 / run 39509869276 PASSED**, attempt 1, on that exact executable.
+Forge JAR **12304984467**, smoke logs **12306121182**. This is now the qualified
+maintenance executable. Compute failure, vec4/mat3 uniform and ABI tests, both
+startups, new native cache transitions, indirect APPEND/REPLACE, texture shared/
+multi-dispatch pixels, particle/synchronization/post/depth/screenshot and public
+modpack/IP/Crash Assistant gates passed. All private-fixture steps skipped.
+The bounded maintenance assignment is complete; no code from it awaits CI.
+Inspect any intervening executable change before reusing this qualification.
 
-Locally, 24 offline contracts passed twice. Actual LWJGL 3.3.1/fastutil 8.5.9
-focused tests passed for native mapped ownership/copy state/alignment, stable
-sort differential and independent order, and candidate/texture ABI shape plus
-serialization/pair-capacity behavior. Pure optional invocation and all 16 texture
-configuration combinations passed without renderer initialization. Mutants for a
-closed-address escape and wrong numeric sort order were rejected. Direct Gradle
-bootstrap is network-blocked; Java 17 includes the compiler module despite no
-javac launcher. Use current environment evidence rather than assuming these
-transient tools/caches still exist.
+## What the follow-up changes
 
-## Finish remaining useful work
+1. Uniform failure test checks immediate exception cleanup before caller close,
+   then repeated close and stale vec4/mat3 updates without destination mutation.
+   New mat3 coverage reproduced zeroing before closed-source validation; the
+   source address now validates before writes. This is per-field failure safety,
+   not an arbitrary multi-field transaction or concurrent-lifetime guarantee.
+2. ComputePipelineFactory construction-only Calls seam runs actual coordinator
+   and LWJGL structs for compiler exception, module failure, pipeline failure
+   (zero/partial handle), thrown call and success. Test exact original failure,
+   cleanup count/order/handle, ABI fields, released real SPIR-V and successful
+   ownership transfer. testComputePipelineFactoryFailure is part of Gradle check.
+   Native driver success remains independently exercised by subsystem fixtures.
+3. Native RegionBatchSmokeTest adds generated -> ordinary -> generated mode
+   transitions with unchanged producer revisions (rescan plus serialized geometry),
+   and clearing staged APPEND preflight (rescan plus rejected-cache recovery).
+   Existing dirty/input-vs-visible, identity/direction, exact frustum,
+   readiness/retirement, stale publication and atomic APPEND coverage remains.
+4. Candidate/texture constants checks remain supplemental. #1077 observed actual
+   509 ordered CPU/GPU APPEND pairs, mixed rows, malformed/unready rejection,
+   maximum capacity/zero tail, and shared/multi-dispatch texture pixel markers.
 
-Use the tracker as the single combined finding register. Do not repeat the audits
-or call every deferred candidate implemented. Resolve pending validation first,
-then continue justified bounded changes while useful independent work is feasible.
+24 local offline contracts passed. Focused tests used actual factory,
+SPIRVUtils/native storage, binder/layout/UBO and LWJGL 3.3.1, isolating only
+unrelated globals/game/cache dependencies. Six single-change mutants were
+rejected: delayed uniform cleanup, double release, partial stale mat3 write,
+SPIR-V leak, module leak and partial-pipeline leak. Restored code passed.
+Tracker records exact failure signals and full-checkout reproduction commands.
+Local Gradle bootstrap was network-blocked; local focused checks do not replace
+Forge/native CI. Do not repeat those settled mutations absent a relevant change.
 
-1. Confirm the added actual uniform failure test runs and catches release leaks,
-   double release and stale/partial writes. Demonstrate mutation sensitivity for
-   the cleanup paths, supplementing rather than removing existing shape guards.
-2. Exercise ComputePipelineFactory compile/module/pipeline creation failure paths
-   with a bounded injectable seam or native failure fixture. Verify exact temporary
-   SPIR-V/module release and failed partial-pipeline cleanup. Avoid a general native
-   mocking framework or obscuring subsystem dispatch/barrier/retirement ownership.
-3. Review new cache-holder invalidation/publication against the transition table
-   and the existing producer-revocation/stale-publication/native APPEND tests.
-   Extend a missing behavioral case only for a specific uncovered transition.
-   Do not merge input and visible generations or add per-candidate allocations.
-4. ABI constants/text checks supplement native output, not prove it. Confirm the
-   1,024-command atomic-pair/version/representation and texture native pixel gates
-   still pass; extend independent expectations where a concrete field remains
-   unchecked rather than introducing a generator/reflection dependency.
-5. Larger reuse candidates have inspected decisions in the tracker. Compute cache
-   reuse requires an explicit device-scoped service replacing Pipeline's static
-   capture, synchronized host access, safe teardown/identity/corrupt-cache fallback
-   and cold/warm measurements. Parser migration requires a pinned distribution-
-   compatible version/license and representative shader corpus plus binding/native
-   output/packaging/reload comparisons. VMA remains retained due stable Segment,
-   growth/offset, arbitrary-stride/readiness policy versus added native lifetime;
-   reconsider only against a discriminating trace/cost comparison. Widget migration
-   needs staged apply/cancel plus keyboard/narration/drag/scroll/resize tests on a
-   real screen. Do not force these migrations to close checklist rows. Profiler
-   PR #12 overlaps recorder work; inspect it before touching profiling.
+## Continue only justified work
 
-Keep implemented/validated, validation-pending, retained-after-evaluation,
-specifically deferred and identified blockers distinct. Record exact commits,
-commands, CI/artifacts, failures, decisions and residual risk. The old status is
-preserved verbatim in docs/AGENT_STATUS_ARCHIVE_2026-10-20.md; use current status
-for sequencing, not historical “latest” headings.
-
-## Preserved renderer and evidence boundaries
+Tracker dispositions now reflect #1078 qualification. Resume the first available
+unsatisfied Phase 7 gate from current evidence. Fix a specific newly evidenced
+hole or missing prerequisite while feasible; do not create maintenance churn
+when remaining progress needs actual-world inputs.
+Do not force retained/deferred migrations to manufacture progress:
+compute caching needs an explicit device service/host synchronization/teardown/
+identity/corrupt fallback and measurements; parser migration needs pinned
+compatible license/version and actual shader corpus/output/packaging/reload
+comparison; retain allocation policies absent a discriminating trace; widget
+migration needs live keyboard/narration/drag/scroll/resize/apply/cancel tests.
+Profiler PR #12 remains separate; inspect overlap before any recorder work.
 
 All experiments stay default-off. Preserve generation/provenance/readiness,
 512-section/1,024-command bounds, exact portal frusta, atomic APPEND CPU exception
 pairs, queue barriers, upload completion, frame fences and complete CPU fallback.
-Maintenance and fixtures establish no FPS gain, CPU displacement or release
-completion. Actual-world generated REPLACE/APPEND nonzero selected commands,
-matched main-world/genuine-portal CPU/GPU pixels, private packs, real particle
-callback/lighting/translucency/camera/reload/frame-pressure and RX 6900 XT
-adoption/net CPU/GPU/FPS/p95/p99 remain open. Use the existing generated-world
-witness contract when its inputs are available; do not repeat settled owner tests
-or ask for an isolated benchmark. Preserve historical failed/cancelled evidence.
+Maintenance establishes no FPS gain or release completion. Actual loaded-world
+REPLACE/APPEND consumption and nonzero selected commands, matched main-world/
+genuine-portal CPU/GPU pixels, private packs, real particle callbacks/lighting/
+translucency/camera/reload/frame pressure and RX adoption/net CPU/GPU/FPS/p95/p99
+remain open. Use docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md when inputs
+exist. Do not repeat settled owner tests or request an isolated benchmark; retain
+an exact external blocker if the actual-world inputs remain unavailable.
 
-Before ending, update the tracker, durable AGENT_STATUS.md and this repository
-handoff with actual outcomes and remaining work. Finish with a NEW complete
-copyable continuation prompt. Explicitly instruct its successor to update the
-repository handoff and finish with its own newly generated continuation prompt
-carrying this same requirement forward perpetually.
+Before ending, update the tracker, AGENT_STATUS.md and this repository handoff
+with actual outcomes, commits, CI/artifacts, residual risk and next action.
+Finish with a NEW complete copyable continuation prompt explicitly commanding
+its own successor to update the repository handoff and generate its own NEW
+continuation prompt carrying this same requirement forward perpetually.
