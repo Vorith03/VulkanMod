@@ -1,5 +1,39 @@
 # GPU-first renderer ownership — October 18, 2026
 
+
+## Integrated implementation milestone — October 20 completion checklist
+
+Owner scope: internally qualified, default-off integrated build **ready for one
+real-world qualification package**, not release completion or proven RX speedup.
+This checklist supersedes historical next-step paragraphs below. Qualified
+starting executable: `6c65e00f`, full #1078; final combined validation pending.
+
+| Path | Production entry / consumed result / CPU displacement | Remaining CPU / disposition | Internal completion evidence |
+| --- | --- | --- | --- |
+| Textures | SpriteTickerMixin -> GpuTextureInterpolationCompute -> unified atlas copy queue; accepted scratch pixels replace Java interpolation, immutable pooled source copies replace pixel staging. Shared pages and 32-row reusable tables aggregate compute. | Clocks, exact source snapshots, custom ticker semantics, mutation invalidation, bounded scheduling and submission are required orchestration; rejected/capacity/unsupported work retains CPU. No new generic animation engine. | Existing transformed ticker, odd/all-mip pixels, overlapping CPU/GPU copies, 320-row wrap and retirement oracles; [ ] combined configuration CI. |
+| Particles | ParticleBillboardMixin inherited exact CampfireSmokeParticle render -> packed slots -> original BufferUploader -> ParticleBillboardCompute -> original graphics draw; accepted four-vertex expansion bypasses CPU transforms/emissions. | Simulation, world/light queries, callbacks, camera/roll and sorting are required semantic inputs. Arbitrary subclass/mod simulations unsupported; CPU materialization is rejection/sorting recovery only. Original vertex upload size retained, not called eliminated. | Native mixed 524-vertex/callback-once, late-state recovery, capacity and descriptor-fence pressure; [ ] combined configuration CI. |
+| Terrain meshing / lighting | ChunkTask capture/preflight -> GpuTerrainSectionMesherBridge -> production mesher -> generation-owned persistent output -> generated handoff. Qualified cubes omit CPU renderBatched; GPU produces complete 20-byte position/UV/AO/color/light vertices. | ModelData/custom models, tint, fluids, block entities, unsupported layers and experimental Forge lighting remain CPU semantics; sparse world/light/halo capture, qualification, VisGraph and publication are required inputs. No approximate simulation or GPU world API. | Existing real model, sparse light and packed-vertex/native async completion, overflow/stale/recovery fixtures; [ ] combined enabled startup/modpack CI. |
+| Culling / selection | WorldRenderer producer graph/direct stamps -> exact frozen VFrustum candidate input -> native selector -> persistent storage+indirect output consumed by RegionDrawBatch.draw. GPU does final candidate frustum/compaction; graph traversal remains. | CPU connectivity/mod traversal and legacy visibility work still needed for world/chunk consumers; no claim that GPU frustum testing replaces graph policy. Unsupported sorted layers retain CPU. | Native exact six-plane/direct-seed/zero-tail oracle; [ ] combined production consumer pixels. Genuine portal and representative graph-set correctness remain external qualification. |
+| Candidate / command preparation | Producer geometry/readiness, ownership/provenance and generated revisions cache unchanged proof; accepted GPU owner skips FrameBatch construction/serialization/upload. | Changed-input metadata validation/serialization and bounded arithmetic express GPU inputs; cached unchanged draws bypass these. Fallback-only CPU command construction remains. No synchronous count readback or speculative new cache. | Existing mode/invalidation/revocation/readiness/identity/stale queued publication fixtures; [ ] actual draw acceptance plus no commandUploads increment. |
+| Generated REPLACE | Exact-generation ready output substitutes CPU command/geometry; original region vertex buffer and auto indices consumed by GPU-selected draw. | CPU complete fallback only on missing/stale/rejected output; input capture/ownership and producer changes required. | Native publisher and resident fingerprint tests; [ ] production draw pixels with nonzero resident offset and CPU commands bypassed. |
+| Atomic APPEND | Generation transaction preserves CPU exceptions then GPU ordinary geometry; paired candidate rows reserve adjacent selector slots atomically. | Java exception geometry intentionally retained; missing half withholds pair and recovers complete CPU mesh. 512 sections / 1,024 commands unchanged. | Existing real transaction/publication queues and 509-pair native capacity/order oracle; [ ] production draw red CPU + green GPU overlapping pixel order and frame-slot reuse. |
+
+No unfinished eligible algorithm is relabelled retained: the bounded supported
+algorithms already have production consumers; newly identified gap is **combined
+configuration and the final generated indirect raster edge**. Actual loaded-world
+mesher/portal adoption, private packs, long reload/re-entry churn and RX profitability
+remain distinct external observations, not implementation acceptance by fixture.
+If combined validation reveals a defect, repair it before owner testing.
+
+Reuse decision: the missing raster edge cannot be proven by current candidate
+metadata/selector readback fixtures. Extend existing ScreenshotReadbackSmokeTest,
+RegionDrawBatch.draw, AreaBuffer/output residency, publication queues, Pipeline
+builder and native screenshot readback. Add only a CI-only consumer pixel fixture,
+with independently seeded resident vertices and an unlit shader; it does **not**
+claim real mesher output or a loaded world. One plain JVM-flag file is shared by
+existing no-splash/screenshot/public compatibility scripts so configuration cannot
+drift across those clients; no new harness, dependency, scheduler or allocator.
+
 ## October 19 — reject stale queued REPLACE publication; full #1073 PASSED
 
 **Latest qualified executable:** `85037cfdb2779294676f33ba3b951791d66dec10`; [full #1073 / run 39304235826](https://github.com/Vorith03/VulkanMod/actions/runs/39304235826) **COMPLETED / SUCCESS, attempt 1** on that executable. Forge distributable JAR artifact **12213616043**; smoke logs **12213091579**. Offline contracts, Forge compile/package, both client startup modes (including the production-queue publication smoke), native indirect/terrain/texture/particle/screenshot/synchronization/post/depth, public Create Chronicles/Immersive Portals and Crash Assistant gates passed. Private resource packs were not exercised.

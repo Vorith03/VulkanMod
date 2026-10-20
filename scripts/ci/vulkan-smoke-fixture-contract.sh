@@ -43,6 +43,12 @@ require_literal 'for jar in "$fixture_backup_dir"/mods/*.jar; do'
 require_literal 'cp -a run/vk_layer_settings.txt "$fixture_backup_dir/vk_layer_settings.txt"'
 require_literal 'cp -a "$fixture_backup_dir/vk_layer_settings.txt" run/vk_layer_settings.txt'
 
+# Shape guards for shared configuration wiring; native assertions remain mandatory.
+for mode in no-splash screenshot; do
+  require_in_mode "$mode" '${integrated_gpu_flags}'
+done
+require_compat_literal '${integrated_gpu_flags}'
+require_in_mode screenshot VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK
 require_in_mode no-splash snapshot_fml_toml
 require_in_mode chat-heads snapshot_build_gradle
 require_in_mode flywheel snapshot_build_gradle

@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 mode="${1:-}"
+integrated_gpu_flags="$(tr '\n' ' ' < scripts/ci/integrated-gpu-flags.txt)"
 
 usage() {
   echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel|create}" >&2
@@ -154,7 +155,7 @@ case "$mode" in
     fi
     grep -F 'earlyWindowControl = false' run/config/fml.toml
 
-    run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.experimentalSectionVoxels=true" vulkan-smoke-no-splash.log
+    run_client "-Dvulkanmod.smokeTest=true ${integrated_gpu_flags}" vulkan-smoke-no-splash.log
     grep -F "ImmediateWindowProvider not loading because splash screen is disabled" vulkan-smoke-no-splash.log
     grep -F "Created Vulkan NO_API window without Forge early splash context" vulkan-smoke-no-splash.log
     grep -F "Vulkan smoke test passed" vulkan-smoke-no-splash.log
@@ -220,7 +221,7 @@ case "$mode" in
     mkdir -p run
     export VK_LAYER_SETTINGS_PATH="$repo_root/run"
     echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
-    run_client "-Dvulkanmod.ciScreenshotSmoke=true -Dvulkanmod.experimentalGpuParticleBillboards=true -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.gpuAnimatedTextureCopies=true -Dvulkanmod.gpuAnimatedTextureInterpolation=true -Dvulkanmod.experimentalUnifiedTextureUploads=true -Dvulkanmod.experimentalGpuTextureSourcePool=true -Dvulkanmod.experimentalGpuAnimationBatch=true -Dvulkanmod.experimentalGpuAnimationSharedScratch=true -Dvulkanmod.experimentalGpuAnimationMultiDispatch=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
+    run_client "-Dvulkanmod.ciScreenshotSmoke=true ${integrated_gpu_flags} -Dvulkanmod.performanceProfiler=true -Dvulkanmod.performanceProfiler.gpuTimestamps=true -Dvulkanmod.pipelineVariantPrewarm=true -Dvulkanmod.pipelineVariantPrewarmBudgetMs=20 -Dvulkanmod.validation=true -Dmixin.debug.export=true" vulkan-screenshot-smoke.log
     grep -F "Graphics pipeline prewarm smoke passed" vulkan-screenshot-smoke.log
     grep -F "Vulkan screenshot readback smoke passed" vulkan-screenshot-smoke.log
     # The screenshot alone does not prove legacy FBO routing/lifetime checks ran.
@@ -239,6 +240,7 @@ case "$mode" in
     grep -F "GPU animation batch smoke passed" vulkan-screenshot-smoke.log
     grep -F "VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK" vulkan-screenshot-smoke.log
     grep -F "GPU particle billboard smoke passed" vulkan-screenshot-smoke.log
+    grep -F "VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK" vulkan-screenshot-smoke.log
     grep -F "GPU animation fallback smoke passed" vulkan-screenshot-smoke.log
     grep -F "Unified GPU texture transfer smoke passed" vulkan-screenshot-smoke.log
     grep -F "Shared GPU animation source pool smoke passed" vulkan-screenshot-smoke.log
