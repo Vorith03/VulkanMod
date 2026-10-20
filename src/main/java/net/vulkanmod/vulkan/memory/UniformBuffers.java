@@ -111,6 +111,9 @@ public class UniformBuffers {
     public UniformBuffer getUniformBuffer(int i) { return uniformBuffers.get(i); }
 
     public class UniformBuffer extends Buffer {
+        @Override
+        public Retirement retirement() { return Retirement.FRAME_FENCE; }
+
 
         protected UniformBuffer(int size, MemoryType memoryType) {
             super(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, memoryType);

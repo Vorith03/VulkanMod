@@ -6,7 +6,7 @@ public abstract class Buffer {
     /** Upload helpers can outlive the current slot's last submitted frame fence. */
     public enum Retirement { FRAME_FENCE, UPLOAD_COMPLETION }
 
-    public Retirement retirement() { return Retirement.FRAME_FENCE; }
+    public abstract Retirement retirement();
 
     protected long id;
     protected long allocation;

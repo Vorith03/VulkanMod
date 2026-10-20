@@ -5,6 +5,9 @@ import java.nio.ByteBuffer;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
 public class IndexBuffer extends Buffer {
+    @Override
+    public Retirement retirement() { return Retirement.FRAME_FENCE; }
+
 
 //    public IndexType indexType = IndexType.SHORT;
 

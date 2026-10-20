@@ -5,6 +5,9 @@ import java.nio.ByteBuffer;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
 public class VertexBuffer extends Buffer {
+    @Override
+    public Retirement retirement() { return Retirement.FRAME_FENCE; }
+
 
     public VertexBuffer(int size) {
         this(size, MemoryTypes.HOST_MEM);

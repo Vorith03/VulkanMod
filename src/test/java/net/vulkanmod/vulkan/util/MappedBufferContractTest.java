@@ -7,6 +7,14 @@ import java.nio.ByteOrder;
 /** Behavioral native-access/lifetime and legacy upload position contracts. */
 public final class MappedBufferContractTest {
     public static void main(String[] args) {
+        for (int stride : new int[]{1, 3, 7, 20, 256}) {
+            for (int value = 0; value < 1024; value++) {
+                int aligned = VUtil.align(value, stride);
+                require(aligned >= value && aligned % stride == 0 && aligned - value < stride, "Arbitrary stride");
+            }
+        }
+        try { VUtil.align(Integer.MAX_VALUE, 20); throw new AssertionError("Alignment overflow"); }
+        catch (ArithmeticException expected) { }
         MappedBuffer owned = new MappedBuffer(16);
         owned.putInt(0, 0x7fc00001);
         require(Float.floatToRawIntBits(owned.getFloat(0)) == 0x7fc00001, "NaN bits");

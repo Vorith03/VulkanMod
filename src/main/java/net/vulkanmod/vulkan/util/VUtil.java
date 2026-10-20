@@ -52,9 +52,11 @@ public class VUtil {
         src.limit(src.capacity()).rewind();
     }
 
-    public static int align(int x, int align) {
-        int r = x % align;
-        return r == 0 ? x : x + align - r;
+    /** Nonnegative byte/element count, arbitrary positive stride; overflow is rejected. */
+    public static int align(int value, int alignment) {
+        if (value < 0 || alignment <= 0) throw new IllegalArgumentException("Invalid alignment input");
+        int remainder = value % alignment;
+        return remainder == 0 ? value : Math.toIntExact((long)value + alignment - remainder);
     }
 
 }

@@ -52,7 +52,32 @@ public final class CandidateAbiContractTest {
         require(full.finish().candidateCount()==1023, "No partial pair mutation");
         full.add(6,1,0,0,511,3);
         require(full.finish().candidateCount()==1024,"Last single slot remains usable");
+        verifyAnimationLayout();
         System.out.println("Candidate ABI constants/offsets/atomic-capacity checks passed");
+    }
+    private static void verifyAnimationLayout() throws Exception {
+        require(net.vulkanmod.render.texture.AnimationComputeLayout.JOB_WORDS == 12
+                && net.vulkanmod.render.texture.AnimationComputeLayout.PUSH_WORDS == 12
+                && net.vulkanmod.render.texture.AnimationComputeLayout.MAX_BATCH_JOBS == 32,
+                "Animation host word/capacity ABI");
+        String source;
+        try (var in = CandidateAbiContractTest.class.getResourceAsStream(
+                "/assets/vulkanmod/shaders/texture/animation_interpolate.comp")) {
+            if (in == null) throw new AssertionError("Missing animation shader");
+            source = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        int start = source.indexOf("uniform InterpolationPushConstants {");
+        int end = source.indexOf("} pc;", start);
+        var fields = Pattern.compile("uint ([a-zA-Z]+);").matcher(source.substring(start,end));
+        String[] names = {"sourceBaseWord","sheetWidth","currentX","currentY","nextX","nextY",
+                "width","height","outputBaseWord","subFrame","duration","reserved"};
+        for (String name : names) require(fields.find() && fields.group(1).equals(name), "Animation push offset " + name);
+        require(!fields.find(), "No extra push words");
+        require(source.contains("job * 12u") && source.contains("pc.reserved == 0xffffffffu"), "Job stride/mode");
+        String[] jobFields = {"currentX","currentY","nextX","nextY"};
+        for (int i=0; i<jobFields.length; i++)
+            require(source.contains("uint " + jobFields[i] + " = multi ? outputData.words[jobWord + " + (i+1) + "u]"),
+                    "Job field offset " + jobFields[i]);
     }
     private static void require(boolean ok,String message) { if(!ok) throw new AssertionError(message); }
 }

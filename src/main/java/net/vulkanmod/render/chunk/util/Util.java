@@ -26,26 +26,14 @@ public class Util {
         return directions;
     }
 
-    public static long posLongHash(int x, int y, int z) {
-        return (long)x & 0x00000000FFFFL | ((long) z << 16) & 0x0000FFFF0000L | ((long) y << 32) & 0xFFFF00000000L;
+    /** Floor log2 for strictly positive area dimensions. */
+    public static int flooredLog(int value) {
+        if (value <= 0) throw new IllegalArgumentException("Dimension must be positive");
+        return 31 - Integer.numberOfLeadingZeros(value);
     }
 
-    public static int flooredLog(int v) {
-        assert v > 0;
-        int log = 30;
-        int t = 0x40000000;
-
-        while((v & t) == 0) {
-            t >>= 1;
-            log--;
-        }
-
-        return log;
-    }
-
-    public static int align(int i, int alignment) {
-        int r = i % alignment;
-        return r != 0 ? i + alignment - r : i;
+    public static int align(int value, int alignment) {
+        return net.vulkanmod.vulkan.util.VUtil.align(value, alignment);
     }
 
     public static ByteBuffer createCopy(ByteBuffer src) {

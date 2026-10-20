@@ -9,10 +9,8 @@ import net.vulkanmod.vulkan.memory.StorageBuffer;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.Queue;
 import net.vulkanmod.vulkan.queue.TransferQueue;
-import net.vulkanmod.vulkan.shader.SPIRVUtils;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkBufferMemoryBarrier;
-import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolCreateInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolSize;
@@ -20,10 +18,8 @@ import org.lwjgl.vulkan.VkDescriptorSetAllocateInfo;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
-import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 import org.lwjgl.vulkan.VkQueueFamilyProperties;
-import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.nio.ByteBuffer;
@@ -489,36 +485,8 @@ public final class GpuTerrainSectionMesher implements AutoCloseable {
     }
 
     private void createPipeline() {
-        SPIRVUtils.SPIRV spirv = SPIRVUtils.compileShaderResource(
-                "/assets/vulkanmod/shaders/terrain/section_mesher_probe.comp",
-                SPIRVUtils.ShaderKind.COMPUTE_SHADER);
-        long shaderModule = VK_NULL_HANDLE;
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkShaderModuleCreateInfo moduleInfo = VkShaderModuleCreateInfo.callocStack(stack)
-                    .sType$Default().pCode(spirv.bytecode());
-            LongBuffer pModule = stack.mallocLong(1);
-            check(vkCreateShaderModule(Device.device, moduleInfo, null, pModule),
-                    "create section mesher shader module");
-            shaderModule = pModule.get(0);
-
-            VkPipelineShaderStageCreateInfo stageInfo = VkPipelineShaderStageCreateInfo.callocStack(stack)
-                    .sType$Default().stage(VK_SHADER_STAGE_COMPUTE_BIT)
-                    .module(shaderModule).pName(stack.UTF8("main"));
-            VkComputePipelineCreateInfo.Buffer pipelineInfo =
-                    VkComputePipelineCreateInfo.calloc(1, stack);
-            pipelineInfo.get(0).sType$Default().stage(stageInfo)
-                    .layout(pipelineLayout).basePipelineHandle(VK_NULL_HANDLE)
-                    .basePipelineIndex(-1);
-            LongBuffer pPipeline = stack.mallocLong(1);
-            check(vkCreateComputePipelines(Device.device, VK_NULL_HANDLE,
-                            pipelineInfo, null, pPipeline),
-                    "create section mesher compute pipeline");
-            pipeline = pPipeline.get(0);
-        } finally {
-            if(shaderModule != VK_NULL_HANDLE)
-                vkDestroyShaderModule(Device.device, shaderModule, null);
-            spirv.free();
-        }
+        this.pipeline = net.vulkanmod.vulkan.shader.ComputePipelineFactory.create(
+                "/assets/vulkanmod/shaders/terrain/section_mesher_probe.comp", this.pipelineLayout);
     }
 
     private void updateDescriptorSet(long targetDescriptorSet,

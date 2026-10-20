@@ -6,7 +6,6 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.memory.VertexBuffer;
 import net.vulkanmod.vulkan.queue.Queue;
-import net.vulkanmod.vulkan.shader.SPIRVUtils;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -25,7 +24,6 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     private static final boolean REQUESTED=Boolean.getBoolean("vulkanmod.experimentalGpuParticleBillboards");
     private static final int MAX_BINDINGS=64, PUSH_CONSTANT_BYTES=16;
     private static ParticleBillboardCompute instance;
-    private static Boolean graphicsComputeSupported;
     private static boolean unavailable, ciUnavailable;
     private static long inheritedAttempts, eligibleAttempts, layoutFallbacks, unavailableFallbacks, originalCpu, packed;
     private static long gpuQuads, recoveryQuads, batches, preparationNanos, uploadedBytes, bindingsCreated;
@@ -57,7 +55,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
                 || !Renderer.getInstance().isRecordingFrame() || Device.getGraphicsQueue().hasActiveUploadBatch()
                 || Boolean.getBoolean("joml.useMathFma")) { unavailableFallbacks++; return false; }
         try {
-            if(!graphicsQueueSupportsCompute()) { unavailable=true; unavailableFallbacks++; return false; }
+            if(!Device.graphicsQueueSupportsCompute()) { unavailable=true; unavailableFallbacks++; return false; }
             if(instance==null) instance=new ParticleBillboardCompute();
             return true;
         } catch(RuntimeException | OutOfMemoryError e) {
@@ -73,7 +71,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     /** Called only after idle at renderer destruction. Pending frame operations tolerate a closed pool. */
     public static void shutdownAfterDeviceIdle() {
         if(instance!=null) instance.close();
-        instance=null; unavailable=false; graphicsComputeSupported=null;
+        instance=null; unavailable=false;
     }
     public static void retireBuffer(long buffer) {
         if(instance==null) return;
@@ -242,75 +240,11 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     }
 
     private void createPipeline() {
-        SPIRVUtils.SPIRV spirv = SPIRVUtils.compileShaderResource(
-                "/assets/vulkanmod/shaders/particle/billboard_expand.comp",
-                SPIRVUtils.ShaderKind.COMPUTE_SHADER);
-        long shaderModule = VK_NULL_HANDLE;
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkShaderModuleCreateInfo moduleInfo =
-                    VkShaderModuleCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pCode(spirv.bytecode());
-            LongBuffer pModule = stack.mallocLong(1);
-            check(vkCreateShaderModule(
-                    Device.device, moduleInfo, null, pModule),
-                    "create particle billboard shader module");
-            shaderModule = pModule.get(0);
-
-            VkPipelineShaderStageCreateInfo stageInfo =
-                    VkPipelineShaderStageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .stage(VK_SHADER_STAGE_COMPUTE_BIT)
-                            .module(shaderModule)
-                            .pName(stack.UTF8("main"));
-
-            VkComputePipelineCreateInfo.Buffer pipelineInfo =
-                    VkComputePipelineCreateInfo.calloc(1, stack);
-            pipelineInfo.get(0)
-                    .sType$Default()
-                    .stage(stageInfo)
-                    .layout(this.pipelineLayout)
-                    .basePipelineHandle(VK_NULL_HANDLE)
-                    .basePipelineIndex(-1);
-            LongBuffer pPipeline = stack.mallocLong(1);
-            check(vkCreateComputePipelines(
-                    Device.device, VK_NULL_HANDLE,
-                    pipelineInfo, null, pPipeline),
-                    "create particle billboard compute pipeline");
-            this.pipeline = pPipeline.get(0);
-        } finally {
-            if(shaderModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(Device.device, shaderModule, null);
-            }
-            spirv.free();
-        }
+        this.pipeline = net.vulkanmod.vulkan.shader.ComputePipelineFactory.create(
+                "/assets/vulkanmod/shaders/particle/billboard_expand.comp", this.pipelineLayout);
     }
 
-    private static boolean graphicsQueueSupportsCompute() {
-        Boolean cached = graphicsComputeSupported;
-        if(cached != null) {
-            return cached;
-        }
-        if(Device.physicalDevice == null) {
-            return false;
-        }
 
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            IntBuffer count = stack.ints(0);
-            vkGetPhysicalDeviceQueueFamilyProperties(
-                    Device.physicalDevice, count, null);
-            VkQueueFamilyProperties.Buffer properties =
-                    VkQueueFamilyProperties.malloc(count.get(0), stack);
-            vkGetPhysicalDeviceQueueFamilyProperties(
-                    Device.physicalDevice, count, properties);
-            int graphicsFamily = Queue.getQueueFamilies().graphicsFamily;
-            boolean supported =
-                    (properties.get(graphicsFamily).queueFlags()
-                            & VK_QUEUE_COMPUTE_BIT) != 0;
-            graphicsComputeSupported = supported;
-            return supported;
-        }
-    }
 
     private static void check(int result, String action) {
         if(result != VK_SUCCESS) {

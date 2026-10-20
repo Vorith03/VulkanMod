@@ -7,13 +7,11 @@ import net.vulkanmod.vulkan.memory.TextureResidentBuffer;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.GraphicsQueue;
 import net.vulkanmod.vulkan.queue.Queue;
-import net.vulkanmod.vulkan.shader.SPIRVUtils;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkBufferImageCopy;
 import org.lwjgl.vulkan.VkBufferMemoryBarrier;
-import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolCreateInfo;
@@ -22,10 +20,7 @@ import org.lwjgl.vulkan.VkDescriptorSetAllocateInfo;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutBinding;
 import org.lwjgl.vulkan.VkDescriptorSetLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
-import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
-import org.lwjgl.vulkan.VkQueueFamilyProperties;
-import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.nio.ByteBuffer;
@@ -65,27 +60,36 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private static final long MAX_SHARED_SCRATCH_BYTES = 128L * 1024L * 1024L;
 
     public static boolean sharedScratchRequested() {
-        return SHARED_SCRATCH_REQUESTED && BATCH_REQUESTED && GpuAnimationSourcePool.enabled();
+        return sharedScratchAdmission() == AnimationComputeAdmission.Reason.ADMITTED;
+    }
+
+    public static AnimationComputeAdmission.Reason sharedScratchAdmission() {
+        return AnimationComputeAdmission.shared(SHARED_SCRATCH_REQUESTED, BATCH_REQUESTED,
+                SHARED_SCRATCH_REQUESTED && BATCH_REQUESTED && GpuAnimationSourcePool.enabled());
     }
 
     private static final boolean MULTI_REQUESTED =
             Boolean.getBoolean("vulkanmod.experimentalGpuAnimationMultiDispatch");
-    private static final int MAX_BATCH_JOBS = 32;
-    private static final int JOB_WORDS = 12;
+    private static final int MAX_BATCH_JOBS = AnimationComputeLayout.MAX_BATCH_JOBS;
+    private static final int JOB_WORDS = AnimationComputeLayout.JOB_WORDS;
     private static final int JOB_BYTES = JOB_WORDS * Integer.BYTES;
     private static final int JOB_TABLE_BYTES = MAX_BATCH_JOBS * JOB_BYTES;
     public static boolean multiRequested() {
-        return MULTI_REQUESTED && sharedScratchRequested();
+        return multiDispatchAdmission() == AnimationComputeAdmission.Reason.ADMITTED;
+    }
+
+    public static AnimationComputeAdmission.Reason multiDispatchAdmission() {
+        return AnimationComputeAdmission.multi(MULTI_REQUESTED,
+                MULTI_REQUESTED ? sharedScratchAdmission() : AnimationComputeAdmission.Reason.NOT_REQUESTED);
     }
 
     private static final int MAX_BINDINGS = 2048;
     private static final int WORKGROUP_SIZE = 64;
-    private static final int PUSH_WORDS = 12;
+    private static final int PUSH_WORDS = AnimationComputeLayout.PUSH_WORDS;
     private static final int PUSH_CONSTANT_BYTES = PUSH_WORDS * Integer.BYTES;
 
     private static GpuTextureInterpolationCompute instance;
     private static boolean unavailable;
-    private static Boolean graphicsComputeSupported;
 
     private long descriptorSetLayout;
     private long descriptorPool;
@@ -103,7 +107,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private GpuTextureInterpolationCompute() {
         if(!Device.isShaderFloat64Enabled())
             throw new UnsupportedOperationException("shaderFloat64 is not enabled");
-        if(!graphicsQueueSupportsCompute())
+        if(!Device.graphicsQueueSupportsCompute())
             throw new UnsupportedOperationException("graphics queue does not support compute");
 
         try {
@@ -124,7 +128,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         return REQUESTED
                 && !unavailable
                 && Device.isShaderFloat64Enabled()
-                && graphicsQueueSupportsCompute();
+                && Device.graphicsQueueSupportsCompute();
     }
 
     public static synchronized Binding createBinding(TextureResidentBuffer source, int scratchBytes) {
@@ -169,7 +173,6 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             instance.close();
             instance = null;
         }
-        graphicsComputeSupported = null;
         unavailable = false;
     }
 
@@ -892,75 +895,11 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     }
 
     private void createPipeline() {
-        SPIRVUtils.SPIRV spirv = SPIRVUtils.compileShaderResource(
-                "/assets/vulkanmod/shaders/texture/animation_interpolate.comp",
-                SPIRVUtils.ShaderKind.COMPUTE_SHADER);
-        long shaderModule = VK_NULL_HANDLE;
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            VkShaderModuleCreateInfo moduleInfo =
-                    VkShaderModuleCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pCode(spirv.bytecode());
-            LongBuffer pModule = stack.mallocLong(1);
-            check(vkCreateShaderModule(
-                    Device.device, moduleInfo, null, pModule),
-                    "create animation interpolation shader module");
-            shaderModule = pModule.get(0);
-
-            VkPipelineShaderStageCreateInfo stageInfo =
-                    VkPipelineShaderStageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .stage(VK_SHADER_STAGE_COMPUTE_BIT)
-                            .module(shaderModule)
-                            .pName(stack.UTF8("main"));
-
-            VkComputePipelineCreateInfo.Buffer pipelineInfo =
-                    VkComputePipelineCreateInfo.calloc(1, stack);
-            pipelineInfo.get(0)
-                    .sType$Default()
-                    .stage(stageInfo)
-                    .layout(this.pipelineLayout)
-                    .basePipelineHandle(VK_NULL_HANDLE)
-                    .basePipelineIndex(-1);
-            LongBuffer pPipeline = stack.mallocLong(1);
-            check(vkCreateComputePipelines(
-                    Device.device, VK_NULL_HANDLE,
-                    pipelineInfo, null, pPipeline),
-                    "create animation interpolation compute pipeline");
-            this.pipeline = pPipeline.get(0);
-        } finally {
-            if(shaderModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(Device.device, shaderModule, null);
-            }
-            spirv.free();
-        }
+        this.pipeline = net.vulkanmod.vulkan.shader.ComputePipelineFactory.create(
+                "/assets/vulkanmod/shaders/texture/animation_interpolate.comp", this.pipelineLayout);
     }
 
-    private static boolean graphicsQueueSupportsCompute() {
-        Boolean cached = graphicsComputeSupported;
-        if(cached != null) {
-            return cached;
-        }
-        if(Device.physicalDevice == null) {
-            return false;
-        }
 
-        try(MemoryStack stack = MemoryStack.stackPush()) {
-            IntBuffer count = stack.ints(0);
-            vkGetPhysicalDeviceQueueFamilyProperties(
-                    Device.physicalDevice, count, null);
-            VkQueueFamilyProperties.Buffer properties =
-                    VkQueueFamilyProperties.malloc(count.get(0), stack);
-            vkGetPhysicalDeviceQueueFamilyProperties(
-                    Device.physicalDevice, count, properties);
-            int graphicsFamily = Queue.getQueueFamilies().graphicsFamily;
-            boolean supported =
-                    (properties.get(graphicsFamily).queueFlags()
-                            & VK_QUEUE_COMPUTE_BIT) != 0;
-            graphicsComputeSupported = supported;
-            return supported;
-        }
-    }
 
     private static void check(int result, String action) {
         if(result != VK_SUCCESS) {

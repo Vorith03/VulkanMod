@@ -1,7 +1,6 @@
 package net.vulkanmod.vulkan.framebuffer;
 
 import net.vulkanmod.Initializer;
-import net.vulkanmod.render.util.MathUtil;
 import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
@@ -444,8 +443,8 @@ public class SwapChain extends Framebuffer {
         VkExtent2D minExtent = capabilities.minImageExtent();
         VkExtent2D maxExtent = capabilities.maxImageExtent();
 
-        actualExtent.width(MathUtil.clamp(minExtent.width(), maxExtent.width(), actualExtent.width()));
-        actualExtent.height(MathUtil.clamp(minExtent.height(), maxExtent.height(), actualExtent.height()));
+        actualExtent.width(Math.min(Math.max(actualExtent.width(), minExtent.width()), maxExtent.width()));
+        actualExtent.height(Math.min(Math.max(actualExtent.height(), minExtent.height()), maxExtent.height()));
 
         return actualExtent;
     }

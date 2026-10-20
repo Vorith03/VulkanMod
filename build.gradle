@@ -275,6 +275,7 @@ tasks.register('verifyDistribution') {
 }
 
 tasks.named('check').configure {
+    dependsOn 'testAnimationComputeAdmission'
     dependsOn 'testOptionalInvocation'
     dependsOn 'testCandidateAbiContract'
     dependsOn 'testMappedBufferContract'
@@ -477,4 +478,10 @@ tasks.register('testOptionalInvocation', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.compatibility.OptionalInvocationTest'
+}
+
+tasks.register('testAnimationComputeAdmission', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.texture.AnimationComputeAdmissionTest'
 }

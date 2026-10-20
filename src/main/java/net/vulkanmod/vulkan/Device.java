@@ -37,6 +37,29 @@ public class Device {
     static TransferQueue transferQueue;
     static ComputeQueue computeQueue;
     private static boolean shaderFloat64Enabled;
+    private static VkPhysicalDevice computeCapabilityDevice;
+    private static int computeCapabilityFamily = -1;
+    private static boolean graphicsComputeSupported;
+
+    /** Render-thread device capability, cached by physical-device identity and selected family. */
+    public static boolean graphicsQueueSupportsCompute() {
+        VkPhysicalDevice current = physicalDevice;
+        if (current == null) return false;
+        int family = Queue.getQueueFamilies().graphicsFamily;
+        if (computeCapabilityDevice == current && computeCapabilityFamily == family)
+            return graphicsComputeSupported;
+        try (MemoryStack stack = stackPush()) {
+            IntBuffer count = stack.ints(0);
+            vkGetPhysicalDeviceQueueFamilyProperties(current, count, null);
+            if (family < 0 || family >= count.get(0)) return false;
+            var properties = VkQueueFamilyProperties.malloc(count.get(0), stack);
+            vkGetPhysicalDeviceQueueFamilyProperties(current, count, properties);
+            graphicsComputeSupported = (properties.get(family).queueFlags() & VK_QUEUE_COMPUTE_BIT) != 0;
+            computeCapabilityFamily = family;
+            computeCapabilityDevice = current;
+            return graphicsComputeSupported;
+        }
+    }
 
     static void pickPhysicalDevice(VkInstance instance) {
 
@@ -329,6 +352,9 @@ public class Device {
     }
 
     public static void destroy() {
+        computeCapabilityDevice = null;
+        computeCapabilityFamily = -1;
+        graphicsComputeSupported = false;
         graphicsQueue.cleanUp();
         presentQueue.cleanUp();
         transferQueue.cleanUp();

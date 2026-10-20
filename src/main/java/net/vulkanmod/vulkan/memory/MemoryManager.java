@@ -390,20 +390,6 @@ public class MemoryManager {
 
     }
 
-    public static int findMemoryType(int typeFilter, int properties) {
-
-        VkPhysicalDeviceMemoryProperties memProperties = VkPhysicalDeviceMemoryProperties.mallocStack();
-        vkGetPhysicalDeviceMemoryProperties(Vulkan.getDevice().getPhysicalDevice(), memProperties);
-
-        for(int i = 0;i < memProperties.memoryTypeCount();i++) {
-            if((typeFilter & (1 << i)) != 0 && (memProperties.memoryTypes(i).propertyFlags() & properties) == properties) {
-                return i;
-            }
-        }
-
-        throw new RuntimeException("Failed to find suitable memory type");
-    }
-
     public int getNativeMemoryMB() { return (int) (nativeMemory / 1048576L); }
 
     public int getDeviceMemoryMB() { return (int) (deviceMemory / 1048576L); }

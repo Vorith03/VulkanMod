@@ -10,6 +10,9 @@ import java.nio.ByteBuffer;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
 public class IndirectBuffer extends Buffer {
+    @Override
+    public Retirement retirement() { return Retirement.FRAME_FENCE; }
+
     CommandPool.CommandBuffer commandBuffer;
 
     public IndirectBuffer(int size, MemoryType type) {

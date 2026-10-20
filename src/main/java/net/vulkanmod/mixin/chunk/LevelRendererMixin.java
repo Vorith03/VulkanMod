@@ -23,7 +23,7 @@ import net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.profiling.Profiler2;
 import net.vulkanmod.render.profiling.PerformanceProfiler;
-import net.vulkanmod.vulkan.util.Pair;
+import com.mojang.datafixers.util.Pair;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.*;
@@ -250,7 +250,7 @@ public abstract class LevelRendererMixin {
             this.entitiesMap.put(entityClass, list);
         }
 
-        list.add(new Pair<>(entity, multiBufferSource));
+        list.add(Pair.of(entity, multiBufferSource));
 
     }
 
@@ -266,8 +266,8 @@ public abstract class LevelRendererMixin {
 
         for(var list : this.entitiesMap.values()) {
             for(var pair : list) {
-                Entity entity = pair.first;
-                MultiBufferSource multiBufferSource = pair.second;
+                Entity entity = pair.getFirst();
+                MultiBufferSource multiBufferSource = pair.getSecond();
 
                 double h = Mth.lerp(partialTicks, entity.xOld, entity.getX());
                 double i = Mth.lerp(partialTicks, entity.yOld, entity.getY());

@@ -100,7 +100,7 @@ public final class GpuRegionCandidateTable {
         public Builder add(int indexCount, int instanceCount, int firstIndex,
                            int vertexOffset, int packedSection, int flags) {
             if(count >= RegionBatchLayout.MAX_DRAW_COMMANDS)
-                throw new IllegalStateException("GPU candidate region exceeds 512 sections");
+                throw new IllegalStateException("GPU candidate region exceeds 1024 command records");
             if(packedSection < 0 || packedSection >= RegionBatchLayout.MAX_SECTIONS)
                 throw new IllegalArgumentException("Packed section is outside its region");
             if((flags & ~(READY | GRAPH_VISIBLE | DIRECT_SEED | PAIR_FIRST | PAIR_SECOND | LAYER_MASK)) != 0)
