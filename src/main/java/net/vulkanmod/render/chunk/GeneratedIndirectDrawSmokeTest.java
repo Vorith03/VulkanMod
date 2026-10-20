@@ -116,10 +116,23 @@ public final class GeneratedIndirectDrawSmokeTest {
 
             // First draw initializes real frame-slot ownership and queues candidates. Later frames
             // must consume the real selector output, not manually passed acceptance predicates.
-            for(int pass = 0; pass < 4; pass++) {
+            for(int pass = 0; pass < 7; pass++) {
                 if(pass == 2) {
                     section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(1L, 1,
                             GpuTerrainDrawHandoff.Ownership.APPEND), generation, true);
+                }
+                if(pass == 4) new DrawBuffers.ParametersUpdate(parameters, 0, 0, 0).setDrawParameters();
+                if(pass == 5) {
+                    area.invalidateGpuTerrainOutput(0, 0, 0, generation + 1);
+                    section.setGpuTerrainCpuMeshComplete(generation, true);
+                    new DrawBuffers.ParametersUpdate(parameters, 6, 0,
+                            parameters.vertexBufferSegment.getOffset() / 20).setDrawParameters();
+                    area.resetQueue();
+                    area.sectionQueue.add(section); // deliberately untracked writer: force complete CPU fallback
+                }
+                if(pass == 6) {
+                    area.resetQueue();
+                    area.addSection(section); // fresh producer proof permits ordinary GPU command ownership again
                 }
                 renderer.resetBuffers();
                 renderer.beginFrame();
@@ -140,11 +153,17 @@ public final class GeneratedIndirectDrawSmokeTest {
                 int uploads = RegionBatchStats.commandUploads;
                 int accepted = RegionBatchStats.gpuCommandOwnerReasons[0];
                 batch.draw(buffers, area, pipeline, RenderType.cutoutMipped(), 0, 0, 0);
-                if(pass > 0) {
+                if(pass > 0 && pass != 5) {
                     require(RegionBatchStats.gpuCommandOwnerReasons[0] == accepted + 1,
                             "Combined configuration did not admit production GPU command ownership");
                     require(RegionBatchStats.commandUploads == uploads,
                             "Accepted GPU draw built/uploaded duplicate CPU commands");
+                }
+                if(pass == 5) {
+                    require(RegionBatchStats.gpuCommandOwnerReasons[0] == accepted,
+                            "Untracked queue mutation did not reject GPU ownership");
+                    require(RegionBatchStats.commandUploads == uploads + 1,
+                            "Rejected GPU ownership did not rebuild complete CPU commands");
                 }
                 AreaUploadManager.INSTANCE.submitUploads();
                 var capture = ScreenshotReadback.request(target);
@@ -153,13 +172,13 @@ public final class GeneratedIndirectDrawSmokeTest {
                 renderer.endFrame();
                 try(NativeImage image = capture.get(10, TimeUnit.SECONDS)) {
                     if(pass > 0) {
-                        expect(image, 16, 16, pass < 2 ? 0xff000000 : 0xff0000ff);
-                        expect(image, 48, 16, 0xff00ff00);
+                        expect(image, 16, 16, pass == 1 || pass == 4 ? 0xff000000 : 0xff0000ff);
+                        expect(image, 48, 16, pass >= 5 ? 0xff0000ff : 0xff00ff00);
                         expect(image, 1, 1, 0xff000000);
                     }
                 }
             }
-            Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK: production RegionDrawBatch.draw, real queued candidates/selector/indirect fetch, nonzero resident offset, REPLACE then atomic CPU/GPU APPEND order, frame-slot reuse and no duplicate CPU command upload; seeded vertices, no loaded world/mesher/portal claim");
+            Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK: production RegionDrawBatch.draw, real queued candidates/selector/indirect fetch, nonzero resident offset, REPLACE, atomic CPU/GPU APPEND order, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU recovery and re-adoption, no duplicate accepted CPU command upload; seeded vertices, no loaded world/mesher/portal claim");
         } finally {
             Vulkan.waitIdle();
             batch.free();

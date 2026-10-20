@@ -1,97 +1,63 @@
-# VulkanMod — Continue From Qualified Maintenance
+# VulkanMod — Complete integrated GPU implementation and qualification
 
-Continue https://github.com/Vorith03/VulkanMod on `forge-1.20.1`, preserving
+Continue https://github.com/Vorith03/VulkanMod on forge-1.20.1, preserving
 Minecraft 1.20.1, Forge 47.3.0 and Java 17. Ordinary edits, logical commits and
-pushes are authorized. Do not force-push, rewrite shared history, merge unrelated
-PRs, publish releases or deploy.
+pushes are authorized. No force push/history rewrite, unrelated merge, release
+publication or deployment. Keep experiments default-off and preserve all native
+ownership/generation/readiness/provenance, exact portal frusta, atomic APPEND,
+512-section/1,024-command bounds, barriers/upload completion/fence retirement and
+complete CPU recovery. Inspect PR #12 before overlapping recorder work.
 
-Read this prompt in full. Follow current AGENTS.md §3A against live Git, CI and
-overlapping work. Read AGENT_STATUS.md, the active ROADMAP.md heading,
-docs/MAINTENANCE_TRACKER_2026-10-20.md, docs/OPTIMIZATION_EVIDENCE_LEDGER.md,
-both October 20 audits and affected ownership contracts. Inspect intervening
-changes; live evidence overrides every checkpoint here. Use the tracker as the
-single finding register, retaining validated, pending, retained, deferred and
-blocked distinctions. Do not repeat the audits or reopen settled decisions.
+Read this prompt in full and follow current AGENTS.md §3A against live Git/CI and
+overlapping work. Recover deltas from AGENT_STATUS.md. Read active roadmap,
+optimization ledger, maintenance tracker and the two October 20 audits; retain
+settled maintenance dispositions. Read affected ownership contracts in full.
+The single completion checklist is now at the top of
+GPU_FIRST_OWNERSHIP_2026-10-18.md, superseding stale historical next-step text.
 
-## Recover actual qualification first
+Owner objective: finish supported GPU-first production consumption and corresponding
+redundant CPU bypass, then deliver one internally qualified build ready for focused
+real-world testing. Continue through implementation/debugging/commit/validation
+cycles; an intermediate fixture, green step, handoff or session duration is not a
+stopping condition. Compaction resumes from durable state. Complete independent
+work before citing external hardware/private-world gaps. Readiness does not mean
+release completion, actual-world pixels or proven RX profitability.
 
-Full #1077 / run **39508596394** completed **SUCCESS**, attempt 1, on
-`c303cf26f53887964e9e45a2cc156c21a55143fb`. JAR **12305230721**, smoke logs
-**12305300783**. It qualifies the prior maintenance milestones. Actual uniform
-failure/ABI tests, Forge packaging/both startups, native indirect/terrain/
-texture/particle/pixel/synchronization, screenshot/post/depth, public Create
-Chronicles/Immersive Portals and Crash Assistant passed; private packs skipped.
-#1076 failed compilation, #1075 was cancelled; neither is qualified. Previous
-baseline `682b0d6b` / #1074 remains historical evidence.
+New implementation `1e049005ffe9225f9eae43644e4a850b0c85966f` adds seeded resident
+REPLACE/APPEND pixels through actual RegionDrawBatch.draw and queued GPU selection,
+plus one shared integrated 19-property configuration in no-splash, screenshot and
+public compatibility clients. Full #1079 / run 39514023722 pending at this checkpoint.
+Local follow-up strengthens zero-exception APPEND, complete CPU recovery and
+re-adoption, and makes old REPLACE-only oracle policy explicit under APPEND-enabled
+clients. Inspect live commits/files for its publication and validation state.
+No seeded fixture is a real loaded-world mesher or genuine portal result.
 
-Follow-up **`6c65e00f6212a7e2d52571bb7a279ec943efd19a`** is pushed and
-**full #1078 / run 39509869276 PASSED**, attempt 1, on that exact executable.
-Forge JAR **12304984467**, smoke logs **12306121182**. This is now the qualified
-maintenance executable. Compute failure, vec4/mat3 uniform and ABI tests, both
-startups, new native cache transitions, indirect APPEND/REPLACE, texture shared/
-multi-dispatch pixels, particle/synchronization/post/depth/screenshot and public
-modpack/IP/Crash Assistant gates passed. All private-fixture steps skipped.
-The bounded maintenance assignment is complete; no code from it awaits CI.
-Inspect any intervening executable change before reusing this qualification.
+Last verified executable remains 6c65e00f6212a7e2d52571bb7a279ec943efd19a,
+full #1078 / run 39509869276 SUCCESS, JAR 12304984467, logs 12306121182,
+private pack steps skipped. Local 24 offline contracts passed; Gradle distribution
+bootstrap is network-blocked. Do not reuse #1078 as qualification of new code.
 
-## What the follow-up changes
+Next: finish/review the follow-up and full exact-executable CI; fix actual failures
+without weakening assertions. Exercise combined configuration/native consumers and
+pixels plus available publication/lifecycle/recovery cases. Extend existing
+mechanisms and pinned dependencies before adding machinery; record unmet need,
+alternatives and smallest addition for substantial new mechanisms. Preserve
+independent numerical oracles and no speculative performance claims.
 
-1. Uniform failure test checks immediate exception cleanup before caller close,
-   then repeated close and stale vec4/mat3 updates without destination mutation.
-   New mat3 coverage reproduced zeroing before closed-source validation; the
-   source address now validates before writes. This is per-field failure safety,
-   not an arbitrary multi-field transaction or concurrent-lifetime guarantee.
-2. ComputePipelineFactory construction-only Calls seam runs actual coordinator
-   and LWJGL structs for compiler exception, module failure, pipeline failure
-   (zero/partial handle), thrown call and success. Test exact original failure,
-   cleanup count/order/handle, ABI fields, released real SPIR-V and successful
-   ownership transfer. testComputePipelineFactoryFailure is part of Gradle check.
-   Native driver success remains independently exercised by subsystem fixtures.
-3. Native RegionBatchSmokeTest adds generated -> ordinary -> generated mode
-   transitions with unchanged producer revisions (rescan plus serialized geometry),
-   and clearing staged APPEND preflight (rescan plus rejected-cache recovery).
-   Existing dirty/input-vs-visible, identity/direction, exact frustum,
-   readiness/retirement, stale publication and atomic APPEND coverage remains.
-4. Candidate/texture constants checks remain supplemental. #1077 observed actual
-   509 ordered CPU/GPU APPEND pairs, mixed rows, malformed/unready rejection,
-   maximum capacity/zero tail, and shared/multi-dispatch texture pixel markers.
+Resolve all in-scope implementation gaps or justify concrete unsupported/necessary
+CPU semantics without relabelling unfinished eligible work. Only after exact final
+full CI and artifact verification, prepare one test package with commit/JAR/setup,
+activation flags from current code, matched CPU baseline and integrated GPU run,
+scenes/actions, expected visual/adoption/performance evidence, failure signals and
+log paths. Keep real world/portal/private packs and RX net benefit explicitly
+untested until observed. Do not request repeated intermediate owner tests.
 
-24 local offline contracts passed. Focused tests used actual factory,
-SPIRVUtils/native storage, binder/layout/UBO and LWJGL 3.3.1, isolating only
-unrelated globals/game/cache dependencies. Six single-change mutants were
-rejected: delayed uniform cleanup, double release, partial stale mat3 write,
-SPIR-V leak, module leak and partial-pipeline leak. Restored code passed.
-Tracker records exact failure signals and full-checkout reproduction commands.
-Local Gradle bootstrap was network-blocked; local focused checks do not replace
-Forge/native CI. Do not repeat those settled mutations absent a relevant change.
-
-## Continue only justified work
-
-Tracker dispositions now reflect #1078 qualification. Resume the first available
-unsatisfied Phase 7 gate from current evidence. Fix a specific newly evidenced
-hole or missing prerequisite while feasible; do not create maintenance churn
-when remaining progress needs actual-world inputs.
-Do not force retained/deferred migrations to manufacture progress:
-compute caching needs an explicit device service/host synchronization/teardown/
-identity/corrupt fallback and measurements; parser migration needs pinned
-compatible license/version and actual shader corpus/output/packaging/reload
-comparison; retain allocation policies absent a discriminating trace; widget
-migration needs live keyboard/narration/drag/scroll/resize/apply/cancel tests.
-Profiler PR #12 remains separate; inspect overlap before any recorder work.
-
-All experiments stay default-off. Preserve generation/provenance/readiness,
-512-section/1,024-command bounds, exact portal frusta, atomic APPEND CPU exception
-pairs, queue barriers, upload completion, frame fences and complete CPU fallback.
-Maintenance establishes no FPS gain or release completion. Actual loaded-world
-REPLACE/APPEND consumption and nonzero selected commands, matched main-world/
-genuine-portal CPU/GPU pixels, private packs, real particle callbacks/lighting/
-translucency/camera/reload/frame pressure and RX adoption/net CPU/GPU/FPS/p95/p99
-remain open. Use docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md when inputs
-exist. Do not repeat settled owner tests or request an isolated benchmark; retain
-an exact external blocker if the actual-world inputs remain unavailable.
-
-Before ending, update the tracker, AGENT_STATUS.md and this repository handoff
-with actual outcomes, commits, CI/artifacts, residual risk and next action.
-Finish with a NEW complete copyable continuation prompt explicitly commanding
-its own successor to update the repository handoff and generate its own NEW
-continuation prompt carrying this same requirement forward perpetually.
+Stop only at full internal acceptance, a demonstrated external blocker after all
+independent work, or an actual execution limit. Never label interrupted/blocked
+work complete. Update AGENT_STATUS.md, roadmap/ledger/checklist and this handoff
+with actual commits, displaced/retained CPU work, validation/artifacts, risks and
+next actions. Finish with a NEW complete copyable continuation prompt that requires
+its successor to update the repository handoff and generate its own NEW complete
+prompt carrying this same requirement forward. If internally complete, advance to
+real-world qualification; otherwise resume the exact unfinished work. This
+contingency does not replace finishing feasible work now.

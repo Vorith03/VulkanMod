@@ -924,20 +924,20 @@ public final class RegionBatchSmokeTest {
             new DrawBuffers.ParametersUpdate(parameters, 12, 6, 40).setDrawParameters();
             parameters.vertexBufferSegment.setReady();
             long generation = section.getVoxelGeneration();
-            var ordinary = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            var ordinary = RegionDrawBatch.indirectCandidate(area, section, type, true, false);
             require(ordinary.representable() && ordinary.geometry().equals(section.getCandidateGeometry(type))
                             && ordinary.maxGpuVertices() == 0,
                     "Ordinary complete meshes remain valid alongside generated REPLACE");
             section.setGpuTerrainCpuMeshComplete(generation, false);
-            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "Missing GPU output must not admit an incomplete CPU replacement");
             var reservation = area.reserveGpuTerrainOutput(16, 16, 16, type, generation, 3);
             require(reservation != null, "Generated candidate reservation must fit");
-            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "Pending generated output cannot become authoritative");
             require(area.publishGpuTerrainOutput(reservation, 3, false), "Generated candidate publication");
             var residency = area.getGpuTerrainOutputResidency(16, 16, 16, type);
-            var generated = RegionDrawBatch.indirectCandidate(area, section, type, true);
+            var generated = RegionDrawBatch.indirectCandidate(area, section, type, true, false);
             require(generated.representable() && generated.geometry().ready()
                             && generated.geometry().indexCount() == 18
                             && generated.geometry().firstIndex() == 0
@@ -979,7 +979,7 @@ public final class RegionBatchSmokeTest {
                             && wire.getInt(row + 16) == RegionBatchLayout.packSection(16, 16, 16),
                     "Uploaded candidate ABI must encode GPU metadata and original section identity");
             parameters.vertexBufferSegment.setPending();
-            require(RegionDrawBatch.indirectCandidate(area, section, type, true).equals(generated),
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true, false).equals(generated),
                     "GPU-only REPLACE must not wait for an unused CPU upload");
             require(batch.update(buffers, area, type, true) && batch.drawCount == 1
                             && batch.commands.getByteBuffer().getInt(0) == generated.geometry().indexCount()
@@ -999,7 +999,7 @@ public final class RegionBatchSmokeTest {
             require(RegionBatchStats.gpuCandidatePreparedSlots > prepared
                             && !publisher.hasCompleteCandidateSuperset(type),
                     "APPEND preflight producer transition must revoke the cached REPLACE candidate table");
-            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "APPEND with CPU exceptions must retain the atomic planner");
             prepared = RegionBatchStats.gpuCandidatePreparedSlots;
             section.stageGpuTerrainPreflight(null, generation, true);
@@ -1075,7 +1075,7 @@ public final class RegionBatchSmokeTest {
                     "Restored upload readiness must recover the atomic APPEND pair");
 
             new DrawBuffers.ParametersUpdate(parameters, 0, 0, 0).setDrawParameters();
-            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "Zero-exception APPEND must not silently broaden candidate-v1 ownership");
             var zeroException = RegionDrawBatch.indirectCandidate(area, section, type, true, true);
             require(zeroException.representable() && zeroException.secondGeometry() == null
@@ -1086,12 +1086,12 @@ public final class RegionBatchSmokeTest {
                             && publisher.publishedCandidates(type).candidateCount() == 1,
                     "Zero-exception APPEND must emit one bounded generated row");
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(401L, 3), generation, true);
-            require(RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "Restoring REPLACE must re-evaluate ownership without an ordinary mesh revision");
             publisher.publishLiveCandidates(buffers, area, type, true, true);
             require(publisher.hasCompleteCandidateSuperset(type), "REPLACE restoration must permit renewed publication");
             area.invalidateGpuTerrainOutput(16, 16, 16, generation + 1);
-            require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
+            require(!RegionDrawBatch.indirectCandidate(area, section, type, true, false).representable(),
                     "Retired or stale GPU geometry must immediately revoke incomplete replacement");
             publisher.publishLiveCandidates(buffers, area, type, true, true);
             require(!publisher.hasCompleteCandidateSuperset(type), "Retirement must revoke published ownership");
@@ -1101,7 +1101,7 @@ public final class RegionBatchSmokeTest {
             section.setGpuTerrainCpuMeshComplete(generation, true);
             new DrawBuffers.ParametersUpdate(parameters, 12, 6, 40).setDrawParameters();
             parameters.vertexBufferSegment.setReady();
-            require(RegionDrawBatch.indirectCandidate(area, section, type, true).geometry()
+            require(RegionDrawBatch.indirectCandidate(area, section, type, true, false).geometry()
                             .equals(section.getCandidateGeometry(type)),
                     "Complete CPU recovery must preserve original geometry after GPU invalidation");
             require(!RegionDrawBatch.prepareCommandOwner(batch, buffers, area, type,
