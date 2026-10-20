@@ -26,8 +26,9 @@ Pushed maintenance milestones:
 
 Full #1076 / run `39507963173` on `27a14fca` FAILED compileJava:
 seven remaining direct accesses to private MappedBuffer.buffer in BufferUploaderM
-and RenderSystemMixin. Both now call byteBuffer(); a fresh full run must qualify
-the correction. Failed smoke-log artifact `12304163339`; no native result/JAR.
+and RenderSystemMixin. Both now call byteBuffer() in correction
+`c303cf26f53887964e9e45a2cc156c21a55143fb`. Full #1077 / run `39508596394`
+is queued/running at handoff; no successful conclusion or qualified artifact yet. Failed smoke-log artifact `12304163339`; no native result/JAR.
 First inspect the latest correction run and exact failed step/logs if red. Fix or narrowly
 revert a failed change; do not weaken tests. Preserve the required produced-JAR,
 Forge startup, native rendering/synchronization and public compatibility gates.

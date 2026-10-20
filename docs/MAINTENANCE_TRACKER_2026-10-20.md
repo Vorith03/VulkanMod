@@ -56,7 +56,9 @@ BufferUploaderM and RenderSystemMixin. They now call byteBuffer(), preserving
 storage representation and adding closed-state checking. All seven compiler
 errors were inspected; remaining .buffer uses were rescanned by type/call site.
 Failed log artifact 12304163339; no #1076 native result or qualified JAR. A new
-full run must qualify the corrected tree.
+full run must qualify the corrected tree. Correction `c303cf26` is pushed;
+full #1077 / run 39508596394 is queued/running at handoff, with no passed result
+or qualified JAR. Last qualified baseline remains `682b0d6b` / #1074.
 A green partial step is not full qualification.
 
 Local mutation checks rejected a closed-address escape regression before native

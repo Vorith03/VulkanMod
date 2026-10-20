@@ -30,7 +30,9 @@ Read its open/pending entries before starting more cleanup.
   **FAILED compileJava**: seven remaining direct accesses to the newly private
   MappedBuffer.buffer in BufferUploaderM/RenderSystemMixin. Failed smoke-log
   artifact **12304163339**, no qualified JAR/native result. Those two mixins now
-  use byteBuffer(); the corrected executable requires a fresh full suite.
+  use byteBuffer(); correction `c303cf26f53887964e9e45a2cc156c21a55143fb`
+  is pushed. Full #1077 / [39508596394](https://github.com/Vorith03/VulkanMod/actions/runs/39508596394)
+  is queued/running at handoff; no qualification/result/artifact yet.
 - Locally: 24 offline contracts passed twice. Java 17's compiler module works
   despite no javac launcher; a temporary launcher allowed actual contracts.
   Direct Gradle download is network-blocked. Focused actual LWJGL 3.3.1/fastutil

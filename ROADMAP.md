@@ -7,7 +7,8 @@ scope, dispositions and pending qualification are in [the tracker](docs/MAINTENA
 and [AGENT_STATUS.md](AGENT_STATUS.md). Milestones `a15ce968`, `0b50f449`, `27a14fca`
 remove obsolete infrastructure and clarify native/cache/ABI/admission ownership.
 Combined full #1076 / run 39507963173 failed compileJava on remaining mapped
-buffer field access; both affected mixins are corrected, fresh full CI pending.
+buffer field access; correction `c303cf26` fixes both affected mixins. Full
+#1077 / run 39508596394 is queued/running, unqualified at this checkpoint.
 #1075 was superseded/cancelled.
 Latest fully qualified baseline remains `682b0d6b`, full #1074. This maintenance
 work is not an FPS result or closure of Phase 7 generated-world/portal pixels,
