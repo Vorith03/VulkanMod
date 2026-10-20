@@ -275,6 +275,10 @@ tasks.register('verifyDistribution') {
 }
 
 tasks.named('check').configure {
+    dependsOn 'testOptionalInvocation'
+    dependsOn 'testCandidateAbiContract'
+    dependsOn 'testMappedBufferContract'
+    dependsOn 'testEffectUniformFailure'
     dependsOn 'testStableQuadSort'
     dependsOn 'testMatrixProduct'
     dependsOn 'testPipelineStateHash'
@@ -449,4 +453,28 @@ tasks.register('testStableQuadSort', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.util.StableQuadSortTest'
+}
+
+tasks.register('testMappedBufferContract', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.util.MappedBufferContractTest'
+}
+
+tasks.register('testEffectUniformFailure', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.shader.EffectUniformFailureTest'
+}
+
+tasks.register('testCandidateAbiContract', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.CandidateAbiContractTest'
+}
+
+tasks.register('testOptionalInvocation', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.compatibility.OptionalInvocationTest'
 }

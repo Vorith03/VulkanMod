@@ -43,15 +43,7 @@ public final class ImmersivePortalsLevelRendererCompat {
             throw new IllegalStateException(
                     "Cannot access Immersive Portals world-render state", e);
         } catch(InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if(cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            if(cause instanceof Error error) {
-                throw error;
-            }
-            throw new IllegalStateException(
-                    "Immersive Portals world-render state lookup failed", cause);
+            throw OptionalInvocation.propagate("Immersive Portals world-render state lookup failed", e);
         }
     }
 
@@ -71,15 +63,7 @@ public final class ImmersivePortalsLevelRendererCompat {
             throw new IllegalStateException(
                     "Cannot access Immersive Portals world-renderer reload hook", e);
         } catch(InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if(cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            if(cause instanceof Error error) {
-                throw error;
-            }
-            throw new IllegalStateException(
-                    "Immersive Portals world-renderer reload hook failed", cause);
+            throw OptionalInvocation.propagate("Immersive Portals world-renderer reload hook failed", e);
         }
     }
 

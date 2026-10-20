@@ -26,27 +26,28 @@ public class VUtil {
         return buffer.rewind();
     }
 
+    /** Copy remaining source bytes at current positions, then reset source to full capacity.
+     * Destination position/limit are retained; the explicit-offset overload moves its position.
+     * These are legacy upload semantics, not position-preserving memcpy APIs.
+     */
     public static void memcpy(ByteBuffer src, ByteBuffer dst) {
-        //src.limit((int)size);
-//        dst.put(src);
-
         MemoryUtil.memCopy(src, dst);
         src.limit(src.capacity()).rewind();
     }
 
-    public static void memcpy(ByteBuffer src, ByteBuffer dst, long offset) {
-        dst.position((int)offset);
-//        dst.put(src);
-
+    /** Move destination to dstByteOffset, copy remaining source, then reset source. */
+    public static void memcpy(ByteBuffer src, ByteBuffer dst, long dstByteOffset) {
+        dst.position((int)dstByteOffset);
         MemoryUtil.memCopy(src, dst);
         src.limit(src.capacity()).rewind();
     }
 
-    public static void memcpy(ByteBuffer src, ByteBuffer dst, int size, long offset) {
-        dst.position((int)offset);
-        src.limit(size);
-//        dst.put(src);
-
+    /** sourceByteLimit is an absolute limit, NOT a count relative to src.position().
+     * Move destination, set source limit, copy remaining bytes, then reset source.
+     */
+    public static void memcpy(ByteBuffer src, ByteBuffer dst, int sourceByteLimit, long dstByteOffset) {
+        dst.position((int)dstByteOffset);
+        src.limit(sourceByteLimit);
         MemoryUtil.memCopy(src, dst);
         src.limit(src.capacity()).rewind();
     }

@@ -107,7 +107,7 @@ public final class ImmersivePortalsShaderCompat {
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals shader compatibility API", e);
         } catch(InvocationTargetException e) {
-            throw propagate("Immersive Portals shader compatibility check failed", e);
+            throw OptionalInvocation.propagate("Immersive Portals shader compatibility check failed", e);
         }
     }
 
@@ -122,7 +122,7 @@ public final class ImmersivePortalsShaderCompat {
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals shader transformation API", e);
         } catch(InvocationTargetException e) {
-            throw propagate("Immersive Portals shader transformation failed for " + shaderName, e);
+            throw OptionalInvocation.propagate("Immersive Portals shader transformation failed for " + shaderName, e);
         }
     }
 
@@ -196,7 +196,7 @@ public final class ImmersivePortalsShaderCompat {
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals terrain clipping state", e);
         } catch(InvocationTargetException e) {
-            throw propagate("Immersive Portals terrain clipping lookup failed", e);
+            throw OptionalInvocation.propagate("Immersive Portals terrain clipping lookup failed", e);
         }
     }
 
@@ -246,7 +246,7 @@ public final class ImmersivePortalsShaderCompat {
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals model-view clipping state", e);
         } catch(InvocationTargetException e) {
-            throw propagate("Immersive Portals model-view clipping lookup failed", e);
+            throw OptionalInvocation.propagate("Immersive Portals model-view clipping lookup failed", e);
         }
     }
 
@@ -293,7 +293,7 @@ public final class ImmersivePortalsShaderCompat {
         } catch(IllegalAccessException e) {
             throw new IllegalStateException("Cannot access Immersive Portals shader loader signal", e);
         } catch(InvocationTargetException e) {
-            throw propagate("Immersive Portals shader loader signal failed", e);
+            throw OptionalInvocation.propagate("Immersive Portals shader loader signal failed", e);
         }
     }
 
@@ -392,14 +392,4 @@ public final class ImmersivePortalsShaderCompat {
         }
     }
 
-    private static RuntimeException propagate(String message, InvocationTargetException exception) {
-        Throwable cause = exception.getCause();
-        if(cause instanceof RuntimeException runtimeException) {
-            return runtimeException;
-        }
-        if(cause instanceof Error error) {
-            throw error;
-        }
-        return new IllegalStateException(message, cause);
-    }
 }

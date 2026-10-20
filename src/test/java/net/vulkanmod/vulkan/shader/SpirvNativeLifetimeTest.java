@@ -8,6 +8,7 @@ import org.objectweb.asm.Opcodes;
 import java.io.IOException;
 import java.io.InputStream;
 
+/** Bytecode shape/packaging guards, not proof of failure-path release behavior. */
 public final class SpirvNativeLifetimeTest {
     private SpirvNativeLifetimeTest() {
     }

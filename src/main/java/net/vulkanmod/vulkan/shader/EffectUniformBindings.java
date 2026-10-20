@@ -19,6 +19,23 @@ import java.util.Map;
  * native pointer.
  */
 public final class EffectUniformBindings implements AutoCloseable {
+    interface FallbackAllocator {
+        ByteBuffer allocate(int byteCount);
+        void release(ByteBuffer buffer);
+    }
+    private final FallbackAllocator allocator;
+
+    public EffectUniformBindings() {
+        this(new FallbackAllocator() {
+            public ByteBuffer allocate(int byteCount) { return MemoryUtil.memCalloc(byteCount); }
+            public void release(ByteBuffer buffer) { MemoryUtil.memFree(buffer); }
+        });
+    }
+
+    // Package seam for deterministic allocation failures; no Vulkan dependency.
+    EffectUniformBindings(FallbackAllocator allocator) { this.allocator = allocator; }
+
+    private final List<MappedBuffer> borrowedViews = new ArrayList<>();
     private final List<ByteBuffer> fallbackUniformBuffers = new ArrayList<>();
 
     public void bind(UBO ubo, Map<String, Uniform> uniformMap) {
@@ -45,7 +62,7 @@ public final class EffectUniformBindings implements AutoCloseable {
                     // shader/program JSON. Keep additional GLSL fields in the Vulkan
                     // UBO so source layout stays compatible, but give them OpenGL's
                     // linked-program default value: all zeroes.
-                    byteBuffer = MemoryUtil.memCalloc(field.getSize() * Integer.BYTES);
+                    byteBuffer = this.allocator.allocate(field.getSize() * Integer.BYTES);
                     this.fallbackUniformBuffers.add(byteBuffer);
                 }
                 else if(uniform.getType() <= 3) {
@@ -59,6 +76,7 @@ public final class EffectUniformBindings implements AutoCloseable {
                 }
 
                 MappedBuffer mappedBuffer = MappedBuffer.createFromBuffer(byteBuffer);
+                this.borrowedViews.add(mappedBuffer);
                 field.setSupplier(() -> mappedBuffer);
             }
         } catch (Throwable throwable) {
@@ -73,8 +91,12 @@ public final class EffectUniformBindings implements AutoCloseable {
 
     @Override
     public void close() {
+        // Invalidate suppliers before freeing fallback bytes. Minecraft remains
+        // responsible for real Uniform storage; directBindings retain their owner.
+        for (MappedBuffer view : this.borrowedViews) view.free();
+        this.borrowedViews.clear();
         for(ByteBuffer buffer : this.fallbackUniformBuffers) {
-            MemoryUtil.memFree(buffer);
+            this.allocator.release(buffer);
         }
         this.fallbackUniformBuffers.clear();
     }

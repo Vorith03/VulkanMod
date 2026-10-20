@@ -10,6 +10,9 @@ import static org.lwjgl.system.libc.LibCString.nmemcpy;
 import static org.lwjgl.vulkan.VK10.*;
 
 public class StagingBuffer extends Buffer {
+    @Override
+    public Retirement retirement() { return Retirement.UPLOAD_COMPLETION; }
+
     private int highWaterMark;
     private int resizeCount;
     private int growthLimit = Integer.MAX_VALUE;

@@ -90,7 +90,7 @@ public class VRenderSystem {
         Vulkan.initVulkan(window);
     }
 
-    public static ByteBuffer getChunkOffset() { return ChunkOffset.buffer; }
+    public static ByteBuffer getChunkOffset() { return ChunkOffset.byteBuffer(); }
 
     public static int maxSupportedTextureSize() {
         return Device.deviceProperties.limits().maxImageDimension2D();
@@ -154,20 +154,20 @@ public class VRenderSystem {
     }
 
     public static void applyModelViewMatrix(Matrix4f mat) {
-        mat.get(modelViewMatrix.buffer.asFloatBuffer());
+        mat.get(modelViewMatrix.byteBuffer().asFloatBuffer());
         //MemoryUtil.memPutFloat(MemoryUtil.memAddress(modelViewMatrix), 1);
     }
 
     public static void applyProjectionMatrix(Matrix4f mat) {
-        mat.get(projectionMatrix.buffer.asFloatBuffer());
+        mat.get(projectionMatrix.byteBuffer().asFloatBuffer());
     }
 
     public static void calculateMVP() {
-        MVP_SCRATCH.get().write(projectionMatrix.buffer, modelViewMatrix.buffer, MVP.buffer);
+        MVP_SCRATCH.get().write(projectionMatrix.byteBuffer(), modelViewMatrix.byteBuffer(), MVP.byteBuffer());
     }
 
     public static void setTextureMatrix(Matrix4f mat) {
-        mat.get(TextureMatrix.buffer.asFloatBuffer());
+        mat.get(TextureMatrix.byteBuffer().asFloatBuffer());
     }
 
     public static MappedBuffer getTextureMatrix() {
@@ -187,7 +187,7 @@ public class VRenderSystem {
     }
 
     public static void setChunkOffset(float f1, float f2, float f3) {
-        long ptr = ChunkOffset.ptr;
+        long ptr = ChunkOffset.address();
         org.lwjgl.system.MemoryUtil.memPutFloat(ptr, f1);
         org.lwjgl.system.MemoryUtil.memPutFloat(ptr + 4, f2);
         org.lwjgl.system.MemoryUtil.memPutFloat(ptr + 8, f3);

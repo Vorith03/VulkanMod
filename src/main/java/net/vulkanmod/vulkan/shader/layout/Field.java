@@ -40,7 +40,7 @@ public abstract class Field {
 
         MappedBuffer src = values.get();
 
-        MemoryUtil.memCopy(src.ptr, ptr + this.offset, this.size);
+        MemoryUtil.memCopy(src.address(), ptr + this.offset, this.size);
     }
 
     /**
@@ -124,7 +124,7 @@ public abstract class Field {
             MemoryUtil.memSet(dst, 0, 3L * STD140_COLUMN_BYTES);
             for(int column = 0; column < 3; ++column) {
                 MemoryUtil.memCopy(
-                        src.ptr + column * SOURCE_COLUMN_BYTES,
+                        src.address() + column * SOURCE_COLUMN_BYTES,
                         dst + column * STD140_COLUMN_BYTES,
                         SOURCE_COLUMN_BYTES
                 );

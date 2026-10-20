@@ -14,6 +14,9 @@ import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
  * already-submitted frame fence.
  */
 public final class TextureResidentBuffer extends Buffer {
+    @Override
+    public Retirement retirement() { return Retirement.UPLOAD_COMPLETION; }
+
     private static final Long2ReferenceOpenHashMap<Runnable> RETIREMENT_CALLBACKS =
             new Long2ReferenceOpenHashMap<>();
 

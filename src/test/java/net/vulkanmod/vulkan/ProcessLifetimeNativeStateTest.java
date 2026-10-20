@@ -9,6 +9,7 @@ import org.objectweb.asm.Opcodes;
 import java.io.IOException;
 import java.io.InputStream;
 
+/** Bytecode shape guards; behavioral mapped storage checks live in MappedBufferContractTest. */
 public final class ProcessLifetimeNativeStateTest {
     private ProcessLifetimeNativeStateTest() {
     }
