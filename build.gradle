@@ -47,7 +47,6 @@ minecraft {
 
 repositories {
     mavenCentral()
-    maven { url = 'https://maven.fabricmc.net/' }
 }
 
 configurations {
@@ -61,10 +60,6 @@ def shadeConfiguration = configurations.shade
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
-
-    // Temporary compile-only bridge for the one remaining @Environment annotation
-    // in LiquidRenderer. This dependency is not shaded or required at runtime.
-    compileOnly 'net.fabricmc:fabric-loader:0.14.21'
 
     // Forge 47.3.0 ships Mixin 0.8.5. The annotation processor generates the
     // production refmap used to remap Mojmap-named mixin targets after reobf.
@@ -280,6 +275,7 @@ tasks.register('verifyDistribution') {
 }
 
 tasks.named('check').configure {
+    dependsOn 'testStableQuadSort'
     dependsOn 'testMatrixProduct'
     dependsOn 'testPipelineStateHash'
     dependsOn 'verifyDistribution'
@@ -447,4 +443,10 @@ tasks.register('testGpuSparseLightingSnapshot', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.chunk.voxel.GpuSparseLightingSnapshotTest'
+}
+
+tasks.register('testStableQuadSort', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.util.StableQuadSortTest'
 }

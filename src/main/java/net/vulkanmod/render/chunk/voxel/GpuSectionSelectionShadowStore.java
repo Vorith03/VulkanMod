@@ -29,7 +29,8 @@ import static org.lwjgl.vulkan.VK10.*;
 /**
  * Persistent, bounded GPU-selected indirect-command output for one region/layer.
  *
- * The output is shadow-only for now: production terrain still consumes the existing
+ * The output supports diagnostics and default-off production indirect ownership.
+ * RegionDrawBatch coordinates admission; ordinary terrain retains the existing
  * CPU-built RegionDrawBatch commands. Dispatches use a helper graphics command buffer
  * because terrain draw recording occurs inside the active render pass, where
  * vkCmdDispatch would be invalid. Same-queue order plus explicit barriers makes the

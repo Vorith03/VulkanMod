@@ -41,7 +41,10 @@ import static org.lwjgl.vulkan.VK10.*;
  * Shared O4 compute pipeline for exact animated-texture interpolation.
  *
  * <p>Each admitted animation owns an immutable resident source buffer plus a
- * bounded scratch buffer and descriptor set. The dispatch is recorded directly
+ * bounded scratch buffer and descriptor set in individual mode. Default-off
+ * shared mode pools source and scratch pages; multi-dispatch batches up to 32
+ * jobs using page-local job tables. All modes retain retirement accounting.
+ * The dispatch is recorded directly
  * into the existing texture-tick graphics command buffer:
  * resident source -> compute scratch -> atlas transfer. No GPU readback or host
  * pixel upload is introduced.</p>

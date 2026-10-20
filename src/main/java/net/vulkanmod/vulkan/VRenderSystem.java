@@ -188,9 +188,9 @@ public class VRenderSystem {
 
     public static void setChunkOffset(float f1, float f2, float f3) {
         long ptr = ChunkOffset.ptr;
-        VUtil.UNSAFE.putFloat(ptr, f1);
-        VUtil.UNSAFE.putFloat(ptr + 4, f2);
-        VUtil.UNSAFE.putFloat(ptr + 8, f3);
+        org.lwjgl.system.MemoryUtil.memPutFloat(ptr, f1);
+        org.lwjgl.system.MemoryUtil.memPutFloat(ptr + 4, f2);
+        org.lwjgl.system.MemoryUtil.memPutFloat(ptr + 8, f3);
     }
 
     public static void setShaderColor(float f1, float f2, float f3, float f4) {

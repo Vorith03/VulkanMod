@@ -78,11 +78,6 @@ public class MemoryTypes {
             Device.getTransferQueue().copyBufferCmd(stagingBuffer.id, stagingBuffer.offset, buffer.getId(), buffer.getUsedBytes(), bufferSize);
         }
 
-        @Override
-        void copyFromBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer) {
-
-        }
-
         public long copyBuffer(Buffer src, Buffer dst) {
             if(dst.bufferSize < src.bufferSize) {
                 throw new IllegalArgumentException("dst size is less than src size.");
@@ -111,11 +106,6 @@ public class MemoryTypes {
         @Override
         void copyToBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer) {
             VUtil.memcpy(byteBuffer, buffer.data.getByteBuffer(0, (int) buffer.bufferSize), (int) bufferSize, buffer.getUsedBytes());
-        }
-
-        @Override
-        void copyFromBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer) {
-            VUtil.memcpy(buffer.data.getByteBuffer(0, (int) buffer.bufferSize), byteBuffer, 0);
         }
 
         @Override

@@ -36,18 +36,18 @@ public class MappedBuffer {
     }
 
     public void putFloat(int idx, float f) {
-        VUtil.UNSAFE.putFloat(ptr + idx, f);
+        org.lwjgl.system.MemoryUtil.memPutFloat(ptr + idx, f);
     }
 
     public void putInt(int idx, int f) {
-        VUtil.UNSAFE.putInt(ptr + idx, f);
+        org.lwjgl.system.MemoryUtil.memPutInt(ptr + idx, f);
     }
 
     public float getFloat(int idx) {
-        return VUtil.UNSAFE.getFloat(ptr + idx);
+        return org.lwjgl.system.MemoryUtil.memGetFloat(ptr + idx);
     }
 
     public int getInt(int idx) {
-        return VUtil.UNSAFE.getInt(ptr + idx);
+        return org.lwjgl.system.MemoryUtil.memGetInt(ptr + idx);
     }
 }

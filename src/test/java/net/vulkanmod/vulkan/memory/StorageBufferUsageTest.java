@@ -62,9 +62,6 @@ public final class StorageBufferUsageTest {
         @Override void copyToBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer) {
             throw new AssertionError("Unexpected copy");
         }
-        @Override void copyFromBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer) {
-            throw new AssertionError("Unexpected copy");
-        }
         @Override void uploadBuffer(Buffer buffer, ByteBuffer byteBuffer) {
             throw new AssertionError("Unexpected upload");
         }

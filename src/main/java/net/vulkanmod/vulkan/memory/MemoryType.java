@@ -10,7 +10,6 @@ public abstract class MemoryType {
 
 
 //    abstract void copyToBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer);
-    abstract void copyFromBuffer(Buffer buffer, long bufferSize, ByteBuffer byteBuffer);
 
     /**
      * Replace data from byte 0

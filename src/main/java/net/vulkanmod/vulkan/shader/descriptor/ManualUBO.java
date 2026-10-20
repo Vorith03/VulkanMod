@@ -5,20 +5,20 @@ import org.lwjgl.system.MemoryUtil;
 public class ManualUBO extends UBO {
 
     private long srcPtr;
-    private int srcSize;
+    private int srcByteCount;
 
-    public ManualUBO(int binding, int type, int size) {
-        super(binding, type, size * 4, null);
+    public ManualUBO(int binding, int type, int wordCount) {
+        super(binding, type, wordCount * 4, null);
     }
 
     @Override
     public void update(long ptr) {
         //update manually
-        MemoryUtil.memCopy(this.srcPtr, ptr, this.srcSize);
+        MemoryUtil.memCopy(this.srcPtr, ptr, this.srcByteCount);
     }
 
-    public void setSrc(long ptr, int size) {
+    public void setSrc(long ptr, int byteCount) {
         this.srcPtr = ptr;
-        this.srcSize = size;
+        this.srcByteCount = byteCount;
     }
 }

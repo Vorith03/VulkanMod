@@ -137,8 +137,8 @@ public class Drawer {
     public void drawIndexed(VertexBuffer vertexBuffer, IndexBuffer indexBuffer, int indexCount, int indexType) {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
 
-        VUtil.UNSAFE.putLong(pBuffers, vertexBuffer.getId());
-        VUtil.UNSAFE.putLong(pOffsets, vertexBuffer.getOffset());
+        org.lwjgl.system.MemoryUtil.memPutLong(pBuffers, vertexBuffer.getId());
+        org.lwjgl.system.MemoryUtil.memPutLong(pOffsets, vertexBuffer.getOffset());
         nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
 
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), indexType);
@@ -148,8 +148,8 @@ public class Drawer {
     public void draw(VertexBuffer vertexBuffer, int vertexCount) {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
 
-        VUtil.UNSAFE.putLong(pBuffers, vertexBuffer.getId());
-        VUtil.UNSAFE.putLong(pOffsets, vertexBuffer.getOffset());
+        org.lwjgl.system.MemoryUtil.memPutLong(pBuffers, vertexBuffer.getId());
+        org.lwjgl.system.MemoryUtil.memPutLong(pOffsets, vertexBuffer.getOffset());
         nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
 
         vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
