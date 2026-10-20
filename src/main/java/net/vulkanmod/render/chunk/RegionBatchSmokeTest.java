@@ -955,6 +955,22 @@ public final class RegionBatchSmokeTest {
                     "Unchanged generated ownership must reuse the producer snapshot without CPU per-section planning");
             require(table != null && table.candidateCount() == 1,
                     "The existing production publisher must emit one REPLACE row");
+            // Mode is an independent cache dimension even when every producer revision matches.
+            prepared = RegionBatchStats.gpuCandidatePreparedSlots;
+            publisher.publishLiveCandidates(buffers, area, type, false, false);
+            var ordinaryTable = publisher.publishedCandidates(type);
+            require(RegionBatchStats.gpuCandidatePreparedSlots > prepared && ordinaryTable != table,
+                    "Generated-to-ordinary transition must rebuild despite unchanged producer state");
+            java.nio.ByteBuffer ordinaryWire = java.nio.ByteBuffer.allocate(ordinaryTable.byteSize());
+            ordinaryTable.writeTo(ordinaryWire);
+            require(ordinaryWire.getInt(net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.HEADER_WORDS * 4) == 12,
+                    "Ordinary mode must serialize CPU geometry rather than cached REPLACE geometry");
+            prepared = RegionBatchStats.gpuCandidatePreparedSlots;
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            table = publisher.publishedCandidates(type);
+            require(RegionBatchStats.gpuCandidatePreparedSlots > prepared
+                            && table != ordinaryTable && publisher.hasCompleteCandidateSuperset(type),
+                    "Ordinary-to-generated transition must restore exact GPU ownership");
             java.nio.ByteBuffer wire = java.nio.ByteBuffer.allocate(table.byteSize());
             table.writeTo(wire);
             int row = net.vulkanmod.render.chunk.voxel.GpuRegionCandidateTable.HEADER_WORDS * 4;
@@ -985,6 +1001,14 @@ public final class RegionBatchSmokeTest {
                     "APPEND preflight producer transition must revoke the cached REPLACE candidate table");
             require(!RegionDrawBatch.indirectCandidate(area, section, type, true).representable(),
                     "APPEND with CPU exceptions must retain the atomic planner");
+            prepared = RegionBatchStats.gpuCandidatePreparedSlots;
+            section.stageGpuTerrainPreflight(null, generation, true);
+            publisher.publishLiveCandidates(buffers, area, type, true, true);
+            require(RegionBatchStats.gpuCandidatePreparedSlots > prepared
+                            && publisher.hasCompleteCandidateSuperset(type),
+                    "Clearing APPEND preflight must invalidate rejection and recover REPLACE");
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                    400L, 3, GpuTerrainDrawHandoff.Ownership.APPEND), generation, true);
             publisher.publishLiveCandidates(buffers, area, type, true, true);
             require(!publisher.hasCompleteCandidateSuperset(type),
                     "APPEND ownership must revoke the whole GPU candidate superset before cached reuse");

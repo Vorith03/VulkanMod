@@ -11,6 +11,12 @@ import java.util.Map;
 /** Inject failure after one fallback allocation and count actual releases. */
 public final class EffectUniformFailureTest {
     public static void main(String[] args) {
+        verify("vec4");
+        verify("mat3");
+        System.out.println("Uniform failure/release accounting passed: vec4 and mat3");
+    }
+
+    private static void verify(String firstType) {
         var live = new IdentityHashMap<ByteBuffer, Boolean>();
         int[] counts = new int[2];
         RuntimeException failure = new RuntimeException("injected allocation failure");
@@ -27,11 +33,13 @@ public final class EffectUniformFailureTest {
         UBO ubo;
         try (var ignored = Field.deferDefaultSupplierBinding()) {
             var builder = new AlignedStruct.Builder();
-            builder.addFieldInfo("vec4", "first"); builder.addFieldInfo("vec4", "second");
+            builder.addFieldInfo(firstType, "first"); builder.addFieldInfo("vec4", "second");
             ubo = builder.buildUBO(0, 0);
         }
         try { bindings.bind(ubo, Map.of()); throw new AssertionError("Expected failure"); }
         catch (RuntimeException actual) { if (actual != failure) throw new AssertionError("Cause lost", actual); }
+        if (!live.isEmpty() || counts[1] != 1 || bindings.fallbackBufferCount() != 0)
+            throw new AssertionError("Failed bind must release immediately, before caller close");
         bindings.close(); bindings.close();
         if (!live.isEmpty() || counts[1] != 1 || bindings.fallbackBufferCount() != 0)
             throw new AssertionError("Partial bind leaked or double-released");
@@ -43,6 +51,6 @@ public final class EffectUniformFailureTest {
             for (int i=0;i<destination.capacity();i++)
                 if (destination.get(i)!=(byte)0x5a) throw new AssertionError("Partial stale update");
         } finally { MemoryUtil.memFree(destination); }
-        System.out.println("Uniform failure/release accounting passed");
+
     }
 }

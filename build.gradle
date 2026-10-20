@@ -280,6 +280,7 @@ tasks.named('check').configure {
     dependsOn 'testCandidateAbiContract'
     dependsOn 'testMappedBufferContract'
     dependsOn 'testEffectUniformFailure'
+    dependsOn 'testComputePipelineFactoryFailure'
     dependsOn 'testStableQuadSort'
     dependsOn 'testMatrixProduct'
     dependsOn 'testPipelineStateHash'
@@ -484,4 +485,9 @@ tasks.register('testAnimationComputeAdmission', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.render.texture.AnimationComputeAdmissionTest'
+}
+tasks.register('testComputePipelineFactoryFailure', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.vulkan.shader.ComputePipelineFactoryFailureTest'
 }

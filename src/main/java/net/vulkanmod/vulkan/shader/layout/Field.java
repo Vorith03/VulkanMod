@@ -120,11 +120,13 @@ public abstract class Field {
             }
 
             MappedBuffer src = this.values.get();
+            // Reject a closed borrowed source before zeroing any destination bytes.
+            long source = src.address();
             long dst = ptr + this.offset;
             MemoryUtil.memSet(dst, 0, 3L * STD140_COLUMN_BYTES);
             for(int column = 0; column < 3; ++column) {
                 MemoryUtil.memCopy(
-                        src.address() + column * SOURCE_COLUMN_BYTES,
+                        source + column * SOURCE_COLUMN_BYTES,
                         dst + column * STD140_COLUMN_BYTES,
                         SOURCE_COLUMN_BYTES
                 );

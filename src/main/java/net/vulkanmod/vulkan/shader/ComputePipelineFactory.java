@@ -12,12 +12,39 @@ public final class ComputePipelineFactory {
 
     public static long create(String resource, long pipelineLayout) {
         VkDevice device = Device.device;
-        SPIRVUtils.SPIRV spirv = SPIRVUtils.compileShaderResource(resource, SPIRVUtils.ShaderKind.COMPUTE_SHADER);
+        return create(resource, pipelineLayout, new Calls() {
+            public SPIRVUtils.SPIRV compile(String path) {
+                return SPIRVUtils.compileShaderResource(path, SPIRVUtils.ShaderKind.COMPUTE_SHADER);
+            }
+            public int module(VkShaderModuleCreateInfo info, LongBuffer result) {
+                return vkCreateShaderModule(device, info, null, result);
+            }
+            public int pipeline(VkComputePipelineCreateInfo.Buffer info, LongBuffer result) {
+                return vkCreateComputePipelines(device, VK_NULL_HANDLE, info, null, result);
+            }
+            public void destroyModule(long module) { vkDestroyShaderModule(device, module, null); }
+            public void destroyPipeline(long pipeline) { vkDestroyPipeline(device, pipeline, null); }
+            public void release(SPIRVUtils.SPIRV spirv) { spirv.free(); }
+        });
+    }
+
+    // Construction-only seam: no global override and no dispatch/retirement ownership.
+    interface Calls {
+        SPIRVUtils.SPIRV compile(String resource);
+        int module(VkShaderModuleCreateInfo info, LongBuffer result);
+        int pipeline(VkComputePipelineCreateInfo.Buffer info, LongBuffer result);
+        void destroyModule(long module);
+        void destroyPipeline(long pipeline);
+        void release(SPIRVUtils.SPIRV spirv);
+    }
+
+    static long create(String resource, long pipelineLayout, Calls calls) {
+        SPIRVUtils.SPIRV spirv = calls.compile(resource);
         long module = VK_NULL_HANDLE;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             var info = VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(spirv.bytecode());
             LongBuffer result = stack.callocLong(1);
-            check(vkCreateShaderModule(device, info, null, result), resource + " shader module");
+            check(calls.module(info, result), resource + " shader module");
             module = result.get(0);
             var stage = VkPipelineShaderStageCreateInfo.calloc(stack).sType$Default()
                     .stage(VK_SHADER_STAGE_COMPUTE_BIT).module(module).pName(stack.UTF8("main"));
@@ -26,16 +53,16 @@ public final class ComputePipelineFactory {
                     .basePipelineHandle(VK_NULL_HANDLE).basePipelineIndex(-1);
             result.put(0, VK_NULL_HANDLE);
             // Deliberately uncached until graphics' static cache has an explicit device lifecycle.
-            int status = vkCreateComputePipelines(device, VK_NULL_HANDLE, pipelineInfo, null, result);
+            int status = calls.pipeline(pipelineInfo, result);
             if (status != VK_SUCCESS) {
                 // Vulkan may return successfully created handles on a failed multi-create call.
-                if (result.get(0) != VK_NULL_HANDLE) vkDestroyPipeline(device, result.get(0), null);
+                if (result.get(0) != VK_NULL_HANDLE) calls.destroyPipeline(result.get(0));
                 check(status, resource + " compute pipeline");
             }
             return result.get(0);
         } finally {
-            if (module != VK_NULL_HANDLE) vkDestroyShaderModule(device, module, null);
-            spirv.free();
+            if (module != VK_NULL_HANDLE) calls.destroyModule(module);
+            calls.release(spirv);
         }
     }
 
