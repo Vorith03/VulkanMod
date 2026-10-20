@@ -142,7 +142,7 @@ public class BufferUploaderM {
             return;
 
         float[] shaderColor = RenderSystem.getShaderColor();
-        ByteBuffer mirroredColor = VRenderSystem.getShaderColor().buffer;
+        ByteBuffer mirroredColor = VRenderSystem.getShaderColor().byteBuffer();
         ByteBuffer vertexBytes = buffer.vertexBuffer();
         long expectedBytes = (long)parameters.vertexCount() * DefaultVertexFormat.NEW_ENTITY.getVertexSize();
 

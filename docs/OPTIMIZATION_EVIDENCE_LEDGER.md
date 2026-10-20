@@ -1,5 +1,20 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## October 20 maintenance implementation detour
+
+The owner selected implementation of both reuse/maintainability reviews. Current
+scope, dispositions and pending qualification are in [the tracker](MAINTENANCE_TRACKER_2026-10-20.md)
+and [AGENT_STATUS.md](../AGENT_STATUS.md). Milestones `a15ce968`, `0b50f449`, `27a14fca`
+remove obsolete infrastructure and clarify native/cache/ABI/admission ownership.
+Combined full #1076 / run 39507963173 failed compileJava on remaining mapped
+buffer field access; both affected mixins are corrected, fresh full CI pending.
+#1075 was superseded/cancelled.
+Latest fully qualified baseline remains `682b0d6b`, full #1074. This maintenance
+work is not an FPS result or closure of Phase 7 generated-world/portal pixels,
+private-pack, particle actual-world or integrated RX adoption/profitability gates.
+Historical checkpoints below retain their original evidence boundaries.
+
+
 ## October 19 — reject stale queued REPLACE publication; full #1073 PASSED
 
 **Latest qualified executable:** `85037cfdb2779294676f33ba3b951791d66dec10`; [full #1073 / run 39304235826](https://github.com/Vorith03/VulkanMod/actions/runs/39304235826) **COMPLETED / SUCCESS, attempt 1** on that executable. Forge distributable JAR artifact **12213616043**; smoke logs **12213091579**. Offline contracts, Forge compile/package, both client startup modes (including the production-queue publication smoke), native indirect/terrain/texture/particle/screenshot/synchronization/post/depth, public Create Chronicles/Immersive Portals and Crash Assistant gates passed. Private resource packs were not exercised.
