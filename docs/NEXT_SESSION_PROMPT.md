@@ -70,3 +70,10 @@ its successor to update the repository handoff and generate its own NEW complete
 prompt carrying this same requirement forward. If internally complete, advance to
 real-world qualification; otherwise resume the exact unfinished work. This
 contingency does not replace finishing feasible work now.
+
+Correction qualification: `cfbd0437` full #1081 / run 39551568932 failed
+compileJava because the new test directly called private ChunkArea.clearVoxels.
+The test now uses public releaseBuffers (which owns that private teardown) and
+retains the same proof-clearing assertions. This is a fixture Java-access error,
+not a native result for the traversal fix. No #1081 qualified JAR exists. Qualify
+the corrected exact executable in full CI before proceeding to owner tests.

@@ -95,3 +95,10 @@ older #1054/#1050–1052/#1047–1048/#1041–1042 and analyzed #1028 UUID e05f2
 
 Every successor must update the repository handoff and finish with a NEW complete
 copyable continuation prompt requiring its own successor to do the same.
+
+Correction qualification: `cfbd0437` full #1081 / run 39551568932 failed
+compileJava because the new test directly called private ChunkArea.clearVoxels.
+The test now uses public releaseBuffers (which owns that private teardown) and
+retains the same proof-clearing assertions. This is a fixture Java-access error,
+not a native result for the traversal fix. No #1081 qualified JAR exists. Qualify
+the corrected exact executable in full CI before proceeding to owner tests.

@@ -715,7 +715,7 @@ public final class RegionBatchSmokeTest {
                                 && area.matchesCandidateProvenance(graph, direct),
                         "Wrapped graph/direct provenance must survive copy, sparse selection and comparison");
             }
-            area.clearVoxels();
+            area.releaseBuffers(); // public teardown owns private clearVoxels
             require(!area.isGraphVisible(seed) && area.candidateActiveWord(0) == 0L,
                     "Area teardown must revoke traversal validity and both provenance masks");
             Initializer.LOGGER.info("VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK: -2/-1/0/MAX/MIN graph visibility, sparse off-frustum visits, direct seeds, queue reset and area teardown");
