@@ -333,7 +333,10 @@ public class RenderSection {
     public synchronized boolean hasReadyGpuTerrainCpuFallback() {
         if(!this.gpuTerrainCpuMeshComplete || !this.isCompiled()) return false;
         DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
-        return parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
+        // A compiled, independently complete empty layer has no vertex read to
+        // wait for and can remain visible while its first mixed pair is staged.
+        return parameters.indexCount == 0
+                || parameters.indexCount > 0 && parameters.vertexBufferSegment.isReady();
     }
 
     public synchronized boolean hasReadyGpuTerrainAppendFallback() {

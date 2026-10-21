@@ -28,6 +28,7 @@ public final class RegionBatchSmokeTest {
         verifyGeneratedCandidateResidencyFingerprint();
         verifyStagedCpuReplacementContract();
         verifyGpuAppendRebuildTransactionContract();
+        verifyGpuAppendEmptyCpuFallbackContract();
         verifyGpuFirstTransitionContract();
 
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
@@ -610,6 +611,65 @@ public final class RegionBatchSmokeTest {
                 batch.commands.freeBuffer();
             area.releaseBuffers();
             RegionVoxelStore.ENABLED = voxelStoreEnabled;
+        }
+    }
+
+    private static void verifyGpuAppendEmptyCpuFallbackContract() {
+        ChunkArea area = new ChunkArea(41, new Vector3i(0, 0, 0));
+        DrawBuffers buffers = area.getDrawBuffers();
+        RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
+        boolean enabled = RegionVoxelStore.ENABLED;
+        RegionVoxelStore.ENABLED = true;
+        try {
+            RenderSection section = new RenderSection(0, 16, 16, 16);
+            section.setChunkArea(area);
+            area.registerSection(section, 16, 16, 16);
+            area.addSection(section);
+            require(!section.hasReadyGpuTerrainCpuFallback(),
+                    "Uncompiled default-empty parameters are not a complete fallback");
+            section.setCompiledSection(new CompiledSection());
+            require(section.hasReadyGpuTerrainCpuFallback(),
+                    "Compiled CPU-complete empty layer must admit staged mixed rebuild");
+            long generation = section.getVoxelGeneration();
+            section.setGpuTerrainCpuMeshComplete(generation, false);
+            require(!section.hasReadyGpuTerrainCpuFallback(),
+                    "An incomplete zero-index GPU-owned CPU half is not an empty complete fallback");
+            section.setGpuTerrainCpuMeshComplete(generation, true);
+            section.invalidateVoxels(true);
+            generation = section.getVoxelGeneration();
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                    704L, 3, GpuTerrainDrawHandoff.Ownership.APPEND), generation, true);
+            TerrainRenderType type = RenderSection.gpuTerrainOutputLayer();
+            DrawBuffers.StagedDrawParameters cpu;
+            try(MemoryStack stack = MemoryStack.stackPush()) {
+                cpu = buffers.stageVertexData(section, type,
+                        stack.calloc(TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize() * 4), 6, generation);
+            }
+            AreaUploadManager.INSTANCE.submitUploads();
+            require(cpu.ready() && section.stageGpuTerrainAppendCpu(generation, cpu),
+                    "First exception half must become staged-ready without publishing it");
+            var gpu = area.reserveStagedGpuTerrainOutput(16, 16, 16, type, generation, 3);
+            require(gpu != null && gpu.submitWithTarget(target -> target != null)
+                            && gpu.complete(3, false) && gpu.ready()
+                            && section.getDrawParameters(type).indexCount == 0,
+                    "Both staged halves must preserve the complete empty old layer");
+            var transaction = new GpuTerrainAppendRebuildTransaction(section, generation, buffers, cpu, gpu);
+            require(transaction.ready() && transaction.commit()
+                            && !section.gpuTerrainCpuMeshComplete()
+                            && !section.hasReadyGpuTerrainCpuFallback()
+                            && batch.update(buffers, area, type, true)
+                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
+                    "Empty complete layer must atomically become CPU exceptions plus GPU ordinary geometry");
+            Device.getGraphicsQueue().waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; frame++)
+                AreaUploadManager.INSTANCE.updateFrame(frame);
+            AreaUploadManager.INSTANCE.updateFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
+            Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_EMPTY_APPEND_OK: complete empty CPU view -> staged ordered CPU/GPU pair; uncompiled/incomplete empties rejected");
+        } finally {
+            if(batch.commands != null) batch.commands.freeBuffer();
+            area.releaseBuffers();
+            RegionVoxelStore.ENABLED = enabled;
         }
     }
 
