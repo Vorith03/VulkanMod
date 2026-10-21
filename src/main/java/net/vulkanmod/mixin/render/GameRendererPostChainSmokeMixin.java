@@ -47,18 +47,33 @@ public abstract class GameRendererPostChainSmokeMixin {
     @Shadow @Final private ReloadableResourceManager resourceManager;
     @Shadow @Final private TextureManager textureManager;
 
+    @Unique private boolean vulkanmod$screenshotSmokeStarted;
+
+    @Inject(method = "runTick", at = @At("HEAD"))
+    private void vulkanmod$executeScreenshotAfterModelReload(boolean tick, CallbackInfo ci) {
+        if(!Boolean.getBoolean("vulkanmod.ciScreenshotSmoke") || this.vulkanmod$screenshotSmokeStarted)
+            return;
+        Minecraft minecraft = (Minecraft)(Object)this;
+        if(minecraft.getOverlay() != null
+                || net.vulkanmod.render.chunk.voxel.GpuTerrainModelRegistry.qualifiedStateCount() == 0)
+            return;
+        this.vulkanmod$screenshotSmokeStarted = true;
+        try {
+            if(Renderer.getInstance().isRecordingFrame())
+                throw new AssertionError("Screenshot smoke requires a between-frame boundary");
+            ScreenshotReadbackSmokeTest.verify(minecraft);
+            System.exit(0);
+        } catch(Throwable failure) {
+            Initializer.LOGGER.error("Vulkan screenshot readback smoke failed", failure);
+            System.exit(1);
+        }
+    }
+
     @Inject(method = "<init>", at = @At("RETURN"))
     private void vulkanmod$executeVanillaPostChain(GameConfig gameConfig, CallbackInfo ci) {
-        if(Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) {
-            try {
-                ScreenshotReadbackSmokeTest.verify((Minecraft)(Object)this);
-                System.exit(0);
-            } catch(Throwable failure) {
-                Initializer.LOGGER.error("Vulkan screenshot readback smoke failed", failure);
-                System.exit(1);
-            }
-            return;
-        }
+        // Screenshot's mesher-to-raster oracle requires the actual baked model generation.
+        // Let normal initial resource reload finish; never synthesize a model registry here.
+        if(Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) return;
         boolean depthSmoke = Boolean.getBoolean(DEPTH_POST_CHAIN_SMOKE_PROPERTY);
         boolean colorSmoke = Boolean.getBoolean(POST_CHAIN_SMOKE_PROPERTY);
         if (!depthSmoke && !colorSmoke) {
