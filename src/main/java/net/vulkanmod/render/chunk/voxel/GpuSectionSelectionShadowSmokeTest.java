@@ -138,6 +138,121 @@ public final class GpuSectionSelectionShadowSmokeTest {
             candidateStore.close();
         }
         verifyAtomicAppendSelection(fixture.frustum);
+        verifyViewOwnership(fixture.frustum);
+    }
+
+    /** Real uploads/compute/readback across cached reads, quota and fence retirement. */
+    private static void verifyViewOwnership(VFrustum frustum) {
+        var holders = new java.util.ArrayList<GpuSectionSelectionShadowStore>();
+        GpuSectionSelectionShadowStore root = null;
+        try(GpuRegionCandidateGpuStore input = new GpuRegionCandidateGpuStore()) {
+            retireFixtureFrame();
+            root = GpuSectionSelectionShadowStore.tryCreate(Renderer.getFramesNum());
+            if(root == null) throw new AssertionError("View root unavailable");
+            var first = dispatchView(input, root, frustum, 1);
+            var second = dispatchView(input, root, frustum, 2);
+            if(first == null || second == null || first == second)
+                throw new AssertionError("Overlapping views require independent live output");
+            assertViewWords(first, 1);
+            assertViewWords(second, 2);
+            retireFixtureFrame();
+            if(dispatchView(input, root, frustum, 2) != second)
+                throw new AssertionError("Exact cached view must be selected before an idle slot");
+            if(dispatchView(input, root, frustum, 3) != first)
+                throw new AssertionError("Retired slot was not reused for changed view");
+            assertViewWords(second, 2);
+            assertViewWords(first, 3);
+            for(int i = 0; i < 1024; i++) {
+                var holder = GpuSectionSelectionShadowStore.tryCreate(Renderer.getFramesNum());
+                if(holder == null) break;
+                holders.add(holder);
+            }
+            if(holders.size() < 2 || holders.size() == 1024)
+                throw new AssertionError("Expected bounded global output exhaustion");
+            if(dispatchView(input, root, frustum, 4) != null)
+                throw new AssertionError("Exhausted view quota must reject");
+            assertViewWords(first, 3);
+            assertViewWords(second, 2);
+            long revision = GpuSectionSelectionShadowStore.retirementRevision();
+            holders.remove(holders.size() - 1).close();
+            holders.remove(holders.size() - 1).close();
+            if(GpuSectionSelectionShadowStore.retirementRevision() != revision
+                    || dispatchView(input, root, frustum, 4) != null)
+                throw new AssertionError("Closing output must not return quota before retirement");
+            retireFixtureFrame();
+            if(GpuSectionSelectionShadowStore.retirementRevision() == revision)
+                throw new AssertionError("Actual retirement must reopen admission");
+            var fourth = dispatchView(input, root, frustum, 4);
+            var fifth = dispatchView(input, root, frustum, 5);
+            var sixth = dispatchView(input, root, frustum, 6);
+            if(fourth == null || fifth == null || sixth == null
+                    || fourth == fifth || fourth == sixth || fifth == sixth)
+                throw new AssertionError("Retired quota must admit a third simultaneous view");
+            assertViewWords(fourth, 4);
+            assertViewWords(fifth, 5);
+            assertViewWords(sixth, 6);
+            Initializer.LOGGER.info("VULKANMOD_GPU_SELECTOR_VIEW_OWNERSHIP_OK: distinct overlapping output, cached-read protection, retired-slot reuse, exhausted quota rejection and fenced readmission; exact native commands/zero tails");
+        } finally {
+            if(root != null) root.close();
+            for(var holder : holders) holder.close();
+            retireFixtureFrame();
+        }
+    }
+
+    private static GpuSectionSelectionShadowStore dispatchView(GpuRegionCandidateGpuStore input,
+            GpuSectionSelectionShadowStore root, VFrustum frustum, int generation) {
+        var table = new GpuRegionCandidateTable.Builder(GENERATION + generation,
+                REGION_X, REGION_Y, REGION_Z).add(6 * generation, 1, 6 * generation,
+                4 * generation, 0, GpuRegionCandidateTable.flags(true, true, true, TARGET_LAYER)).finish();
+        if(!input.upload(table)) throw new AssertionError("View candidate upload rejected");
+        AreaUploadManager.INSTANCE.submitUploads();
+        return root.dispatchView(input.getResidency(), table, TARGET_LAYER, frustum);
+    }
+
+    private static void retireFixtureFrame() {
+        // Constructor-boundary fixture only; production never waits for a view.
+        Device.getGraphicsQueue().waitIdle();
+        Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+        MemoryManager.getInstance().initFrame(Renderer.getCurrentFrame());
+    }
+
+    private static void assertViewWords(GpuSectionSelectionShadowStore store, int generation) {
+        int size = store.commandOffsetBytes() + store.commandCapacity() * RegionBatchLayout.STRIDE;
+        long buffer = VK_NULL_HANDLE, allocation = VK_NULL_HANDLE;
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var memory = MemoryManager.getInstance();
+            LongBuffer pBuffer = stack.mallocLong(1);
+            PointerBuffer pAllocation = stack.mallocPointer(1);
+            memory.createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    pBuffer, pAllocation);
+            buffer = pBuffer.get(0);
+            allocation = pAllocation.get(0);
+            var command = Device.getGraphicsQueue().beginCommands();
+            var barrier = VkBufferMemoryBarrier.calloc(1, stack);
+            barrier.get(0).sType$Default().srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(store.output().getId()).offset(0L).size(size);
+            vkCmdPipelineBarrier(command.getHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, barrier, null);
+            TransferQueue.uploadBufferCmd(command, store.output().getId(), 0L, buffer, 0L, size);
+            Device.getGraphicsQueue().submitCommands(command);
+            Synchronization.waitFence(command.getFence());
+            Synchronization.INSTANCE.retireSameQueueCommandBufferAfterFence(command);
+            int[] expected = {1, 1, 0, 1, 6 * generation, 1, 6 * generation, 4 * generation, 0};
+            memory.MapAndCopy(allocation, size, pointer -> {
+                var bytes = pointer.getByteBuffer(0, size).order(ByteOrder.nativeOrder());
+                for(int i = 0; i < size / Integer.BYTES; i++) {
+                    int wanted = i < expected.length ? expected[i] : 0;
+                    if(bytes.getInt(i * Integer.BYTES) != wanted)
+                        throw new AssertionError("View " + generation + " word " + i + " expected " + wanted
+                                + " got " + bytes.getInt(i * Integer.BYTES));
+                }
+            });
+        } finally {
+            if(buffer != VK_NULL_HANDLE) MemoryManager.freeBuffer(buffer, allocation);
+        }
     }
 
     /** Real selector/readback proof, not generated-world or portal rasterization. */

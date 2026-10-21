@@ -104,6 +104,7 @@ final class RegionDrawBatch {
     private final GpuSectionSelectionShadowStore[] shadowStores =
             new GpuSectionSelectionShadowStore[TerrainRenderType.VALUES.length];
     private final boolean[] shadowStoreAttempted = new boolean[TerrainRenderType.VALUES.length];
+    private final long[] shadowStoreFailureRevision = new long[TerrainRenderType.VALUES.length];
 
     void draw(DrawBuffers buffers, ChunkArea area, Pipeline pipeline, RenderType renderType,
               double camX, double camY, double camZ) {
@@ -121,7 +122,7 @@ final class RegionDrawBatch {
         // command list. Only build CPU commands after GPU ownership is rejected.
         compareLiveCandidates(area, type);
         publishLiveCandidates(buffers, area, type);
-        GpuSectionSelectionShadowStore shadowStore = dispatchShadowCandidates(area, type, frames);
+        GpuSectionSelectionShadowStore shadowStore = dispatchShadowCandidates(buffers, area, type, frames);
         GpuRegionCandidateTable candidateTable = candidateCaches[type.ordinal()].table;
         VFrustum currentFrustum = VFrustum.currentGpuSelectionFrustum();
         boolean volumeCurrent = currentFrustum != null
@@ -355,7 +356,7 @@ final class RegionDrawBatch {
      * submission is outside the active render pass. When the separate production
      * draw gate is disabled, the CPU FrameBatch below remains the only consumer.
      */
-    private GpuSectionSelectionShadowStore dispatchShadowCandidates(ChunkArea area,
+    GpuSectionSelectionShadowStore dispatchShadowCandidates(DrawBuffers buffers, ChunkArea area,
                                                                      TerrainRenderType type,
                                                                      int frames) {
         if(!GpuSectionSelectionShadowStore.enabled())
@@ -367,16 +368,29 @@ final class RegionDrawBatch {
             return null;
         GpuRegionCandidateGpuStore.Residency residency = area.getGpuCandidateResidency(type);
         if(residency == null || !residency.valid()
-                || residency.generation() != table.generation())
-            return null;
+                || residency.generation() != table.generation()) {
+            // Changing main/portal views cannot wait for a later frame's upload
+            // drain. Submit once, then revalidate proofs changed by callbacks.
+            AreaUploadManager.INSTANCE.submitUploads();
+            publishLiveCandidates(buffers, area, type);
+            table = candidateCaches[layer].table;
+            frustum = candidateCaches[layer].frustum;
+            residency = area.getGpuCandidateResidency(type);
+            if(table == null || frustum == null || residency == null || !residency.valid()
+                    || residency.generation() != table.generation())
+                return null;
+        }
 
         GpuSectionSelectionShadowStore store = shadowStores[layer];
-        if(store == null && !shadowStoreAttempted[layer]) {
+        if(store == null && (!shadowStoreAttempted[layer]
+                || shadowStoreFailureRevision[layer] != GpuSectionSelectionShadowStore.retirementRevision())) {
             shadowStoreAttempted[layer] = true;
             store = GpuSectionSelectionShadowStore.tryCreate(frames);
             shadowStores[layer] = store;
+            if(store == null)
+                shadowStoreFailureRevision[layer] = GpuSectionSelectionShadowStore.retirementRevision();
         }
-        return store != null && store.dispatch(residency, table, layer, frustum) ? store : null;
+        return store == null ? null : store.dispatchView(residency, table, layer, frustum);
     }
 
     /**

@@ -115,6 +115,39 @@ mesher/portal adoption, private packs, long reload/re-entry churn and RX profita
 remain distinct external observations, not implementation acceptance by fixture.
 If combined validation reveals a defect, repair it before owner testing.
 
+## October 21 — public portal admission repair (implementation pending qualification)
+
+Full #1086 / run 39641932762 succeeded on 32247a7, including the seven-phase
+same-save actual-world gate. JAR artifact 12365557695 and logs 12365557689 exist;
+artifact bytes/manifest have not yet been independently inspected. This qualifies
+that checkpoint, not subsequent portal changes or final milestone acceptance.
+
+A controlled public IP3.0.7 portal was constructed with its pinned public API.
+The CPU control completed eight phases with rendered portal count >0 when front
+facing and zero hazards. The integrated GPU control failed admission: current
+terrain GPU residencies and omitted CPU tessellation, but zero accepted command
+owners and positive CPU command uploads. Existing rejection counters isolated
+output readiness. One bounded candidate upload submission followed by original
+proof revalidation restored main-view indirect adoption, while the portal still
+rejected. These observations preceded an execution snapshot rollback; uncommitted
+fixture changes and local logs were lost. Repeat them on the restored worktree.
+
+Reuse decision: changing main/portal generations starve the existing deferred
+candidate publication, and one output cannot serve distinct still-recorded views.
+The existing selector store already owns output, descriptors, parameters, barriers,
+16 MiB quota and fence retirement. A descriptor-only extension cannot protect
+indirect output bytes. Extend that owner with linked bounded view slots and exact
+cache-first selection; cached reads also claim the current frame. One queued upload
+flush/revalidation replaces waiting until a later frame. No new allocator, scheduler,
+shader ABI, synchronous production wait or raised limit. Failed admission remains
+complete CPU fallback. Negative allocation proof expires only at actual native quota
+retirement, never constructor rollback. Root close retires all borrowed slots.
+
+Native coverage being added uses real publication, commands and independent output
+words for overlapping views, cached-read protection, retired-slot reuse, exhaustion,
+withheld quota before retirement and readmission after retirement. Public portal
+pixels/adoption, final full CI, artifacts and owner package remain OPEN.
+
 ## October 21 — bridge-to-raster qualification in progress
 
 The owner explicitly requested continued work toward the full GPU effort after

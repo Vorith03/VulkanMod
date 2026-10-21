@@ -60,7 +60,9 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
     private int regionX;
     private int regionY;
     private int regionZ;
-    private final boolean[] parametersInFlight;
+    private final boolean[] resourcesInFlight;
+    private GpuSectionSelectionShadowStore nextView;
+    private long failedAllocationRevision = -1L;
     private boolean valid;
     private boolean closed;
 
@@ -116,7 +118,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
 
         this.output = createdOutput;
         this.parameters = createdParameters;
-        this.parametersInFlight = new boolean[frames];
+        this.resourcesInFlight = new boolean[frames];
         this.descriptorPool = createdPool;
         this.descriptorSets = createdSets;
     }
@@ -148,11 +150,11 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         warnedUnavailable = true;
         if(failure == null) {
             Initializer.LOGGER.warn(
-                    "GPU indirect shadow path disabled: {}. CPU terrain remains authoritative.",
+                    "GPU indirect shadow path unavailable for this draw: {}. CPU terrain remains authoritative.",
                     reason);
         } else {
             Initializer.LOGGER.warn(
-                    "GPU indirect shadow path disabled: {}. CPU terrain remains authoritative.",
+                    "GPU indirect shadow path unavailable for this draw: {}. CPU terrain remains authoritative.",
                     reason, failure);
         }
     }
@@ -182,19 +184,18 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
                 || residency.regionY() != table.regionY()
                 || residency.regionZ() != table.regionZ())
             return false;
-        if(valid && generation == table.generation()
-                && regionX == table.regionX() && regionY == table.regionY()
-                && regionZ == table.regionZ())
-            return true;
-
         int frame = Renderer.getCurrentFrame();
         if(frame < 0 || frame >= parameters.length)
             return false;
+        if(isValidFor(table.generation(), table.regionX(), table.regionY(), table.regionZ())) {
+            retainForFrame(frame);
+            return true;
+        }
 
         // Protect the descriptor/parameter buffer until its actual frame retirement,
         // not until a different numeric slot happens to dispatch. Cached generations
         // can span a whole ring, so equal slot indices do not imply the same frame.
-        if(parametersInFlight[frame])
+        if(resourcesInFlight[frame])
             return false;
 
         GpuSectionSelectionShadowPipeline.State pipeline =
@@ -248,11 +249,58 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         this.regionX = table.regionX();
         this.regionY = table.regionY();
         this.regionZ = table.regionZ();
-        this.parametersInFlight[frame] = true;
-        MemoryManager.getInstance().addFrameOp(() -> this.parametersInFlight[frame] = false);
+        retainForFrame(frame);
         this.valid = true;
         logReady(table, targetLayer);
         return true;
+    }
+
+    private void retainForFrame(int frame) {
+        if(resourcesInFlight[frame])
+            return;
+        resourcesInFlight[frame] = true;
+        MemoryManager.getInstance().addFrameOp(() -> resourcesInFlight[frame] = false);
+    }
+
+    /**
+     * Borrow an output for a view without overwriting another draw recorded in the
+     * current frame. The root owns all slots, including returned children. Cached
+     * reads claim their slot too: no compute dispatch does not mean no GPU use.
+     */
+    public GpuSectionSelectionShadowStore dispatchView(
+            GpuRegionCandidateGpuStore.Residency residency,
+            GpuRegionCandidateTable table, int layer, VFrustum frustum) {
+        if(closed || table == null || residency == null || frustum == null)
+            return null;
+        int frame = Renderer.getCurrentFrame();
+        if(frame < 0 || frame >= parameters.length)
+            return null;
+        // Preserve an exact cached output before considering any idle slot.
+        for(GpuSectionSelectionShadowStore slot = this; slot != null; slot = slot.nextView) {
+            if(slot.isValidFor(table.generation(), table.regionX(), table.regionY(), table.regionZ()))
+                return slot.dispatch(residency, table, layer, frustum) ? slot : null;
+        }
+        GpuSectionSelectionShadowStore tail = this;
+        for(GpuSectionSelectionShadowStore slot = this; slot != null; slot = slot.nextView) {
+            tail = slot;
+            if(!slot.resourcesInFlight[frame])
+                return slot.dispatch(residency, table, layer, frustum) ? slot : null;
+        }
+        long revision = retirementRevision();
+        if(failedAllocationRevision == revision)
+            return null;
+        GpuSectionSelectionShadowStore slot = tryCreate(parameters.length);
+        if(slot == null) {
+            failedAllocationRevision = retirementRevision();
+            return null;
+        }
+        tail.nextView = slot;
+        return slot.dispatch(residency, table, layer, frustum) ? slot : null;
+    }
+
+    /** Changes only when native output quota is actually retired. */
+    public static long retirementRevision() {
+        return GLOBAL_BUDGET.retirementRevision();
     }
 
     public boolean isValidFor(long generation, int regionX, int regionY, int regionZ) {
@@ -385,6 +433,16 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
 
     @Override
     public void close() {
+        GpuSectionSelectionShadowStore slot = this;
+        while(slot != null) {
+            GpuSectionSelectionShadowStore next = slot.nextView;
+            slot.nextView = null;
+            slot.closeSlot();
+            slot = next;
+        }
+    }
+
+    private void closeSlot() {
         if(closed)
             return;
         closed = true;
@@ -399,11 +457,11 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
             long pool = descriptorPool;
             manager.addFrameOp(() -> {
                 vkDestroyDescriptorPool(Device.device, pool, null);
-                GLOBAL_BUDGET.release(OUTPUT_BYTES);
+                GLOBAL_BUDGET.retire(OUTPUT_BYTES);
             });
         } else {
             vkDestroyDescriptorPool(Device.device, descriptorPool, null);
-            GLOBAL_BUDGET.release(OUTPUT_BYTES);
+            GLOBAL_BUDGET.retire(OUTPUT_BYTES);
         }
     }
 
@@ -420,6 +478,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         private final int maxBytes;
         private int usedBytes;
         private long rejectedAllocations;
+        private long retirementRevision;
 
         Budget(int maxBytes) {
             this.maxBytes = maxBytes;
@@ -438,6 +497,15 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
             if(bytes <= 0 || bytes > usedBytes)
                 throw new IllegalStateException("GPU indirect shadow budget accounting underflow");
             usedBytes -= bytes;
+        }
+
+        synchronized void retire(int bytes) {
+            release(bytes);
+            retirementRevision++;
+        }
+
+        synchronized long retirementRevision() {
+            return retirementRevision;
         }
 
         synchronized String describe() {

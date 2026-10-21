@@ -152,8 +152,8 @@ public final class GeneratedIndirectDrawSmokeTest {
             }
             section.setGpuTerrainCpuMeshComplete(generation, false);
 
-            // First draw initializes real frame-slot ownership and queues candidates. Later frames
-            // must consume the real selector output, not manually passed acceptance predicates.
+            // First draw must publish through the real queue and consume immediately;
+            // changing views cannot depend on a later frame to make candidates ready.
             int unchangedFrames = Renderer.getFramesNum() - 1;
             int lastGenerationDispatchSlot = -1;
             for(int iteration = 0; iteration < 7 + unchangedFrames; iteration++) {
@@ -201,7 +201,7 @@ public final class GeneratedIndirectDrawSmokeTest {
                 int uploads = RegionBatchStats.commandUploads;
                 int accepted = RegionBatchStats.gpuCommandOwnerReasons[0];
                 batch.draw(buffers, area, pipeline, RenderType.cutoutMipped(), 0, 0, 0);
-                if(pass > 0 && pass != 5) {
+                if(pass != 5) {
                     require(RegionBatchStats.gpuCommandOwnerReasons[0] == accepted + 1,
                             "Combined configuration did not admit production GPU command ownership");
                     require(RegionBatchStats.commandUploads == uploads,
