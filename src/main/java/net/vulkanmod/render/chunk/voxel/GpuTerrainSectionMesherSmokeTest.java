@@ -8,6 +8,7 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.Vulkan;
 import org.joml.Vector3i;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,6 +37,33 @@ public final class GpuTerrainSectionMesherSmokeTest {
     };
 
     private GpuTerrainSectionMesherSmokeTest() {}
+
+    /** CI input shared with the real bridge-to-indirect raster oracle; never vertex bytes. */
+    public static void publishIsolatedCubeInputs(ChunkArea area, long generation) {
+        int state = net.minecraft.world.level.block.Block.getId(
+                net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        require(GpuTerrainModelTable.captureCurrent().templateIndexForStateId(state) >= 0,
+                "Raster cube must use a genuinely qualified baked stone model");
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; i++)
+            builder.add(i == 0 ? state : 0, SectionVoxelSnapshot.CPU_REQUIRED
+                    | (i == 0 ? SectionVoxelSnapshot.GPU_FULL_CUBE : 0));
+        SectionVoxelSnapshot voxel = builder.finish();
+        int[] light = new int[GpuLightingDemandMap.SAMPLE_COUNT];
+        int[] shade = new int[light.length];
+        boolean[] passes = new boolean[light.length];
+        int[] directional = new int[6];
+        Arrays.fill(light, 0x00f000f0);
+        Arrays.fill(shade, Float.floatToRawIntBits(1.0f));
+        Arrays.fill(passes, true);
+        Arrays.fill(directional, Float.floatToRawIntBits(1.0f));
+        GpuSparseLightingSnapshot lighting = GpuSparseLightingSnapshot.fromDenseReference(
+                voxel, light, shade, passes, directional);
+        require(lighting != null, "Isolated raster cube lighting must fit");
+        area.publishVoxels(0, 0, 0, voxel, generation);
+        area.publishSparseLighting(0, 0, 0, lighting, generation);
+        AreaUploadManager.INSTANCE.submitUploads();
+    }
 
     public static void verify() {
         if(AreaUploadManager.INSTANCE == null)

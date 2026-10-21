@@ -49,6 +49,7 @@ for mode in no-splash screenshot; do
 done
 require_compat_literal '${integrated_gpu_flags}'
 require_in_mode screenshot VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK
+require_in_mode screenshot VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK
 require_in_mode no-splash snapshot_fml_toml
 require_in_mode chat-heads snapshot_build_gradle
 require_in_mode flywheel snapshot_build_gradle

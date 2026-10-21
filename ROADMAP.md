@@ -1,5 +1,28 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October 21 — bridge-to-raster qualification in progress
+
+The owner explicitly requested continued work toward the full GPU effort after
+internal readiness. That broader effort is **not complete**. A remaining internally
+feasible integration edge is now under qualification: actual production mesher
+output -> bridge async completion/publication/handoff -> native selector ->
+RegionDrawBatch indirect raster, with accepted CPU command-upload bypass.
+
+Reuse decision: existing numerical mesher tests and seeded indirect pixels prove
+separate halves but do not join them. Reuse the existing screenshot draw oracle,
+real ChunkArea voxel/light upload, baked model qualification, bridge dispatcher,
+completion poll, residency and original draw. Add only deterministic isolated-cube
+input in the existing mesher smoke and a second mode of the existing pixel test;
+no new runtime hook, allocator, scheduler, dependency or replacement oracle.
+The fixture-only idle wait exposes signaled helper completion; production remains
+non-blocking. No GPU vertex payload is read back, patched or reuploaded. The
+original seeded test and independent numerical/async oracles remain unchanged.
+
+Validation pending on the new executable. Synthetic inputs and an unlit projection
+remain distinct from loaded ClientLevel terrain, atlas/lightmap rendering, real
+portals/private packs and hardware profitability. Those gates remain open.
+
+
 ## October 20 — integrated implementation ready for real-world qualification
 
 **Internal readiness complete:** exact executable

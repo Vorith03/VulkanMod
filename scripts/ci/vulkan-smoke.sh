@@ -242,6 +242,7 @@ case "$mode" in
     grep -F "VULKANMOD_GPU_TEXTURE_MULTI_DISPATCH_OK" vulkan-screenshot-smoke.log
     grep -F "GPU particle billboard smoke passed" vulkan-screenshot-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK" vulkan-screenshot-smoke.log
+    grep -F "VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK" vulkan-screenshot-smoke.log
     grep -F "GPU animation fallback smoke passed" vulkan-screenshot-smoke.log
     grep -F "Unified GPU texture transfer smoke passed" vulkan-screenshot-smoke.log
     grep -F "Shared GPU animation source pool smoke passed" vulkan-screenshot-smoke.log
