@@ -1,5 +1,16 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## October 21 — owner test initiation, not a performance result
+
+Live package reverified: executable 95221419, CI #1088 successful, exact
+artifact12383727666 and 19-property current activation. Owner controls use the
+same executable with all 19 properties false. Initial matched Prism CPU/GPU
+visual/launch logs are pending; framebuffer (half-size desktop window) must be
+read from profiler, not inferred. No new owner UUID, adoption percentage, CPU
+saved milliseconds, GPU costs or frame-time percentile exists. Preserve current
+**qualified but unmeasured** disposition and exclude historical #1028 as a
+matched baseline. Full owner sequence and missing evidence in witness package.
+
 ## October21 — integrated GPU milestone internally qualified; advance to owner testing
 
 **COMPLETE for the requested implementation/readiness milestone.** Executable

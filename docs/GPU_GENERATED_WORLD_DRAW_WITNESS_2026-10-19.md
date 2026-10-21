@@ -2,6 +2,12 @@
 
 **Internally qualified and ready for focused real-world testing.**
 
+**October 21 owner test session:** Package/CI/artifact reverified at live branch; the
+first Prism/Java17 same-save visual control pair has been requested. Owner framebuffer,
+visual outcomes, admission, capture UUIDs and RX performance remain **unmeasured**.
+Do not reinterpret the preexisting CI screenshots as owner machine results. The
+performance stage follows first visual/adoption inspection, not before.
+
 - Executable: `95221419486931c295b83b1efe1c98ef3df4eef7`.
 - Full [#1088 /39680381869](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869): **SUCCESS, attempt1**.
 - [JAR artifact12383727666](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869/artifacts/12383727666): `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1088-g95221419-all.jar`.

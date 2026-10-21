@@ -1,5 +1,34 @@
 # VulkanMod Forge1.20.1 — qualified integrated GPU checkpoint
 
+## October 21 owner-machine benchmark kickoff (pending evidence)
+
+Current session verified live branch head 3c7b6ef714a2 and its two documentation-only
+changes since executable 95221419, exact #1088 SUCCESS run 39680381869,
+JAR artifact 12383727666 (available), exact SHA256 and all full-CI jobs.
+The 19 integrated properties are unchanged in scripts/ci/integrated-gpu-flags.txt;
+owner control uses the SAME JAR with all 19 set false. Profiler uses
+-Dvulkanmod.performanceProfiler=true, .gpuTimestamps=true and
+-Dvulkanmod.debugGpuGeneratedWorldDraw=true (the debug key is independent).
+Current code's profiler records initial_framebuffer_px and world-window framebuffer
+ranges; DO NOT infer the RX owner's actual resolution from the 5120x1440 display.
+Profiler PR #12 remains open/unmerged and is not part of the executable.
+
+**No owner-machine launch, screenshots, measured framebuffer, capture UUID,
+feature-admission verdict or RX FPS result has yet been received.** Initial owner
+stage: install exact JAR in matched Prism/Forge Java17 profiles, confirm
+config/fml.toml earlyWindowControl=false and regionBatching=true, capture CPU
+allfalse and integrated19 true functional same-save screenshots and logs.
+Use the witness package below as the sole test procedure. After judging visual
+correctness and admission, advance to one matched 60 s min warmup + 10 s stable
+initial terrain + 180 s stationary automated benchmark on the same saved input.
+No performance conclusion, new recorder, implementation work or repeated owner
+request is justified before inspecting the first evidence. If defects appear,
+preserve logs and isolate only the evidenced failure. Keep default-off modes.
+
+Next successor must update this handoff, witness/ledger and NEXT_SESSION_PROMPT with
+actual captures (or explicitly still pending), then generate its own NEW complete
+copyable continuation prompt preserving that perpetual handoff requirement.
+
 ## Current milestone
 
 **The requested integrated GPU implementation milestone is COMPLETE and internally
