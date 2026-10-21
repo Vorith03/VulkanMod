@@ -486,7 +486,7 @@ public final class GpuSectionSelectionSmokeTest {
                 VkBufferMemoryBarrier.Buffer barriers = VkBufferMemoryBarrier.calloc(3, stack);
                 readBarrier(barriers.get(0), input);
                 barriers.get(1).sType$Default().srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                        .dstAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
                         .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                         .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                         .buffer(output.getId()).offset(0L).size(output.getBufferSize());
