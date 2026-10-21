@@ -138,6 +138,9 @@ jobs:
       - name: Smoke-test Vulkan screenshot readback
         if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh screenshot
+      - name: Smoke-test loaded-world CPU/GPU terrain pixels and lifecycle
+        if: needs.plan.outputs.native == 'true'
+        run: bash scripts/ci/vulkan-smoke.sh gpu-world
       - name: Smoke-test Create Chronicles compatibility
         if: needs.plan.outputs.native == 'true' && (github.event_name != 'push' || vars.VULKANMOD_PRIVATE_PACK_REPO == '' || env.PRIVATE_PACK_TOKEN_CONFIGURED != 'true')
         run: bash scripts/ci/create-chronicles-compat-smoke.sh
@@ -182,6 +185,8 @@ jobs:
             run/hs_err_pid*.log
             vulkan-*.javap
             run/screenshot-smoke/screenshots/*.png
+            run/gpu-world-smoke/**/*.png
+            run/gpu-world-smoke/**/*.rgba
           if-no-files-found: ignore
       - name: Upload distributable JAR
         if: success() && needs.plan.outputs.native == 'true' && steps.package.outcome == 'success'

@@ -44,13 +44,17 @@ require_literal 'cp -a run/vk_layer_settings.txt "$fixture_backup_dir/vk_layer_s
 require_literal 'cp -a "$fixture_backup_dir/vk_layer_settings.txt" run/vk_layer_settings.txt'
 
 # Shape guards for shared configuration wiring; native assertions remain mandatory.
-for mode in no-splash screenshot; do
+for mode in no-splash screenshot gpu-world; do
   require_in_mode "$mode" '${integrated_gpu_flags}'
 done
 require_compat_literal '${integrated_gpu_flags}'
 require_in_mode screenshot VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK
 require_in_mode screenshot VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK
 require_in_mode screenshot VULKANMOD_GPU_SELECTOR_RETIRED_SLOT_REUSE_OK
+require_in_mode gpu-world snapshot_fml_toml
+require_in_mode gpu-world 'ciGpuWorldExpectedGpu=false'
+require_in_mode gpu-world 'ciGpuWorldExpectedGpu=true'
+require_in_mode gpu-world 'gpu-world-pixels.py'
 require_in_mode no-splash snapshot_fml_toml
 require_in_mode chat-heads snapshot_build_gradle
 require_in_mode flywheel snapshot_build_gradle
@@ -58,7 +62,7 @@ require_in_mode create snapshot_build_gradle
 require_in_mode create 'maven.modrinth:LNytGWDc:6R069CcK'
 require_in_mode create 'vulkanmod.ciCreateStencilSmoke=true'
 
-for mode in gpu-indirect-shadow depth-post-chain screenshot; do
+for mode in gpu-indirect-shadow depth-post-chain screenshot gpu-world; do
   require_in_mode "$mode" snapshot_vk_layer_settings
 done
 

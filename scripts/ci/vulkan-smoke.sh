@@ -8,7 +8,7 @@ mode="${1:-}"
 integrated_gpu_flags="$(tr '\n' ' ' < scripts/ci/integrated-gpu-flags.txt)"
 
 usage() {
-  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|crash-assistant|chat-heads|flywheel|create}" >&2
+  echo "Usage: $0 {startup|no-splash|gpu-indirect-shadow|post-chain|depth-post-chain|screenshot|gpu-world|crash-assistant|chat-heads|flywheel|create}" >&2
   exit 2
 }
 
@@ -183,6 +183,9 @@ case "$mode" in
     grep -F "VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_APPEND_INDIRECT_OK" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK: previous=APPEND" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK: previous=REPLACE" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_TERRAIN_EMPTY_APPEND_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "Vulkan smoke test passed" vulkan-gpu-indirect-shadow-smoke.log
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-gpu-indirect-shadow-smoke.log; then
       echo "GPU indirect shadow smoke produced invalid Vulkan" >&2
@@ -213,6 +216,48 @@ case "$mode" in
       exit 1
     fi
     rm -f run/vk_layer_settings.txt
+    ;;
+
+  gpu-world)
+    clear_ci_mods
+    snapshot_fml_toml
+    sed -i 's/^earlyWindowControl *= *.*/earlyWindowControl = false/' run/config/fml.toml
+    snapshot_vk_layer_settings
+    mkdir -p run
+    export VK_LAYER_SETTINGS_PATH="$repo_root/run"
+    echo 'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' > run/vk_layer_settings.txt
+    # These are exclusively generated CI readbacks. Never reuse a phase left by
+    # an earlier process that failed before publishing all of its captures.
+    rm -rf run/gpu-world-smoke/cpu run/gpu-world-smoke/gpu
+    # Each process creates its own uniquely named disposable world through game APIs.
+    # Preserve identical settings; explicit false values form the same-JAR CPU control.
+    common_world_options="${JAVA_TOOL_OPTIONS:-}"
+    export JAVA_TOOL_OPTIONS="$common_world_options"
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldPrepare=true ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-prepare-smoke.log
+    grep -F 'VULKANMOD_GPU_WORLD_TEMPLATE_OK' vulkan-world-prepare-smoke.log
+    read -r template_world < run/gpu-world-smoke/template-world.txt
+    if [[ ! "$template_world" =~ ^VulkanMod-CI-GPU-[a-zA-Z0-9-]+$ ]]; then
+      echo 'Invalid exclusively owned CI template name' >&2
+      exit 1
+    fi
+    test ! -e "run/saves/${template_world}-cpu"
+    test ! -e "run/saves/${template_world}-gpu"
+    cp -a "run/saves/$template_world" "run/saves/${template_world}-cpu"
+    cp -a "run/saves/$template_world" "run/saves/${template_world}-gpu"
+    export JAVA_TOOL_OPTIONS="$common_world_options"
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-cpu -Dvulkanmod.ciGpuWorldExpectedGpu=false ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-cpu-smoke.log
+    export JAVA_TOOL_OPTIONS="$common_world_options"
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
+    grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-cpu-smoke.log
+    grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-gpu-smoke.log
+    grep -F "VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED" vulkan-world-gpu-smoke.log
+    grep -E 'VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED:.*replace=[1-9]' vulkan-world-gpu-smoke.log
+    grep -E 'VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED:.*appendPairs=[1-9]' vulkan-world-gpu-smoke.log
+    if grep -E 'Validation Error|SYNC-HAZARD' vulkan-world-{prepare,cpu,gpu}-smoke.log; then
+      echo "Loaded-world smoke produced invalid Vulkan" >&2
+      exit 1
+    fi
+    python3 scripts/ci/gpu-world-pixels.py run/gpu-world-smoke
     ;;
 
   screenshot)

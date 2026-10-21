@@ -38,6 +38,7 @@ NATIVE_STEPS = {
     'Smoke-test vanilla Vulkan post-chain execution',
     'Smoke-test vanilla Vulkan depth post-chain execution',
     'Smoke-test Vulkan screenshot readback',
+    'Smoke-test loaded-world CPU/GPU terrain pixels and lifecycle',
     'Smoke-test Crash Assistant 1.9.7 compatibility',
 }
 QUALIFICATION_STEPS = {
