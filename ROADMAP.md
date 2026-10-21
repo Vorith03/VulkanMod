@@ -1,24 +1,38 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
-## October 20 — integrated consumer qualification and traversal stamp correction
+## October 20 — integrated implementation ready for real-world qualification
 
-The maintenance detour is complete. The active implementation-readiness checklist
-is at the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md (relative to repository root).
-New combined no-splash/screenshot/public-modpack configuration and actual generated
-indirect consumer raster checks revealed a short-stamp sentinel collision in
-ChunkArea: valid traversal -1 lost graph provenance and emitted empty accepted GPU
-draws. Full #1080 / 39514286089 FAILED its green-pixel assertion on eb6989a3;
-compile/package, startup/combined no-splash, indirect and post/depth passed. #1079
-was cancelled. The explicit validity-bit correction and full-short-domain/reset/
-clear tests now require exact full CI. No qualified new JAR, owner test or speedup
-is claimed. See current AGENT_STATUS.md and the checklist for next actions.
+**Internal readiness complete:** exact executable
+`9a6de8480c7ab46ccae7cdc06a652c108daa8078`, full #1082 / run 39551989165
+SUCCESS attempt 1. JAR 12324685470, logs 12323799769; private packs skipped.
+Forge/package, baseline and combined GPU startups, native mesher/lighting/
+publication/selector, 509-pair APPEND, generated consumer/texture/particle pixels,
+synchronization/post/depth, combined public Create Chronicles/IP and Crash
+Assistant all passed. Downloaded 11,074,747-byte JAR manifest/version inspected;
+SHA-256 c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a.
 
-This fixes correctness, not additional CPU offload. Existing supported GPU output
-consumption/CPU bypass and retained semantic/fallback work are inventoried in the
-checklist. The owner milestone is internal readiness for one focused test package;
-actual-world/portal/private-pack/RX performance and Phase 7 default-promotion gates
-remain separate and open. Earlier evidence below remains historical.
+A new actual RegionDrawBatch.draw pixel fixture exposed a production collision:
+valid wrapping short traversal -1 was mistaken for absent graph proof. Explicit
+validity now preserves the full stamp domain without changing CPU traversal,
+barriers/fences or fallback. Native domain/reset/clear and actual -1 REPLACE/
+APPEND/zero-exception/fallback/re-adoption pixels pass. #1080 failed the pixel
+oracle on eb6989a3; #1081 failed new-test private access before native validation;
+#1079 was cancelled. These are not qualified runs.
 
+The single current completion checklist and precise retained CPU semantics are at
+the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md (repository-root-relative).
+Accepted textures/particles/terrain/indirect output feeds production and bypasses
+its documented CPU counterpart; clocks/callbacks/world/light/graph input,
+changed metadata, unsupported semantics and complete recovery remain CPU-owned.
+This session's production correction is correctness, not extra measured offload.
+
+**Next:** the integrated package in docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md.
+Actual loaded-world/portal/private-pack/particle gameplay behavior and RX adoption,
+net CPU/GPU costs/FPS/p95/p99 remain open. Phase 7 actual-world/default-promotion
+and release gates are not closed by internal readiness. Disposition: **qualified
+but unmeasured**. No further independently evidenced in-scope prerequisite remains;
+advance to owner evidence without unrelated churn. Historical entries below retain
+their original boundaries.
 
 ## October 20 maintenance implementation detour
 

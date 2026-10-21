@@ -1,13 +1,25 @@
 # Actual-world generated indirect recording witness — October 19, 2026
 
 
-## Current integrated test package — qualification pending
+## Current integrated test package — internally qualified #1082
 
-Do not use a pending CI executable for owner qualification. Exact final commit,
-full run, JAR and artifact digest will be recorded here after the full suite passes.
-This package replaces the historical terrain-only flag list below; do not combine
+Use this exact internally qualified executable and artifact:
+
+- Commit: `9a6de8480c7ab46ccae7cdc06a652c108daa8078`.
+- Full [#1082 / run 39551989165](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165): **SUCCESS, attempt 1**.
+- [JAR artifact 12324685470](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165/artifacts/12324685470): `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar`.
+- JAR: **11,074,747 bytes**, SHA-256 `c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a` (downloaded bytes/manifest inspected).
+- [Smoke logs 12323799769](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165/artifacts/12323799769).
+
+Combined no-splash, native generated consumer pixels/texture/particle/synchronization
+and public Create Chronicles/IP gates passed. Private resource packs skipped.
+This is **ready for focused real-world testing**, not a release, proven speedup
+or actual loaded-world/portal correctness. No executable change follows this run;
+subsequent documentation-only HEADs reuse its exact executable qualification.
+
+This package replaces the historical terrain-only flag list below. Do not combine
 an old JAR with current flags. One package covers functional qualification and a
-matched performance screening; it is not a request for successive isolated tests.
+matched performance screening, rather than successive isolated owner tests.
 
 ### Setup and the two configurations
 
@@ -83,7 +95,7 @@ Use the same pre-run world snapshot for both configurations. Add to both profile
 
 ```text
 -Dvulkanmod.performanceProfiler.autoBenchmark=true
--Dvulkanmod.performanceProfiler.benchmarkWorld=VulkanMod Benchmark
+-Dvulkanmod.performanceProfiler.benchmarkWorld="VulkanMod Benchmark"
 -Dvulkanmod.performanceProfiler.benchmarkX=0
 -Dvulkanmod.performanceProfiler.benchmarkY=192
 -Dvulkanmod.performanceProfiler.benchmarkZ=0

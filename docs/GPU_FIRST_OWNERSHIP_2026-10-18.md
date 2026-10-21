@@ -6,17 +6,18 @@
 Owner scope: internally qualified, default-off integrated build **ready for one
 real-world qualification package**, not release completion or proven RX speedup.
 This checklist supersedes historical next-step paragraphs below. Qualified
-starting executable: `6c65e00f`, full #1078; final combined validation pending.
+executable: `9a6de848`, full #1082 / run 39551989165 SUCCESS (attempt 1).
+**Internal implementation-readiness milestone complete; real-world qualification open.**
 
 | Path | Production entry / consumed result / CPU displacement | Remaining CPU / disposition | Internal completion evidence |
 | --- | --- | --- | --- |
-| Textures | SpriteTickerMixin -> GpuTextureInterpolationCompute -> unified atlas copy queue; accepted scratch pixels replace Java interpolation, immutable pooled source copies replace pixel staging. Shared pages and 32-row reusable tables aggregate compute. | Clocks, exact source snapshots, custom ticker semantics, mutation invalidation, bounded scheduling and submission are required orchestration; rejected/capacity/unsupported work retains CPU. No new generic animation engine. | Existing transformed ticker, odd/all-mip pixels, overlapping CPU/GPU copies, 320-row wrap and retirement oracles; [ ] combined configuration CI. |
-| Particles | ParticleBillboardMixin inherited exact CampfireSmokeParticle render -> packed slots -> original BufferUploader -> ParticleBillboardCompute -> original graphics draw; accepted four-vertex expansion bypasses CPU transforms/emissions. | Simulation, world/light queries, callbacks, camera/roll and sorting are required semantic inputs. Arbitrary subclass/mod simulations unsupported; CPU materialization is rejection/sorting recovery only. Original vertex upload size retained, not called eliminated. | Native mixed 524-vertex/callback-once, late-state recovery, capacity and descriptor-fence pressure; [ ] combined configuration CI. |
-| Terrain meshing / lighting | ChunkTask capture/preflight -> GpuTerrainSectionMesherBridge -> production mesher -> generation-owned persistent output -> generated handoff. Qualified cubes omit CPU renderBatched; GPU produces complete 20-byte position/UV/AO/color/light vertices. | ModelData/custom models, tint, fluids, block entities, unsupported layers and experimental Forge lighting remain CPU semantics; sparse world/light/halo capture, qualification, VisGraph and publication are required inputs. No approximate simulation or GPU world API. | Existing real model, sparse light and packed-vertex/native async completion, overflow/stale/recovery fixtures; [ ] combined enabled startup/modpack CI. |
-| Culling / selection | WorldRenderer producer graph/direct stamps -> exact frozen VFrustum candidate input -> native selector -> persistent storage+indirect output consumed by RegionDrawBatch.draw. GPU does final candidate frustum/compaction; graph traversal remains. | CPU connectivity/mod traversal and legacy visibility work still needed for world/chunk consumers; no claim that GPU frustum testing replaces graph policy. Unsupported sorted layers retain CPU. | Native exact six-plane/direct-seed/zero-tail oracle; [ ] combined production consumer pixels. Genuine portal and representative graph-set correctness remain external qualification. |
-| Candidate / command preparation | Producer geometry/readiness, ownership/provenance and generated revisions cache unchanged proof; accepted GPU owner skips FrameBatch construction/serialization/upload. | Changed-input metadata validation/serialization and bounded arithmetic express GPU inputs; cached unchanged draws bypass these. Fallback-only CPU command construction remains. No synchronous count readback or speculative new cache. | Existing mode/invalidation/revocation/readiness/identity/stale queued publication fixtures; [ ] actual draw acceptance plus no commandUploads increment. |
-| Generated REPLACE | Exact-generation ready output substitutes CPU command/geometry; original region vertex buffer and auto indices consumed by GPU-selected draw. | CPU complete fallback only on missing/stale/rejected output; input capture/ownership and producer changes required. | Native publisher and resident fingerprint tests; [ ] production draw pixels with nonzero resident offset and CPU commands bypassed. |
-| Atomic APPEND | Generation transaction preserves CPU exceptions then GPU ordinary geometry; paired candidate rows reserve adjacent selector slots atomically. | Java exception geometry intentionally retained; missing half withholds pair and recovers complete CPU mesh. 512 sections / 1,024 commands unchanged. | Existing real transaction/publication queues and 509-pair native capacity/order oracle; [ ] production draw red CPU + green GPU overlapping pixel order and frame-slot reuse. |
+| Textures | SpriteTickerMixin -> GpuTextureInterpolationCompute -> unified atlas copy queue; accepted scratch pixels replace Java interpolation, immutable pooled source copies replace pixel staging. Shared pages and 32-row reusable tables aggregate compute. | Clocks, exact source snapshots, custom ticker semantics, mutation invalidation, bounded scheduling and submission are required orchestration; rejected/capacity/unsupported work retains CPU. No new generic animation engine. | Existing transformed ticker, odd/all-mip pixels, overlapping CPU/GPU copies, 320-row wrap and retirement oracles; [x] combined configuration CI. |
+| Particles | ParticleBillboardMixin inherited exact CampfireSmokeParticle render -> packed slots -> original BufferUploader -> ParticleBillboardCompute -> original graphics draw; accepted four-vertex expansion bypasses CPU transforms/emissions. | Simulation, world/light queries, callbacks, camera/roll and sorting are required semantic inputs. Arbitrary subclass/mod simulations unsupported; CPU materialization is rejection/sorting recovery only. Original vertex upload size retained, not called eliminated. | Native mixed 524-vertex/callback-once, late-state recovery, capacity and descriptor-fence pressure; [x] combined configuration CI. |
+| Terrain meshing / lighting | ChunkTask capture/preflight -> GpuTerrainSectionMesherBridge -> production mesher -> generation-owned persistent output -> generated handoff. Qualified cubes omit CPU renderBatched; GPU produces complete 20-byte position/UV/AO/color/light vertices. | ModelData/custom models, tint, fluids, block entities, unsupported layers and experimental Forge lighting remain CPU semantics; sparse world/light/halo capture, qualification, VisGraph and publication are required inputs. No approximate simulation or GPU world API. | Existing real model, sparse light and packed-vertex/native async completion, overflow/stale/recovery fixtures; [x] combined enabled startup/modpack CI. |
+| Culling / selection | WorldRenderer producer graph/direct stamps -> exact frozen VFrustum candidate input -> native selector -> persistent storage+indirect output consumed by RegionDrawBatch.draw. GPU does final candidate frustum/compaction; graph traversal remains. | CPU connectivity/mod traversal and legacy visibility work still needed for world/chunk consumers; no claim that GPU frustum testing replaces graph policy. Unsupported sorted layers retain CPU. | Native exact six-plane/direct-seed/zero-tail oracle; [x] combined production consumer pixels. Genuine portal and representative graph-set correctness remain external qualification. |
+| Candidate / command preparation | Producer geometry/readiness, ownership/provenance and generated revisions cache unchanged proof; accepted GPU owner skips FrameBatch construction/serialization/upload. | Changed-input metadata validation/serialization and bounded arithmetic express GPU inputs; cached unchanged draws bypass these. Fallback-only CPU command construction remains. No synchronous count readback or speculative new cache. | Existing mode/invalidation/revocation/readiness/identity/stale queued publication fixtures; [x] actual draw acceptance plus no commandUploads increment. |
+| Generated REPLACE | Exact-generation ready output substitutes CPU command/geometry; original region vertex buffer and auto indices consumed by GPU-selected draw. | CPU complete fallback only on missing/stale/rejected output; input capture/ownership and producer changes required. | Native publisher and resident fingerprint tests; [x] production draw pixels with nonzero resident offset and CPU commands bypassed. |
+| Atomic APPEND | Generation transaction preserves CPU exceptions then GPU ordinary geometry; paired candidate rows reserve adjacent selector slots atomically. | Java exception geometry intentionally retained; missing half withholds pair and recovers complete CPU mesh. 512 sections / 1,024 commands unchanged. | Existing real transaction/publication queues and 509-pair native capacity/order oracle; [x] production draw red CPU + green GPU overlapping pixel order and frame-slot reuse. |
 
 No unfinished eligible algorithm is relabelled retained: the bounded supported
 algorithms already have production consumers; newly identified gap is **combined
@@ -55,7 +56,7 @@ native qualification. The real RegionBatchSmokeTest now checks -2/-1/0/MAX/MIN,
 off-frustum graph slots, direct seed/provenance copy/compare, reset and area clear.
 The production pixel oracle deliberately stays at `-1` and still requires exact
 nonzero REPLACE/APPEND pixels, zero-exception APPEND, complete CPU fallback and
-re-adoption. The corrected executable still requires full CI.
+re-adoption. The corrected executable passed full #1082 as recorded below.
 
 Reuse decision: the missing raster edge cannot be proven by current candidate
 metadata/selector readback fixtures. Extend existing ScreenshotReadbackSmokeTest,
@@ -65,6 +66,44 @@ with independently seeded resident vertices and an unlit shader; it does **not**
 claim real mesher output or a loaded world. One plain JVM-flag file is shared by
 existing no-splash/screenshot/public compatibility scripts so configuration cannot
 drift across those clients; no new harness, dependency, scheduler or allocator.
+
+### Final integrated qualification
+
+Exact executable `9a6de8480c7ab46ccae7cdc06a652c108daa8078`, full
+[#1082 / 39551989165](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165),
+SUCCESS attempt 1. JAR artifact **12324685470**, logs **12323799769**.
+Forge build/distribution and nested LWJGL linkage verified; all 24 offline
+contracts, baseline startup, combined GPU no-splash startup, native mesher/model/
+lighting/async publication, indirect/509-pair APPEND/REPLACE, post/depth, combined
+screenshot texture/particle/generated-indirect pixels and synchronization,
+combined public Create Chronicles/IP and Crash Assistant passed. Private packs
+skipped. Native `VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK` and
+`VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK` were observed in actual job logs.
+The latter proves nonzero resident-offset REPLACE, ordered overlapping CPU/GPU
+APPEND, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU
+recovery/re-adoption and no duplicate accepted CPU command uploads. Seeded
+vertices remain distinct from actual loaded-world mesher/portal pixels.
+
+Downloaded artifact bytes were inspected: 11,074,747-byte JAR, manifest and
+mods.toml version `0.3.2-forge.2-build.1082-g9a6de848`, new consumer fixture class,
+SHA-256 `c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a`.
+No renderer run is needed for the final documentation-only checkpoint.
+
+Qualification sequence remains explicit: #1080 failed real pixels on eb6989a3;
+#1081 failed Java test access on cfbd0437 before native checks (logs 12323488387).
+9a6de848 uses public releaseBuffers for the same teardown assertion and qualified
+both the validity-bit fix and all integrated fixtures. #1079 was cancelled.
+No assertions were weakened. Experiments/defaults, ownership limits and recovery
+contracts remain. No known independently repairable in-scope defect/prerequisite
+remains for this test package; do not infer exhaustive world/mod correctness.
+
+The current [test package](GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md) supplies
+exact artifact/setup, shared activation flags, explicit CPU-off control, scenes,
+visual/adoption/performance criteria, failures and log paths. Proceed to that
+focused real-world qualification when its inputs are available; do not reopen
+settled maintenance or invent another optimization solely to continue coding.
+RX speedup/default adoption, real portals/private packs, actual particle callbacks/
+lighting/translucency and sustained gameplay/reload evidence remain open.
 
 ## October 19 — reject stale queued REPLACE publication; full #1073 PASSED
 

@@ -1,5 +1,22 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October 20 — integrated consumer pixels and complete short traversal domain
+
+Current qualified executable `9a6de848`, full #1082 / 39551989165 SUCCESS;
+JAR 12324685470, logs 12323799769. ChunkArea traversal proof has explicit validity:
+addSection establishes it; resetQueue and clearVoxels revoke it. The wrapping
+WorldRenderer short stamp may equal -1; no short value means absent proof.
+Graph visibility, provenance copy/compare and sparse active masks use the same
+validity bit. This fixes accepted but empty GPU draws at the old sentinel value.
+The native producer domain/reset/clear tests and production RegionDrawBatch.draw
+pixels at -1 passed, including nonzero resident offsets, ordered atomic APPEND,
+zero-exception APPEND, complete fallback/re-adoption and accepted CPU command
+upload bypass. The fixture seeds resident vertices; actual world mesher/portal
+pixels remain external qualification. Use the current GPU_FIRST_OWNERSHIP checklist
+and GPU_GENERATED_WORLD_DRAW_WITNESS test package; historical checkpoints below
+retain their original boundaries. Limits, barriers, fences and CPU recovery remain.
+
+
 ## October 19 — reject stale queued REPLACE publication; full #1073 PASSED
 
 **Latest qualified executable:** `85037cfdb2779294676f33ba3b951791d66dec10`; [full #1073 / run 39304235826](https://github.com/Vorith03/VulkanMod/actions/runs/39304235826) **COMPLETED / SUCCESS, attempt 1** on that executable. Forge distributable JAR artifact **12213616043**; smoke logs **12213091579**. Offline contracts, Forge compile/package, both client startup modes (including the production-queue publication smoke), native indirect/terrain/texture/particle/screenshot/synchronization/post/depth, public Create Chronicles/Immersive Portals and Crash Assistant gates passed. Private resource packs were not exercised.

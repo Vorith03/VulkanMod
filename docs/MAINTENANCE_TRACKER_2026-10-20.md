@@ -176,3 +176,14 @@ this assignment. Retained/deferred/blocked migrations are not implementations. N
 cache service prerequisites, parser license/corpus inputs, retained allocators
 and deferred live-widget migration stand. No FPS, actual-world/portal, private
 pack, particle or RX profitability gate closes through this work.
+
+## Post-maintenance integrated qualification
+
+The maintenance dispositions above are unchanged. Integrated follow-up executable
+9a6de848 passed full #1082 / 39551989165 (JAR 12324685470, logs 12323799769;
+private packs skipped). It fixes the valid-short-stamp -1 versus absent graph
+proof collision and adds production generated-indirect consumer pixels plus one
+shared combined configuration. See the single GPU_FIRST_OWNERSHIP checklist and
+current test package. This supersedes #1078 as qualified executable, not as new
+maintenance work or an RX speedup. #1080 pixel and #1081 fixture compile failures
+remain distinct negatives; #1079 cancelled. Continue real-world qualification.

@@ -1,79 +1,71 @@
-# VulkanMod — Complete integrated GPU implementation and qualification
+# VulkanMod — Qualify the integrated GPU build in real-world use
 
-Continue https://github.com/Vorith03/VulkanMod on forge-1.20.1, preserving
-Minecraft 1.20.1, Forge 47.3.0 and Java 17. Ordinary edits, logical commits and
-pushes are authorized. No force push/history rewrite, unrelated merge, release
-publication or deployment. Keep experiments default-off and preserve all native
-ownership/generation/readiness/provenance, exact portal frusta, atomic APPEND,
-512-section/1,024-command bounds, barriers/upload completion/fence retirement and
-complete CPU recovery. Inspect PR #12 before overlapping recorder work.
+Continue https://github.com/Vorith03/VulkanMod on forge-1.20.1. Preserve Minecraft
+1.20.1, Forge 47.3.0 and Java 17. Ordinary edits, logical commits and pushes are
+authorized. No force push/history rewrite, unrelated merge, release or deployment.
+Keep experiments default-off. Inspect profiler PR #12 before overlapping recorder
+work. Prefer existing repository mechanisms and pinned dependencies; record the
+unmet need, alternatives and smallest addition before substantial new machinery.
 
-Read this prompt in full and follow current AGENTS.md §3A against live Git/CI and
-overlapping work. Recover deltas from AGENT_STATUS.md. Read active roadmap,
-optimization ledger, maintenance tracker and the two October 20 audits; retain
-settled maintenance dispositions. Read affected ownership contracts in full.
-The single completion checklist is now at the top of
-GPU_FIRST_OWNERSHIP_2026-10-18.md, superseding stale historical next-step text.
+Follow current AGENTS.md §3A against live Git/CI and overlapping work. Read this
+prompt in full, AGENT_STATUS.md, active roadmap/ledger and the single completion
+checklist at the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md. Read affected
+ownership contracts when investigating/changing them. Retain settled maintenance
+tracker/audit dispositions; use deltas instead of repeating unchanged archaeology.
 
-Owner objective: finish supported GPU-first production consumption and corresponding
-redundant CPU bypass, then deliver one internally qualified build ready for focused
-real-world testing. Continue through implementation/debugging/commit/validation
-cycles; an intermediate fixture, green step, handoff or session duration is not a
-stopping condition. Compaction resumes from durable state. Complete independent
-work before citing external hardware/private-world gaps. Readiness does not mean
-release completion, actual-world pixels or proven RX profitability.
+The internal implementation-readiness milestone is complete on exact executable
+9a6de8480c7ab46ccae7cdc06a652c108daa8078, full #1082 / run 39551989165 SUCCESS,
+attempt 1. JAR artifact 12324685470:
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar.
+Downloaded 11,074,747-byte JAR manifest/version inspected; SHA-256
+c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a.
+Smoke logs 12323799769. All public full gates passed; private packs skipped.
+Documentation-only follow-ups reuse this qualification unless executable/config
+changes invalidate it. Internal readiness is not release completion or RX speedup.
 
-New implementation `1e049005ffe9225f9eae43644e4a850b0c85966f` adds seeded resident
-REPLACE/APPEND pixels through actual RegionDrawBatch.draw and queued GPU selection,
-plus one shared integrated 19-property configuration in no-splash, screenshot and
-public compatibility clients. Full #1079 / run 39514023722 was cancelled/superseded.
-Local follow-up strengthens zero-exception APPEND, complete CPU recovery and
-re-adoption, and makes old REPLACE-only oracle policy explicit under APPEND-enabled
-clients. Inspect live commits/files for its publication and validation state.
-No seeded fixture is a real loaded-world mesher or genuine portal result.
+New combined native consumer pixels exposed a production short-stamp collision:
+WorldRenderer legitimately reaches -1, previously mistaken for absent graph proof.
+ChunkArea now has explicit traversalFrameValid, established by addSection and
+cleared by resetQueue/clearVoxels across visibility/provenance/sparse readers.
+Native -2/-1/0/MAX/MIN/reset/clear and real production RegionDrawBatch.draw pixels
+at -1 passed. Seeded resident vertices prove nonzero-offset REPLACE, ordered
+APPEND, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU
+fallback/re-adoption and accepted CPU command-upload bypass; they are NOT actual
+loaded-world mesher or genuine portal pixels. Preserve independent numerical,
+publication/transaction and native oracles. #1080 failed pixels; #1081 failed new
+test private access before native checks; #1079 cancelled. They are not qualified.
 
-Last verified executable remains 6c65e00f6212a7e2d52571bb7a279ec943efd19a,
-full #1078 / run 39509869276 SUCCESS, JAR 12304984467, logs 12306121182,
-private pack steps skipped. Local 24 offline contracts passed; Gradle distribution
-bootstrap is network-blocked. Do not reuse #1078 as qualification of new code.
+Next use docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md as the one integrated
+real-world test package, with scripts/ci/integrated-gpu-flags.txt and its explicit
+same-JAR CPU-off control. Check any already supplied project/log evidence before
+requesting repetition. Assess separately:
+1. Main-world/genuine-portal visuals, mixed exceptions, particle lighting/
+   translucency/callbacks, dirty rebuild, resource reload/re-entry and churn.
+2. Actual consumption/adoption and corresponding CPU bypass, fallback reasons
+   and denominators. Requested flags or recorded candidate inventory alone do
+   not prove selected nonzero commands or pixels.
+3. Matched converged RX 6900 XT CPU/GPU/submit cost, throughput and render-only/
+   tick-bearing p95/p99. Do not sum overlapping GPU scopes or infer net benefit
+   from code location. Retain untested private packs/hardware/scene boundaries.
 
-Full #1080 / run 39514286089 on eb6989a3 FAILED the screenshot raster oracle
-(expected green ff00ff00, got black ff000000) after all earlier gates passed.
-The fixture exposed a real production short-domain collision: WorldRenderer's
-valid wrapping stamp -1 was treated as no traversal proof. ChunkArea now uses
-explicit traversalFrameValid across all four readers, set at addSection and
-cleared at resetQueue/clearVoxels. Actual-reader local checks pass all 65536 values;
-restored old-sentinel logic fails at -1. Native producer boundary/reset/clear tests
-and actual pixels at -1 must qualify this fix in a new full run.
+Fix demonstrated defects through focused implementation and appropriate local/
+full exact-executable validation; verify new artifacts before additional owner
+tests. Keep generation/provenance/readiness, exact portal frusta, atomic APPEND
+CPU exceptions, 512-section/1,024-command bounds, upload completion, barriers,
+fence retirement and complete CPU recovery. Java clocks/callbacks/world-light
+capture/graph connectivity/changed metadata/unsupported semantics remain required
+CPU work; do not claim all CPU graphics vanished or silently broaden eligibility.
 
-Next: finish/review the correction and full exact-executable CI; fix actual failures
-without weakening assertions. Exercise combined configuration/native consumers and
-pixels plus available publication/lifecycle/recovery cases. Extend existing
-mechanisms and pinned dependencies before adding machinery; record unmet need,
-alternatives and smallest addition for substantial new mechanisms. Preserve
-independent numerical oracles and no speculative performance claims.
+Continue autonomously while independent useful work remains. Do not stop at a
+plan, audit, fixture, intermediate success, context rollover or speculative credit
+concern. If necessary real-world inputs are absent and no independently evidenced
+repairable prerequisite remains, identify that exact external blocker rather than
+manufacturing churn or claiming qualification. Enable no accelerated default or
+release until the actual-world and repeatable profitability gates are satisfied.
 
-Resolve all in-scope implementation gaps or justify concrete unsupported/necessary
-CPU semantics without relabelling unfinished eligible work. Only after exact final
-full CI and artifact verification, prepare one test package with commit/JAR/setup,
-activation flags from current code, matched CPU baseline and integrated GPU run,
-scenes/actions, expected visual/adoption/performance evidence, failure signals and
-log paths. Keep real world/portal/private packs and RX net benefit explicitly
-untested until observed. Do not request repeated intermediate owner tests.
-
-Stop only at full internal acceptance, a demonstrated external blocker after all
-independent work, or an actual execution limit. Never label interrupted/blocked
-work complete. Update AGENT_STATUS.md, roadmap/ledger/checklist and this handoff
-with actual commits, displaced/retained CPU work, validation/artifacts, risks and
-next actions. Finish with a NEW complete copyable continuation prompt that requires
-its successor to update the repository handoff and generate its own NEW complete
-prompt carrying this same requirement forward. If internally complete, advance to
-real-world qualification; otherwise resume the exact unfinished work. This
-contingency does not replace finishing feasible work now.
-
-Correction qualification: `cfbd0437` full #1081 / run 39551568932 failed
-compileJava because the new test directly called private ChunkArea.clearVoxels.
-The test now uses public releaseBuffers (which owns that private teardown) and
-retains the same proof-clearing assertions. This is a fixture Java-access error,
-not a native result for the traversal fix. No #1081 qualified JAR exists. Qualify
-the corrected exact executable in full CI before proceeding to owner tests.
+Before ending, update AGENT_STATUS.md, relevant checklist/roadmap/ledger and this
+repository handoff with actual changes, CPU displacement/retained work, evidence,
+artifacts, risks and next actions. Finish with a NEW complete copyable continuation
+prompt requiring its successor to update the repository handoff and generate its
+own NEW prompt carrying this same requirement forward. That contingency never
+substitutes for completing feasible work in the current session.
