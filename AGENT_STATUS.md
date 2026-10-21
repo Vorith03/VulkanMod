@@ -1,5 +1,24 @@
 # VulkanMod Forge 1.20.1 — Current continuation checkpoint
 
+October 21 continuation: full GPU effort remains open. New mesher-to-indirect
+raster qualification landed in 8261e666; #1083 / 39561858614 was cancelled when
+6e6cabf1 moved the screenshot test after the real initial model reload. Full #1084 /
+39562212856 compiled/packaged and passed startup, mesher/async/indirect/post/depth,
+but failed before screenshot pixels: AreaUploadManager.uploadAsync correctly
+rejected a between-frame upload whose manager still named the previous slot.
+The fixture now calls renderer.resetBuffers (fence retirement) then existing
+AreaUploadManager.updateFrame before preparation, matching the model-bake probes;
+production assertions remain intact. No #1084 qualified JAR or compatibility claim.
+
+A separate selector defect was reproduced with extracted actual guard/state code:
+old numeric lastDispatchFrame rejects a changed generation on a safely retired
+same slot; callback-owned in-flight state passes retired reuse and still rejects
+same-frame mutation. The existing frame callback replaces the sentinel, without
+new epoch/cache/scheduler, barriers or waits. Native tests now cover same-frame
+rejection and unchanged output across a complete frame ring before changed
+APPEND adoption/no duplicate CPU command upload. Full qualification pending.
+
+
 ## October 21 — bridge-to-raster qualification in progress
 
 The owner explicitly requested continued work toward the full GPU effort after

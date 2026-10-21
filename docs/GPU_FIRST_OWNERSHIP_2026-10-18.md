@@ -1,5 +1,24 @@
 # GPU-first renderer ownership — October 18, 2026
 
+### Selector slot retirement correction (qualification pending)
+
+Inspection found an eligible-adoption gap: lastDispatchFrame compared only a
+numeric ring index. After unchanged cached draws span a full ring, a new generation
+on that same retired slot is rejected despite no live descriptor use. CPU fallback
+is safe but redundant and can repeat for intermittent views. Reuse alternatives:
+main-submit counts distinguish epochs but do not themselves prove slot retirement;
+renderer already owns exact fence-safe MemoryManager frame callbacks. Replace the
+last-index sentinel with one fixed per-slot in-flight bit cleared by that existing
+callback. Keep one dispatch per still-live slot, all barriers and lazy CPU recovery.
+No new epoch/cache/scheduler or synchronization primitive is introduced.
+
+The native raster test deliberately repeats unchanged output across one complete
+slot ring before APPEND generation turnover, then requires same-slot GPU ownership
+and no CPU command upload. The native selector also attempts a different genuinely
+uploaded generation before frame retirement and requires rejection, unchanged-output
+reuse and preservation of old exact output. Full native qualification is pending.
+
+
 
 ## Integrated implementation milestone — October 20 completion checklist
 

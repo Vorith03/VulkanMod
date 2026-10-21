@@ -42,6 +42,10 @@ public final class GeneratedIndirectDrawSmokeTest {
         // No extra production hook or configuration defaults: only the existing screenshot fixture calls this.
         if(!Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) throw new IllegalStateException("CI only");
         Renderer renderer = Renderer.getInstance();
+        renderer.resetBuffers();
+        // At the between-frame entry, the upload manager still names the previous
+        // slot until beginFrame. Retire first, then enter the normal upload domain.
+        AreaUploadManager.INSTANCE.updateFrame(Renderer.getCurrentFrame());
         ChunkArea area = new ChunkArea(93, new Vector3i(0, 0, 0));
         DrawBuffers buffers = area.getDrawBuffers();
         RegionDrawBatch batch = new RegionDrawBatch();
@@ -150,7 +154,11 @@ public final class GeneratedIndirectDrawSmokeTest {
 
             // First draw initializes real frame-slot ownership and queues candidates. Later frames
             // must consume the real selector output, not manually passed acceptance predicates.
-            for(int pass = 0; pass < 7; pass++) {
+            int unchangedFrames = Renderer.getFramesNum() - 1;
+            int lastGenerationDispatchSlot = -1;
+            for(int iteration = 0; iteration < 7 + unchangedFrames; iteration++) {
+                int pass = iteration <= 1 ? iteration
+                        : iteration <= 1 + unchangedFrames ? 1 : iteration - unchangedFrames;
                 if(pass == 2) {
                     section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
                             meshed ? mesherPlan.modelGeneration() : 1L, meshed ? mesherPlan.faceCount() : 1,
@@ -173,6 +181,9 @@ public final class GeneratedIndirectDrawSmokeTest {
                 }
                 renderer.resetBuffers();
                 renderer.beginFrame();
+                if(iteration == 1) lastGenerationDispatchSlot = Renderer.getCurrentFrame();
+                if(pass == 2) require(Renderer.getCurrentFrame() == lastGenerationDispatchSlot,
+                        "Generation turnover must deliberately revisit the retired selector slot");
                 // Publish/submit through the actual area queue before the draw resolves residency.
                 if(pass > 0) {
                     batch.publishLiveCandidates(buffers, area, type, true, true, true);
@@ -215,6 +226,7 @@ public final class GeneratedIndirectDrawSmokeTest {
                     }
                 }
             }
+            Initializer.LOGGER.info("VULKANMOD_GPU_SELECTOR_RETIRED_SLOT_REUSE_OK: unchanged cached frames span a complete slot ring; changed generation re-adopted on the same numeric slot without CPU command upload; meshed={}", meshed);
             if(meshed) Initializer.LOGGER.info("VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK: baked stone qualification, sparse input upload, production bridge async compute/completion/handoff, six resident faces without vertex readback/reupload, native selector and production indirect pixels, REPLACE/APPEND/recovery CPU command bypass; synthetic world inputs and unlit projection, not loaded-world/portal adoption");
             else Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK: production RegionDrawBatch.draw, real queued candidates/selector/indirect fetch, nonzero resident offset, REPLACE, atomic CPU/GPU APPEND order, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU recovery and re-adoption, no duplicate accepted CPU command upload; seeded vertices, no loaded world/mesher/portal claim");
         } finally {

@@ -60,6 +60,23 @@ public final class GpuSectionSelectionShadowSmokeTest {
             if(!shadowStore.dispatch(residency, fixture.table, TARGET_LAYER, fixture.frustum))
                 throw new IllegalStateException("Persistent GPU indirect shadow dispatch was not submitted");
 
+            // A second generation in this still-unsubmitted frame must not rewrite the
+            // descriptor or erase output already referenced by its first draw. Use real
+            // independent uploaded bytes so rejection reaches the lifetime guard.
+            try(GpuRegionCandidateGpuStore newerStore = new GpuRegionCandidateGpuStore()) {
+                var newer = new GpuRegionCandidateTable.Builder(GENERATION + 1,
+                        REGION_X, REGION_Y, REGION_Z).finish();
+                if(!newerStore.upload(newer)) throw new AssertionError("New generation upload rejected");
+                AreaUploadManager.INSTANCE.submitUploads();
+                if(!newerStore.getResidency().valid()) throw new AssertionError("New generation not resident");
+                if(shadowStore.dispatch(newerStore.getResidency(), newer, TARGET_LAYER, fixture.frustum))
+                    throw new AssertionError("In-flight parameter descriptor was rewritten before frame retirement");
+                if(!shadowStore.dispatch(residency, fixture.table, TARGET_LAYER, fixture.frustum))
+                    throw new AssertionError("Unchanged resident output must remain reusable in its original frame");
+                if(!shadowStore.isValidFor(fixture.table.generation(), REGION_X, REGION_Y, REGION_Z))
+                    throw new AssertionError("Rejected generation revoked usable old output");
+            }
+
             int outputBytes = shadowStore.commandOffsetBytes()
                     + shadowStore.commandCapacity() * RegionBatchLayout.STRIDE;
             int[] result = new int[outputBytes / Integer.BYTES];

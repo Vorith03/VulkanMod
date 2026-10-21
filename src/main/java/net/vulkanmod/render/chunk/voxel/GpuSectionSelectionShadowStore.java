@@ -60,7 +60,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
     private int regionX;
     private int regionY;
     private int regionZ;
-    private int lastDispatchFrame = -1;
+    private final boolean[] parametersInFlight;
     private boolean valid;
     private boolean closed;
 
@@ -116,6 +116,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
 
         this.output = createdOutput;
         this.parameters = createdParameters;
+        this.parametersInFlight = new boolean[frames];
         this.descriptorPool = createdPool;
         this.descriptorSets = createdSets;
     }
@@ -190,11 +191,10 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         if(frame < 0 || frame >= parameters.length)
             return false;
 
-        // A frame slot owns one parameter buffer and descriptor set. Do not rewrite
-        // either after a helper submission from this same frame; its fence is owned
-        // by the later main-frame submit. A newer generation simply waits until the
-        // renderer advances to another frame slot, keeping the CPU draw authoritative.
-        if(lastDispatchFrame == frame)
+        // Protect the descriptor/parameter buffer until its actual frame retirement,
+        // not until a different numeric slot happens to dispatch. Cached generations
+        // can span a whole ring, so equal slot indices do not imply the same frame.
+        if(parametersInFlight[frame])
             return false;
 
         GpuSectionSelectionShadowPipeline.State pipeline =
@@ -248,7 +248,8 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
         this.regionX = table.regionX();
         this.regionY = table.regionY();
         this.regionZ = table.regionZ();
-        this.lastDispatchFrame = frame;
+        this.parametersInFlight[frame] = true;
+        MemoryManager.getInstance().addFrameOp(() -> this.parametersInFlight[frame] = false);
         this.valid = true;
         logReady(table, targetLayer);
         return true;
