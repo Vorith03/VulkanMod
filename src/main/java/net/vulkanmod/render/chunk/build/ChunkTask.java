@@ -77,7 +77,7 @@ public class ChunkTask {
         private final long voxelGeneration;
         private final boolean gpuTerrainCpuRecoveryRequired;
         private final boolean gpuTerrainHadReadyCpuFallback;
-        private final boolean gpuTerrainHadReadyAppendFallback;
+        private final boolean gpuTerrainHadReadyGeneratedFallback;
         private final boolean gpuTerrainCpuBypassCandidate;
         private final boolean gpuTerrainHybridFreshCandidate;
         private final boolean gpuTerrainHybridRebuildCandidate;
@@ -97,20 +97,21 @@ public class ChunkTask {
             this.voxelGeneration = renderSection.getVoxelGeneration();
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
-            this.gpuTerrainHadReadyAppendFallback = renderSection.hasReadyGpuTerrainAppendFallback();
+            this.gpuTerrainHadReadyGeneratedFallback = renderSection.hasReadyGpuTerrainGeneratedFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
                     && !this.gpuTerrainCpuRecoveryRequired;
             this.gpuTerrainHybridFreshCandidate = RenderSection.gpuTerrainHybridEnabled()
                     && !renderSection.isCompiled() && !this.gpuTerrainCpuRecoveryRequired;
-            // Rebuild omission is allowed only when a complete old CPU mesh can remain
-            // visible while the new APPEND CPU/GPU pair is staged. Sections already
-            // relying on an incomplete GPU-first CPU half must finish CPU recovery first.
+            // A complete old CPU mesh or generated REPLACE/APPEND view remains
+            // visible while the future pair is staged. Actual dispatch failure must
+            // still complete CPU recovery instead of repeatedly retrying omission.
             this.gpuTerrainHybridRebuildCandidate = RenderSection.gpuTerrainHybridEnabled()
                     && renderSection.isCompiled()
+                    && !renderSection.gpuTerrainDispatchRecoveryRequired()
                     && (this.gpuTerrainHadReadyCpuFallback
-                    || this.gpuTerrainHadReadyAppendFallback)
+                    || this.gpuTerrainHadReadyGeneratedFallback)
                     && (!this.gpuTerrainCpuRecoveryRequired
-                    || this.gpuTerrainHadReadyAppendFallback);
+                    || this.gpuTerrainHadReadyGeneratedFallback);
             this.highPriority = highPriority;
             this.initialPopulation = taskDispatcher.terrainPopulation().enabled() && !renderSection.isCompiled();
         }
@@ -338,7 +339,7 @@ public class ChunkTask {
                                     compileResults.gpuTerrainPreflight.faceCount(),
                                     compileResults.gpuTerrainPreflight.ownership(),
                                     this.gpuTerrainHadReadyCpuFallback,
-                                    this.gpuTerrainHadReadyAppendFallback);
+                                    this.gpuTerrainHadReadyGeneratedFallback);
                         }
                         voxels = null;
                     } catch(RuntimeException error) {

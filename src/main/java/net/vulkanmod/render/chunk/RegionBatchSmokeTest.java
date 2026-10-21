@@ -397,6 +397,12 @@ public final class RegionBatchSmokeTest {
     }
 
     private static void verifyGpuAppendRebuildTransactionContract() {
+        verifyGpuAppendRebuildTransactionContract(GpuTerrainDrawHandoff.Ownership.APPEND);
+        verifyGpuAppendRebuildTransactionContract(GpuTerrainDrawHandoff.Ownership.REPLACE);
+    }
+
+    private static void verifyGpuAppendRebuildTransactionContract(GpuTerrainDrawHandoff.Ownership previousOwnership) {
+        int oldDraws = previousOwnership == GpuTerrainDrawHandoff.Ownership.APPEND ? 2 : 1;
         ChunkArea area = new ChunkArea(40, new Vector3i(0, 0, 0));
         DrawBuffers buffers = area.getDrawBuffers();
         RegionDrawBatch.FrameBatch batch = new RegionDrawBatch.FrameBatch();
@@ -422,7 +428,7 @@ public final class RegionBatchSmokeTest {
 
             long oldGeneration = section.getVoxelGeneration();
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
-                            700L, 3, GpuTerrainDrawHandoff.Ownership.APPEND),
+                            700L, 3, previousOwnership),
                     oldGeneration, true);
             section.setGpuTerrainCpuMeshComplete(oldGeneration, false);
             GpuTerrainOutputStore.Reservation oldGpu = area.reserveGpuTerrainOutput(
@@ -431,15 +437,23 @@ public final class RegionBatchSmokeTest {
             require(oldGpu != null && area.publishGpuTerrainOutput(oldGpu, 3, false),
                     "Atomic APPEND baseline GPU half must publish");
             require(section.publishGpuTerrainDrawHandoff(
-                            oldGeneration, GpuTerrainDrawHandoff.Ownership.APPEND),
+                            oldGeneration, previousOwnership),
                     "Atomic APPEND baseline handoff must publish");
             buffers.markMeshChanged(type);
             require(batch.update(buffers, area, type, true)
-                            && batch.drawCount == 2 && batch.gpuDrawCount == 1,
-                    "Atomic APPEND baseline pair must be drawable");
+                            && batch.drawCount == oldDraws && batch.gpuDrawCount == 1,
+                    "Complete old APPEND or REPLACE view must be drawable");
             section.setCompiledSection(new CompiledSection());
-            require(section.hasReadyGpuTerrainAppendFallback(),
-                    "Published APPEND pair must qualify as a complete rebuild fallback");
+            require(section.hasReadyGpuTerrainGeneratedFallback()
+                            && section.hasReadyGpuTerrainAppendFallback()
+                            == (previousOwnership == GpuTerrainDrawHandoff.Ownership.APPEND),
+                    "Published generated view must qualify without confusing REPLACE and APPEND");
+            if(previousOwnership == GpuTerrainDrawHandoff.Ownership.REPLACE) {
+                parameters.vertexBufferSegment.setPending();
+                require(section.hasReadyGpuTerrainGeneratedFallback(),
+                        "REPLACE fallback must not depend on its unused CPU half's readiness");
+                parameters.vertexBufferSegment.setReady();
+            }
 
             int oldCpuOffset = parameters.vertexOffset;
             int oldGpuOffset = area.getGpuTerrainOutputResidency(
@@ -449,8 +463,9 @@ public final class RegionBatchSmokeTest {
             long generation = section.getVoxelGeneration();
             require(generation == oldGeneration + 1L
                             && section.gpuTerrainCpuRecoveryRequired()
-                            && section.hasReadyGpuTerrainAppendFallback(),
-                    "Dirty APPEND baseline must advance inputs while retaining a complete pair fallback");
+                            && !section.gpuTerrainDispatchRecoveryRequired()
+                            && section.hasReadyGpuTerrainGeneratedFallback(),
+                    "Dirty generated baseline must retain a complete view without claiming dispatch failure");
             section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
                             701L, 4, GpuTerrainDrawHandoff.Ownership.APPEND),
                     generation, true);
@@ -566,6 +581,22 @@ public final class RegionBatchSmokeTest {
                             && batch.drawCount == 2 && batch.gpuDrawCount == 1,
                     "Discarding a stale APPEND transaction must leave the previous complete pair intact");
 
+            // An actual failed producer is different from ordinary dirty input.
+            // Even a complete retained generated view must not permit omission retries.
+            long failedGeneration = section.getVoxelGeneration();
+            section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                    703L, 4, GpuTerrainDrawHandoff.Ownership.APPEND), failedGeneration, true);
+            require(section.requestGpuTerrainCpuRecovery(failedGeneration)
+                            && section.gpuTerrainCpuRecoveryRequired()
+                            && section.gpuTerrainDispatchRecoveryRequired()
+                            && section.hasReadyGpuTerrainGeneratedFallback(),
+                    "Actual failure must force CPU recovery while preserving the old complete generated view");
+            section.completeGpuTerrainCpuRecovery(section.getVoxelGeneration());
+            require(section.gpuTerrainCpuMeshComplete() && !section.gpuTerrainCpuRecoveryRequired()
+                            && !section.gpuTerrainDispatchRecoveryRequired()
+                            && !section.hasReadyGpuTerrainGeneratedFallback(),
+                    "Only complete CPU recovery clears failure and retires the old generated view");
+
             Device.getGraphicsQueue().waitIdle();
             Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
             for(int frame = 0; frame < AreaUploadManager.INSTANCE.frameOps.length; ++frame)
@@ -573,7 +604,7 @@ public final class RegionBatchSmokeTest {
             AreaUploadManager.INSTANCE.updateFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
 
             Initializer.LOGGER.info(
-                    "VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK: staged CPU/GPU halves remain hidden, commit together as one generation, and stale transaction discard preserves the previous complete pair");
+                    "VULKANMOD_GPU_TERRAIN_APPEND_TRANSACTION_OK: previous={} staged CPU/GPU halves remain hidden, commit together, stale discard preserves previous view, explicit failure forces complete CPU recovery", previousOwnership);
         } finally {
             if(batch.commands != null)
                 batch.commands.freeBuffer();

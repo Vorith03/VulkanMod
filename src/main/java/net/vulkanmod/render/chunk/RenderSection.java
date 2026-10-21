@@ -53,6 +53,9 @@ public class RenderSection {
     private GpuTerrainDrawHandoff.Ownership gpuTerrainVisibleOwnership =
             GpuTerrainDrawHandoff.Ownership.REPLACE;
     private boolean forceCpuTerrainUntilSuccess;
+    // Actual dispatch/publication failure must force CPU recovery even when a
+    // complete older generated view can still be displayed during that recovery.
+    private boolean gpuTerrainDispatchRecoveryRequired;
     private long gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
     private DrawBuffers.StagedDrawParameters gpuTerrainAppendCpuStage;
     private boolean playerChanged;
@@ -173,7 +176,7 @@ public class RenderSection {
 
     void release() {
         this.invalidateVoxels(false);
-        synchronized(this) { this.forceCpuTerrainUntilSuccess = false; }
+        synchronized(this) { this.forceCpuTerrainUntilSuccess = false; this.gpuTerrainDispatchRecoveryRequired = false; }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
     }
@@ -293,7 +296,7 @@ public class RenderSection {
 
     private void reset() {
         this.invalidateVoxels(false);
-        synchronized(this) { this.forceCpuTerrainUntilSuccess = false; }
+        synchronized(this) { this.forceCpuTerrainUntilSuccess = false; this.gpuTerrainDispatchRecoveryRequired = false; }
         this.cancelTasks();
         this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
@@ -334,14 +337,19 @@ public class RenderSection {
     }
 
     public synchronized boolean hasReadyGpuTerrainAppendFallback() {
-        if(!this.isCompiled()
-                || this.gpuTerrainVisibleGeneration == Long.MIN_VALUE
-                || this.gpuTerrainVisibleOwnership != GpuTerrainDrawHandoff.Ownership.APPEND
+        return this.gpuTerrainVisibleOwnership == GpuTerrainDrawHandoff.Ownership.APPEND
+                && this.hasReadyGpuTerrainGeneratedFallback();
+    }
+
+    /** Complete retained geometry for the existing staged APPEND rebuild transaction. */
+    public synchronized boolean hasReadyGpuTerrainGeneratedFallback() {
+        if(!this.isCompiled() || this.gpuTerrainVisibleGeneration == Long.MIN_VALUE
                 || this.chunkArea == null)
             return false;
 
         DrawBuffers.DrawParameters parameters = this.getDrawParameters(gpuTerrainOutputLayer());
-        if(parameters.indexCount > 0 && !parameters.vertexBufferSegment.isReady())
+        if(this.gpuTerrainVisibleOwnership == GpuTerrainDrawHandoff.Ownership.APPEND
+                && parameters.indexCount > 0 && !parameters.vertexBufferSegment.isReady())
             return false;
 
         GpuTerrainOutputStore.Residency residency =
@@ -357,6 +365,7 @@ public class RenderSection {
     }
 
     public synchronized boolean gpuTerrainCpuRecoveryRequired() { return this.forceCpuTerrainUntilSuccess; }
+    public synchronized boolean gpuTerrainDispatchRecoveryRequired() { return this.gpuTerrainDispatchRecoveryRequired; }
 
     /**
      * Record whether the CPU draw retained by this generation is independently
@@ -381,6 +390,7 @@ public class RenderSection {
             if(generation != this.voxelGeneration)
                 return;
             this.forceCpuTerrainUntilSuccess = false;
+            this.gpuTerrainDispatchRecoveryRequired = false;
             this.gpuTerrainCpuMeshComplete = true;
             this.clearGpuTerrainVisibleHandoff();
             this.generatedCandidateChanged();
@@ -534,6 +544,7 @@ public class RenderSection {
         this.gpuTerrainVisibleGeneration = generation;
         this.gpuTerrainVisibleOwnership = GpuTerrainDrawHandoff.Ownership.APPEND;
         this.forceCpuTerrainUntilSuccess = false;
+        this.gpuTerrainDispatchRecoveryRequired = false;
         this.gpuTerrainCpuMeshComplete = false;
         this.gpuTerrainAppendCpuStage = null;
         this.gpuTerrainAppendCpuStageGeneration = Long.MIN_VALUE;
@@ -553,6 +564,7 @@ public class RenderSection {
                     || !this.gpuTerrainPreflightCpuBypassed)
                 return false;
             this.forceCpuTerrainUntilSuccess = true;
+            this.gpuTerrainDispatchRecoveryRequired = true;
         }
         this.setDirty(false);
         return true;
