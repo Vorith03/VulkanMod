@@ -40,10 +40,9 @@ public final class GpuTerrainSectionMesherSmokeTest {
 
     /** CI input shared with the real bridge-to-indirect raster oracle; never vertex bytes. */
     public static void publishIsolatedCubeInputs(ChunkArea area, long generation) {
-        int state = net.minecraft.world.level.block.Block.getId(
-                net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
-        require(GpuTerrainModelTable.captureCurrent().templateIndexForStateId(state) >= 0,
-                "Raster cube must use a genuinely qualified baked stone model");
+        var table = GpuTerrainModelTable.captureCurrent();
+        require(table.templateCount() > 0, "Raster cube requires a genuinely qualified baked model");
+        int state = table.stateIdForTemplate(0);
         SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
         for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; i++)
             builder.add(i == 0 ? state : 0, SectionVoxelSnapshot.CPU_REQUIRED

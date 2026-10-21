@@ -7,6 +7,10 @@ import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.queue.TransferQueue;
 import org.apache.commons.lang3.Validate;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.vulkan.VkBufferMemoryBarrier;
+
+import static org.lwjgl.vulkan.VK10.*;
 
 import java.nio.ByteBuffer;
 import java.util.Locale;
@@ -175,7 +179,27 @@ public class AreaUploadManager {
         this.stagingCopyBytes += bufferSize;
         this.stagingCopyCount++;
 
-        TransferQueue.uploadBufferCmd(this.commandBuffers[currentFrame], stagingBuffer.getId(), stagingBuffer.getOffset(), bufferId, dstOffset, bufferSize);
+        // Same-queue submission order does not supply memory visibility. A slice can
+        // be overwritten after vertex/index/storage consumers, or uploaded twice
+        // before the next main frame. Keep both dependencies scoped to this range.
+        // ALL_COMMANDS expands only supported queue stages (including CPU-only
+        // graphics devices without compute); the numeric API serves all buffer kinds.
+        try(MemoryStack stack = MemoryStack.stackPush()) {
+            var barrier = VkBufferMemoryBarrier.calloc(1, stack).sType$Default()
+                    .srcAccessMask(VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                    .buffer(bufferId).offset(dstOffset).size(bufferSize);
+            var command = this.commandBuffers[currentFrame].getHandle();
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0, null, barrier, null);
+            TransferQueue.uploadBufferCmd(this.commandBuffers[currentFrame], stagingBuffer.getId(),
+                    stagingBuffer.getOffset(), bufferId, dstOffset, bufferSize);
+            barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                    .dstAccessMask(VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    0, null, barrier, null);
+        }
     }
 
     public void enqueueParameterUpdate(DrawBuffers.ParametersUpdate parametersUpdate) {

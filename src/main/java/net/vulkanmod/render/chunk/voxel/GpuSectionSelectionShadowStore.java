@@ -348,7 +348,9 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
                     .size(residency.byteLength());
             barriers.get(1).sType$Default()
                     .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                    .dstAccessMask(VK_ACCESS_SHADER_WRITE_BIT)
+                    // Selector header atomicAdd/atomicOr read the freshly cleared words
+                    // as well as writing them. Both accesses must see vkCmdFillBuffer.
+                    .dstAccessMask(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                     .buffer(output.getId()).offset(0L).size(OUTPUT_BYTES);

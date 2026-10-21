@@ -199,9 +199,6 @@ public class VulkanImage {
     }
 
     public void transferDstLayout(CommandPool.CommandBuffer commandBuffer) {
-        if (this.currentLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-            return;
-
         try(MemoryStack stack = stackPush()) {
 
             VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.callocStack(1, stack);
@@ -226,6 +223,12 @@ public class VulkanImage {
                 case VK_IMAGE_LAYOUT_UNDEFINED -> {
                     barrier.srcAccessMask(0);
                     sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                }
+                case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL -> {
+                    // Repeated raw uploads can overwrite texels without any intervening
+                    // sample/layout transition. Order those writes even in the same layout.
+                    barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+                    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
                 }
                 case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL -> {
                     barrier.srcAccessMask(VK_ACCESS_SHADER_READ_BIT);

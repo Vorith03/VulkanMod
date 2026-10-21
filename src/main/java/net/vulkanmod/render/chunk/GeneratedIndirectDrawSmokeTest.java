@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.lwjgl.vulkan.VK10.*;
 
-/** Native production-consumer pixels with seeded resident vertices, NOT a loaded-world mesher oracle. */
+/** Independent seeded and production-mesher indirect pixels; no loaded ClientLevel or portal claim. */
 public final class GeneratedIndirectDrawSmokeTest {
     private GeneratedIndirectDrawSmokeTest() {}
 
@@ -227,7 +227,7 @@ public final class GeneratedIndirectDrawSmokeTest {
                 }
             }
             Initializer.LOGGER.info("VULKANMOD_GPU_SELECTOR_RETIRED_SLOT_REUSE_OK: unchanged cached frames span a complete slot ring; changed generation re-adopted on the same numeric slot without CPU command upload; meshed={}", meshed);
-            if(meshed) Initializer.LOGGER.info("VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK: baked stone qualification, sparse input upload, production bridge async compute/completion/handoff, six resident faces without vertex readback/reupload, native selector and production indirect pixels, REPLACE/APPEND/recovery CPU command bypass; synthetic world inputs and unlit projection, not loaded-world/portal adoption");
+            if(meshed) Initializer.LOGGER.info("VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK: baked model qualification, sparse input upload, production bridge async compute/completion/handoff, six resident faces without vertex readback/reupload, native selector and production indirect pixels, REPLACE/APPEND/recovery CPU command bypass; synthetic world inputs and unlit projection, not loaded-world/portal adoption");
             else Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK: production RegionDrawBatch.draw, real queued candidates/selector/indirect fetch, nonzero resident offset, REPLACE, atomic CPU/GPU APPEND order, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU recovery and re-adoption, no duplicate accepted CPU command upload; seeded vertices, no loaded world/mesher/portal claim");
         } finally {
             Vulkan.waitIdle();

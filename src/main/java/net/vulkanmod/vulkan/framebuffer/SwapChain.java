@@ -280,7 +280,10 @@ public class SwapChain extends Framebuffer {
             barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
 
             vkCmdPipelineBarrier(commandBuffer,
-                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,  // srcStageMask
+                    // Chain the layout transition after Renderer's image-available wait,
+                    // whose destination scope is COLOR_ATTACHMENT_OUTPUT. TOP_OF_PIPE
+                    // would let the transition race presentation/acquisition on reuse.
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
                     0,
                     null,
