@@ -126,7 +126,11 @@ run_client() {
 
   configure_lavapipe
   export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} ${property}"
-  timeout 240s xvfb-run -a ./gradlew runClient --stacktrace 2>&1 | tee "$log_file"
+  local gradle_args=()
+  if [[ -n "${VULKANMOD_CI_INIT_SCRIPT:-}" ]]; then
+    gradle_args+=(--init-script "$VULKANMOD_CI_INIT_SCRIPT")
+  fi
+  timeout 240s xvfb-run -a ./gradlew "${gradle_args[@]}" runClient --stacktrace 2>&1 | tee "$log_file"
 }
 
 case "$mode" in
@@ -179,6 +183,7 @@ case "$mode" in
     run_client "-Dvulkanmod.smokeTest=true -Dvulkanmod.smokeExitAtConstructor=true -Dvulkanmod.experimentalGpuIndirectCommands=true -Dvulkanmod.ciGpuIndirectShadowSmoke=true -Dvulkanmod.ciGpuLiveSelectionDiagnosticSmoke=true -Dvulkanmod.validation=true" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_READY" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_INDIRECT_SHADOW_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
+    grep -F "VULKANMOD_GPU_SELECTOR_VIEW_OWNERSHIP_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_LIVE_DIAGNOSTIC_SMOKE_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_CANDIDATE_GEOMETRY_PRODUCER_OK" vulkan-gpu-indirect-shadow-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_REPLACE_CANDIDATE_OK" vulkan-gpu-indirect-shadow-smoke.log
@@ -256,6 +261,11 @@ case "$mode" in
     if grep -E 'Validation Error|SYNC-HAZARD' vulkan-world-{prepare,cpu,gpu}-smoke.log; then
       echo "Loaded-world smoke produced invalid Vulkan" >&2
       exit 1
+    fi
+    if [[ "${VULKANMOD_CI_PUBLIC_PORTAL_WORLD:-false}" == true ]]; then
+      grep -E 'VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED:.*portalView=true' vulkan-world-gpu-smoke.log
+      grep -E 'VULKANMOD_GPU_LOADED_WORLD_ADOPTION:.*portal=true portalViews=[1-9]' vulkan-world-cpu-smoke.log
+      grep -E 'VULKANMOD_GPU_LOADED_WORLD_ADOPTION:.*portal=true portalViews=[1-9]' vulkan-world-gpu-smoke.log
     fi
     python3 scripts/ci/gpu-world-pixels.py run/gpu-world-smoke
     ;;

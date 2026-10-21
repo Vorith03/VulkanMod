@@ -37,10 +37,12 @@ import java.util.concurrent.TimeUnit;
 public final class GpuLoadedWorldSmokeTest {
     private static final boolean ENABLED = Boolean.getBoolean("vulkanmod.ciGpuWorldSmoke");
     private static final boolean GPU = Boolean.getBoolean("vulkanmod.ciGpuWorldExpectedGpu");
+    private static final boolean PORTAL = Boolean.getBoolean("vulkanmod.ciGpuWorldPortal");
+    private static java.lang.reflect.Method portalRenderCount;
     private static final boolean PREPARE = Boolean.getBoolean("vulkanmod.ciGpuWorldPrepare");
     private static final String WORLD = System.getProperty("vulkanmod.ciGpuWorldLoad",
             "VulkanMod-CI-GPU-" + UUID.randomUUID());
-    private static final String[] PHASES = {"initial", "dirty", "recovery", "readopt", "camera", "reload", "reentry"};
+    private static final String[] PHASES = {"initial", "dirty", "recovery", "readopt", "camera", "return", "reload", "reentry"};
     private static int phase;
     private static int state;
     private static long deadline, stableSince, previousModelGeneration, previousSectionGeneration;
@@ -65,6 +67,12 @@ public final class GpuLoadedWorldSmokeTest {
         if(state == 0) {
             if(minecraft.getOverlay() != null || GpuTerrainModelRegistry.qualifiedStateCount() == 0) return;
             if(minecraft.level != null) throw new AssertionError("CI world creation requires an unloaded client");
+            if(PORTAL) {
+                if(!net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat.isAvailable())
+                    throw new AssertionError("Portal control requires the pinned public runtime");
+                portalRenderCount = Class.forName("qouteall.imm_ptl.core.render.context_management.RenderStates")
+                        .getMethod("getRenderedPortalNum");
+            }
             minecraft.options.renderDistance().set(2);
             minecraft.options.simulationDistance().set(2);
             minecraft.options.cloudStatus().set(CloudStatus.OFF);
@@ -131,6 +139,7 @@ public final class GpuLoadedWorldSmokeTest {
                     level.setBlockAndUpdate(new BlockPos(x + 16, 81, z), qualified);
                 }
                 level.setBlockAndUpdate(new BlockPos(20, 82, 4), Blocks.OAK_SLAB.defaultBlockState());
+                if(PORTAL) createPortal(level);
             });
             scenePlaced = true;
             state = 2;
@@ -146,6 +155,7 @@ public final class GpuLoadedWorldSmokeTest {
         }
         if(state == 3 && System.nanoTime() >= nextDiagnostic) {
             nextDiagnostic = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            Initializer.LOGGER.info("GPU_WORLD_DRAW_DIAGNOSTIC: {}", RegionBatchStats.describe());
             Initializer.LOGGER.info("GPU_WORLD_CLIENT_LIGHT_WAIT: ordinary={} mixed={} pending={}",
                     minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY, new BlockPos(4, 82, 4)),
                     minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY, new BlockPos(20, 83, 4)),
@@ -210,16 +220,16 @@ public final class GpuLoadedWorldSmokeTest {
                         .setBlockAndUpdate(new BlockPos(5, 82, 5), Block.stateById(
                                 GpuTerrainModelTable.captureCurrent().stateIdForTemplate(0))));
                 state = 2;
-            } else if(phase == 4) {
+            } else if(phase == 4 || phase == 5) {
                 work = onServer(minecraft, () -> minecraft.getSingleplayerServer().getPlayerList()
                         .getPlayer(minecraft.player.getUUID()).connection
                         .teleport(8.0, 86.0, cameraZ(), cameraYaw(), 25));
                 state = 2;
-            } else if(phase == 5) {
+            } else if(phase == 6) {
                 previousModelGeneration = GpuTerrainModelRegistry.generation();
                 work = minecraft.reloadResourcePacks();
                 state = 2;
-            } else if(phase == 6) {
+            } else if(phase == 7) {
                 minecraft.level.disconnect();
                 minecraft.clearLevel();
                 minecraft.createWorldOpenFlows().loadLevel(new TitleScreen(), WORLD);
@@ -228,7 +238,7 @@ public final class GpuLoadedWorldSmokeTest {
                 minecraft.level.disconnect();
                 minecraft.clearLevel();
                 state = 9;
-                Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_OK: mode={} initial/mixed, dirty REPLACE-to-APPEND, failed-producer CPU recovery/readoption, camera volume change, resource generation reload and save/reentry; deterministic flat scene, not portal/private-pack/RX performance", GPU);
+                Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_OK: mode={} initial/mixed, dirty REPLACE-to-APPEND, failed-producer CPU recovery/readoption, camera volume change, resource generation reload and save/reentry; deterministic flat scene, controlled public portal={}; private-pack/RX performance untested", GPU, PORTAL);
                 System.exit(0);
             }
         }
@@ -240,6 +250,7 @@ public final class GpuLoadedWorldSmokeTest {
             Minecraft minecraft = Minecraft.getInstance();
             if(minecraft.level == null || minecraft.player == null || minecraft.screen != null
                     || minecraft.getOverlay() != null || !Renderer.getInstance().isRecordingFrame()) return;
+            int portalViews = PORTAL ? (int) portalRenderCount.invoke(null) : 0;
             RenderSection ordinary = section(0), mixed = section(16);
             boolean ready = ordinary != null && mixed != null && ordinary.isCompiled() && mixed.isCompiled()
                     && !ordinary.isDirty() && !mixed.isDirty()
@@ -255,8 +266,9 @@ public final class GpuLoadedWorldSmokeTest {
                     && minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY,
                             new BlockPos(20, 83, 4)) == 15
                     && !minecraft.level.getLightEngine().hasLightWork());
+            if(PORTAL && phase != 4) ready &= portalViews > 0;
             if(phase >= 1 && phase <= 3) ready &= ordinary != null && ordinary.getVoxelGeneration() > previousSectionGeneration;
-            if(phase == 5) ready &= GpuTerrainModelRegistry.generation() > previousModelGeneration;
+            if(phase == 6) ready &= GpuTerrainModelRegistry.generation() > previousModelGeneration;
             if(ready && !GPU) ready &= ordinary.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0
                     && mixed.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0;
             if(ready && GPU) {
@@ -290,11 +302,11 @@ public final class GpuLoadedWorldSmokeTest {
                 state = 11;
                 return;
             }
-            Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_ADOPTION: mode={} phase={} gpuOwners={} cpuCommandUploads={} ordinaryCpuIndices={} mixedCpuIndices={} ordinaryCpuComplete={} mixedCpuComplete={}",
+            Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_ADOPTION: mode={} phase={} gpuOwners={} cpuCommandUploads={} ordinaryCpuIndices={} mixedCpuIndices={} ordinaryCpuComplete={} mixedCpuComplete={} portal={} portalViews={}",
                     GPU, PHASES[phase], RegionBatchStats.gpuCommandOwnerReasons[0], RegionBatchStats.commandUploads,
                     ordinary.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount,
                     mixed.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount,
-                    ordinary.gpuTerrainCpuMeshComplete(), mixed.gpuTerrainCpuMeshComplete());
+                    ordinary.gpuTerrainCpuMeshComplete(), mixed.gpuTerrainCpuMeshComplete(), PORTAL, portalViews);
             int[] sky = new int[4];
             BlockPos[] probes = {new BlockPos(4, 82, 4), new BlockPos(20, 83, 4),
                     new BlockPos(4, 80, 4), new BlockPos(20, 80, 4)};
@@ -314,8 +326,27 @@ public final class GpuLoadedWorldSmokeTest {
         } catch(Throwable failure) { fail(failure); }
     }
 
-    private static double cameraZ() { return phase >= 4 ? 28.0 : -12.0; }
-    private static float cameraYaw() { return phase >= 4 ? 180.0F : 0.0F; }
+    private static void createPortal(net.minecraft.server.level.ServerLevel level) {
+        try {
+            var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getOptional(
+                    new net.minecraft.resources.ResourceLocation("immersive_portals", "portal")).orElseThrow();
+            var helper = Class.forName("qouteall.imm_ptl.core.portal.PortalManipulation");
+            var method = helper.getMethod("createOrthodoxPortal", net.minecraft.world.entity.EntityType.class,
+                    net.minecraft.server.level.ServerLevel.class, net.minecraft.server.level.ServerLevel.class,
+                    net.minecraft.core.Direction.class, net.minecraft.world.phys.AABB.class,
+                    net.minecraft.world.phys.Vec3.class);
+            var portal = (net.minecraft.world.entity.Entity) method.invoke(null, type, level, level,
+                    net.minecraft.core.Direction.NORTH, new net.minecraft.world.phys.AABB(5, 81.5, -4, 11, 86.5, -4),
+                    new net.minecraft.world.phys.Vec3(24, 84, -4));
+            portal.getClass().getField("teleportable").setBoolean(portal, false);
+            if(!level.addFreshEntity(portal)) throw new AssertionError("Controlled portal was not added");
+        } catch(ReflectiveOperationException failure) {
+            throw new AssertionError("Pinned public portal API changed", failure);
+        }
+    }
+
+    private static double cameraZ() { return phase == 4 ? 28.0 : -12.0; }
+    private static float cameraYaw() { return phase == 4 ? 180.0F : 0.0F; }
 
     private static RenderSection section(int x) {
         var world = WorldRenderer.getInstance();

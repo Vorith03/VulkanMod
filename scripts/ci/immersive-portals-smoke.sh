@@ -67,6 +67,36 @@ dependencies {
 }
 EOF
 
+# Reuse the pinned public runtime and existing same-save world oracle. Keep
+# ordinary captures/logs distinct so artifact evidence survives this second gate.
+if [[ "${1:-}" == gpu-world ]]; then
+  if [[ -n "$real_base_pack" || -n "$real_overlay_pack" ]]; then
+    echo "Public portal pixel control requires vanilla resources" >&2
+    exit 1
+  fi
+  mkdir -p run/gpu-world-smoke/vanilla
+  for control in cpu gpu; do
+    if [[ -d "run/gpu-world-smoke/$control" ]]; then
+      test ! -e "run/gpu-world-smoke/vanilla/$control"
+      mv "run/gpu-world-smoke/$control" "run/gpu-world-smoke/vanilla/$control"
+    fi
+  done
+  for control in prepare cpu gpu; do
+    if [[ -f "vulkan-world-${control}-smoke.log" ]]; then
+      mv "vulkan-world-${control}-smoke.log" "vulkan-world-vanilla-${control}-smoke.log"
+    fi
+  done
+  mkdir -p run
+  touch run/options.txt
+  sed -i '/^resourcePacks:/d; /^incompatibleResourcePacks:/d' run/options.txt
+  printf 'resourcePacks:["vanilla"]\nincompatibleResourcePacks:[]\n' >> run/options.txt
+  export VULKANMOD_CI_INIT_SCRIPT="$init_script"
+  export VULKANMOD_CI_PUBLIC_PORTAL_WORLD=true
+  export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dvulkanmod.ciGpuWorldPortal=true"
+  bash scripts/ci/vulkan-smoke.sh gpu-world
+  exit 0
+fi
+
 # When supplied, load the real ZIP bytes without ever committing them to the
 # repository. CI uses the small synthetic pack because it cannot access private
 # user assets; a synthetic pass must never count as a real-pack pass.

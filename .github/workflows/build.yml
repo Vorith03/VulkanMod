@@ -141,6 +141,9 @@ jobs:
       - name: Smoke-test loaded-world CPU/GPU terrain pixels and lifecycle
         if: needs.plan.outputs.native == 'true'
         run: bash scripts/ci/vulkan-smoke.sh gpu-world
+      - name: Smoke-test public portal CPU/GPU terrain pixels and lifecycle
+        if: needs.plan.outputs.native == 'true'
+        run: bash scripts/ci/immersive-portals-smoke.sh gpu-world
       - name: Smoke-test Create Chronicles compatibility
         if: needs.plan.outputs.native == 'true' && (github.event_name != 'push' || vars.VULKANMOD_PRIVATE_PACK_REPO == '' || env.PRIVATE_PACK_TOKEN_CONFIGURED != 'true')
         run: bash scripts/ci/create-chronicles-compat-smoke.sh
