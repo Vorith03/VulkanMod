@@ -93,8 +93,9 @@ Existing checked evidence does not establish final acceptance of this worktree.
   real GPU ownership and CPU command bypass.
 - [x] Real public portal pixels/adoption with overlapping main/portal views in
   #1087 and local exact eight-phase controls; bounded existing selector owner extended.
-- [ ] Resolve producer-turnover CPU recovery -> GPU readmission, qualify native
-  readiness/stale callbacks and nine same-save phases with per-capture portal ownership.
+- [x] Producer-turnover CPU recovery -> GPU readmission: final-source native
+  readiness/stale callbacks and nine exact same-save portal phases with per-capture ownership.
+  Final full CI remains a separate required acceptance below.
 - [ ] Qualify the exact final executable through all required full CI gates and
   verify its produced JAR/artifacts.
 - [ ] Update the focused owner package with final artifact, activation, matched
@@ -187,8 +188,11 @@ non-dispatch recovery publication. Actual dispatch failure is captured separatel
 and excludes the retry. Java17 classes/two Gradle tests and all24 contracts passed. Combined native
 indirect-readmission.complete.log exits0 with ZERO validation errors/hazards;
 real pending CPU upload/readmission, exactly-once callback, stale/recycled identity
-and failed-producer revocation tests pass. The positive nine-phase public world
-comparison is running. Temporary per-worker diagnostic logging was removed.
+and failed-producer revocation tests pass. The positive nine-phase public CPU/GPU world comparison passes every640x360
+pixel with ZERO hazards in both runs, including turnover recovery/readmission and
+per-capture front-facing portal generated ownership. Source95221419 (local6bdbf47
+same tree) is in full #1088 /39680381869; final CI/artifact acceptance remains open.
+Temporary per-worker diagnostic logging was removed.
 
 ## October 21 — bridge-to-raster qualification in progress
 

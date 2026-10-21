@@ -2,101 +2,114 @@
 
 ## Active gate
 
-**Integrated GPU effort remains OPEN.** Preserve Minecraft1.20.1 / Forge47.3.0 /
-Java17; experiments default-off. Follow AGENTS.md §3A and the single checklist in
-GPU_FIRST_OWNERSHIP. Maintenance retained/deferred decisions stand. Profiler PR#12
-was inspected (3db6d0d5); no recorder overlap or delegated agents.
+**Final integrated qualification pending.** Preserve Minecraft1.20.1 / Forge47.3.0 /
+Java17 and default-off experiments. Follow AGENTS.md §3A and the ONE completion
+checklist in GPU_FIRST_OWNERSHIP. Maintenance retained/deferred decisions stand.
+No agents; profiler PR#12 inspected at3db6d0d5 and recorder untouched.
 
-## Current executable checkpoint
+## Source and CI
 
-Source:e1abcf39f8e9e993d3b21e0fa50a4e6543137a47. Full CI will start after this
-documentation checkpoint push; inspect live head/run before assuming completion.
-No new qualified JAR yet. GitHub equivalents of the logical local commits:
-- de608023: terrain upload range barriers, raw-image repeated-write ordering,
-  swapchain acquire stage chain, selector atomic-read visibility, qualified template.
-- 4ffe59e6: ready old REPLACE retains geometry for atomic APPEND rebuild; actual
-  dispatch failure remains distinct and forces complete CPU recovery.
-- 7446dce5: compiled CPU-complete empty layer admits staged mixed rebuilding;
-  uncompiled/incomplete empties and pending positive CPU geometry reject.
-- ce34d648: voxel/sparse-light/selector probe atomic headers, including persistent
-  fixture scratch, use transfer-to-shader READ|WRITE dependencies.
-- e1abcf39: same-saved-input loaded-world oracle and required full CI gate.
+Pushed executable **95221419486931c295b83b1efe1c98ef3df4eef7**, source tree
+**e84ec04f30ebded967129afccf27eea1c0d4095a** (local6bdbf47 tree identical).
+Full **#1088 /39680381869** is RUNNING; last observed required build passed,
+startup in progress. Inspect actual metadata/failed step before claiming readiness.
+No qualified #1088 artifact yet. Documentation-only commits do not change this
+executable. GitHub commits fe87d991/3d1ddd73/95221419 correspond to local
+ad567ae/4b2f647/6bdbf47. Shell push has no auth; Git-data tools/expected_sha work.
 
-## Local evidence
+Previous full **#1087 /39677628455 SUCCESS** on3d1ddd73 passed eight-phase
+main/public portal pixels and all required gates; private packs skipped. JAR
+artifact12382993099, logs12381744299. Its bytes were not independently downloaded.
+A local timing-dependent re-entry adoption failure and deterministic turnover
+negative exposed a remaining CPU-recovery -> GPU readmission gap after that green
+run; #1087 is not final acceptance of the current milestone.
 
-Java17 classes and both existing Gradle tests passed. Complete indirect/native and
-screenshot runs exit0 with ZERO Validation Error/SYNC-HAZARD on Ubuntu24
-Lavapipe25.2.8 / validation1.3.275. Native tests cover both previous generated
-ownership modes, stale atomic publication, failed-producer recovery and complete
-empty CPU -> paired commit. Screenshot covers independent seeded AND production
-mesher -> bridge completion/publication -> selector/original RegionDrawBatch pixels,
-full-ring retirement reuse, textures and particles.
+## Changes and CPU displacement
 
-Actual loaded-world CPU/GPU controls pass SEVEN phases with zero hazards and exact
-640x360 raw pixels: initial REPLACE/mixed APPEND, dirty glass conversion, complete
-CPU recovery, readoption, camera reversal, resource reload, save/reentry. Real
-workers/publication/native rendering are used; no vertex readback/patch/reupload
-feeds rendering. Accepted GPU captures have owner1/commandUploads0, ordinary CPU
-indices0 initially then84 exceptions, mixed84, CPU-complete=false. Recovery gives
-ordinary984/CPU-complete=true, then readoption84/false. No representative RX result.
+- RegionDrawBatch submits pending exact candidate input once, then republishes/
+  revalidates original proofs. Changing main/portal views no longer starves readiness.
+- Existing selector owner retains distinct live view slots under unchanged16MiB
+  quota; exact cached output selected first and cached reads claim frame ownership.
+  Root closes all borrowed slots. Allocation rejection expires only on actual
+  native quota retirement, not constructor rollback. Direct same-frame rejection,
+  exact frusta,512 sections/1024 commands, barriers/fences/fallback remain.
+- Non-dispatch incomplete-producer turnover first restores complete CPU geometry,
+  then queues ONE readmission after that upload is ready. Generation/area/dirty/
+  recovery/readiness guards revoke stale callbacks. Actual failed-dispatch recovery
+  is captured separately and never automatically retried through this branch.
+- CI-only per-frame portal witness requires actually recorded generated GPU-owned
+  draws at every front-facing capture, rather than only a once-per-mode marker.
+  Public portal gate preserves vanilla captures/logs and uses pinned IP3.0.7 /
+  Cloth11.1.136 runtime. No new dependency/allocator/scheduler or production wait.
 
-Sibling tooling evidence: indirect-final.complete.log, screenshot-final.complete.log,
-cpu-camera-final.complete.log, gpu-camera-final.complete.log. Current
-run/gpu-world-smoke contains seven paired PNG/raw captures. Final full CI/JAR
-qualification is still required. Startup negatives75 ->1 atomic RAW hazards were
-corrected; the later complete indirect run has0. Old #1084 failed upload-domain
-fixture preparation; #1085 failed assumed stone eligibility. No qualified artifacts.
+Accepted textures replace Java interpolation, exact supported smoke replaces CPU
+billboard expansion, terrain replaces eligible tessellation, GPU indirect ownership
+bypasses FrameBatch construction/serialization/upload. Simulation/callbacks,
+world/light/halo capture, connectivity, changed metadata, unsupported semantics and
+complete CPU recovery remain required CPU. Original particle upload size retained.
+No utilization/placement based speedup, default promotion or release claim.
 
-## Input and execution limits
+## Final-source local evidence
 
-Separate rapid fresh-world setups gave unequal client light inputs (below8 versus
-server11, or above2 versus15). No GPU numerical defect was established. Prepare and
-close ONE authoritative save, then load independent copies of the SAME bytes; actual
-client/server probes agree and all pixels match. Dirty/recovery/reload/reentry
-remain real. Initial rapid-mutation lighting is a fixture setup limitation, not
-claimed fixed. No world light arrays or vertices were patched.
+All24 offline contracts pass. Java17 classes/testRegionBatchLayout/
+testSectionVoxelSnapshot and combined native indirect-readmission pass, exit0 with
+ZERO Validation Error/SYNC-HAZARD. Native coverage includes overlapping outputs,
+cached-read protection, retired-slot reuse, global capacity rejection/readmission,
+atomic APPEND, real pending CPU upload, exactly-once callback and stale/recycled/
+failed-producer revocation. Independent numerical/seeded oracles remain intact.
 
-Active log views were stale; completed processes/readbacks did not establish a
-hang. The speculative Java watchdog and vertex readback diagnostics were removed.
-Wait/resume the exec session before reading complete outputs. Local launcher
-creates a separate complete log from its own descriptor after process completion.
+Same authoritative saved input, separate CPU/GPU copies: **all NINE640x360 public
+portal phase pixels exactly match**, both complete runs exit0 with ZERO hazards.
+Phases: initial,dirty,recovery,readopt,camera,return,reload,reentry,turnover. Each
+front-facing GPU capture has portalViews1/portalGpuOwners1, main owner1 and zero
+CPU command uploads. Initial ordinary CPU indices0; mixed/converted exceptions84.
+Deliberate actual failure gives ordinary984/CPU-complete=true until explicit
+readoption; turnover logs complete CPU upload readmission then returns84/false.
+Actual aperture visually inspected; translated destination slab is visible.
 
-Tools/cache are outside Git under /workspace/scratch/34a9c7ba8b11/tooling: Gradle8.1.1,
-Java17 javac-module wrapper, extracted official Ubuntu Vulkan/Xvfb and run-local.py.
-Derive proxy ports inside the SAME exec invocation. Xvfb uses loopback TCP because
-UNIX bind is unavailable. Root and /tmp caches can vanish between contexts. Avoid
-concurrent cache/build-file mutation. A truncated generated client-extra local JAR
-was rebuilt from verified client.jar/pinned mappings, all ZIP entries checked; no
-project dependency upgraded. All24 offline contracts passed before the final slice;
-rerun after final changes.
+Evidence: sibling tooling/indirect-readmission.complete.log,
+portal-{gpu,cpu}-readmission.complete.log and portal-readmission-pair.log;
+run/gpu-world-smoke/{cpu,gpu} holds9 PNG/raw pairs. The explicit pre-fix
+portal-turnover-negative.complete.log exits1 at phase8 timeout: CPU1008/invalid
+GPU output, recovery=true/dispatchRecovery=false/no ready old fallback. Temporary
+worker diagnostics were removed. No vertex payload readback/patch/reupload or
+light-array injection feeds rendering. Same-save inputs avoid unequal rapid fresh
+client light fields; initial rapid-mutation lighting is not claimed repaired.
 
-## Next independent work
+## Remaining action
 
-Create a genuine same-dimension portal with the existing public IP3.0.7 /
-Cloth11.1.136 fixture and saved-world oracle. Pinned Apache2.0 JAR APIs inspected:
-PortalManipulation.createOrthodoxPortal and RenderStates.getRenderedPortalNum.
-Require actual portal pixels and GPU adoption, not just shader/target fixtures.
-Inspect one persistent selector output per region/layer and one in-flight parameter
-set per frame before changing multi-view admission. Do not assume a fix before
-actual evidence. Preserve exact frusta, bounds, fences and complete CPU fallback.
+Observe #1088 through final required native/world/public compatibility/package
+steps. On failure inspect exact log region and fix; do not weaken checks. On success
+download/inspect actual produced JAR and logs (tool .zip names can contain raw JAR
+bytes), verify manifest/version/CRC/hash and exact-run public nine-phase evidence.
+Finish the sole current package in GPU_GENERATED_WORLD_DRAW_WITNESS with artifact
+links/size/hash and readiness. Update checklist/roadmap/ledger/status/prompt with
+final evidence. Then advance to ONE focused owner qualification package, separating
+visual, adoption/CPU displacement and performance. RX6900XT/RADV, private packs,
+representative owner/cross-dimension/nested portals and long gameplay remain external.
 
-Accepted textures bypass Java interpolation, exact campfire billboards CPU expansion,
-terrain workers eligible tessellation, GPU-selected indirect commands FrameBatch
-construction/serialization/upload. Clocks/callbacks, world/light/halo capture,
-connectivity, changed metadata, unsupported semantics and complete recovery remain
-required CPU. No speedup/default promotion. Finish feasible internal work, then full
-exact-executable CI/JAR verification and one updated owner package in
-GPU_GENERATED_WORLD_DRAW_WITNESS. Private packs, representative owner scenes and
-RX6900XT profitability remain distinct external evidence. No intermediate owner test.
+## Environment and rollback
 
-## Historical rollback baseline
+Workspace /workspace/scratch/34a9c7ba8b11/VulkanMod. An execution snapshot reverted
+to90ba/old dirty files; preserved in git stash snapshot-recovery and sibling patch,
+then restored remote32247 and reconstructed work. DO NOT pop that old stash onto
+current source. Scratch/tools can disappear; remote Git is durable. Current local
+6bdbf47 is tree-equivalent to remote95221419; reconcile via fetch before ordinary
+push, preserving any intervening work/uncommitted docs.
 
-Last full qualified executable:9a6de8480c7ab46ccae7cdc06a652c108daa8078,
-full#1082 /39551989165 SUCCESS attempt1. JAR12324685470,
-VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar,
-11,074,747 bytes; SHA256 c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a;
-logs12323799769; private packs skipped. This does not qualify current changes.
+Sibling tooling contains Gradle8.1.1/cache, Java17 javac-module wrapper, extracted
+Ubuntu Vulkan/Xvfb, gradle-local.py/run-local.py/run-portal.py/pair-final.py. Derive
+proxy host/port INSIDE same exec. Xvfb uses loopback TCP. Public launcher snapshots/
+restores build.gradle; never commit its temporary pinned runtime diff. No runtime
+is active now. Completed descriptor-backed logs are authoritative over active stale
+file excerpts. Cold corrupt generated client-extra and deobf Cloth caches were
+reconstructed/regenerated from pinned verified inputs; no dependency changed.
 
-Every successor must update this handoff, relevant checklist/roadmap/ledger and
-NEXT_SESSION_PROMPT, then generate its own NEW complete copyable continuation
-prompt requiring the next successor to do the same. This is not a stopping rule.
+Verified earlier rollback32247a7/#1086: actual artifact12365557695 JAR
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1086-g32247a7d-all.jar,
+11,091,626 bytes, SHA256 a27588e6ffd31fe7d1406d1527818d9ca9c73614dd96877649bae9c3376a63c9;
+CRC/manifest/version/ranges inspected; logs12365557689. This does not qualify952.
+
+Every successor must update repository handoff and generate its own NEW complete
+copyable continuation prompt requiring the next successor to do the same. This
+contingency never substitutes for completing feasible work in this session.

@@ -1,16 +1,22 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
-## October21 — seven-phase saved-world qualification; full CI pending
+## October21 — nine-phase portal integration locally qualified; final full CI running
 
-Source e1abcf39 locally passes complete native indirect/screenshot suites with zero
-validation errors/hazards and exact CPU/GPU pixels in seven actual loaded-world
-phases, including dirty atomic conversion, full recovery/readoption, camera and
-reload/reentry. Ready old REPLACE and complete-empty CPU layers now admit existing
-staged APPEND ownership; real failure still forces CPU. Upload/acquire/atomic-header
-dependencies are corrected. Single current checklist:GPU_FIRST_OWNERSHIP. Final
-full CI/JAR and real public portal/multi-view coverage remain open. Last full
-rollback:#1082. Disposition:locally qualified but unmeasured; no speedup/default
-promotion, maintenance retained/deferred decisions unchanged.
+Executable95221419486931c295b83b1efe1c98ef3df4eef7, full #1088 /39680381869
+RUNNING; final JAR/artifact acceptance remains open. All24 contracts, Java17/two
+Gradle tests and native readiness/capacity/stale/failure checks pass. All NINE
+same-save public portal CPU/GPU640x360 phases match exactly, zero hazards. Actual
+portal generated GPU ownership is required per front-facing capture; accepted
+main draws have zero CPU command uploads. Producer-turnover CPU recovery now
+readmits GPU work once after ready CPU upload, preserving actual dispatch-failure
+recovery. Earlier full #1087/3d1ddd73 and #1086/32247a7 passed their then-current
+gates, but do not qualify this later source. Single checklist:GPU_FIRST_OWNERSHIP.
+Next: final full CI, actual JAR verification and the focused owner package. CPU
+orchestration/unsupported semantics/complete recovery remain explicit; RX benefit,
+private packs and representative owner scenes are unmeasured. Disposition:locally
+qualified but unmeasured pending final integration CI. Defaults and maintenance
+retained/deferred decisions unchanged. Historical pending/next paragraphs below
+retain their original dates and are superseded by this checkpoint.
 
 
 ## October 21 — stricter local native qualification, full GPU effort remains open
