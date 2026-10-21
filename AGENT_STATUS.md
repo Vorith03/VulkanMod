@@ -1,149 +1,102 @@
-# VulkanMod Forge 1.20.1 — Current continuation checkpoint
-
-October 21 continuation: full GPU effort remains open. New mesher-to-indirect
-raster qualification landed in 8261e666; #1083 / 39561858614 was cancelled when
-6e6cabf1 moved the screenshot test after the real initial model reload. Full #1084 /
-39562212856 compiled/packaged and passed startup, mesher/async/indirect/post/depth,
-but failed before screenshot pixels: AreaUploadManager.uploadAsync correctly
-rejected a between-frame upload whose manager still named the previous slot.
-The fixture now calls renderer.resetBuffers (fence retirement) then existing
-AreaUploadManager.updateFrame before preparation, matching the model-bake probes;
-production assertions remain intact. No #1084 qualified JAR or compatibility claim.
-
-A separate selector defect was reproduced with extracted actual guard/state code:
-old numeric lastDispatchFrame rejects a changed generation on a safely retired
-same slot; callback-owned in-flight state passes retired reuse and still rejects
-same-frame mutation. The existing frame callback replaces the sentinel, without
-new epoch/cache/scheduler, barriers or waits. Native tests now cover same-frame
-rejection and unchanged output across a complete frame ring before changed
-APPEND adoption/no duplicate CPU command upload. Full qualification pending.
-
-
-## October 21 — bridge-to-raster qualification in progress
-
-The owner explicitly requested continued work toward the full GPU effort after
-internal readiness. That broader effort is **not complete**. A remaining internally
-feasible integration edge is now under qualification: actual production mesher
-output -> bridge async completion/publication/handoff -> native selector ->
-RegionDrawBatch indirect raster, with accepted CPU command-upload bypass.
-
-Reuse decision: existing numerical mesher tests and seeded indirect pixels prove
-separate halves but do not join them. Reuse the existing screenshot draw oracle,
-real ChunkArea voxel/light upload, baked model qualification, bridge dispatcher,
-completion poll, residency and original draw. Add only deterministic isolated-cube
-input in the existing mesher smoke and a second mode of the existing pixel test;
-no new runtime hook, allocator, scheduler, dependency or replacement oracle.
-The fixture-only idle wait exposes signaled helper completion; production remains
-non-blocking. No GPU vertex payload is read back, patched or reuploaded. The
-original seeded test and independent numerical/async oracles remain unchanged.
-
-Validation pending on the new executable. Synthetic inputs and an unlit projection
-remain distinct from loaded ClientLevel terrain, atlas/lightmap rendering, real
-portals/private packs and hardware profitability. Those gates remain open.
-
+# VulkanMod Forge1.20.1 — continuation checkpoint
 
 ## Active gate
 
-**Integrated implementation-readiness milestone complete; focused real-world
-qualification is next.** Minecraft 1.20.1 / Forge 47.3.0 / Java 17 unchanged.
-Follow AGENTS.md §3A and docs/NEXT_SESSION_PROMPT.md. The single completion
-checklist is at the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md. Actual-world/
-release/default-promotion gates remain open; internal readiness is not speedup.
+**Integrated GPU effort remains OPEN.** Preserve Minecraft1.20.1 / Forge47.3.0 /
+Java17; experiments default-off. Follow AGENTS.md §3A and the single checklist in
+GPU_FIRST_OWNERSHIP. Maintenance retained/deferred decisions stand. Profiler PR#12
+was inspected (3db6d0d5); no recorder overlap or delegated agents.
 
-## Exact qualified executable and artifacts
+## Current executable checkpoint
 
-- `9a6de8480c7ab46ccae7cdc06a652c108daa8078`, full
-  [#1082 / 39551989165](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165),
-  **COMPLETED / SUCCESS, attempt 1**, checked against live run/job metadata/logs.
-- [JAR artifact 12324685470](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165/artifacts/12324685470):
-  `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar`.
-  Downloaded bytes inspected: 11,074,747 bytes; SHA-256
-  `c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a`;
-  manifest/mods.toml version and new fixture class verified.
-- [Logs artifact 12323799769](https://github.com/Vorith03/VulkanMod/actions/runs/39551989165/artifacts/12323799769).
-  Forge compile/package/nested LWJGL linkage, all 24 offline contracts, baseline
-  startup, combined GPU no-splash, native model/mesher/lighting/async publication,
-  indirect/509-pair APPEND/REPLACE, post/depth, generated consumer/texture/particle
-  pixels and synchronization, combined public Create Chronicles/IP and Crash
-  Assistant passed. All three private-fixture steps skipped.
-- Final documentation-only checkpoint reuses this executable; no renderer rerun
-  is needed solely for updated documentation.
+Source:e1abcf39f8e9e993d3b21e0fa50a4e6543137a47. Full CI will start after this
+documentation checkpoint push; inspect live head/run before assuming completion.
+No new qualified JAR yet. GitHub equivalents of the logical local commits:
+- de608023: terrain upload range barriers, raw-image repeated-write ordering,
+  swapchain acquire stage chain, selector atomic-read visibility, qualified template.
+- 4ffe59e6: ready old REPLACE retains geometry for atomic APPEND rebuild; actual
+  dispatch failure remains distinct and forces complete CPU recovery.
+- 7446dce5: compiled CPU-complete empty layer admits staged mixed rebuilding;
+  uncompiled/incomplete empties and pending positive CPU geometry reject.
+- ce34d648: voxel/sparse-light/selector probe atomic headers, including persistent
+  fixture scratch, use transfer-to-shader READ|WRITE dependencies.
+- e1abcf39: same-saved-input loaded-world oracle and required full CI gate.
 
-## Changes and causal evidence
+## Local evidence
 
-- `1e049005`: shared 19-property integrated configuration in existing no-splash,
-  screenshot and public compatibility clients; new CI-only production indirect
-  draw raster edge. Default-off baseline startup retained.
-- `eb6989a3`: explicit REPLACE-only test policy under APPEND-enabled clients;
-  zero-exception APPEND, rejected-proof complete CPU recovery and re-adoption.
-- `cfbd0437`: **production fix** for short traversal stamp -1 colliding with
-  ChunkArea's absent-proof sentinel. WorldRenderer legitimately traverses every
-  short value; graph visibility/copy/comparison/sparse masks previously suppressed
-  a valid -1 traversal while accepting GPU command ownership. One explicit
-  traversalFrameValid bit is established by addSection and cleared by resetQueue/
-  clearVoxels. CPU traversal/stamps and native synchronization unchanged.
-- `9a6de848`: test uses public releaseBuffers for teardown, retaining all assertions.
+Java17 classes and both existing Gradle tests passed. Complete indirect/native and
+screenshot runs exit0 with ZERO Validation Error/SYNC-HAZARD on Ubuntu24
+Lavapipe25.2.8 / validation1.3.275. Native tests cover both previous generated
+ownership modes, stale atomic publication, failed-producer recovery and complete
+empty CPU -> paired commit. Screenshot covers independent seeded AND production
+mesher -> bridge completion/publication -> selector/original RegionDrawBatch pixels,
+full-ring retirement reuse, textures and particles.
 
-Actual log markers VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK and
-VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK passed. Producer tests cover
--2/-1/0/MAX/MIN, off-frustum graph visits, direct seeds, reset and area clear.
-The raster fixture deliberately uses -1 and the real queued candidate residency,
-selector, RegionDrawBatch.draw, nonzero resident vertex offset and screenshot
-readback. It proves REPLACE, ordered overlapping CPU/GPU APPEND, zero-exception
-APPEND, frame-slot reuse, complete CPU fallback/re-adoption and no duplicate
-accepted CPU command upload. **Resident vertices are independently seeded; this
-is not a loaded-world mesher/portal pixel result.** Existing independent native
-model/lighting/packed-vertex and publication/transaction oracles remain intact.
+Actual loaded-world CPU/GPU controls pass SEVEN phases with zero hazards and exact
+640x360 raw pixels: initial REPLACE/mixed APPEND, dirty glass conversion, complete
+CPU recovery, readoption, camera reversal, resource reload, save/reentry. Real
+workers/publication/native rendering are used; no vertex readback/patch/reupload
+feeds rendering. Accepted GPU captures have owner1/commandUploads0, ordinary CPU
+indices0 initially then84 exceptions, mixed84, CPU-complete=false. Recovery gives
+ordinary984/CPU-complete=true, then readoption84/false. No representative RX result.
 
-Local extracted actual readers passed all 65,536 valid stamps plus absent-proof
-rejection; restoring the old sentinel failed specifically at -1. All 24 offline
-contracts passed locally using the Java 17 compiler module. Gradle bootstrap was
-network-blocked locally; only full CI supplies Forge/native qualification.
+Sibling tooling evidence: indirect-final.complete.log, screenshot-final.complete.log,
+cpu-camera-final.complete.log, gpu-camera-final.complete.log. Current
+run/gpu-world-smoke contains seven paired PNG/raw captures. Final full CI/JAR
+qualification is still required. Startup negatives75 ->1 atomic RAW hazards were
+corrected; the later complete indirect run has0. Old #1084 failed upload-domain
+fixture preparation; #1085 failed assumed stone eligibility. No qualified artifacts.
 
-## Failed/cancelled attempts remain distinct
+## Input and execution limits
 
-- #1079 / 39514023722 cancelled/superseded; not qualified.
-- #1080 / 39514286089 on eb6989a3 failed actual generated-consumer pixels:
-  expected ff00ff00, got ff000000 with GPU ownership accepted. Logs 12308050624;
-  no qualified JAR. This exposed the production sentinel bug.
-- #1081 / 39551568932 on cfbd0437 failed compileJava because the new test called
-  private clearVoxels. Logs 12323488387; no native result or qualified JAR.
-- Prior qualified baseline 6c65e00f / #1078 / 39509869276, JAR 12304984467,
-  logs 12306121182 remains historical maintenance evidence; #1077 passed on
-  c303cf26, #1076 failed compilation, #1075 cancelled.
+Separate rapid fresh-world setups gave unequal client light inputs (below8 versus
+server11, or above2 versus15). No GPU numerical defect was established. Prepare and
+close ONE authoritative save, then load independent copies of the SAME bytes; actual
+client/server probes agree and all pixels match. Dirty/recovery/reload/reentry
+remain real. Initial rapid-mutation lighting is a fixture setup limitation, not
+claimed fixed. No world light arrays or vertices were patched.
 
-## CPU ownership, safety and next action
+Active log views were stale; completed processes/readbacks did not establish a
+hang. The speculative Java watchdog and vertex readback diagnostics were removed.
+Wait/resume the exec session before reading complete outputs. Local launcher
+creates a separate complete log from its own descriptor after process completion.
 
-Accepted GPU texture pixels bypass Java interpolation; exact campfire billboards
-bypass CPU four-vertex expansion; qualified REPLACE/APPEND workers omit GPU-owned
-ordinary tessellation; GPU selector ownership skips duplicate FrameBatch command
-construction/serialization/upload. Unchanged candidate proofs are cached.
-Clocks, Java/mod callbacks, sparse world/light/halo capture, graph connectivity,
-changed candidate metadata, unsupported semantics and complete recovery remain
-necessary CPU work, explicitly inventoried in the checklist. No new FPS claim.
+Tools/cache are outside Git under /workspace/scratch/34a9c7ba8b11/tooling: Gradle8.1.1,
+Java17 javac-module wrapper, extracted official Ubuntu Vulkan/Xvfb and run-local.py.
+Derive proxy ports inside the SAME exec invocation. Xvfb uses loopback TCP because
+UNIX bind is unavailable. Root and /tmp caches can vanish between contexts. Avoid
+concurrent cache/build-file mutation. A truncated generated client-extra local JAR
+was rebuilt from verified client.jar/pinned mappings, all ZIP entries checked; no
+project dependency upgraded. All24 offline contracts passed before the final slice;
+rerun after final changes.
 
-Experiments remain default-off. Preserve generation/provenance/readiness, exact
-portal frusta, 512 sections/1,024 commands, atomic APPEND CPU exceptions, queue
-barriers, upload completion, fences and complete CPU fallback. The maintenance
-tracker's retained/deferred decisions stand. PR #12 remains open at 3db6d0d5;
-inspected, no recorder overlap or merge.
+## Next independent work
 
-Use docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md as the **one focused test
-package**, with scripts/ci/integrated-gpu-flags.txt, explicit same-JAR CPU-off
-control, setup/scenes, separate visual/adoption/performance criteria and log paths.
-No independently evidenced in-scope prerequisite remains for that package.
-Actual loaded-world mesher/selector/portal pixels, private packs, real particle
-callback/lighting/translucency/camera/reload/re-entry/sustained gameplay pressure,
-and RX 6900 XT adoption/net CPU/GPU/FPS/p95/p99 remain unqualified. Obtain/analyze
-that evidence next; do not manufacture an unrelated maintenance or optimization
-slice to avoid the actual external boundary. Check existing supplied evidence
-before requesting repetition. Fix any demonstrated defect before new owner tests.
+Create a genuine same-dimension portal with the existing public IP3.0.7 /
+Cloth11.1.136 fixture and saved-world oracle. Pinned Apache2.0 JAR APIs inspected:
+PortalManipulation.createOrthodoxPortal and RenderStates.getRenderedPortalNum.
+Require actual portal pixels and GPU adoption, not just shader/target fixtures.
+Inspect one persistent selector output per region/layer and one in-flight parameter
+set per frame before changing multi-view admission. Do not assume a fix before
+actual evidence. Preserve exact frusta, bounds, fences and complete CPU fallback.
 
-Historical evidence is recoverable in Git and
-[the archive](docs/AGENT_STATUS_ARCHIVE_2026-10-20.md), including older negative
-#1067/#1060/#1064, cancelled #1071, #1070 attempt-1 failure versus attempt-2
-success, #1054/#1050–1052/#1047–1048/#1041–1042 and #1028 UUID e05f2b31.
+Accepted textures bypass Java interpolation, exact campfire billboards CPU expansion,
+terrain workers eligible tessellation, GPU-selected indirect commands FrameBatch
+construction/serialization/upload. Clocks/callbacks, world/light/halo capture,
+connectivity, changed metadata, unsupported semantics and complete recovery remain
+required CPU. No speedup/default promotion. Finish feasible internal work, then full
+exact-executable CI/JAR verification and one updated owner package in
+GPU_GENERATED_WORLD_DRAW_WITNESS. Private packs, representative owner scenes and
+RX6900XT profitability remain distinct external evidence. No intermediate owner test.
+
+## Historical rollback baseline
+
+Last full qualified executable:9a6de8480c7ab46ccae7cdc06a652c108daa8078,
+full#1082 /39551989165 SUCCESS attempt1. JAR12324685470,
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar,
+11,074,747 bytes; SHA256 c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a;
+logs12323799769; private packs skipped. This does not qualify current changes.
 
 Every successor must update this handoff, relevant checklist/roadmap/ledger and
-rolling prompt, then finish with a NEW complete copyable continuation prompt
-requiring its own successor to do the same.
+NEXT_SESSION_PROMPT, then generate its own NEW complete copyable continuation
+prompt requiring the next successor to do the same. This is not a stopping rule.

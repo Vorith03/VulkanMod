@@ -1,5 +1,59 @@
 # GPU-first renderer ownership — October 18, 2026
 
+## October 21 — empty complete CPU fallback admission
+
+The same BuildTask staged APPEND admission asks hasReadyGpuTerrainCpuFallback.
+It rejects indexCount0 even when the section is compiled and CPU-complete. An
+empty complete layer has no pending vertex read and is a complete old view; this
+needlessly retains full CPU tessellation when an empty layer becomes mixed.
+Reuse the existing completeness bit, compile state and staged transaction. Admit
+zero indices only behind both complete/compiled proofs; positive counts still
+require segment readiness, incomplete or negative counts still reject. Extend the
+existing native transaction oracle from an empty CPU layer to a complete paired
+commit; do not invent another transaction or infer profitability.
+
+## October 21 — evidenced eligible dirty-rebuild gap (in progress)
+
+Actual loaded GPU world initial capture proved REPLACE plus paired APPEND recording,
+GPU residency on both real worker sections, ordinary CPU indices=0, mixed CPU
+exceptions=84, both CPU-complete=false and commandUploads=0. Dirtying the REPLACE
+section with one glass exception then timed out the required GPU re-adoption:
+BuildTask recognizes only a ready old APPEND pair for atomic rebuild fallback.
+A ready old GPU-only REPLACE is also complete geometry but is needlessly rebuilt
+entirely on CPU. This is unfinished eligible displacement, not a retained semantic.
+
+Reuse decision: existing staged CPU allocation, staged GPU reservation and
+GpuTerrainAppendRebuildTransaction already keep any old visible GPU generation
+until both future halves commit; no transaction/allocator/kernel replacement is
+needed. Extend its fallback proof to ready REPLACE as well as APPEND (CPU readiness
+is required only for APPEND's actual exception half). Dirty-incomplete and real
+GPU dispatch failure currently share a recovery flag; add one explicit failure bit
+so the existing dirty-pair exception cannot retry omission after an actual failure.
+Keep ordinary dirty recovery state and full CPU recovery until successful complete
+publication; clear the failure bit only at existing successful/reset boundaries.
+Qualify old visibility, new atomic pair, stale rejection and actual worker pixels.
+
+
+## October 21 — stricter local native qualification, full GPU effort remains open
+
+Local transformed Java 17/Forge compilation and the complete screenshot suite now
+pass with actual production bridge mesher output -> residency/handoff -> native
+selector -> RegionDrawBatch pixels, alongside the original independent seeded and
+numerical tests. Full-ring cached output reuse and same-slot changed-generation
+adoption/CPU command bypass pass. Newer local synchronization validation exposed
+and then cleared two production defects: acquire-wait/first swapchain layout
+transition stage chaining, and missing shader-read access for selector atomic
+header operations after transfer fill. Final local screenshot process exited 0
+with zero Validation Error/SYNC-HAZARD; full exact-executable CI remains required.
+
+#1083 cancelled; #1084 failed fixture upload-domain preparation; #1085 passed the
+new retired-slot seeded pixels but failed assumed-stone qualification. The fixture
+now selects an actually qualified baked model. These failed runs have no qualified
+JAR. Last full qualified baseline remains #1082 / 9a6de848. Loaded-world CPU/GPU
+workers/pixels/rebuild/reload/re-entry automation is being developed independently;
+no loaded-world, portal/private-pack or RX performance claim is made yet.
+
+
 ### Selector slot retirement correction (qualification pending)
 
 Inspection found an eligible-adoption gap: lastDispatchFrame compared only a
@@ -20,13 +74,29 @@ reuse and preservation of old exact output. Full native qualification is pending
 
 
 
-## Integrated implementation milestone — October 20 completion checklist
+## Integrated implementation milestone — current completion checklist
 
 Owner scope: internally qualified, default-off integrated build **ready for one
 real-world qualification package**, not release completion or proven RX speedup.
 This checklist supersedes historical next-step paragraphs below. Qualified
 executable: `9a6de848`, full #1082 / run 39551989165 SUCCESS (attempt 1).
-**Internal implementation-readiness milestone complete; real-world qualification open.**
+**The expanded integrated GPU milestone is OPEN.** The historical #1082
+qualification predates the current fixes and loaded-world gate. Existing checked
+fixture evidence below remains historical, not final acceptance of this worktree.
+
+- [x] Production mesher output reaches the original indirect raster consumer in
+  the local transformed screenshot suite, with redundant CPU command upload bypass.
+- [x] Local native selector retirement/synchronization and old REPLACE/APPEND/
+  empty-CPU transactions, including failed-producer complete CPU recovery.
+- [x] Fresh SAME-save CPU/GPU pixels match in seven actual loaded-world phases,
+  including camera, recovery/readoption and reload/reentry; zero Vulkan hazards,
+  real GPU ownership and CPU command bypass.
+- [ ] Real public portal pixels/adoption with overlapping main/portal views;
+  inspect selection output/parameter ownership before extending it.
+- [ ] Qualify the exact final executable through all required full CI gates and
+  verify its produced JAR/artifacts.
+- [ ] Update the focused owner package with final artifact, activation, matched
+  baseline, visual/adoption/performance criteria and remaining external limits.
 
 | Path | Production entry / consumed result / CPU displacement | Remaining CPU / disposition | Internal completion evidence |
 | --- | --- | --- | --- |

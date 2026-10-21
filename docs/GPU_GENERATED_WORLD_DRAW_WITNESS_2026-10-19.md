@@ -1,7 +1,40 @@
 # Actual-world generated indirect recording witness — October 19, 2026
 
+## October21 — real loaded-world main-view qualification
 
-## Current integrated test package — internally qualified #1082
+Source e1abcf39f8e9e993d3b21e0fa50a4e6543137a47 locally passes complete native
+indirect/screenshot suites with zero validation errors/hazards. SAME-save CPU/GPU
+controls match every pixel in seven640x360 phases: initial REPLACE/mixed APPEND,
+dirty conversion, complete CPU recovery, GPU readoption, camera reversal, resource
+reload and save/reentry. Real workers/publication/native draw produce owner1 /
+commandUploads0; ordinary CPU indices0 initially,84 exceptions after conversion,
+mixed84; ordinary984/CPU-complete=true during recovery then84/false after readoption.
+No GPU vertex payload readback/patch/reupload feeds rendering. This is controlled
+loaded-world correctness/adoption, not representative RX coverage/performance or
+actual portal/private-pack qualification. Final full CI/artifacts remain required.
+
+Production fixes reuse existing owners: fence-owned selector retirement, swapchain
+acquire chain, terrain upload range dependencies, repeated image WAW dependency,
+atomic READ|WRITE headers, ready REPLACE/APPEND and empty-complete-CPU staged rebuild
+fallback. Actual failed producers still force full CPU recovery. Native startup
+negative sequence75 ->1 ->0 RAW hazards is preserved; assertions remain intact.
+
+Separate rapid fresh-world mutation gave unequal client light fields (below8 versus
+server11 or above2 versus15); no GPU numerical defect established. Existing
+WorldOpenFlows/save/load and standard copy now provide identical serialized scene
+input to both controls. Per-capture client/server probes, all exact pixels and zero
+hazard gates remain. No light-array injection. Initial rapid-mutation light state
+is an unqualified setup boundary, not reported repaired. Active file views were
+stale; no deadlock established. Temporary watchdog/vertex diagnostics removed.
+Inspect completed outputs: sibling tooling/{indirect-final,screenshot-final,
+cpu-camera-final,gpu-camera-final}.complete.log.
+
+Next feasible internal coverage: actual public IP3.0.7 portal pixels/adoption using
+its pinned creation/count APIs and the same oracle. Inspect selector output/parameter
+ownership for overlapping main/portal views before extending it. Preserve exact
+frusta and complete fallback; do not request owner testing before this work finishes.
+
+## Historical rollback package — internally qualified #1082
 
 Use this exact internally qualified executable and artifact:
 
@@ -13,9 +46,9 @@ Use this exact internally qualified executable and artifact:
 
 Combined no-splash, native generated consumer pixels/texture/particle/synchronization
 and public Create Chronicles/IP gates passed. Private resource packs skipped.
-This is **ready for focused real-world testing**, not a release, proven speedup
-or actual loaded-world/portal correctness. No executable change follows this run;
-subsequent documentation-only HEADs reuse its exact executable qualification.
+This was the October20 checkpoint. October21 executable changes require a new
+qualified artifact before owner testing. Keep this as rollback evidence; it does
+not qualify the current GPU milestone.
 
 This package replaces the historical terrain-only flag list below. Do not combine
 an old JAR with current flags. One package covers functional qualification and a

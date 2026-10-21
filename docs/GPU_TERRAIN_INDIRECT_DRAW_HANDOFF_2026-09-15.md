@@ -1,5 +1,33 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October 21 — complete startup probe validation
+
+A reliably captured complete local startup log passed the extended APPEND/native
+assertions and both Gradle tests but exposed75 RAW hazards in independent voxel/
+sparse-light/selector probes. Each shader uses atomicAdd/atomicOr on a header
+initialized by vkCmdFillBuffer, while its existing barrier grants shader WRITE
+only. Extend those existing buffer-specific output barriers to READ|WRITE,
+matching the corrected production selector/result-header policy. Model-table and
+vertex output buffers are writeonly and remain WRITE-only. The first rerun
+reduced75 hazards to1: the persistent-vertex fixture also uses the sparse-light
+shader atomic scratch header (not a writeonly vertex target), so that fifth
+scratch barrier receives the same READ|WRITE correction. No oracle/result is
+replaced, no validation error suppressed and no shader arithmetic changed. Rerun
+all native startup/indirect/combined gates; prior exit0 is not qualification.
+
+## October 21 — local synchronization validation follow-up
+
+The newer local validation layer reports selector output binding 1 READ_AFTER_WRITE
+from vkCmdFillBuffer to shader storage reads. section_select_probe.comp uses
+atomicAdd/atomicOr on that cleared header; the existing output barrier admitted
+only SHADER_WRITE. Add SHADER_READ to that same transfer-to-compute destination
+access mask. Existing mesher result-header barriers already include both accesses
+and need no change. This reuses the authoritative selector barrier, changes no
+algorithm/allocator/queue or CPU fallback, and must pass real native validation.
+The independently reproduced swapchain acquisition chain fix is recorded in the
+current world-witness document. No validation warning is suppressed.
+
+
 ### Selector slot retirement correction (qualification pending)
 
 Inspection found an eligible-adoption gap: lastDispatchFrame compared only a

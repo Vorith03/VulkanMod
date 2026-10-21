@@ -1,113 +1,126 @@
-# VulkanMod — Qualify the integrated GPU build in real-world use
-
-October 21 continuation: full GPU effort remains open. New mesher-to-indirect
-raster qualification landed in 8261e666; #1083 / 39561858614 was cancelled when
-6e6cabf1 moved the screenshot test after the real initial model reload. Full #1084 /
-39562212856 compiled/packaged and passed startup, mesher/async/indirect/post/depth,
-but failed before screenshot pixels: AreaUploadManager.uploadAsync correctly
-rejected a between-frame upload whose manager still named the previous slot.
-The fixture now calls renderer.resetBuffers (fence retirement) then existing
-AreaUploadManager.updateFrame before preparation, matching the model-bake probes;
-production assertions remain intact. No #1084 qualified JAR or compatibility claim.
-
-A separate selector defect was reproduced with extracted actual guard/state code:
-old numeric lastDispatchFrame rejects a changed generation on a safely retired
-same slot; callback-owned in-flight state passes retired reuse and still rejects
-same-frame mutation. The existing frame callback replaces the sentinel, without
-new epoch/cache/scheduler, barriers or waits. Native tests now cover same-frame
-rejection and unchanged output across a complete frame ring before changed
-APPEND adoption/no duplicate CPU command upload. Full qualification pending.
-
-
-## October 21 — bridge-to-raster qualification in progress
-
-The owner explicitly requested continued work toward the full GPU effort after
-internal readiness. That broader effort is **not complete**. A remaining internally
-feasible integration edge is now under qualification: actual production mesher
-output -> bridge async completion/publication/handoff -> native selector ->
-RegionDrawBatch indirect raster, with accepted CPU command-upload bypass.
-
-Reuse decision: existing numerical mesher tests and seeded indirect pixels prove
-separate halves but do not join them. Reuse the existing screenshot draw oracle,
-real ChunkArea voxel/light upload, baked model qualification, bridge dispatcher,
-completion poll, residency and original draw. Add only deterministic isolated-cube
-input in the existing mesher smoke and a second mode of the existing pixel test;
-no new runtime hook, allocator, scheduler, dependency or replacement oracle.
-The fixture-only idle wait exposes signaled helper completion; production remains
-non-blocking. No GPU vertex payload is read back, patched or reuploaded. The
-original seeded test and independent numerical/async oracles remain unchanged.
-
-Validation pending on the new executable. Synthetic inputs and an unlit projection
-remain distinct from loaded ClientLevel terrain, atlas/lightmap rendering, real
-portals/private packs and hardware profitability. Those gates remain open.
-
+# Continue VulkanMod integrated GPU implementation and qualification
 
 Continue https://github.com/Vorith03/VulkanMod on forge-1.20.1. Preserve Minecraft
-1.20.1, Forge 47.3.0 and Java 17. Ordinary edits, logical commits and pushes are
-authorized. No force push/history rewrite, unrelated merge, release or deployment.
-Keep experiments default-off. Inspect profiler PR #12 before overlapping recorder
-work. Prefer existing repository mechanisms and pinned dependencies; record the
-unmet need, alternatives and smallest addition before substantial new machinery.
+1.20.1, Forge47.3.0 and Java17. Ordinary edits, logical commits and pushes are
+authorized; no force push/shared-history rewrite, unrelated merge, release or
+deployment. Experiments remain default-off. No agents unless explicitly authorized.
+Profiler PR#12 was inspected (3db6d0d5); check its current delta before recorder work.
 
-Follow current AGENTS.md §3A against live Git/CI and overlapping work. Read this
-prompt in full, AGENT_STATUS.md, active roadmap/ledger and the single completion
-checklist at the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md. Read affected
-ownership contracts when investigating/changing them. Retain settled maintenance
-tracker/audit dispositions; use deltas instead of repeating unchanged archaeology.
+The full GPU milestone is NOT COMPLETE. Continue autonomously until acceptance is
+satisfied or a demonstrated external/execution blocker prevents necessary progress
+and independent work is exhausted. A plan, passing fixture, intermediate green CI,
+chat length or handoff is not a stopping condition. Do not request successive owner
+tests while feasible internal work remains. This overrides discretionary rollover.
 
-The internal implementation-readiness milestone is complete on exact executable
-9a6de8480c7ab46ccae7cdc06a652c108daa8078, full #1082 / run 39551989165 SUCCESS,
-attempt 1. JAR artifact 12324685470:
-VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar.
-Downloaded 11,074,747-byte JAR manifest/version inspected; SHA-256
-c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a.
-Smoke logs 12323799769. All public full gates passed; private packs skipped.
-Documentation-only follow-ups reuse this qualification unless executable/config
-changes invalidate it. Internal readiness is not release completion or RX speedup.
+Follow current AGENTS.md §3A against live Git/CI. Read AGENT_STATUS.md and this prompt
+in full, active ROADMAP/optimization ledger, maintenance tracker/both October20
+audits and affected ownership contracts. Use deltas for unchanged evidence; preserve
+settled maintenance dispositions. Maintain the ONE completion checklist in
+GPU_FIRST_OWNERSHIP across textures, particles, terrain/lighting, culling, candidate/
+indirect preparation, REPLACE and atomic APPEND. Do not relabel unfinished eligible
+work retained. Inspect existing owners, partial implementations and pinned dependency
+capabilities before substantial changes; record unmet need/alternatives/smallest
+addition. Do not repeat settled migrations or add arbitrary mod/shaderpack support.
 
-New combined native consumer pixels exposed a production short-stamp collision:
-WorldRenderer legitimately reaches -1, previously mistaken for absent graph proof.
-ChunkArea now has explicit traversalFrameValid, established by addSection and
-cleared by resetQueue/clearVoxels across visibility/provenance/sparse readers.
-Native -2/-1/0/MAX/MIN/reset/clear and real production RegionDrawBatch.draw pixels
-at -1 passed. Seeded resident vertices prove nonzero-offset REPLACE, ordered
-APPEND, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU
-fallback/re-adoption and accepted CPU command-upload bypass; they are NOT actual
-loaded-world mesher or genuine portal pixels. Preserve independent numerical,
-publication/transaction and native oracles. #1080 failed pixels; #1081 failed new
-test private access before native checks; #1079 cancelled. They are not qualified.
+## Current checkpoint and evidence
 
-Next use docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md as the one integrated
-real-world test package, with scripts/ci/integrated-gpu-flags.txt and its explicit
-same-JAR CPU-off control. Check any already supplied project/log evidence before
-requesting repetition. Assess separately:
-1. Main-world/genuine-portal visuals, mixed exceptions, particle lighting/
-   translucency/callbacks, dirty rebuild, resource reload/re-entry and churn.
-2. Actual consumption/adoption and corresponding CPU bypass, fallback reasons
-   and denominators. Requested flags or recorded candidate inventory alone do
-   not prove selected nonzero commands or pixels.
-3. Matched converged RX 6900 XT CPU/GPU/submit cost, throughput and render-only/
-   tick-bearing p95/p99. Do not sum overlapping GPU scopes or infer net benefit
-   from code location. Retain untested private packs/hardware/scene boundaries.
+New source checkpoint:e1abcf39f8e9e993d3b21e0fa50a4e6543137a47. Its tree matches the
+locally tested03bec39 tree:f677307c9038e2ab39a7a344d9159638465f48f3. GitHub Git-data
+replays of local logical commits are de608023 (native upload/acquire/selector fixes),
+4ffe59e6 (ready REPLACE -> staged APPEND, explicit failure recovery),7446dce5
+(complete empty CPU fallback admission),ce34d648 (atomic probe header visibility),
+e1abcf39 (saved-world oracle/CI gate). Documentation checkpoint will start full CI;
+inspect actual latest head/run/steps/logs rather than assuming a result. No new JAR
+is qualified yet. Shell push lacks auth; GitHub Git-data tools with expected_sha are
+available. Never overwrite intervening work; fetch/reconcile after authorized update.
 
-Fix demonstrated defects through focused implementation and appropriate local/
-full exact-executable validation; verify new artifacts before additional owner
-tests. Keep generation/provenance/readiness, exact portal frusta, atomic APPEND
-CPU exceptions, 512-section/1,024-command bounds, upload completion, barriers,
-fence retirement and complete CPU recovery. Java clocks/callbacks/world-light
-capture/graph connectivity/changed metadata/unsupported semantics remain required
-CPU work; do not claim all CPU graphics vanished or silently broaden eligibility.
+Last full qualified rollback:9a6de8480c7ab46ccae7cdc06a652c108daa8078, full#1082 /
+39551989165 SUCCESS attempt1, JAR12324685470:
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1082-g9a6de848-all.jar,
+11,074,747 bytes, SHA256 c97997f24572fce48abbe739659b3b69808bd5f24d5e61d9ffbf28dc30f1e64a;
+logs12323799769, private packs skipped. This does not qualify current executable.
+#1083 cancelled; #1084 failed fixture upload-domain entry; #1085 failed assumed stone
+eligibility. Both corrected; these failures have no qualified artifacts.
 
-Continue autonomously while independent useful work remains. Do not stop at a
-plan, audit, fixture, intermediate success, context rollover or speculative credit
-concern. If necessary real-world inputs are absent and no independently evidenced
-repairable prerequisite remains, identify that exact external blocker rather than
-manufacturing churn or claiming qualification. Enable no accelerated default or
-release until the actual-world and repeatable profitability gates are satisfied.
+Local Java17 classes and both Gradle tests passed. Complete native indirect and
+screenshot suites have ZERO validation errors/hazards on Ubuntu24 Lavapipe25.2.8 /
+validation1.3.275. Includes same-frame rejection/retired-slot reuse, real production
+mesher -> bridge completion/publication -> original indirect raster, old REPLACE/
+APPEND/empty-complete-CPU atomic transactions, stale discard and complete failure
+recovery. Independent numerical/seeded oracles preserved. Initial startup negatives
+75 then1 atomic RAW hazards were fixed, not suppressed; later full indirect has0.
 
-Before ending, update AGENT_STATUS.md, relevant checklist/roadmap/ledger and this
-repository handoff with actual changes, CPU displacement/retained work, evidence,
-artifacts, risks and next actions. Finish with a NEW complete copyable continuation
-prompt requiring its successor to update the repository handoff and generate its
-own NEW prompt carrying this same requirement forward. That contingency never
-substitutes for completing feasible work in the current session.
+Actual loaded-world controls pass SEVEN phases, every640x360 pixel exactly equal,
+zero hazards: initial REPLACE/mixed APPEND, dirty glass conversion, complete CPU
+recovery, GPU readoption, camera reversal, resource reload, save/reentry. Real workers,
+queues and world rendering; no vertex payload readback/patch/reupload feeds rendering.
+Accepted GPU owner1/commandUploads0, ordinary CPU0 initially then84 exceptions,
+mixed84/CPU-complete=false; recovery ordinary984/true then readoption84/false.
+Complete local logs: sibling tooling/{indirect-final,screenshot-final,
+cpu-camera-final,gpu-camera-final}.complete.log. Paired PNG/raws in run/gpu-world-smoke.
+This is controlled main-world evidence, not representative hardware adoption or FPS.
+
+Rapid creation of separate new worlds gave unequal client light inputs (below8
+versus authoritative11, or above2 versus15), not an established GPU numerical defect.
+The test now prepares/closes ONE world and loads separate copies of SAME saved bytes;
+client/server probes agree and pixels match. Dirty/recovery/reload/reentry still run.
+No light-array injection. Initial rapid-mutation lighting is a setup limitation,
+not claimed repaired. Active file excerpts were stale; completed results did not
+establish a hang. Speculative watchdog/vertex diagnostics were removed. Resume/wait
+the exec session before inspecting complete outputs; local launcher writes complete
+output from its own descriptor at completion. Avoid concurrent cache/build mutation.
+
+Tooling persists outside Git under /workspace/scratch/34a9c7ba8b11/tooling: Gradle8.1.1,
+Java17 javac module wrapper, extracted official Ubuntu Vulkan/Xvfb, run-local.py.
+Derive proxy ports inside each exec. TCP Xvfb is necessary; UNIX bind unavailable.
+Root/tmp caches can disappear between contexts. A truncated generated client-extra
+cache was rebuilt from verified client.jar/pinned mappings and all ZIP entries
+checked; no project dependency changed. All24 offline contracts passed before final
+slice; rerun after final edits. Use completed process logs, not partial live files.
+
+## Continue independent work
+
+A genuine public portal test is feasible: the pinned IP3.0.7 / Cloth11.1.136 runtime
+already exists in scripts/ci/immersive-portals-smoke.sh. Pinned JAR downloaded under
+tooling/immersive-portals-6368524.jar (Apache2.0); inspected APIs:
+PortalManipulation.createOrthodoxPortal(EntityType,ServerLevel,ServerLevel,Direction,
+AABB,Vec3), Portal.teleportable and RenderStates.getRenderedPortalNum. Entity key is
+immersive_portals:portal. Reuse existing saved-world subscriber and optional API
+patterns, not a new reflection/controller framework. A small same-dimension portal
+can map the two existing platforms (offset16X), requiring no private scene/pack.
+Assert a real rendered portal, inspect actual CPU-control pixels, then strict GPU
+pixels and adoption/CPU bypass across camera/reload/reentry. Consider a camera return
+before reload so portal remains visible in those lifecycle checks.
+
+Inspect production selector ownership first: RegionDrawBatch has one shadow store
+per region/layer; GpuSectionSelectionShadowStore has one persistent output and
+in-flight per-frame parameter protection. Main and portal views may need distinct
+live outputs in the same frame. Do not infer or implement that change before real
+portal evidence. Reuse existing owners/global budget/frame retirement if a bounded
+extension is needed; keep rejection, exact frusta and complete CPU fallback intact.
+Do not silently call eligible portal adoption retained/unsupported just to finish.
+Inspect actual CI metadata/logs during meaningful waits and continue this independent
+work; a green main-world checkpoint is not full completion.
+
+Accepted GPU results must reach production consumers and bypass redundant CPU work.
+Required clocks/callbacks, world/light/halo capture, connectivity, changed metadata,
+unsupported semantics and complete recovery remain CPU-owned. Preserve generation/
+provenance/readiness, exact portal frusta, atomic APPEND exceptions,512 sections /
+1024 commands, upload completion, barriers and fence retirement. No utilization or
+placement-based speedup claims. Complete all available combined lifecycle/capacity/
+ordering/synchronization tests, full exact-final-executable CI including public
+compatibility and produced-JAR startup/packaging, and verify artifacts themselves.
+
+Only then update GPU_GENERATED_WORLD_DRAW_WITNESS as one focused owner package:
+exact JAR/commit/setup/current-code flags (integrated-gpu-flags.txt), same-JAR CPU
+control, scenes/actions, expected observations/failures/logs. Separate visual,
+adoption/CPU displacement and performance criteria. Private packs, actual owner
+modpack scenes and RX6900XT net benefit remain external/untested, not proven speedup
+or release completion. Do not ask for repeated intermediate owner tests.
+
+Before ending, update AGENT_STATUS, relevant roadmap/ledger/checklist and this
+handoff with actual changes, displaced/retained CPU work, validation/artifacts,
+remaining risks and exact next action. Finish with a NEW COMPLETE COPYABLE
+continuation prompt requiring its successor to update repository handoff and
+produce its own NEW prompt carrying this requirement forward. This contingency
+never substitutes for completing feasible work in the current session.

@@ -1,5 +1,38 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October21 — seven-phase saved-world qualification; full CI pending
+
+Source e1abcf39 locally passes complete native indirect/screenshot suites with zero
+validation errors/hazards and exact CPU/GPU pixels in seven actual loaded-world
+phases, including dirty atomic conversion, full recovery/readoption, camera and
+reload/reentry. Ready old REPLACE and complete-empty CPU layers now admit existing
+staged APPEND ownership; real failure still forces CPU. Upload/acquire/atomic-header
+dependencies are corrected. Single current checklist:GPU_FIRST_OWNERSHIP. Final
+full CI/JAR and real public portal/multi-view coverage remain open. Last full
+rollback:#1082. Disposition:locally qualified but unmeasured; no speedup/default
+promotion, maintenance retained/deferred decisions unchanged.
+
+
+## October 21 — stricter local native qualification, full GPU effort remains open
+
+Local transformed Java 17/Forge compilation and the complete screenshot suite now
+pass with actual production bridge mesher output -> residency/handoff -> native
+selector -> RegionDrawBatch pixels, alongside the original independent seeded and
+numerical tests. Full-ring cached output reuse and same-slot changed-generation
+adoption/CPU command bypass pass. Newer local synchronization validation exposed
+and then cleared two production defects: acquire-wait/first swapchain layout
+transition stage chaining, and missing shader-read access for selector atomic
+header operations after transfer fill. Final local screenshot process exited 0
+with zero Validation Error/SYNC-HAZARD; full exact-executable CI remains required.
+
+#1083 cancelled; #1084 failed fixture upload-domain preparation; #1085 passed the
+new retired-slot seeded pixels but failed assumed-stone qualification. The fixture
+now selects an actually qualified baked model. These failed runs have no qualified
+JAR. Last full qualified baseline remains #1082 / 9a6de848. Loaded-world CPU/GPU
+workers/pixels/rebuild/reload/re-entry automation is being developed independently;
+no loaded-world, portal/private-pack or RX performance claim is made yet.
+
+
 October 21 continuation: full GPU effort remains open. New mesher-to-indirect
 raster qualification landed in 8261e666; #1083 / 39561858614 was cancelled when
 6e6cabf1 moved the screenshot test after the real initial model reload. Full #1084 /
