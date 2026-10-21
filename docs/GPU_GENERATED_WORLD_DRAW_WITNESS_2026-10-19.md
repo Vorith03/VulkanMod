@@ -1,14 +1,29 @@
 # Integrated GPU owner qualification package
 
-**Candidate awaiting final full CI:** `95221419486931c295b83b1efe1c98ef3df4eef7`,
-full [#1088 /39680381869](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869).
-Artifact verification and readiness declaration are pending. Do not use an older
-JAR to qualify this source. This is the sole current test package; the historical
-sections below preserve evidence and do not supply current activation instructions.
+**Internally qualified and ready for focused real-world testing.**
+
+- Executable: `95221419486931c295b83b1efe1c98ef3df4eef7`.
+- Full [#1088 /39680381869](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869): **SUCCESS, attempt1**.
+- [JAR artifact12383727666](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869/artifacts/12383727666): `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1088-g95221419-all.jar`.
+- Actual downloaded JAR: **11,098,113 bytes**, SHA-256 `09f491f063d5a3b0def066e029ae1805acaeaaf7fe9b4cd5eb8f2ec292bf01e8`.
+- [Logs/captures artifact12385056493](https://github.com/Vorith03/VulkanMod/actions/runs/39680381869/artifacts/12385056493).
+
+This is the sole current owner test package. Historical sections below preserve
+evidence and do not supply current activation instructions. No release/default
+promotion or RX speedup follows from this internal readiness.
 
 ## Build and internal evidence
 
-Final artifact/size/SHA-256/log links will be recorded here after full qualification.
+Actual JAR/embedded Vulkan library CRC, manifest/version, Java17 class major61,
+MC/Forge dependency ranges, VMA/shaderc and pinned LWJGL packaging were inspected.
+All required full CI build/distribution, startups, native selector/terrain/texture/
+particle/async/capacity/recovery/pixels/synchronization/post/depth, nine-phase main
+and public portal controls, public Create Chronicles and CrashAssistant gates passed.
+All three private-fixture steps skipped. Downloaded CI captures were independently
+recompared: **9/9 main-world plus9/9 public-portal phases match every854x480 pixel**;
+all14 archived top-level Vulkan logs contain ZERO validation errors/SYNC-HAZARD.
+Local public controls also match every640x360 pixel in all9 phases, zero hazards.
+
 Previous full #1087 on3d1ddd73 passed eight-phase main/public-portal controls,
 but a separate local adoption failure exposed producer-turnover readmission.
 The new explicit turnover negative remained CPU1008/invalid GPU output and timed

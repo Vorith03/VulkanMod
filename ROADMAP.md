@@ -1,22 +1,29 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
-## October21 — nine-phase portal integration locally qualified; final full CI running
+## October21 — integrated GPU milestone internally qualified; advance to owner testing
 
-Executable95221419486931c295b83b1efe1c98ef3df4eef7, full #1088 /39680381869
-RUNNING; final JAR/artifact acceptance remains open. All24 contracts, Java17/two
-Gradle tests and native readiness/capacity/stale/failure checks pass. All NINE
-same-save public portal CPU/GPU640x360 phases match exactly, zero hazards. Actual
-portal generated GPU ownership is required per front-facing capture; accepted
-main draws have zero CPU command uploads. Producer-turnover CPU recovery now
-readmits GPU work once after ready CPU upload, preserving actual dispatch-failure
-recovery. Earlier full #1087/3d1ddd73 and #1086/32247a7 passed their then-current
-gates, but do not qualify this later source. Single checklist:GPU_FIRST_OWNERSHIP.
-Next: final full CI, actual JAR verification and the focused owner package. CPU
-orchestration/unsupported semantics/complete recovery remain explicit; RX benefit,
-private packs and representative owner scenes are unmeasured. Disposition:locally
-qualified but unmeasured pending final integration CI. Defaults and maintenance
-retained/deferred decisions unchanged. Historical pending/next paragraphs below
-retain their original dates and are superseded by this checkpoint.
+**COMPLETE for the requested implementation/readiness milestone.** Executable
+`95221419486931c295b83b1efe1c98ef3df4eef7`, full #1088 /39680381869 SUCCESS attempt1.
+Actual JAR12383727666 verified:11,098,113 bytes, SHA256 `09f491f063d5a3b0def066e029ae1805acaeaaf7fe9b4cd5eb8f2ec292bf01e8`;
+manifest/Java17/CRC/packaging inspected. Logs/captures12385056493. All required
+Forge/package/startup/native/public compatibility gates passed; private fixtures
+skipped. Independently recompared downloaded captures:9 main-world plus9 public
+portal phases, every854x480 pixel exact, zero Vulkan errors/hazards in14 logs.
+Local640x360 public9-phase controls and all24 contracts also pass.
+
+Accepted GPU results feed production and bypass their documented CPU counterparts.
+Main/portal outputs retain distinct frame ownership; cached reads are protected;
+capacity returns only at actual retirement. Non-dispatch producer turnover restores
+complete CPU geometry then readmits GPU work once after ready upload; actual failed
+dispatch remains complete CPU recovery. Required simulation/callbacks/world/light/
+connectivity/changed metadata/unsupported semantics/recovery remain CPU-owned.
+Single completion checklist:GPU_FIRST_OWNERSHIP. Focused owner package:
+GPU_GENERATED_WORLD_DRAW_WITNESS, same-JAR CPU-allfalse versus integrated19 flags.
+No known independently repairable prerequisite remains. Disposition:**qualified
+but unmeasured**, no default/release promotion or speedup. RX6900XT/RADV, private
+packs, representative owner/cross-dimension/nested portal scenes and long gameplay
+remain external qualification. Maintenance retained/deferred decisions unchanged.
+Historical pending/next paragraphs below retain their dates and are superseded here.
 
 
 ## October 21 — stricter local native qualification, full GPU effort remains open

@@ -79,26 +79,29 @@ reuse and preservation of old exact output. Full native qualification is pending
 Owner scope: internally qualified, default-off integrated build **ready for one
 real-world qualification package**, not release completion or proven RX speedup.
 This checklist supersedes historical next-step paragraphs below. Qualified
-executable checkpoint: `3d1ddd73`, full #1087 /39677628455 SUCCESS.
-**The expanded integrated GPU milestone is OPEN.** That eight-phase checkpoint
-predates the newly reproduced producer-turnover readmission defect and repair.
-Existing checked evidence does not establish final acceptance of this worktree.
+executable: `95221419486931c295b83b1efe1c98ef3df4eef7`, full #1088 /39680381869 SUCCESS, attempt1.
+**The integrated implementation milestone is COMPLETE and internally qualified.**
+Actual JAR12383727666:11,098,113 bytes, SHA256 `09f491f063d5a3b0def066e029ae1805acaeaaf7fe9b4cd5eb8f2ec292bf01e8`;
+logs/captures12385056493. Manifest/Java17/packaging/CRC inspected. All required
+CI gates passed, private fixtures skipped. Downloaded main/portal9-phase captures
+independently match every854x480 pixel; all14 Vulkan logs have zero errors/hazards.
+The focused owner package is GPU_GENERATED_WORLD_DRAW_WITNESS. Representative
+hardware/modpack/private-pack/performance qualification remains external.
 
 - [x] Production mesher output reaches the original indirect raster consumer in
   the local transformed screenshot suite, with redundant CPU command upload bypass.
 - [x] Local native selector retirement/synchronization and old REPLACE/APPEND/
   empty-CPU transactions, including failed-producer complete CPU recovery.
-- [x] Fresh SAME-save CPU/GPU pixels match in seven actual loaded-world phases,
-  including camera, recovery/readoption and reload/reentry; zero Vulkan hazards,
-  real GPU ownership and CPU command bypass.
-- [x] Real public portal pixels/adoption with overlapping main/portal views in
-  #1087 and local exact eight-phase controls; bounded existing selector owner extended.
+- [x] SAME-save CPU/GPU pixels match all9 actual loaded-world phases in final
+  full CI, with real GPU ownership, CPU bypass and zero Vulkan errors/hazards.
+- [x] Real public portal pixels/adoption with overlapping main/portal views,
+  all9 final CI phases and per-capture ownership; existing bounded selector extended.
 - [x] Producer-turnover CPU recovery -> GPU readmission: final-source native
   readiness/stale callbacks and nine exact same-save portal phases with per-capture ownership.
-  Final full CI remains a separate required acceptance below.
-- [ ] Qualify the exact final executable through all required full CI gates and
+  Complete CPU recovery and actual dispatch-failure exclusion preserved.
+- [x] Qualify the exact final executable through all required full CI gates and
   verify its produced JAR/artifacts.
-- [ ] Update the focused owner package with final artifact, activation, matched
+- [x] Update the focused owner package with final artifact, activation, matched
   baseline, visual/adoption/performance criteria and remaining external limits.
 
 | Path | Production entry / consumed result / CPU displacement | Remaining CPU / disposition | Internal completion evidence |
@@ -106,19 +109,22 @@ Existing checked evidence does not establish final acceptance of this worktree.
 | Textures | SpriteTickerMixin -> GpuTextureInterpolationCompute -> unified atlas copy queue; accepted scratch pixels replace Java interpolation, immutable pooled source copies replace pixel staging. Shared pages and 32-row reusable tables aggregate compute. | Clocks, exact source snapshots, custom ticker semantics, mutation invalidation, bounded scheduling and submission are required orchestration; rejected/capacity/unsupported work retains CPU. No new generic animation engine. | Existing transformed ticker, odd/all-mip pixels, overlapping CPU/GPU copies, 320-row wrap and retirement oracles; [x] combined configuration CI. |
 | Particles | ParticleBillboardMixin inherited exact CampfireSmokeParticle render -> packed slots -> original BufferUploader -> ParticleBillboardCompute -> original graphics draw; accepted four-vertex expansion bypasses CPU transforms/emissions. | Simulation, world/light queries, callbacks, camera/roll and sorting are required semantic inputs. Arbitrary subclass/mod simulations unsupported; CPU materialization is rejection/sorting recovery only. Original vertex upload size retained, not called eliminated. | Native mixed 524-vertex/callback-once, late-state recovery, capacity and descriptor-fence pressure; [x] combined configuration CI. |
 | Terrain meshing / lighting | ChunkTask capture/preflight -> GpuTerrainSectionMesherBridge -> production mesher -> generation-owned persistent output -> generated handoff. Qualified cubes omit CPU renderBatched; GPU produces complete 20-byte position/UV/AO/color/light vertices. | ModelData/custom models, tint, fluids, block entities, unsupported layers and experimental Forge lighting remain CPU semantics; sparse world/light/halo capture, qualification, VisGraph and publication are required inputs. No approximate simulation or GPU world API. | Existing real model, sparse light and packed-vertex/native async completion, overflow/stale/recovery fixtures; [x] combined enabled startup/modpack CI. |
-| Culling / selection | WorldRenderer producer graph/direct stamps -> exact frozen VFrustum candidate input -> native selector -> persistent storage+indirect output consumed by RegionDrawBatch.draw. GPU does final candidate frustum/compaction; graph traversal remains. | CPU connectivity/mod traversal and legacy visibility work still needed for world/chunk consumers; no claim that GPU frustum testing replaces graph policy. Unsupported sorted layers retain CPU. | Native exact six-plane/direct-seed/zero-tail oracle; [x] combined production consumer pixels. Genuine public portal qualification is an OPEN internal gate; representative owner graph sets remain external. |
+| Culling / selection | WorldRenderer producer graph/direct stamps -> exact frozen VFrustum candidate input -> native selector -> persistent storage+indirect output consumed by RegionDrawBatch.draw. GPU does final candidate frustum/compaction; graph traversal remains. | CPU connectivity/mod traversal and legacy visibility work still needed for world/chunk consumers; no claim that GPU frustum testing replaces graph policy. Unsupported sorted layers retain CPU. | Native exact six-plane/direct-seed/zero-tail oracle; [x] combined production consumer pixels. Final9-phase controlled public portal qualification passed; representative owner graph sets remain external. |
 | Candidate / command preparation | Producer geometry/readiness, ownership/provenance and generated revisions cache unchanged proof; accepted GPU owner skips FrameBatch construction/serialization/upload. | Changed-input metadata validation/serialization and bounded arithmetic express GPU inputs; cached unchanged draws bypass these. Fallback-only CPU command construction remains. No synchronous count readback or speculative new cache. | Existing mode/invalidation/revocation/readiness/identity/stale queued publication fixtures; [x] actual draw acceptance plus no commandUploads increment. |
 | Generated REPLACE | Exact-generation ready output substitutes CPU command/geometry; original region vertex buffer and auto indices consumed by GPU-selected draw. | CPU complete fallback only on missing/stale/rejected output; input capture/ownership and producer changes required. | Native publisher and resident fingerprint tests; [x] production draw pixels with nonzero resident offset and CPU commands bypassed. |
 | Atomic APPEND | Generation transaction preserves CPU exceptions then GPU ordinary geometry; paired candidate rows reserve adjacent selector slots atomically. | Java exception geometry intentionally retained; missing half withholds pair and recovers complete CPU mesh. 512 sections / 1,024 commands unchanged. | Existing real transaction/publication queues and 509-pair native capacity/order oracle; [x] production draw red CPU + green GPU overlapping pixel order and frame-slot reuse. |
 
-No unfinished eligible algorithm is relabelled retained: the bounded supported
-algorithms already have production consumers; newly identified gap is **combined
-configuration and the final generated indirect raster edge**. Actual loaded-world
-mesher/portal adoption, private packs, long reload/re-entry churn and RX profitability
-remain distinct external observations, not implementation acceptance by fixture.
-If combined validation reveals a defect, repair it before owner testing.
+All bounded in-scope eligible paths now have consumed production results and
+verified corresponding CPU displacement. Retained CPU is required orchestration,
+conservative unsupported semantics, capacity/readiness fallback or complete recovery,
+as specified per path above; none is an unfinished eligible implementation relabelled
+for closure. Changed view/provenance metadata remains necessary GPU input, not a
+second CPU command list. This completes the requested integrated implementation
+milestone; representative owner scenes, private packs, sustained gameplay and
+RX6900XT net benefit still require the one focused real-world package. Historical
+pending/next paragraphs below record earlier checkpoints and are superseded here.
 
-## October 21 — public portal admission repair (implementation pending qualification)
+## October 21 — public portal admission repair (historical sequence; qualified in #1088)
 
 Full #1086 / run 39641932762 succeeded on 32247a7, including the seven-phase
 same-save actual-world gate. JAR artifact 12365557695 and logs 12365557689 exist;
@@ -151,7 +157,7 @@ words for overlapping views, cached-read protection, retired-slot reuse, exhaust
 withheld quota before retirement and readmission after retirement. Public portal
 pixels/adoption, final full CI, artifacts and owner package remain OPEN.
 
-### Readmission after incomplete producer turnover — qualification in progress
+### Readmission after incomplete producer turnover — qualified in #1088
 
 Full #1087 /39677628455 succeeded on3d1ddd73, including actual public portal
 pixels across eight phases and native selector/raster gates. Local matching eight
@@ -191,7 +197,8 @@ real pending CPU upload/readmission, exactly-once callback, stale/recycled ident
 and failed-producer revocation tests pass. The positive nine-phase public CPU/GPU world comparison passes every640x360
 pixel with ZERO hazards in both runs, including turnover recovery/readmission and
 per-capture front-facing portal generated ownership. Source95221419 (local6bdbf47
-same tree) is in full #1088 /39680381869; final CI/artifact acceptance remains open.
+same tree) passed full #1088 /39680381869. Actual final JAR/CI captures were
+verified as recorded in the current checklist; no independently repairable prerequisite remains.
 Temporary per-worker diagnostic logging was removed.
 
 ## October 21 — bridge-to-raster qualification in progress

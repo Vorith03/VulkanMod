@@ -1,5 +1,40 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October21 — integrated production ownership qualified in full #1088
+
+Executable `95221419486931c295b83b1efe1c98ef3df4eef7` passed full #1088 /39680381869,
+including9 same-save main-world and9 actual public-portal exact pixel phases,
+per-capture generated GPU ownership/CPU command bypass, recovery/reload/re-entry/
+producer turnover, native capacity and retirement, zero validation errors/hazards.
+Verified JAR12383727666/logs12385056493; see the single GPU_FIRST_OWNERSHIP checklist
+and current GPU_GENERATED_WORLD_DRAW_WITNESS owner package. Older pending statements
+below are historical, superseded by this qualification.
+
+RegionDrawBatch publishes candidate input, submits at most once when exact residency
+is pending, then revalidates original cache/provenance/readiness before dispatch.
+Existing GpuSectionSelectionShadowStore root owns bounded borrowed view slots under
+the same16MiB quota. Exact cached output is selected first; every accepted cached
+read claims its actual frame, even without a new dispatch. A different still-recorded
+view cannot overwrite its output/parameters/descriptors. Root close retires every
+slot. Negative allocation proof expires only when actual native quota retirement
+advances revision, never constructor rollback. No new allocator, raised capacity,
+synchronous production wait or approximate portal volume.
+
+BuildTask snapshots actual dispatch failure separately from incomplete-producer
+invalidation. If non-dispatch turnover has no complete ready old view, the worker
+first completes ordinary CPU recovery. Only that publication queues ONE existing
+post-submit callback; current generation/area, non-dirty/non-failed state and ready
+complete CPU fallback are required before setDirty requests a standard GPU-capable
+rebuild. Stale/recycled/new-failure callbacks cannot readmit. Actual failed dispatch
+is excluded at the task publication, so it remains complete CPU until subsequent
+real input change. Native pending-upload/exactly-once/revocation and real-world
+failed-dispatch versus producer-turnover phases independently qualify this policy.
+
+Complete CPU fallback, staged APPEND CPU exceptions, generation/ownership/provenance,
+exact frusta,512 sections/1024 commands, upload/barrier/fence retirement policy remain.
+This is internal readiness of the bounded supported paths, not representative RX
+performance, arbitrary mod support or release completion.
+
 ## October 21 — complete startup probe validation
 
 A reliably captured complete local startup log passed the extended APPEND/native
