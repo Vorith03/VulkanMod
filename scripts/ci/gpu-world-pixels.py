@@ -5,7 +5,7 @@ import struct
 import sys
 
 root = Path(sys.argv[1])
-for phase in ('initial', 'dirty', 'recovery', 'readopt', 'camera', 'return', 'reload', 'reentry'):
+for phase in ('initial', 'dirty', 'recovery', 'readopt', 'camera', 'return', 'reload', 'reentry', 'turnover'):
     cpu = (root / 'cpu' / f'{phase}.rgba').read_bytes()
     gpu = (root / 'gpu' / f'{phase}.rgba').read_bytes()
     width, height = struct.unpack('>II', cpu[:8])

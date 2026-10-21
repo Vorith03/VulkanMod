@@ -220,6 +220,7 @@ final class RegionDrawBatch {
         boolean portalApi = ImmersivePortalsLevelRendererCompat.isAvailable();
         boolean portalView = portalApi
                 && ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload();
+        GpuLoadedWorldSmokeTest.recordGeneratedDraw(portalView);
         int shiftedModes = modes << (portalView ? 3 : 0);
         int newlyWitnessed;
         synchronized(RegionDrawBatch.class) {
@@ -356,7 +357,7 @@ final class RegionDrawBatch {
      * submission is outside the active render pass. When the separate production
      * draw gate is disabled, the CPU FrameBatch below remains the only consumer.
      */
-    GpuSectionSelectionShadowStore dispatchShadowCandidates(DrawBuffers buffers, ChunkArea area,
+    private GpuSectionSelectionShadowStore dispatchShadowCandidates(DrawBuffers buffers, ChunkArea area,
                                                                      TerrainRenderType type,
                                                                      int frames) {
         if(!GpuSectionSelectionShadowStore.enabled())

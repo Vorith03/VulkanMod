@@ -76,6 +76,7 @@ public class ChunkTask {
         private final BlockPos origin;
         private final long voxelGeneration;
         private final boolean gpuTerrainCpuRecoveryRequired;
+        private final boolean gpuTerrainDispatchRecoveryRequired;
         private final boolean gpuTerrainHadReadyCpuFallback;
         private final boolean gpuTerrainHadReadyGeneratedFallback;
         private final boolean gpuTerrainCpuBypassCandidate;
@@ -96,6 +97,7 @@ public class ChunkTask {
             this.origin = origin.immutable();
             this.voxelGeneration = renderSection.getVoxelGeneration();
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
+            this.gpuTerrainDispatchRecoveryRequired = renderSection.gpuTerrainDispatchRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();
             this.gpuTerrainHadReadyGeneratedFallback = renderSection.hasReadyGpuTerrainGeneratedFallback();
             this.gpuTerrainCpuBypassCandidate = RenderSection.gpuTerrainCpuBypassEnabled()
@@ -107,7 +109,7 @@ public class ChunkTask {
             // still complete CPU recovery instead of repeatedly retrying omission.
             this.gpuTerrainHybridRebuildCandidate = RenderSection.gpuTerrainHybridEnabled()
                     && renderSection.isCompiled()
-                    && !renderSection.gpuTerrainDispatchRecoveryRequired()
+                    && !this.gpuTerrainDispatchRecoveryRequired
                     && (this.gpuTerrainHadReadyCpuFallback
                     || this.gpuTerrainHadReadyGeneratedFallback)
                     && (!this.gpuTerrainCpuRecoveryRequired
@@ -207,6 +209,12 @@ public class ChunkTask {
                         }
                         this.renderSection.publishVoxels(compileResults.voxels,
                                 compileResults.sparseLighting, this.voxelGeneration);
+                        // Invalidation of an incomplete producer can require one complete
+                        // CPU build before an old fallback is ready. Re-admit only after
+                        // that upload; actual failed dispatches remain CPU recovery.
+                        if(!compileResults.gpuTerrainCpuBypassed && this.gpuTerrainCpuRecoveryRequired
+                                && !this.gpuTerrainDispatchRecoveryRequired)
+                            this.renderSection.queueGpuTerrainReadmission(this.voxelGeneration);
                     });
 
                     this.populationHandedOff = true;

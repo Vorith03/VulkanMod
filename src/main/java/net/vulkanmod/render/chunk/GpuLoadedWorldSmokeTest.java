@@ -42,11 +42,12 @@ public final class GpuLoadedWorldSmokeTest {
     private static final boolean PREPARE = Boolean.getBoolean("vulkanmod.ciGpuWorldPrepare");
     private static final String WORLD = System.getProperty("vulkanmod.ciGpuWorldLoad",
             "VulkanMod-CI-GPU-" + UUID.randomUUID());
-    private static final String[] PHASES = {"initial", "dirty", "recovery", "readopt", "camera", "return", "reload", "reentry"};
+    private static final String[] PHASES = {"initial", "dirty", "recovery", "readopt", "camera", "return", "reload", "reentry", "turnover"};
     private static int phase;
     private static int state;
     private static long deadline, stableSince, previousModelGeneration, previousSectionGeneration;
     private static int stableFrames;
+    private static int portalGeneratedDraws;
     private static boolean scenePlaced;
     private static long nextDiagnostic;
     private static CompletableFuture<Void> work;
@@ -234,18 +235,36 @@ public final class GpuLoadedWorldSmokeTest {
                 minecraft.clearLevel();
                 minecraft.createWorldOpenFlows().loadLevel(new TitleScreen(), WORLD);
                 state = 1;
+            } else if(phase == 8) {
+                var section = section(0);
+                previousSectionGeneration = section.getVoxelGeneration();
+                if(GPU) {
+                    // Revoke a still GPU-owned producer before its dirty rebuild.
+                    // This is turnover, not a failed compute dispatch. Complete CPU
+                    // recovery must finish before automatic GPU readmission.
+                    section.getChunkArea().invalidateGpuTerrainOutput(section.xOffset(), section.yOffset(),
+                            section.zOffset(), previousSectionGeneration + 1);
+                }
+                minecraft.levelRenderer.setSectionDirty(0, 5, 0);
+                work = CompletableFuture.completedFuture(null);
+                state = 2;
             } else {
                 minecraft.level.disconnect();
                 minecraft.clearLevel();
                 state = 9;
-                Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_OK: mode={} initial/mixed, dirty REPLACE-to-APPEND, failed-producer CPU recovery/readoption, camera volume change, resource generation reload and save/reentry; deterministic flat scene, controlled public portal={}; private-pack/RX performance untested", GPU, PORTAL);
+                Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_OK: mode={} initial/mixed, dirty REPLACE-to-APPEND, failed-producer CPU recovery/readoption, camera volume change, resource generation reload, save/reentry and producer-turnover readmission; deterministic flat scene, controlled public portal={}; private-pack/RX performance untested", GPU, PORTAL);
                 System.exit(0);
             }
         }
     }
 
     @SubscribeEvent public static void render(TickEvent.RenderTickEvent event) {
-        if(!ENABLED || event.phase != TickEvent.Phase.END || state != 3) return;
+        if(!ENABLED) return;
+        if(event.phase == TickEvent.Phase.START) {
+            portalGeneratedDraws = 0;
+            return;
+        }
+        if(state != 3) return;
         try {
             Minecraft minecraft = Minecraft.getInstance();
             if(minecraft.level == null || minecraft.player == null || minecraft.screen != null
@@ -266,8 +285,8 @@ public final class GpuLoadedWorldSmokeTest {
                     && minecraft.level.getBrightness(net.minecraft.world.level.LightLayer.SKY,
                             new BlockPos(20, 83, 4)) == 15
                     && !minecraft.level.getLightEngine().hasLightWork());
-            if(PORTAL && phase != 4) ready &= portalViews > 0;
-            if(phase >= 1 && phase <= 3) ready &= ordinary != null && ordinary.getVoxelGeneration() > previousSectionGeneration;
+            if(PORTAL && phase != 4) ready &= portalViews > 0 && (!GPU || portalGeneratedDraws > 0);
+            if(phase >= 1 && phase <= 3 || phase == 8) ready &= ordinary != null && ordinary.getVoxelGeneration() > previousSectionGeneration;
             if(phase == 6) ready &= GpuTerrainModelRegistry.generation() > previousModelGeneration;
             if(ready && !GPU) ready &= ordinary.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0
                     && mixed.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0;
@@ -302,11 +321,11 @@ public final class GpuLoadedWorldSmokeTest {
                 state = 11;
                 return;
             }
-            Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_ADOPTION: mode={} phase={} gpuOwners={} cpuCommandUploads={} ordinaryCpuIndices={} mixedCpuIndices={} ordinaryCpuComplete={} mixedCpuComplete={} portal={} portalViews={}",
+            Initializer.LOGGER.info("VULKANMOD_GPU_LOADED_WORLD_ADOPTION: mode={} phase={} gpuOwners={} cpuCommandUploads={} ordinaryCpuIndices={} mixedCpuIndices={} ordinaryCpuComplete={} mixedCpuComplete={} portal={} portalViews={} portalGpuOwners={}",
                     GPU, PHASES[phase], RegionBatchStats.gpuCommandOwnerReasons[0], RegionBatchStats.commandUploads,
                     ordinary.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount,
                     mixed.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount,
-                    ordinary.gpuTerrainCpuMeshComplete(), mixed.gpuTerrainCpuMeshComplete(), PORTAL, portalViews);
+                    ordinary.gpuTerrainCpuMeshComplete(), mixed.gpuTerrainCpuMeshComplete(), PORTAL, portalViews, portalGeneratedDraws);
             int[] sky = new int[4];
             BlockPos[] probes = {new BlockPos(4, 82, 4), new BlockPos(20, 83, 4),
                     new BlockPos(4, 80, 4), new BlockPos(20, 80, 4)};
@@ -324,6 +343,11 @@ public final class GpuLoadedWorldSmokeTest {
             capture = ScreenshotReadback.request(minecraft.getMainRenderTarget());
             state = 4;
         } catch(Throwable failure) { fail(failure); }
+    }
+
+    /** CI-only per-frame witness from an actually recorded generated indirect draw. */
+    static void recordGeneratedDraw(boolean portalView) {
+        if(ENABLED && GPU && state == 3 && portalView) portalGeneratedDraws++;
     }
 
     private static void createPortal(net.minecraft.server.level.ServerLevel level) {

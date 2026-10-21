@@ -169,6 +169,7 @@ case "$mode" in
     grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-no-splash.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
     grep -F "VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK" vulkan-smoke-no-splash.log
+    grep -F "VULKANMOD_GPU_TERRAIN_READMISSION_UPLOAD_OK" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log
     grep -F "Adaptive chunk scheduling smoke passed" vulkan-smoke-no-splash.log
@@ -265,7 +266,7 @@ case "$mode" in
     if [[ "${VULKANMOD_CI_PUBLIC_PORTAL_WORLD:-false}" == true ]]; then
       grep -E 'VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED:.*portalView=true' vulkan-world-gpu-smoke.log
       grep -E 'VULKANMOD_GPU_LOADED_WORLD_ADOPTION:.*portal=true portalViews=[1-9]' vulkan-world-cpu-smoke.log
-      grep -E 'VULKANMOD_GPU_LOADED_WORLD_ADOPTION:.*portal=true portalViews=[1-9]' vulkan-world-gpu-smoke.log
+      grep -E 'VULKANMOD_GPU_LOADED_WORLD_ADOPTION:.*portal=true portalViews=[1-9][0-9]* portalGpuOwners=[1-9]' vulkan-world-gpu-smoke.log
     fi
     python3 scripts/ci/gpu-world-pixels.py run/gpu-world-smoke
     ;;

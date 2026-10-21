@@ -403,6 +403,26 @@ public class RenderSection {
             area.invalidateGpuTerrainOutput(this.xOffset, this.yOffset, this.zOffset, generation);
     }
 
+    /** One reattempt after non-dispatch producer turnover has restored complete CPU geometry. */
+    public void queueGpuTerrainReadmission(long generation) {
+        if(!gpuTerrainCpuBypassEnabled()) return;
+        ChunkArea expectedArea = this.chunkArea;
+        if(expectedArea == null) return;
+        AreaUploadManager.INSTANCE.enqueuePostSubmitOp(() -> {
+            synchronized(this) {
+                if(this.voxelGeneration != generation || this.chunkArea != expectedArea
+                        || this.dirty || this.forceCpuTerrainUntilSuccess
+                        || this.gpuTerrainDispatchRecoveryRequired
+                        || !this.hasReadyGpuTerrainCpuFallback())
+                    return;
+            }
+            // Post-submit callbacks run on the render thread, after all CPU draw
+            // parameters/segments are ready, and outside the upload-manager lock.
+            this.setDirty(false);
+            GpuTerrainDiagnostics.record("readmission", "cpu_upload_ready", this, generation, null);
+        });
+    }
+
     @Nullable
     public static GpuTerrainPreflight qualifyGpuTerrain(SectionVoxelSnapshot snapshot) {
         GpuTerrainSectionMesherBridge.Qualification qualification = GpuTerrainSectionMesherBridge.qualify(snapshot);

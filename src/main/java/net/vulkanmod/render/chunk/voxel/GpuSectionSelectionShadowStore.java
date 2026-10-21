@@ -192,7 +192,7 @@ public final class GpuSectionSelectionShadowStore implements AutoCloseable {
             return true;
         }
 
-        // Protect the descriptor/parameter buffer until its actual frame retirement,
+        // Protect output/descriptor/parameter use until its actual frame retirement,
         // not until a different numeric slot happens to dispatch. Cached generations
         // can span a whole ring, so equal slot indices do not imply the same frame.
         if(resourcesInFlight[frame])

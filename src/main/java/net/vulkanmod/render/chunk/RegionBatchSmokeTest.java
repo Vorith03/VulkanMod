@@ -30,6 +30,7 @@ public final class RegionBatchSmokeTest {
         verifyGpuAppendRebuildTransactionContract();
         verifyGpuAppendEmptyCpuFallbackContract();
         verifyGpuFirstTransitionContract();
+        verifyGpuReadmissionAfterUpload();
 
         ChunkArea area = new ChunkArea(0, new Vector3i(-128, -128, 128));
         ChunkArea recycleArea = new ChunkArea(1, new Vector3i(-128, -128, 128));
@@ -671,6 +672,55 @@ public final class RegionBatchSmokeTest {
             area.releaseBuffers();
             RegionVoxelStore.ENABLED = enabled;
         }
+    }
+
+    private static void verifyGpuReadmissionAfterUpload() {
+        if(!RenderSection.gpuTerrainCpuBypassEnabled()) return;
+        for(int mode = 0; mode < 4; mode++) {
+            ChunkArea area = new ChunkArea(95, new Vector3i());
+            try {
+                RenderSection section = new RenderSection(0, 0, 0, 0);
+                section.setChunkArea(area);
+                section.setCompiledSection(new CompiledSection());
+                section.setNotDirty();
+                var parameters = section.getDrawParameters(RenderSection.gpuTerrainOutputLayer());
+                try(MemoryStack stack = MemoryStack.stackPush()) {
+                    area.getDrawBuffers().vertexBuffer.upload(stack.calloc(
+                            TerrainShaderManager.TERRAIN_VERTEX_FORMAT.getVertexSize() * 4),
+                            parameters.vertexBufferSegment);
+                }
+                parameters.indexCount = 6;
+                long generation = section.getVoxelGeneration();
+                require(!section.hasReadyGpuTerrainCpuFallback(), "Pending CPU copy must withhold readmission");
+                section.queueGpuTerrainReadmission(generation);
+                require(section.getVoxelGeneration() == generation && !section.isDirty(),
+                        "Queued readmission must not dirty before complete CPU upload submission");
+                if(mode == 1) section.setDirty(false);
+                if(mode == 2) section.setOrigin(16, 0, 0);
+                if(mode == 3) {
+                    section.stageGpuTerrainPreflight(new RenderSection.GpuTerrainPreflight(
+                            1L, 1, GpuTerrainDrawHandoff.Ownership.REPLACE), generation, true);
+                    require(section.requestGpuTerrainCpuRecovery(generation), "Concurrent failed producer must revoke readmission");
+                }
+                long beforeSubmit = section.getVoxelGeneration();
+                AreaUploadManager.INSTANCE.submitUploads();
+                if(mode == 0) {
+                    require(section.getVoxelGeneration() == generation + 1 && section.isDirty()
+                                    && section.hasReadyGpuTerrainCpuFallback()
+                                    && !section.gpuTerrainCpuRecoveryRequired(),
+                            "Ready complete CPU upload must permit one safe GPU rebuild");
+                    AreaUploadManager.INSTANCE.submitUploads();
+                    require(section.getVoxelGeneration() == generation + 1,
+                            "Readmission callback must execute exactly once");
+                } else {
+                    require(section.getVoxelGeneration() == beforeSubmit,
+                            "Stale/recycled/failed-producer callback must not request another rebuild");
+                    if(mode == 3) require(section.gpuTerrainDispatchRecoveryRequired(),
+                            "Readmission must not clear actual dispatch failure");
+                }
+            } finally { area.releaseBuffers(); }
+        }
+        Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_READMISSION_UPLOAD_OK: real pending CPU upload, exactly-once ready readmission, stale/recycled/failed-producer revocation");
     }
 
     private static void verifyGpuFirstTransitionContract() {
