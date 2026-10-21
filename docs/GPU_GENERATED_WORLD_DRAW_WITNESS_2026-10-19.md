@@ -1,5 +1,139 @@
 # Actual-world generated indirect recording witness — October 19, 2026
 
+
+## Current integrated test package — qualification pending
+
+Do not use a pending CI executable for owner qualification. Exact final commit,
+full run, JAR and artifact digest will be recorded here after the full suite passes.
+This package replaces the historical terrain-only flag list below; do not combine
+an old JAR with current flags. One package covers functional qualification and a
+matched performance screening; it is not a request for successive isolated tests.
+
+### Setup and the two configurations
+
+Use Minecraft 1.20.1 / Forge 47.3.0 / Java 17 and one VulkanMod JAR only. Keep
+`regionBatching: true` in `config/vulkanmod_settings.json` in both runs (default
+true); region batching also requires native multiDrawIndirect and
+drawIndirectFirstInstance support. `indirectDraw` is the separate legacy option,
+not an extra prerequisite for the region path. In `config/fml.toml`, retain
+`earlyWindowControl = false`. Preserve the known supported modpack configuration,
+resolution, render/simulation distance, mipmaps, packs, drivers and existing CPU
+fallback settings in both runs. Do not enable another renderer replacement.
+
+The authoritative integrated feature list is
+[scripts/ci/integrated-gpu-flags.txt](../scripts/ci/integrated-gpu-flags.txt),
+19 restart-time JVM properties checked against the current gates. Copy its lines
+into the launcher's Java arguments for **GPU**. For **CPU baseline**, use the same
+19 lines with every `=true` changed to `=false`; remove competing duplicate
+properties so launch order cannot choose a different value. All shipped defaults
+remain off. Do not copy `ciScreenshotSmoke`, `smokeTest` or CI-only properties.
+
+For the functional runs add these common observability properties:
+
+```text
+-Dvulkanmod.performanceProfiler=true
+-Dvulkanmod.performanceProfiler.gpuTimestamps=true
+-Dvulkanmod.debugGpuGeneratedWorldDraw=true
+```
+
+The mesher already enables bounded GPU-terrain diagnostics by default; do not
+suppress them. Flags are requests, not evidence of admission. CPU baseline must
+show no enabled GPU ownership in its environment/adoption evidence. CPU bulk
+interpolation and unrelated fast paths must have identical settings in both runs.
+
+### Functional comparison (same saved scene for CPU and GPU)
+
+1. Start from the same backup copy of the world for each configuration. Record
+   world/dimension, position, yaw/pitch, FOV, time/weather, packs and video settings.
+   Let initial terrain populate before comparing. Preserve the whole log before
+   each next launch overwrites it.
+2. Capture an F2 main-world screenshot with opaque ordinary full cubes, mixed
+   unsupported geometry/fluids/block entities and campfire smoke visible. Repeat
+   the exact camera pose in GPU; compare missing/duplicated faces, AO/light/color,
+   texture animation/mips, particle orientation, light and translucency order.
+3. In a genuinely existing Immersive Portals scene, repeat matched main/portal
+   screenshots. Include generated opaque terrain and smoke through the portal
+   where available. If no appropriate portal exists, record **not exercised**;
+   do not substitute a constructor or clip-shader test for portal pixels.
+4. Rotate/move across region and chunk boundaries, briefly visit above build
+   height in spectator if available, and return. Break/replace an ordinary cube
+   next to a slab/fluid/unsupported block to exercise dirty mixed APPEND. Watch
+   for both-half flicker, stale geometry, missing exceptions and failed recovery.
+5. Perform F3+T resource reload, leave/re-enter the world, then repeat the main
+   scene and a brief movement/smoke pass. Preserve failures and the last good
+   camera position; stop the GPU run on device loss/crash or persistent visual
+   corruption and retain CPU as recovery. Do not disable assertions to continue.
+
+### Assess three separate outcomes
+
+| Outcome | Required observation | Failure / missing evidence |
+| --- | --- | --- |
+| Visual correctness | Matched CPU/GPU main and genuine-portal pixels, exception/order/lighting/animation/smoke checks, rebuild/reload/re-entry observations. | Any reproducible mismatch, missing/duplicated geometry, stale half, validation/synchronization error or device loss is a defect. Missing scene is untested, not passed. |
+| Adoption and CPU displacement | `VULKANMOD_GPU_TERRAIN_CPU_BYPASS_ACTIVE` plus success samples `cpuBypassed=true`, `VULKANMOD_GPU_COMMAND_OWNERSHIP_ACTIVE`, and `VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED` inventory for REPLACE/paired APPEND/GPU-only APPEND in relevant main/portal contexts. Benchmark counters below must show actual GPU texture/particle work and explain fallback denominators. | Requested properties alone, zero eligible work, or recording markers without nonempty correct pixels cannot certify a path. A terrain recovery marker is not automatically a failure; inspect its reason and completeness. |
+| Performance | Matched same-JAR CPU/GPU fixed-scene captures after convergence, with CPU graphics time, separate upload/main GPU scopes, submission cost, throughput and render-only/tick-bearing p95/p99. | One different world/camera/convergence state is not a causal comparison. Do not sum overlapping GPU scopes or infer speedup from adoption; regressions and uncertainty remain valid results. |
+
+A recording witness has no GPU-count readback and reports candidate inventory.
+Nonzero native selector tests plus seeded resident pixels close an internal edge;
+they do not establish representative loaded-world selected-command counts. Correct
+visible scene pixels and actual-mode adoption are both required in the owner run.
+
+### Matched performance screening after functional correctness
+
+Use the same pre-run world snapshot for both configurations. Add to both profiles:
+
+```text
+-Dvulkanmod.performanceProfiler.autoBenchmark=true
+-Dvulkanmod.performanceProfiler.benchmarkWorld=VulkanMod Benchmark
+-Dvulkanmod.performanceProfiler.benchmarkX=0
+-Dvulkanmod.performanceProfiler.benchmarkY=192
+-Dvulkanmod.performanceProfiler.benchmarkZ=0
+-Dvulkanmod.performanceProfiler.benchmarkYaw=-90
+-Dvulkanmod.performanceProfiler.benchmarkPitch=30
+-Dvulkanmod.performanceProfiler.benchmarkSettleSeconds=60
+-Dvulkanmod.performanceProfiler.durationSeconds=180
+-Dvulkanmod.performanceProfiler.benchmarkAfterStagingCapSeconds=60
+-Dvulkanmod.performanceProfiler.maxSamples=4096
+-Dvulkanmod.performanceProfiler.slowFrameMs=25
+```
+
+These are the existing benchmark-world defaults; use the actual representative
+world name/pose in **both** profiles if different. Do not use a scene with no
+eligible geometry/smoke/animations merely to produce a clean number. Manually enter that named singleplayer world. The existing
+controller teleports within its explicitly named world and checks convergence; keep screens closed and do not move during capture. It saves and
+quits after successful completion. An aborted/nonconverged run is incomplete.
+One new same-JAR pair screens the integrated candidate; default promotion still
+requires the roadmap's repeatability and formal evidence gates, not this one pair.
+
+Keep the CPU and GPU UUID captures. Compare `standard_interpolation_gpu_updates`
+against `standard_interpolation_updates`; deltas of `gpu_multi_*_total` (jobs per
+native dispatch, fallback and table wraps); `particle_billboard_lifetime`
+GPU/packed/original-CPU/recovery and descriptor counters; `gpuCandidateLifetime`
+reuse/prepared slots and preparation time; terrain-window bypass/recovery/backlog;
+separate CPU and GPU/frame classes. Lifetime totals include warmup and must be
+differenced, not called measurement-window rates. Simulation, Java callbacks,
+changed input metadata and graph traversal are retained CPU work.
+
+### Evidence to return / known untested environments
+
+Preserve the complete instance `logs/latest.log` and `logs/debug.log` after each
+functional run, screenshots under `screenshots/`, profiler
+`logs/vulkanmod-performance.log` for functional runs, and both
+`logs/vulkanmod-performance-benchmark-<UUID>.log` plus neighboring raw JFR/capture
+files for automated runs. Include the manifest/setup, snapshot confirmation and
+short visual observations; complete logs retain fallback attribution.
+
+Useful narrow extraction (send complete logs as well):
+
+```bash
+rg 'VULKANMOD_GPU_(TERRAIN_(CPU_BYPASS_ACTIVE|SUCCESS_SAMPLE|FALLBACK_SAMPLE|CPU_RECOVERY)|COMMAND_OWNERSHIP_ACTIVE|GENERATED_WORLD_INDIRECT_RECORDED)|particle_billboard_lifetime|gpu_multi_|Validation Error|SYNC-HAZARD|device lost' logs/latest.log
+```
+
+Untested until this package is executed: RX 6900 XT/RADV net benefit and driver
+behavior, actual generated-world/portal raster equivalence, private resource packs,
+real mod-injected callbacks and long gameplay churn. CI public compatibility and
+software Vulkan fixtures do not close those external gates. No release/default
+promotion or 144-FPS promise follows from internal readiness.
+
 ## October 19 — reject stale queued REPLACE publication; full #1073 PASSED
 
 **Latest qualified executable:** `85037cfdb2779294676f33ba3b951791d66dec10`; [full #1073 / run 39304235826](https://github.com/Vorith03/VulkanMod/actions/runs/39304235826) **COMPLETED / SUCCESS, attempt 1** on that executable. Forge distributable JAR artifact **12213616043**; smoke logs **12213091579**. Offline contracts, Forge compile/package, both client startup modes (including the production-queue publication smoke), native indirect/terrain/texture/particle/screenshot/synchronization/post/depth, public Create Chronicles/Immersive Portals and Crash Assistant gates passed. Private resource packs were not exercised.

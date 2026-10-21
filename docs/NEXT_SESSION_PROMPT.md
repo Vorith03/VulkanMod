@@ -26,7 +26,7 @@ release completion, actual-world pixels or proven RX profitability.
 New implementation `1e049005ffe9225f9eae43644e4a850b0c85966f` adds seeded resident
 REPLACE/APPEND pixels through actual RegionDrawBatch.draw and queued GPU selection,
 plus one shared integrated 19-property configuration in no-splash, screenshot and
-public compatibility clients. Full #1079 / run 39514023722 pending at this checkpoint.
+public compatibility clients. Full #1079 / run 39514023722 was cancelled/superseded.
 Local follow-up strengthens zero-exception APPEND, complete CPU recovery and
 re-adoption, and makes old REPLACE-only oracle policy explicit under APPEND-enabled
 clients. Inspect live commits/files for its publication and validation state.
@@ -37,7 +37,16 @@ full #1078 / run 39509869276 SUCCESS, JAR 12304984467, logs 12306121182,
 private pack steps skipped. Local 24 offline contracts passed; Gradle distribution
 bootstrap is network-blocked. Do not reuse #1078 as qualification of new code.
 
-Next: finish/review the follow-up and full exact-executable CI; fix actual failures
+Full #1080 / run 39514286089 on eb6989a3 FAILED the screenshot raster oracle
+(expected green ff00ff00, got black ff000000) after all earlier gates passed.
+The fixture exposed a real production short-domain collision: WorldRenderer's
+valid wrapping stamp -1 was treated as no traversal proof. ChunkArea now uses
+explicit traversalFrameValid across all four readers, set at addSection and
+cleared at resetQueue/clearVoxels. Actual-reader local checks pass all 65536 values;
+restored old-sentinel logic fails at -1. Native producer boundary/reset/clear tests
+and actual pixels at -1 must qualify this fix in a new full run.
+
+Next: finish/review the correction and full exact-executable CI; fix actual failures
 without weakening assertions. Exercise combined configuration/native consumers and
 pixels plus available publication/lifecycle/recovery cases. Extend existing
 mechanisms and pinned dependencies before adding machinery; record unmet need,

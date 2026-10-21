@@ -25,6 +25,38 @@ mesher/portal adoption, private packs, long reload/re-entry churn and RX profita
 remain distinct external observations, not implementation acceptance by fixture.
 If combined validation reveals a defect, repair it before owner testing.
 
+### Reproduced traversal-stamp defect and bounded correction
+
+Full #1080 / run 39514286089 on `eb6989a3` passed compilation/package,
+startup, combined no-splash, native indirect, post/depth, then FAILED the new
+production consumer pixel oracle: expected green `ff00ff00`, got black `ff000000`
+while GPU command ownership was accepted. No qualified #1080 JAR exists.
+#1079 was cancelled/superseded, not qualified.
+
+Root cause: WorldRenderer increments a `short` traversal stamp through all
+65,536 values. ChunkArea used `-1` as absent-proof sentinel in graph visibility,
+provenance copying/comparison and sparse active masks. A legitimate `-1`
+traversal suppressed GRAPH_VISIBLE (and graph-only candidates), while direct
+candidate metadata could still admit an empty GPU draw. The fixture's initial
+`-1` stamp exposed this real production-domain collision.
+
+Correction: one explicit `traversalFrameValid` bit, established by authoritative
+addSection and cleared by resetQueue/clearVoxels. All four reader paths use the
+bit; the short's equality/domain and CPU traversal are unchanged. Reuse decision:
+existing stamps/bitsets/revisions already express ownership. Reserving `-1` in
+WorldRenderer would alter shared CPU semantics; widening all stamps or adding a
+new epoch/cache is unnecessary. One validity bit is the smallest missing state.
+No queue/barrier/fence, capacity, portal volume or fallback policy changes.
+
+Focused Java 17 extraction of the four actual production reader methods passed
+all 65,536 valid values plus absent-proof rejection; restoring the old sentinel
+failed specifically at valid stamp `-1`. This is local policy evidence, not
+native qualification. The real RegionBatchSmokeTest now checks -2/-1/0/MAX/MIN,
+off-frustum graph slots, direct seed/provenance copy/compare, reset and area clear.
+The production pixel oracle deliberately stays at `-1` and still requires exact
+nonzero REPLACE/APPEND pixels, zero-exception APPEND, complete CPU fallback and
+re-adoption. The corrected executable still requires full CI.
+
 Reuse decision: the missing raster edge cannot be proven by current candidate
 metadata/selector readback fixtures. Extend existing ScreenshotReadbackSmokeTest,
 RegionDrawBatch.draw, AreaBuffer/output residency, publication queues, Pipeline

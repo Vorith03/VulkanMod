@@ -78,7 +78,11 @@ public final class GeneratedIndirectDrawSmokeTest {
             buffers.allocateBuffers();
             section.setChunkArea(area);
             area.registerSection(section, 0, 0, 0);
-            area.addSection(section); // authoritative direct seed, independent of frustum classification
+            // Exercise the legitimate wrapped traversal stamp that used to collide with an
+            // "uninitialized" sentinel. addSection establishes its validity.
+            section.setLastFrame((short)-1);
+            area.addSection(section);
+            require(area.isGraphVisible(section), "Wrapped traversal lost graph visibility");
             VFrustum frustum = new VFrustum();
             frustum.calculateFrustum(new Matrix4f(), new Matrix4f());
             frustum.offsetToFullyIncludeCameraCube(8);

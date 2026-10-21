@@ -57,7 +57,10 @@ public class ChunkArea {
     private int candidateQueueCount;
     private long candidateQueueRevision;
     private boolean visibilityRewritePending;
+    // WorldRenderer's short stamp wraps through every value, including -1.
+    // Validity must not consume a value from that production stamp domain.
     private short traversalFrame = -1;
+    private boolean traversalFrameValid;
 
     public ChunkArea(int i, Vector3i origin) {
         this.index = i;
@@ -166,6 +169,7 @@ public class ChunkArea {
 
     public void addSection(RenderSection section) {
         this.traversalFrame = section.getLastFrame();
+        this.traversalFrameValid = true;
         this.sectionQueue.add(section);
         if(TRACK_GPU_CANDIDATE_PROVENANCE) {
             markCandidateGraphVisit(section);
@@ -308,7 +312,7 @@ public class ChunkArea {
 
     void copyCandidateProvenance(long[] graph, long[] seeds) {
         for(int i = 0; i < graphVisitBits.length; ++i) {
-            graph[i] = traversalFrame == -1 ? 0L : graphVisitBits[i];
+            graph[i] = !traversalFrameValid ? 0L : graphVisitBits[i];
             seeds[i] = directSeedBits[i];
         }
     }
@@ -316,7 +320,7 @@ public class ChunkArea {
     // Candidate v1 can only select producer-observed graph/direct slots.
     // Graph stamps from before frustum rejection must remain in the union.
     long candidateActiveWord(int word) {
-        return (traversalFrame == -1 ? 0L : graphVisitBits[word]) | directSeedBits[word];
+        return (!traversalFrameValid ? 0L : graphVisitBits[word]) | directSeedBits[word];
     }
 
     boolean candidateIsDirectSeed(int slot) {
@@ -327,7 +331,7 @@ public class ChunkArea {
         if(!TRACK_GPU_CANDIDATE_PROVENANCE)
             return false;
         for(int i = 0; i < graphVisitBits.length; ++i) {
-            if(graph[i] != (traversalFrame == -1 ? 0L : graphVisitBits[i])
+            if(graph[i] != (!traversalFrameValid ? 0L : graphVisitBits[i])
                     || seeds[i] != directSeedBits[i])
                 return false;
         }
@@ -335,7 +339,7 @@ public class ChunkArea {
     }
 
     boolean isGraphVisible(RenderSection section) {
-        return section != null && this.traversalFrame != -1
+        return section != null && this.traversalFrameValid
                 && section.getLastFrame() == this.traversalFrame;
     }
 
@@ -356,6 +360,7 @@ public class ChunkArea {
             candidateQueueRevision = sectionQueue.contentRevision();
         this.visibilityRewritePending = true;
         this.traversalFrame = -1;
+        this.traversalFrameValid = false;
     }
 
     long getCandidateInputRevision() {
@@ -731,6 +736,7 @@ public class ChunkArea {
         this.candidateInputRevision++;
         this.candidateOwnershipRevision++;
         this.traversalFrame = -1;
+        this.traversalFrameValid = false;
     }
 
     public synchronized void releaseBuffers() {

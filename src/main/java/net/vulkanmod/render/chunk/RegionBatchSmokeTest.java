@@ -21,6 +21,7 @@ public final class RegionBatchSmokeTest {
         verifyGeneratedWorldWitnessGate();
         verifyLazyGpuCommandOwnership();
         verifyCandidateProducerProvenance();
+        verifyTraversalStampDomain();
         verifyCandidateGeometryProducer();
         verifyCachedCandidateProducerRevocation();
         verifyGeneratedReplaceCandidates();
@@ -683,6 +684,43 @@ public final class RegionBatchSmokeTest {
                 batch.commands.freeBuffer();
             area.releaseBuffers();
             RegionVoxelStore.ENABLED = voxelStoreEnabled;
+        }
+    }
+
+    /** A valid wrapping short stamp must never be confused with absent traversal proof. */
+    private static void verifyTraversalStampDomain() {
+        if(!ChunkArea.trackGpuCandidateProvenance()) return;
+        ChunkArea area = new ChunkArea(94, new Vector3i(0, 0, 0));
+        RenderSection seed = new RenderSection(0, 0, 0, 0);
+        RenderSection graphOnly = new RenderSection(1, 16, 0, 0);
+        seed.setChunkArea(area);
+        graphOnly.setChunkArea(area);
+        area.registerSection(seed, 0, 0, 0);
+        area.registerSection(graphOnly, 16, 0, 0);
+        long[] graph = new long[RegionBatchLayout.MAX_SECTIONS / Long.SIZE];
+        long[] direct = new long[graph.length];
+        try {
+            for(short stamp : new short[]{-2, -1, 0, Short.MAX_VALUE, Short.MIN_VALUE}) {
+                area.resetQueue();
+                require(!area.isGraphVisible(seed) && area.candidateActiveWord(0) == 0L,
+                        "Queue reset must revoke proof independently of the prior stamp value");
+                seed.setLastFrame(stamp);
+                area.addSection(seed);
+                graphOnly.setLastFrame(stamp); // producer visit before frustum; not in CPU queue
+                require(area.candidateQueueCovered() && area.isGraphVisible(seed)
+                                && area.isGraphVisible(graphOnly),
+                        "Every short stamp, including -1, must preserve established graph visibility");
+                area.copyCandidateProvenance(graph, direct);
+                require(graph[0] == 3L && direct[0] == 1L && area.candidateActiveWord(0) == 3L
+                                && area.matchesCandidateProvenance(graph, direct),
+                        "Wrapped graph/direct provenance must survive copy, sparse selection and comparison");
+            }
+            area.clearVoxels();
+            require(!area.isGraphVisible(seed) && area.candidateActiveWord(0) == 0L,
+                    "Area teardown must revoke traversal validity and both provenance masks");
+            Initializer.LOGGER.info("VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK: -2/-1/0/MAX/MIN graph visibility, sparse off-frustum visits, direct seeds, queue reset and area teardown");
+        } finally {
+            area.releaseBuffers();
         }
     }
 

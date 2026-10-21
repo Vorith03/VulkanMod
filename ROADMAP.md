@@ -1,5 +1,25 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October 20 — integrated consumer qualification and traversal stamp correction
+
+The maintenance detour is complete. The active implementation-readiness checklist
+is at the top of docs/GPU_FIRST_OWNERSHIP_2026-10-18.md (relative to repository root).
+New combined no-splash/screenshot/public-modpack configuration and actual generated
+indirect consumer raster checks revealed a short-stamp sentinel collision in
+ChunkArea: valid traversal -1 lost graph provenance and emitted empty accepted GPU
+draws. Full #1080 / 39514286089 FAILED its green-pixel assertion on eb6989a3;
+compile/package, startup/combined no-splash, indirect and post/depth passed. #1079
+was cancelled. The explicit validity-bit correction and full-short-domain/reset/
+clear tests now require exact full CI. No qualified new JAR, owner test or speedup
+is claimed. See current AGENT_STATUS.md and the checklist for next actions.
+
+This fixes correctness, not additional CPU offload. Existing supported GPU output
+consumption/CPU bypass and retained semantic/fallback work are inventoried in the
+checklist. The owner milestone is internal readiness for one focused test package;
+actual-world/portal/private-pack/RX performance and Phase 7 default-promotion gates
+remain separate and open. Earlier evidence below remains historical.
+
+
 ## October 20 maintenance implementation detour
 
 The owner selected implementation of both reuse/maintainability reviews. Current

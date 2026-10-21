@@ -164,6 +164,7 @@ case "$mode" in
     grep -F "Forge shader registration/reload contract smoke passed" vulkan-smoke-no-splash.log
     grep -F "Forge RenderTarget stencil capability smoke passed" vulkan-smoke-no-splash.log
     grep -F "Terrain region cache smoke test passed" vulkan-smoke-no-splash.log
+    grep -F "VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log
     grep -F "Adaptive chunk scheduling smoke passed" vulkan-smoke-no-splash.log
