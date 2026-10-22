@@ -66,6 +66,13 @@ public final class RegionVoxelStore {
         }
     }
 
+    /** Return consumed CPU staging only; a delayed consumer cannot remove a replacement. */
+    public boolean releaseConsumed(int slot, SectionVoxelSnapshot expected) {
+        if (expected == null || sections.get(slot) != expected) return false;
+        remove(slot);
+        return true;
+    }
+
     public void clear() {
         if (sections.isEmpty()) return;
         sections.values().forEach(snapshot -> budget.release(snapshot.byteSize()));
@@ -136,5 +143,30 @@ public final class RegionVoxelStore {
         budget.release(10);
         if (!budget.canAcquire(20, 0))
             throw new IllegalStateException("Released voxel staging capacity must become available");
+
+        SectionVoxelSnapshot.Builder builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; i++)
+            builder.add(0, SectionVoxelSnapshot.CPU_REQUIRED);
+        SectionVoxelSnapshot first = builder.finish();
+        builder = new SectionVoxelSnapshot.Builder(0, 0, 0);
+        for(int i = 0; i < SectionVoxelSnapshot.BLOCK_COUNT; i++)
+            builder.add(1, SectionVoxelSnapshot.CPU_REQUIRED);
+        SectionVoxelSnapshot replacement = builder.finish();
+        Budget turnover = new Budget(SectionVoxelSnapshot.MAX_BYTES, 1);
+        RegionVoxelStore store = new RegionVoxelStore(turnover);
+        for(int i = 0; i < 4096; i++) {
+            if(!store.put(0, first) || store.canPut(1, first.byteSize())
+                    || !store.releaseConsumed(0, first)
+                    || store.releaseConsumed(0, first)
+                    || !store.canPut(1, first.byteSize()))
+                throw new IllegalStateException("Consumed staging must turn over without raising capacity");
+        }
+        store.put(0, first);
+        store.put(0, replacement);
+        if(store.releaseConsumed(0, first) || store.get(0) != replacement)
+            throw new IllegalStateException("Delayed consumer must not release replacement staging");
+        store.clear();
+        if(turnover.stagingCounters().entries() != 0 || turnover.stagingCounters().bytes() != 0)
+            throw new IllegalStateException("Staging turnover leaked capacity");
     }
 }

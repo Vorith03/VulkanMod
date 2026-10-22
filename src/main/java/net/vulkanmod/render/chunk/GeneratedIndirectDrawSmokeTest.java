@@ -112,12 +112,19 @@ public final class GeneratedIndirectDrawSmokeTest {
             RenderSection.GpuTerrainPreflight mesherPlan = null;
             if(meshed) {
                 section.setGpuTerrainCpuMeshComplete(generation, false);
-                GpuTerrainSectionMesherSmokeTest.publishIsolatedCubeInputs(area, generation);
-                var plan = RenderSection.qualifyGpuTerrain(area.getVoxels(0, 0, 0));
-                require(plan != null && plan.faceCount() == 6, "Mesher raster preflight rejected six-face cube");
-                mesherPlan = plan;
-                section.stageGpuTerrainPreflight(plan, generation, true);
-                GpuTerrainSectionMesherBridge.dispatch(area, section, generation);
+                var plans = new RenderSection.GpuTerrainPreflight[1];
+                GpuTerrainSectionMesherSmokeTest.publishIsolatedCubeInputs(area, generation, snapshot -> {
+                    var plan = RenderSection.qualifyGpuTerrain(snapshot);
+                    require(plan != null && plan.faceCount() == 6, "Mesher raster preflight rejected six-face cube");
+                    plans[0] = plan;
+                    section.stageGpuTerrainPreflight(plan, generation, true);
+                });
+                mesherPlan = plans[0];
+                require(area.getVoxels(0, 0, 0) == null,
+                        "Production mesher dispatch must return consumed CPU staging capacity");
+                require(!area.getGpuVoxelResidency(0, 0, 0).valid()
+                                && !area.getGpuSparseLightingResidency(0, 0, 0).valid(),
+                        "Consumed GPU input slices must retire without revoking generated output");
                 // Fixture-only wait: production completion remains non-blocking. No vertex readback,
                 // CPU vertex construction, payload patch or reupload is permitted on this branch.
                 Vulkan.waitIdle();

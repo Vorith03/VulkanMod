@@ -40,6 +40,12 @@ public final class GpuTerrainSectionMesherSmokeTest {
 
     /** CI input shared with the real bridge-to-indirect raster oracle; never vertex bytes. */
     public static void publishIsolatedCubeInputs(ChunkArea area, long generation) {
+        publishIsolatedCubeInputs(area, generation, snapshot -> {});
+    }
+
+    /** Stage the worker plan before post-submit production dispatch can consume inputs. */
+    public static void publishIsolatedCubeInputs(ChunkArea area, long generation,
+            java.util.function.Consumer<SectionVoxelSnapshot> beforePublication) {
         var table = GpuTerrainModelTable.captureCurrent();
         require(table.templateCount() > 0, "Raster cube requires a genuinely qualified baked model");
         int state = table.stateIdForTemplate(0);
@@ -59,6 +65,7 @@ public final class GpuTerrainSectionMesherSmokeTest {
         GpuSparseLightingSnapshot lighting = GpuSparseLightingSnapshot.fromDenseReference(
                 voxel, light, shade, passes, directional);
         require(lighting != null, "Isolated raster cube lighting must fit");
+        beforePublication.accept(voxel);
         area.publishVoxels(0, 0, 0, voxel, generation);
         area.publishSparseLighting(0, 0, 0, lighting, generation);
         AreaUploadManager.INSTANCE.submitUploads();

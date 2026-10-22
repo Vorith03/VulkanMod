@@ -174,6 +174,19 @@ public final class RegionVoxelGpuStore {
     }
 
     /**
+     * Mesher inputs are single-consumer staging, not rendered geometry. Revoke only
+     * the consumed generation; physical slices remain protected by normal frame
+     * retirement, ordered after the helper compute submission on the graphics queue.
+     */
+    public synchronized void releaseConsumed(int slot, long generation) {
+        checkSlot(slot);
+        if(this.generations[slot] == generation)
+            invalidate(slot, generation);
+        if(this.lightingGenerations[slot] == generation)
+            invalidateLighting(slot, generation);
+    }
+
+    /**
      * True while this exact voxel generation is either queued for upload or already
      * resident. Sparse lighting may only be queued while this contract is true.
      */

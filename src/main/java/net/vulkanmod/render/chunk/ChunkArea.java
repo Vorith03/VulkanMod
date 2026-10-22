@@ -555,6 +555,17 @@ public class ChunkArea {
         return voxels == null || slot < 0 ? null : voxels.get(slot);
     }
 
+    /** CPU dispatch input has been consumed; GPU slices and visible geometry remain owned. */
+    synchronized boolean releaseConsumedVoxels(int x, int y, int z, long generation,
+                                               SectionVoxelSnapshot expected) {
+        int slot = voxelSlot(x, y, z);
+        if(voxels == null || slot < 0 || !voxels.releaseConsumed(slot, expected))
+            return false;
+        if(gpuVoxels != null)
+            gpuVoxels.releaseConsumed(slot, generation);
+        return true;
+    }
+
     public synchronized RegionVoxelGpuStore.Residency getGpuVoxelResidency(int x, int y, int z) {
         int slot = voxelSlot(x, y, z);
         return gpuVoxels == null || slot < 0 ? null : gpuVoxels.getResidency(slot);

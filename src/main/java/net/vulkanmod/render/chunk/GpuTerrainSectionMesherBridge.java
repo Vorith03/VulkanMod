@@ -123,6 +123,30 @@ public final class GpuTerrainSectionMesherBridge {
     static synchronized void dispatch(ChunkArea area, RenderSection section, long generation) {
         if(!ENABLED || area == null || section == null)
             return;
+        RenderSystem.assertOnRenderThread();
+        if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
+            GpuTerrainDiagnostics.record("dispatch", "section_stale_before_dispatch",
+                    section, generation, null);
+            return;
+        }
+        int x = section.xOffset(), y = section.yOffset(), z = section.zOffset();
+        SectionVoxelSnapshot input = area.getVoxels(x, y, z);
+        try {
+            dispatchWithStagedInput(area, section, generation);
+        } finally {
+            // Qualification reads the CPU snapshot synchronously. Async completion
+            // captures numeric plans and GPU slices, never this snapshot. Recovery
+            // rebuilds from world state. GPU input slices retire through the existing
+            // frame fence after the submitted compute; visible output is untouched.
+            if(area.releaseConsumedVoxels(x, y, z, generation, input))
+                GpuTerrainDiagnostics.record("staging", "cpu_input_released",
+                        section, generation, null);
+        }
+    }
+
+    private static void dispatchWithStagedInput(ChunkArea area, RenderSection section, long generation) {
+        if(!ENABLED || area == null || section == null)
+            return;
 
         RenderSystem.assertOnRenderThread();
         if(section.getChunkArea() != area || section.getVoxelGeneration() != generation) {
