@@ -19,7 +19,7 @@ UNKNOWN = -(1 << 63)
 
 
 def load(path, epoch):
-    trace = {'origin': None, 'views': set(), 'intents': set(), 'view_events': [], 'draws': [], 'stages': {}, 'reference': None,
+    trace = {'origin': None, 'views': set(), 'intents': set(), 'view_events': [], 'draws': [], 'stages': {}, 'reference': None, 'page_budget_events': [],
              'incomplete': False, 'epoch': epoch, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     for line in path.read_text(errors='replace').splitlines():
         if PREFIX not in line:
@@ -43,6 +43,11 @@ def load(path, epoch):
             trace['view_events'].append((int(fields['observed_ns']), fields['signature']))
         elif marker == 'REFERENCE_BEGIN':
             trace['reference'] = int(fields['observed_ns'])
+        elif marker == 'INPUT_PAGE_BUDGET':
+            used, capacity = int(fields['used_bytes']), int(fields['capacity_bytes'])
+            if used < 0 or capacity <= 0 or used > capacity:
+                raise ValueError('invalid charged input-page budget')
+            trace['page_budget_events'].append((int(fields['observed_ns']), fields['operation'], used, capacity))
         elif marker == 'GEOMETRY_CONSUMED':
             xyz = tuple(map(int, fields['section'].strip('()').split(',')))
             if len(xyz) != 3 or any(x % 16 for x in xyz):
@@ -103,12 +108,13 @@ def freeze(trace, conditions, visual_reference, excluded):
         if len(generations[key]) != 1:
             raise ValueError('reference generation changed during census')
     return {'schema': 1, 'metric': 'frame-fence-confirmed nonempty production command coverage',
-            'conditions': conditions, 'view': trace['final_view'], 'intent': next(iter(trace['intents'])),
+            'conditions': conditions, 'view_scope': 'main-world geometry; secondary/portal views require separate references', 'view': trace['final_view'], 'intent': next(iter(trace['intents'])),
             'source_log_sha256': trace['sha256'], 'sections_layers': keys,
             'exclusions': excluded, 'visual_reference_checked': True,
             'limits': ['not a pixel/presentation or first-usable-frame oracle',
                        'all-inputs availability unknown; snapshot latency reported separately',
-                       'empty/excluded sections never count as progress']}
+                       'empty/excluded sections never count as progress',
+                       'secondary/portal view geometry is not included in main-world coverage']}
 
 
 def milestone(times, denominator):
@@ -174,7 +180,17 @@ def measure(trace, reference, conditions):
         start = trace['stages'].get((*key[:3], d['generation'], 'REGION_SNAPSHOT_READY'))
         if start is not None and d['recorded_ns'] >= start:
             snapshot_delays.append((d['confirmed_ns'] - start) / 1e6)
-    return {'metric': reference['metric'], 'conditions': conditions, 'log_sha256': trace['sha256'],
+    budgets = sorted(trace.get('page_budget_events', []))
+    page_budget = {'status': 'not recorded'}
+    if budgets:
+        page_budget = {'scope': 'global terrain-input buffer charges during this main-world epoch; includes secondary views, excludes driver heap/output geometry',
+                       'entry_snapshot_recorded': any(event[1] == 'entry' for event in budgets),
+                       'peak_charged_bytes_observed': max(event[2] for event in budgets),
+                       'retained_charged_bytes_at_last_event': budgets[-1][2],
+                       'last_event_seconds_since_entry': (budgets[-1][0] - trace['origin']) / 1e9,
+                       **{operation: sum(event[1] == operation for event in budgets)
+                          for operation in ('allocated', 'retired', 'rejected', 'allocation_rollback')}}
+    return {'metric': reference['metric'], 'view_scope': reference.get('view_scope', 'main-world geometry'), 'conditions': conditions, 'log_sha256': trace['sha256'],
             'view_locked_seconds_since_entry': (trace['view_locked_since'] - trace['origin']) / 1e9,
             'entry_projection_transition_excluded_from_progress': len(trace['views']) > 1,
             'intended_view': {'denominator': len(xyz_members), 'observed': len(section_times),
@@ -187,6 +203,7 @@ def measure(trace, reference, conditions):
                        'holes': sorted(nearby - section_times.keys())},
             'snapshot_to_fence_ms': {'samples': len(snapshot_delays), 'max': max(snapshot_delays, default=None),
                                     'mean': sum(snapshot_delays) / len(snapshot_delays) if snapshot_delays else None},
+            'input_page_budget': page_budget,
             'all_required_inputs_to_draw': 'unknown', 'first_usable_presented_frame': 'unknown',
             'target_2_to_3s_and_5s': 'not established by command coverage', 'limits': reference['limits']}
 

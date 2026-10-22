@@ -1,5 +1,26 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+
+## October22 — input lifetime/turnover milestone; final trace qualification pending
+
+CPU one-shot staging/slice release and generation-aware actual consumption are
+integrated. A second reproduced limit was quiet regions retaining native512KiB
+input pages forever under the shared32MiB quota. Final-allocation frame-fence
+retirement now returns actual pages and charge, preserves pending/live inputs and
+stable live indices, and has passed full1101 /39830419833 at7027aeea. A bounded
+entry/allocation/retirement/rejection trace is being qualified for the ONE final
+owner executable. All26 offline contracts passed; resource budgets/defaults /
+visibility/output/APPEND/recovery and texture/particle paths are preserved.
+
+Disposition: qualified lifetime/capacity correction, net D32 appearance/pacing/memory
+UNMEASURED. Actual1100 two-section D2 reference/command-clock exercise passed and
+is explicitly NOT RX performance or a causal staging comparison. First usable
+presentation and complete input availability remain unknown. Existing/new terrain,
+initial/re-entry and cache strata stay distinct. All3 workstreams assessed; no
+parallel allocator/scheduler/culler, speculative model expansion or quota increase.
+See AGENT_STATUS and TERRAIN_APPEARANCE_2026-10-22.md for actual current gates.
+Older progress below is historical; do not request the superseded1097 owner test.
+
 ## October22 — integrated staging/observation build1097 qualified; full appearance mission OPEN
 
 Executable `2577508c0de67917b362e6b454fda2f924d6ac0a`, full workflow build

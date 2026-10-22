@@ -1,8 +1,8 @@
 # VulkanMod Forge1.20.1 — initial terrain appearance mission OPEN
 
-## October22 — second input retention repair ready for full qualification
+## October22 — page repair qualified; bounded memory trace final qualification pending
 
-Follow AGENTS.md §3A. The current logical milestone returns native input pages
+Follow AGENTS.md §3A. The page-repair milestone returns native input pages
 when their last allocation has crossed the existing frame fence. The previous
 store reproduced one-page cross-region starvation after all slices had retired:
 budget524288/second region rejected. Same production-store harness after correction:
@@ -17,8 +17,9 @@ Java17 actual Forge/LWJGL focused compilation and all26 offline contracts passed
 The new production-store contract exercises128 cross-region pairs at ONE page,
 pre-fence pressure, pending/stale protection, interior index reuse, close races and
 exact260 destructions. Native sparse fixture now requires different-region actual
-bytes/compute, last-slice capacity return and pending/live protection. Full native,
-world/portal pixel/bypass/compatibility qualification of THIS final slice is pending.
+bytes/compute, last-slice capacity return and pending/live protection. Full1101 /39830419833 at7027aeeabf61a429a902f41773b0aabbbe84bc21 SUCCESS, including
+native/world/portal pixel/bypass/compatibility gates. The follow-up bounded page
+budget event/entry-snapshot trace still needs exact final executable qualification.
 Do not promote an intermediate JAR or ask for its owner benchmark.
 
 ## Qualified prior components
@@ -51,7 +52,7 @@ in0.44s locally. Tool IDs/conditions are explicit; never fabricate save/mod dige
 
 ## Remaining gates and next action
 
-Finish the current page-retirement slice's full integration, inspect exact JAR/log
+Finish the bounded budget-trace follow-up's full integration, inspect exact JAR/log
 bytes and native/loaded-world census output, then finish one owner package in
 TERRAIN_INITIAL_OWNER_TEST.md and update final evidence/rolling prompt. The owner
 check keeps2552x1374,D32/S12,VSyncOFF,cap260 and the existing saved camera; fresh

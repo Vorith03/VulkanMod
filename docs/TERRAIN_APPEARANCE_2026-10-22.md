@@ -533,3 +533,57 @@ pending input prevents premature trimming, and VMA may internally reuse its own
 heap blocks. Logical buffer budget return is not a promise of immediate OS/driver
 VRAM release. This fixes proven capacity retention; D32 appearance benefit and
 actual RX memory/pacing remain unmeasured.
+
+
+### Memory/churn discrimination in the same diagnostic
+
+The existing epoch-scoped collector now records bounded input-page entry snapshot,
+allocation, retirement, quota rejection and allocation rollback events. Budget
+state is read outside the trace monitor at epoch start; budget producers record
+only numeric charges, avoiding trace-monitor→budget-monitor inversion. Events stop
+at60s and cap8192 with an explicit incomplete marker. The offline report derives
+observed peak charge, last retained charge and exact event counts; absence of old
+markers stays NOT RECORDED, never zero. These are global terrain-input charges
+(including secondary views during the main epoch), not output geometry or driver
+heap reservations. The CI world must witness allocated pages returning to zero.
+No broad profiler/JFR branch was rewritten, and tracing FALSE keeps the extra I/O
+off for BOTH matched speed controls.
+
+### Actual1100 frozen-reference exercise (prior to empty-page repair)
+
+Logs12447608356 downloaded/CRC checked:3,349,673bytes,
+SHA256a618cd40c5eb50e553a615d3e0cfcf722148c711ec828016f969c0ca26056285.
+Recomputed18 original exact main/portal pixel pairs. The CPU initial PNG was also
+visually inspected: both platforms, mixed slab and translucent stained glass are
+present. The same-template clones were prepared before either control (template
+VulkanMod-CI-GPU-b86e4804-838c-4431-ada5-baf2f5072b6b). A separate CPU census at55s
+froze TWO nonempty main-view sections and THREE layer memberships; mixed unsupported
+CPU geometry remains included. No empty member or unresolved reference input is
+counted; the named fixture's two visible sections are the intended view.
+
+The offline CLI was exercised against the ACTUAL CPU and GPU initial epoch logs,
+with identical independently checked snapshot/config identities. CPU final view
+locked0.806584s after entry; GPU0.761836s. CPU50/90/99/100 command recording bounds
+0.812241/0.812722/0.812722/0.812722s and fence bounds all0.849911s. GPU bounds:
+recording0.764800/0.817249/0.817249/0.817249s; fences0.824324/0.874249/0.874249/0.874249s.
+Both retain0 unresolved command-reference holes. Nearby64-block and full fixture
+reference sets are the same two sections. Snapshot-to-fence samples3 each:
+CPU mean443.573/max520.828ms; GPU mean328.608/max507.496ms. True input availability
+and first usable/presented frame remain UNKNOWN. Census times55.002/55.008s confirm
+late reference admission, not early appearance.
+
+These validate a clock, generation association, APPEND completeness and a real
+nonempty reference. They are NOT owner D32 results or a causal before/after test:
+software D2, TWO sections, all19 feature settings differ, natural CI cache order
+is not performance matched, and screenshots are converged controls. Portal correctness
+pixels passed, but child-view percentages are deliberately not attributed to the
+main-world clock. No2–3s/5s, frame-pacing or net speedup claim follows.
+
+
+Diagnostic generation ownership also adds one long field per DrawParameters. A
+D32 Overworld grid has65×65×24 section identities with five layer parameters each:
+~3.9MiB of raw field storage before JVM layout effects. Actual retained heap must be
+measured; this structural estimate is not a heap/VRAM peak result. Default-OFF
+tracing adds no command readback buffers or trace I/O. Keeping simple generation
+ownership in the existing draw parameters avoids a second weak identity registry
+that could retain old world/section objects or misattribute an older mesh.

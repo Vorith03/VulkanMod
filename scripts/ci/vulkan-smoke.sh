@@ -272,6 +272,8 @@ case "$mode" in
     done
     grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=GPU_READY' vulkan-world-gpu-smoke.log
     grep -E 'VULKANMOD_TERRAIN_GEOMETRY_CONSUMED:.*epoch=[1-9].*producer=gpu' vulkan-world-gpu-smoke.log
+    grep -E 'VULKANMOD_TERRAIN_INPUT_PAGE_BUDGET:.*operation=allocated' vulkan-world-gpu-smoke.log
+    grep -E 'VULKANMOD_TERRAIN_INPUT_PAGE_BUDGET:.*operation=retired used_bytes=0 ' vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-cpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED" vulkan-world-gpu-smoke.log

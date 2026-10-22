@@ -165,7 +165,8 @@ public class WorldRenderer {
         if(TerrainAppearanceEvents.ENABLED && this == getInstance()
                 && !net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload())
         {
-            TerrainAppearanceEvents.begin(this, this.level);
+            if(TerrainAppearanceEvents.begin(this, this.level))
+                net.vulkanmod.render.chunk.voxel.RegionVoxelGpuStore.recordGlobalBudgetSnapshot();
             var pos = camera.getPosition();
             float[] projection = new float[16];
             RenderSystem.getProjectionMatrix().get(projection);

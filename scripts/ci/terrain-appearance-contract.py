@@ -56,6 +56,14 @@ assert a.measure(trace, reference, conditions)['intended_view']['fence_upper_bou
 # An input generation advancing after a retained mesh invalidates its progress.
 trace['stages'][(128, 0, 0, 2, 'REGION_SNAPSHOT_READY')] = 8_000_000_000
 assert a.measure(trace, reference, conditions)['intended_view']['observed'] == 2
+trace['page_budget_events'] = [(trace['origin'], 'entry', 0, 524288),
+                              (trace['origin'] + 10, 'allocated', 524288, 524288),
+                              (trace['origin'] + 20, 'rejected', 524288, 524288),
+                              (trace['origin'] + 30, 'retired', 0, 524288)]
+budget_report = a.measure(trace, reference, conditions)['input_page_budget']
+assert budget_report['peak_charged_bytes_observed'] == 524288
+assert budget_report['retained_charged_bytes_at_last_event'] == 0
+assert budget_report['allocated'] == budget_report['retired'] == budget_report['rejected'] == 1
 rejects(lambda: a.measure(trace, reference, {'save': 'different'}))
 bad = copy.deepcopy(trace); bad['final_view'] = 'changed'
 rejects(lambda: a.measure(bad, reference, conditions))

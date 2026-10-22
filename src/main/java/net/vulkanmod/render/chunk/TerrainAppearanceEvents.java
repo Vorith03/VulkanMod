@@ -15,6 +15,7 @@ public final class TerrainAppearanceEvents {
     private static final Map<Ticket, Integer> seen = new HashMap<>();
     private static long epoch, origin;
     private static boolean incomplete;
+    private static int pageBudgetEvents;
     private static String view;
 
     public enum Stage { NEIGHBOR_GATE_PASSED, REGION_PREPARE_START, REGION_SNAPSHOT_READY,
@@ -25,13 +26,14 @@ public final class TerrainAppearanceEvents {
     private TerrainAppearanceEvents() {}
 
     /** Main-world setup entry, not server join, GUI dismissal, presentation or first nonempty mesh. */
-    public static synchronized void begin(Object renderer, Object level) {
-        if(!ENABLED || renderer == null || level == null) return;
-        if(owner.get() == renderer && world.get() == level) return;
+    public static synchronized boolean begin(Object renderer, Object level) {
+        if(!ENABLED || renderer == null || level == null) return false;
+        if(owner.get() == renderer && world.get() == level) return false;
         owner = new WeakReference<>(renderer); world = new WeakReference<>(level);
-        epoch++; origin = System.nanoTime(); seen.clear(); incomplete = false; view = null;
+        epoch++; origin = System.nanoTime(); seen.clear(); incomplete = false; view = null; pageBudgetEvents = 0;
         Initializer.LOGGER.info("VULKANMOD_TERRAIN_WORLD_RENDER_ENTER: epoch={} origin_ns={} epoch_ms={}; first main-world renderer setup, NOT first usable/presented frame",
                 epoch, origin, System.currentTimeMillis());
+        return true;
     }
 
     /** Exact observed main-view signature; a changed signature invalidates a fixed-view trial. */
@@ -80,6 +82,18 @@ public final class TerrainAppearanceEvents {
         seen.put(ticket, previous | bit);
         Initializer.LOGGER.info("VULKANMOD_TERRAIN_SECTION_STAGE: epoch={} section=({},{},{}) generation={} stage={} since_entry_ns={} observed_ns={}",
                 epoch, ticket.x, ticket.y, ticket.z, ticket.generation, stage, now - origin, now);
+    }
+
+    /** Bounded exact charged-page chronology for allocation churn/retention diagnosis. */
+    public static synchronized void pageBudgetEvent(String operation, int usedBytes, int capacityBytes) {
+        if(!ENABLED || origin == 0 || System.nanoTime() - origin > DURATION) return;
+        if(pageBudgetEvents >= 8192) {
+            if(!incomplete) Initializer.LOGGER.warn("VULKANMOD_TERRAIN_WORLD_TRACE_INCOMPLETE: epoch={} page_budget_event_cap=8192", epoch);
+            incomplete = true; return;
+        }
+        pageBudgetEvents++;
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_INPUT_PAGE_BUDGET: epoch={} observed_ns={} operation={} used_bytes={} capacity_bytes={}; charged native input buffers, NOT driver heap reservation",
+                epoch, System.nanoTime(), operation, usedBytes, capacityBytes);
     }
 
     static synchronized boolean lateCensusWindowReached() {

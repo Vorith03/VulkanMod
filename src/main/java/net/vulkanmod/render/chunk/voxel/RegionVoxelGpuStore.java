@@ -18,7 +18,9 @@ import java.util.List;
  * section generation while retaining independent staged publication/retirement
  * state. A record is discoverable only after its staged copy has been submitted
  * in graphics-queue order. Replacements always allocate a fresh slice; old slices
- * retire through the frame fence domain before the allocator may reuse them.</p>
+ * retire through the frame fence domain before the allocator may reuse them.
+ * Empty pages return their native allocation and shared charge at that same
+ * completed fence. Live page indices stay stable across retired slot holes.</p>
  */
 public final class RegionVoxelGpuStore {
     static final int PAGE_BYTES = 512 * 1024;
@@ -213,6 +215,7 @@ public final class RegionVoxelGpuStore {
         return page == null ? null : page.buffer;
     }
 
+    /** Page-slot bound; a retired interior slot may return null until reused. */
     public synchronized int pageCount() {
         return this.pages.size();
     }
@@ -238,9 +241,14 @@ public final class RegionVoxelGpuStore {
         for(Page page : this.pages) {
             if(page == null) continue;
             page.buffer.freeBuffer();
-            memoryManager.addFrameOp(() -> this.budget.release(PAGE_BYTES));
+            memoryManager.addFrameOp(() -> this.budget.releaseRetired(PAGE_BYTES));
         }
         this.pages.clear();
+    }
+
+    /** Called outside the trace monitor, after a new main-world epoch begins. */
+    public static void recordGlobalBudgetSnapshot() {
+        GLOBAL_BUDGET.recordSnapshot("entry");
     }
 
     static String describeGlobalBudget() {
@@ -279,6 +287,7 @@ public final class RegionVoxelGpuStore {
         Page page = new Page(index, buffer);
         if(index == this.pages.size()) this.pages.add(page);
         else this.pages.set(index, page);
+        this.budget.recordAllocation();
         RegionVoxelPageAllocator.Allocation allocation = page.allocator.allocate(byteLength);
         if(allocation == null)
             throw new IllegalStateException("Fresh terrain input page cannot fit one bounded snapshot");
@@ -363,7 +372,7 @@ public final class RegionVoxelGpuStore {
                         // pinning a quiet region's empty cache until world eviction.
                         RegionVoxelGpuStore.this.pages.set(page.index, null);
                         MemoryManager.freeBufferAfterFence(page.buffer.getBufferInfo());
-                        RegionVoxelGpuStore.this.budget.release(PAGE_BYTES);
+                        RegionVoxelGpuStore.this.budget.releaseRetired(PAGE_BYTES);
                         while(!RegionVoxelGpuStore.this.pages.isEmpty()
                                 && RegionVoxelGpuStore.this.pages.get(RegionVoxelGpuStore.this.pages.size() - 1) == null)
                             RegionVoxelGpuStore.this.pages.remove(RegionVoxelGpuStore.this.pages.size() - 1);
@@ -401,16 +410,27 @@ public final class RegionVoxelGpuStore {
                 throw new IllegalArgumentException("GPU terrain input reservation must be positive");
             if(bytes > this.maxBytes - this.usedBytes) {
                 this.rejectedPages++;
+                net.vulkanmod.render.chunk.TerrainAppearanceEvents.pageBudgetEvent("rejected", this.usedBytes, this.maxBytes);
                 return false;
             }
             this.usedBytes += bytes;
             return true;
         }
 
-        synchronized void release(int bytes) {
+        synchronized void recordSnapshot(String operation) {
+            net.vulkanmod.render.chunk.TerrainAppearanceEvents.pageBudgetEvent(operation, this.usedBytes, this.maxBytes);
+        }
+
+        synchronized void recordAllocation() { recordSnapshot("allocated"); }
+
+        synchronized void releaseRetired(int bytes) { release(bytes, "retired"); }
+        synchronized void release(int bytes) { release(bytes, "allocation_rollback"); }
+
+        private void release(int bytes, String operation) {
             if(bytes <= 0 || bytes > this.usedBytes)
                 throw new IllegalStateException("GPU terrain input budget accounting underflow");
             this.usedBytes -= bytes;
+            net.vulkanmod.render.chunk.TerrainAppearanceEvents.pageBudgetEvent(operation, this.usedBytes, this.maxBytes);
         }
 
         synchronized int usedBytes() {
