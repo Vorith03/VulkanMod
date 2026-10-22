@@ -1,4 +1,39 @@
-# Terrain appearance: staging turnover candidate — October 22, 2026
+# Terrain appearance — qualified staging/observation build, full study OPEN
+
+## October22 — integrated staging/observation build1097 qualified; full appearance mission OPEN
+
+Executable `2577508c0de67917b362e6b454fda2f924d6ac0a`, full workflow build
+#1097 /39817774598 attempt1 SUCCESS. Actual runtime artifact12443882313:
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1097-g2577508c-all.jar,
+11,125,845bytes,SHA256 `5fc766cd9cf23ad392f5df2580ffee5ca2724fb3e889250cb199b11ccc3b3d48`.
+Downloaded actual JAR CRC/manifest/buildSHA/Java17 classmajor61/MC+Forge ranges /
+Mixins/nested LWJGL Vulkan CRC/Linux+Windows VMA+shaderc checked. Logs12443168969,
+SHA256469c3d5d8b886d90b4b67ba4aebd229a88c10779efb6f241419a317ef2381096, CRC verified.
+All required public offline/Forge/package/dual startup/native/post/depth/screenshot /
+loaded-world/public portal/Create Chronicles/CrashAssistant gates passed. Three
+private fixture steps skipped. Independently recomputed18 exact854x480 main/portal
+CPU/GPU phase pairs;0 validation/sync errors in top-level logs. Native readback
+seeded AND real-mesher paths each5 samples/5 GPU commands/1 complete CPU fallback;
+original pixels/CPU bypass/full-ring/generation/recovery preserved. Enabled main/
+portal world controls recorded initial and reentry epochs,4345 CPU/4106 GPU world
+observations,9 GPU-ready events, no incomplete capture. Fixture counts are NOT RX
+coverage or a performance comparison. Prior1094/1095/1096 all passed their slices;
+1093 superseded/cancelled. No new default enable or release promotion.
+
+This qualifies consumed/rejected staging turnover and bounded ACTUAL command
+consumption/stage observability. It does NOT qualify2–3s nearby/5s intended-view
+appearance. Full true input-ready, first usable/presented frame, frozen full-view
+reference denominator, legacy/direct/translucent/generation association and matched
+appearance/pacing/memory comparisons remain OPEN. Same settings alone do not make
+an old uninstrumented executable a matched diagnostic-overhead control.
+
+Exact new profile: OWNER_TERRAIN_INITIAL.jvmargs, all19 integrated flags unchanged,
+explicit debugTerrainDrawReadback=true,autoBenchmark=false,duration0,summary1s.
+One focused changed-build RX/D32 chronology/visual capture can diagnose whether
+staging is now turning over and whether output pressure or publication->consumption
+delay dominates. This owner-only evidence does not replace the unfinished full
+measurement. Details and honest limits: TERRAIN_APPEARANCE_2026-10-22.md.
+
 
 ## Capture turnover follow-up after full1096
 
@@ -255,37 +290,73 @@ before/after, peak initial memory/responsiveness comparisons, and minimal fully
 specified appearance-test package remain OPEN; a new stationary FPS run alone
 will not close them. No promise of2–3s/5s or release readiness.
 
-## Provisional owner package: staging/visual smoke, not performance qualification
+## Qualified owner diagnostic/visual package (full appearance study remains OPEN)
 
-Use only after final full qualification succeeds and exact artifact/hash is filled
-in below. This is a narrow changed-build hardware check, not a substitute for the
-missing section-event coverage comparison.
+**JAR:** [build1097 artifact12443882313](https://github.com/Vorith03/VulkanMod/actions/runs/39817774598/artifacts/12443882313),
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1097-g2577508c-all.jar.
+Actual SHA256 `5fc766cd9cf23ad392f5df2580ffee5ca2724fb3e889250cb199b11ccc3b3d48`.
+**Properties:** [OWNER_TERRAIN_INITIAL.jvmargs](OWNER_TERRAIN_INITIAL.jvmargs).
+This exact file contains all19 integrated flags, tracing,1s profiling summaries,
+autoBenchmark=false and duration0. Replace previous VulkanMod feature/profiler
+properties to avoid duplicates; preserve unrelated memory/GC options.
 
-1. Use candidate e6b9b35b's final qualified JAR; previous272b7f81/full1092 is the
-   comparison executable. Never install both. Keep config/fml.toml
-   earlyWindowControl=false and the existing VulkanMod config/modpack unchanged.
-2. Both executables use identical OWNER_TERRAIN_INITIAL.jvmargs. It keeps all19
-   feature flags and profiling identical, disables stationary automation, removes
-   capture duration expiry, and emits1s windows. Restart Prism's game process for
-   each run. Keep the window focused and avoid settings/reloads during timing.
-3. Restore the SAME saved VulkanMod_Benchmark snapshot with spectator at0/192/0,
-   yaw-90,pitch30 before each process. Do not teleport after entry or preload the
-   candidate. Keep2552x1374,D32/S12,VSyncOFF,cap260. Record natural warm-cache
-   state/order; do not drop caches. New generation and world reentry are separate
-   tests, not pooled with this existing-save initial-entry pair.
-4. Record the screen before joining through30s after first rendered world frame;
-   keep the camera fixed. Capture a converged reference image around60s. Note holes,
-   incorrect geometry, severe stalls or loss of responsiveness. This video can
-   establish visible first-frame/nearby impressions and frame timestamps; it cannot
-   establish the missing per-section denominator/input-ready latency by itself.
-5. Leave60s for staging/retirement turnover, then exit normally. Return new
-   latest.log, debug.log, vulkanmod-performance.log (or actual configured profiler
-   output), video/reference image, trial order and observed defects. Check new
-   staging/cpu_input_released summaries, input/upload/output rejection reasons,
-   staging occupancy, actual GPU publication/draw markers and CPU bypass. A freed
-   cap with rising output failures or worse frame pacing is not a proven win.
+1. Install ONLY this VulkanMod JAR. Keep the existing modpack, VulkanMod config and
+   config/fml.toml earlyWindowControl=false. Experiments remain OFF by default in
+   the executable; the supplied profile explicitly enables them for this test.
+2. Start a fresh game process using the same saved VulkanMod_Benchmark snapshot
+   and saved spectator camera0/192/0,yaw-90,pitch30. Keep framebuffer2552x1374,
+   D32/S12,VSyncOFF,cap260. Do not teleport, move camera, reload or change settings
+   during the initial minute. Preserve natural OS/driver caches and note trial
+   order; do not drop caches. Reentry and new generation are different strata.
+3. Enter the world, leave the view fixed for60s and exit normally. Observe first
+   usable world frame, whether nearby terrain is usable around2–3s, the intended
+   view around5s, remaining holes and initial hitches. A short entry-to-converged
+   clip if already available helps establish actual on-screen timing; no recording
+   setup is required solely for this diagnostic. Compare holes to the final view,
+   not to task/publication counters.
+4. Return the NEW latest.log and logs/vulkanmod-performance.log; include the clip
+   or concise visual observations if available. Keep these private owner files out
+   of Git. No need to repeat old stationary captures or supply unchanged logs.
 
-Do not repeat old stationary captures as the appearance test. A single pair is a
-smoke check; repeat/order-balance only if observed variance affects the conclusion.
-The full appearance qualification still requires the event collection described
-above. No owner check is claimed performed here.
+The agent will check staging release/occupancy, concrete input/output rejections,
+GPU publication and CPU bypass, world epochs, stage gaps and actual opaque indirect
+selection. The distinguishing question is whether consumed inputs turn over or
+output free-range pressure/publication-to-draw delay now limits population. Rising
+output failures, worse pacing or incorrect/stale terrain are not a win.
+
+This is one changed-build HARDWARE diagnostic, not a matched before/after performance
+experiment. The earlier qualified272b7f81/full1092 remains a baseline, but its
+unrecognized tracing property does not make overhead comparable. The observer adds
+work, and no overhead/net-speed qualification is claimed. Full reference coverage,
+true input-availability, full draw-path/generation and presentation measurements
+remain unfinished. Do not calculate50/90/99 or promise2–3s/5s from this capture.
+No owner check is claimed performed here. Ordinary play can remove
+-Dvulkanmod.debugTerrainDrawReadback=true after collection.
+
+## Additional capacity assessment (no speculative change)
+
+The earlier10 dispatch/output_reservation_failed cases come from the existing
+AreaBuffer.tryReserve free-range rule, not a separate global GPU-output allocator.
+GpuTerrainOutputStore.reserve deliberately refuses growth while CPU uploads can grow
+the area buffer. Successful visible output must remain resident, so freeing it to
+manufacture adoption would violate ownership. A worker-side output-capacity
+preflight was considered but not added: DrawBuffers/its allocation lifecycle are
+render-thread owned, capacity can change before publication, and an advisory
+rejection can lose an otherwise valid GPU opportunity. The old10 failures do not
+quantify the new post-staging-turnover bottleneck. Keep existing render-thread
+reservation/recovery and measure new output pressure before changing growth,
+reservation timing or admission. No budgets/allocator/scheduler were duplicated.
+
+## Local environment recovery (not a substitute for full CI)
+
+The workspace initially had only a JRE. Downloaded Java17 and Gradle8.1.1 enabled
+all24 offline contracts and actual pinned-LWJGL helper/event compilation. Correcting
+both JAVA_TOOL_OPTIONS AND the inherited GRADLE_OPTS proxy override, with the
+workspace CA in a temporary trust store, recovered ForgeGradle/dependency resolution.
+A bounded480s initial bootstrap downloaded dependencies and generated the mapped
+Forge jar before timing out; no completed full local Forge/native pass is claimed.
+APT index access was also recovered with task-local proxy/sandbox-user options;
+Xvfb/software Vulkan were not installed or claimed exercised locally. These are
+local setup observations; full1097 is the actual complete qualification evidence.
+No repository network/build versions or dependency configuration were changed to
+hide environmental failures. Temporary tools/caches/private logs are outside Git.

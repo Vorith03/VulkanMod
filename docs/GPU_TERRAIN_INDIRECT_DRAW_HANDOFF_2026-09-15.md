@@ -1,5 +1,28 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October22 — staging + frame-fenced consumption observation qualified in full1097
+
+Executable2577508c/full1097 /39817774598 SUCCESS; exact JAR/hash and full evidence
+in TERRAIN_APPEARANCE_2026-10-22.md. One-shot CPU inputs release by identity; GPU
+input slices revoke discovery then retire at existing frame fences. Input failures
+return staging through existing deferred recovery. Output, APPEND pairing and CPU
+recovery remain separate; no geometry quota/default changes.
+
+Default-off debugTerrainDrawReadback copies ACTUAL recorded GPU/CPU indirect
+sources after rendering before command finalization, then reads after the existing
+frame fence. Diagnostic source revisions suppress unchanged copies only; changed
+readiness/ownership re-observes. Source metadata and requests are bounded and
+cancelled after device idle on failure/shutdown. CPU source barriers do not require
+compute. World epoch/stage ownership prevents delayed callbacks being attributed
+to a replacement world. Native exact raster/CPU bypass and both enabled same-save
+world/portal controls passed, with all18 original phase pixel pairs exact and no
+validation/synchronization errors. No independent selector or gameplay wait added.
+
+This is command-consumption correctness evidence, NOT on-screen appearance time
+or full-view percentage. Full input availability/reference/generation/path coverage
+and representative RX performance gates remain open. Preserve these distinctions.
+
+
 ## October22 — single-consumer mesher input staging (candidate, qualification pending)
 
 CPU voxel snapshots are no longer persistent inputs after the mesher dispatch

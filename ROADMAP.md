@@ -1,5 +1,40 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October22 — integrated staging/observation build1097 qualified; full appearance mission OPEN
+
+Executable `2577508c0de67917b362e6b454fda2f924d6ac0a`, full workflow build
+#1097 /39817774598 attempt1 SUCCESS. Actual runtime artifact12443882313:
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1097-g2577508c-all.jar,
+11,125,845bytes,SHA256 `5fc766cd9cf23ad392f5df2580ffee5ca2724fb3e889250cb199b11ccc3b3d48`.
+Downloaded actual JAR CRC/manifest/buildSHA/Java17 classmajor61/MC+Forge ranges /
+Mixins/nested LWJGL Vulkan CRC/Linux+Windows VMA+shaderc checked. Logs12443168969,
+SHA256469c3d5d8b886d90b4b67ba4aebd229a88c10779efb6f241419a317ef2381096, CRC verified.
+All required public offline/Forge/package/dual startup/native/post/depth/screenshot /
+loaded-world/public portal/Create Chronicles/CrashAssistant gates passed. Three
+private fixture steps skipped. Independently recomputed18 exact854x480 main/portal
+CPU/GPU phase pairs;0 validation/sync errors in top-level logs. Native readback
+seeded AND real-mesher paths each5 samples/5 GPU commands/1 complete CPU fallback;
+original pixels/CPU bypass/full-ring/generation/recovery preserved. Enabled main/
+portal world controls recorded initial and reentry epochs,4345 CPU/4106 GPU world
+observations,9 GPU-ready events, no incomplete capture. Fixture counts are NOT RX
+coverage or a performance comparison. Prior1094/1095/1096 all passed their slices;
+1093 superseded/cancelled. No new default enable or release promotion.
+
+This qualifies consumed/rejected staging turnover and bounded ACTUAL command
+consumption/stage observability. It does NOT qualify2–3s nearby/5s intended-view
+appearance. Full true input-ready, first usable/presented frame, frozen full-view
+reference denominator, legacy/direct/translucent/generation association and matched
+appearance/pacing/memory comparisons remain OPEN. Same settings alone do not make
+an old uninstrumented executable a matched diagnostic-overhead control.
+
+Exact new profile: OWNER_TERRAIN_INITIAL.jvmargs, all19 integrated flags unchanged,
+explicit debugTerrainDrawReadback=true,autoBenchmark=false,duration0,summary1s.
+One focused changed-build RX/D32 chronology/visual capture can diagnose whether
+staging is now turning over and whether output pressure or publication->consumption
+delay dominates. This owner-only evidence does not replace the unfinished full
+measurement. Details and honest limits: TERRAIN_APPEARANCE_2026-10-22.md.
+
+
 ## October 22 — owner-directed terrain appearance mission OPEN
 
 Owner superseded the prior owner-test-only next action with staging/GPU adoption/

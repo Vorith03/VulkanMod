@@ -36,3 +36,4 @@
 -Dvulkanmod.performanceProfiler.maxSamples=4096
 -Dvulkanmod.performanceProfiler.slowFrameMs=25
 -Dvulkanmod.performanceProfiler.summarySeconds=1
+-Dvulkanmod.debugTerrainDrawReadback=true

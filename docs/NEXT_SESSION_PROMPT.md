@@ -1,83 +1,98 @@
-# VulkanMod — Continue initial terrain appearance measurement
+# VulkanMod — Continue the OPEN initial terrain appearance mission
 
-## October22 — chronology follow-up candidate
+Repository Vorith03/VulkanMod, branch forge-1.20.1, MC1.20.1/Forge47.3.0/Java17.
+Follow current AGENTS.md §3A. Recover live Git/CI delta and new owner evidence;
+read current status, roadmap/ledger and TERRAIN_APPEARANCE_2026-10-22.md. Preserve
+uncommitted/concurrent work, PR12, texture/particle repairs, GPU CPU omission,
+REPLACE/APPEND, portals, exact visibility and full CPU recovery. Experiments stay
+OFF by default. Do not reconstruct settled investigations or repeat old tests.
 
-Staging repair e6b9b35b/full1094 remains the latest completely qualified executable;
-exact bytes/hash and independent18-phase pixel check are in the focused report.
-Readback candidate7503c146/full1095 /39814242766 passed native readback/raster and
-loaded-world/portal gates; public modpack compatibility was still active at this
-observation, so do not call1095 fully qualified yet.
+## One final qualified executable from this continuation
 
-The next candidate adds bounded same-flag TerrainAppearanceEvents, main-world entry
-clock, section-generation stage timestamps and recorded-epoch tags on fence-confirmed
-indirect bytes. It enables collection in BOTH existing same-save CPU/GPU world
-controls, requires positive main-world consumption/worker/publication/GPU-ready
-markers and no incomplete capture, retaining original pixel/lifecycle/portal gates.
-Focused Java17 event/helper compilation, event lifetime/bounds/owner isolation tests,
-all24 offline contracts and shell syntax passed. Full qualification of the combined
-successor is required. Neighbor admission is NOT all-inputs-ready; no frozen full
-terrain denominator, full-path/generation association or presented-frame timing is
-claimed. The full appearance mission remains OPEN. Follow the focused report and
-live delta; do not ask for another stationary benchmark as initial-load evidence.
+2577508c0de67917b362e6b454fda2f924d6ac0a; full build workflow #1097 /39817774598,
+attempt1 SUCCESS. Actual artifact12443882313:
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1097-g2577508c-all.jar,
+11,125,845bytes,SHA256 5fc766cd9cf23ad392f5df2580ffee5ca2724fb3e889250cb199b11ccc3b3d48.
+Logs12443168969, SHA256469c3d5d8b886d90b4b67ba4aebd229a88c10779efb6f241419a317ef2381096.
+Downloaded actual JAR/log CRC, manifest/SHA/version/Java17/MC+Forge/Mixins/nested
+Vulkan/Linux+Windows native packaging checked. All required public offline/Forge /
+package/dual startup/native/post/depth/screenshot/world/portal/Create Chronicles /
+CrashAssistant passed;3 private steps skipped, not passed. Independently recomputed
+18 exact854x480 CPU/GPU main/portal phase pairs,0 validation/sync errors in top-level
+logs. Native consumption seeded AND meshed: each5 samples/5 GPU commands/1 complete
+CPU fallback, original pixels/CPU bypass/generation/full-ring/recovery preserved.
+Both enabled main/portal controls passed; main CPU4345/GPU4106 actual observations,
+9 GPU-ready events, distinct initial/reentry epochs, no incomplete capture. Fixture
+counts are NOT owner adoption/performance. Earlier1094/1095/1096 successful slices
+remain history;1093 superseded/cancelled. No need to rerun unchanged final CI.
 
+## What changed
 
-Follow current AGENTS.md §3A on forge-1.20.1 (MC1.20.1/Forge47.3.0/Java17).
-Owner mission is still the full terrain-appearance assignment, not just a staging
-repair or a stationary FPS run. Preserve portals, texture/particle unsigned-limit
-repairs, GPU mesher CPU omission, REPLACE/APPEND, complete recovery and default-off
-pilots. PR12 remains separate. Read live status, roadmap/ledger and the focused
-TERRAIN_APPEARANCE_2026-10-22.md; recover live delta and relevant CI.
+Consumed CPU voxel snapshots return staging by identity. Matching GPU voxel/light
+records revoke then retire physical slices at existing frame fences; failed inputs
+also release staging via existing deferred recovery, including complete-CPU builds.
+Visible output/APPEND/CPU recovery/quotas/defaults are unchanged.
 
-## October22 continuation — staging repair qualified; production draw readback candidate
+Default-off debugTerrainDrawReadback copies ACTUAL GPU/CPU fallback indirect sources
+after final render pass, before main command-buffer finalization, then decodes only
+at existing frame-fence retirement. No second selector or gameplay wait. Source
+metadata dedup uses exact existing candidate/visibility/mesh/generated/readiness
+revisions and buffer/range/count; changed readiness re-observes. Cancellation permits
+retry. Bounds:128 requests/4MiB per frame,32768 requests/30s main epoch,4096 numeric
+source keys. CPU barriers do not require compute. Epoch-scoped weak world/owner
+chronology records first main renderer setup and first generation-stage observations
+(region prep/snapshot, admission, worker, publication, GPU attempt/ready), bounded
+32768 generation records/60s, stale worker isolation and explicit incompleteness.
 
-Executable e6b9b35bc7421547d62bfe4d2ef3735c431fb0ce passed full1094 /39809988234
-attempt1. JAR12440996437 is actual11,106,031byte runtime payload, SHA256
- df481ee5b0e646cb6e7aecb35ac233ad56782bc4b2146c8d1c97e172d16872c9.
-Logs12440348598 verified;18 downloaded854x480 CPU/GPU phase pairs independently
-exact,0 validation/sync errors in top-level logs. Native/actual-world staging
-release, mesher production raster, CPU bypass, turnover/recovery passed. Three
-private steps skipped. The installation delay resolved;1093 was cancelled.
+Local focused Java17/pinned-LWJGL compilation, stage epoch/owner/bounds/dedup tests,
+source unchanged/readiness/cancellation/bounds tests, all24 offline contracts and
+shell syntax passed. Workspace originally lacked javac; downloaded JDK17/Gradle
+and corrected task-local GRADLE_OPTS proxy override recovered dependency resolution.
+Initial local bootstrap reached its480s bound after meaningful dependency/mapping
+progress (mapped Forge jar generated); don't call it a full
+local Forge/native pass. CI is the complete qualification. Temporary tooling and
+private owner logs are outside Git.
 
-A successor candidate adds bounded default-off TerrainDrawReadback: copy ACTUAL
-GPU or CPU-fallback indirect slices after render-pass end but before main command
-buffer finalization; decode only at existing frame-fence retirement. No gameplay
-wait/independent selector, same frame-owned sources, explicit incomplete capture
-on bounds/failure, device-idle cancellation, native GPU+CPU/pixel/recovery oracle.
-Focused helper Java17/pinned-LWJGL compilation with ownership stubs and all24
-offline contracts passed. Full native qualification of this successor is pending.
-See TERRAIN_APPEARANCE_2026-10-22.md for exact bounds/limitations. This is a selected
-production command witness, NOT pixel/presentation timing. Full mission remains
-OPEN: world-entry/input-ready clock, frozen denominator, full-path attribution and
-controlled before/after still need completion. PR12/texture/particle repair and
-existing renderer ownership/defaults remain preserved.
+## Full mission remains OPEN — do not promote these components to completion
 
+No true all-inputs-ready oracle, first usable/PRESENTED-frame oracle, fixed-camera
+full-view frozen nonempty denominator, full legacy/direct/translucent coverage,
+geometry-generation association or matched initial-appearance/pacing/memory
+comparison is delivered. Admission has a near-camera shortcut and is NOT proof
+all light/halo inputs exist; snapshot ready is a later CPU-resolved milestone.
+Stage gaps are FIRST observations per generation, not full per-attempt/cancellation
+service accounting. Recording/fence confirmation bounds establish command execution,
+not screen appearance. Never invent50/90/99/hole closure or2–3s/5s evidence. Old
+stationary71s settling and aggregate64.7/5.6/23.2ms queue/build/handoff are not those
+measures. A baseline uninstrumented build is not equal-overhead diagnostic control.
 
-## Concrete next actions
+## Next useful work and owner gate
 
-1. Finish the new production indirect readback candidate's full qualification.
-   Resolve live code SHA/run rather than inferring from this file. Native screenshot
-   fixture must log VULKANMOD_TERRAIN_DRAW_READBACK_OK for BOTH seeded and real-mesher
-   paths, with nonzero GPU AND CPU fallback commands, original pixels, full-ring
-   turnover and zero validation/synchronization errors. Fix actual failures. Keep
-   e6b9b35b/full1094 as qualified staging baseline until successor passes.
-2. Complete initial-population collection using existing profiler and this bounded
-   ACTUAL production command witness. Add world-entry/usable-frame origins and
-   per-section availability/preparation/admission/service/publication chronology.
-   hasXYNeighbours is an admission rule with a near-camera shortcut, not proof
-   all lighting/halo data are ready. Do not mislabel that predicate input-ready.
-3. Freeze nonempty reference-view section denominator before comparing builds;
-   keep empty/occluded/unsupported/unavailable counts explicit. Include world entry
-   AND input-ready renderer timelines,50/90/99/hole inventory, fairness/frame pacing
-   and memory. Readbacks confirm selection after a fence; recorded_ns is NOT an
-   on-screen timestamp. Legacy/direct paths and portal context must be explicit.
-4. Exercise controlled internal appearance comparisons when runtime permits, then
-   deliver one final exact qualified JAR/hash and minimal owner package. Keep RX/
-   302-mod/save hardware gates explicit. Provisional OWNER_TERRAIN_INITIAL.jvmargs
-   is a staging/visual smoke profile, not finished appearance qualification.
+OWNER_TERRAIN_INITIAL.jvmargs is the exact new profile: all19 integrated flags,
+tracing=true, autoBenchmark=false,duration0,summary1s. New qualified-build RX/D32
+first-minute chronology/visual evidence can distinguish retained staging vs output
+reservation pressure vs publication->actual opaque command delay, before extending
+adoption/scheduling/visibility. Keep same saved camera (0/192/0,yaw-90,pitch30),
+2552x1374,D32/S12,VSyncOFF,cap260; no movement/reload/settings/teleport during capture.
+Use a fresh process, let60s pass after entry and exit. New latest.log and
+logs/vulkanmod-performance.log, plus an entry/converged-view clip if available,
+answer the changed-build hardware question. Existing private logs were already
+inspected; don't request unchanged ones. This is a diagnostic/visual check, not
+completed matched appearance qualification. Exact302-mod save/RX evidence is
+unavailable internally; no owner result is claimed.
 
-No redundant archaeology, separate selector/allocator/culler architecture,
-unsupported model shortcuts, raised budgets, weakened tests, private logs in Git
-or force pushes. Keep working through actionable cycles. Commit coherent changes
-and update status/roadmap/ledger/contract/this complete rolling prompt when material.
-Do not call the complete mission done until its evidence gates are satisfied; do
-not promise background execution after ending.
+Finish feasible measurement gaps using existing facilities; freeze the nonempty
+reference view, keep unavailable/empty/unsupported/occluded sets explicit, retain
+both world-entry and actual-input availability timelines, and qualify changes
+before any performance claim. New evidence should rank actual delays and the
+next source repair. All3 workstreams were inspected; existing cached graph/candidate /
+GPU selector/CPU bypass already exists. Do not build parallel allocators/schedulers /
+meshers/cullers or silently expand into generation/server rewrite. Old10 output
+reservation failures come from AreaBuffer free ranges with no GPU growth; visible
+output cannot be discarded. Worker preflight would cross render-owned allocation
+state and may lose valid GPU opportunity; new pressure evidence is needed first.
+
+Commit coherent milestones; maintain status/roadmap/ledger/affected ownership
+contracts and replace this COMPLETE rolling prompt when conclusions materially
+change. No private logs in Git, force pushes, concurrent overwrite or background
+work promises. Keep implementation/internal/owner/performance/release gates distinct.
