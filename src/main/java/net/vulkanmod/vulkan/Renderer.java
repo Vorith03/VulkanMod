@@ -272,6 +272,7 @@ public class Renderer {
             // Submission may have succeeded before presentation failed. Reclaim
             // readback buffers only after outstanding GPU use has ended.
             Vulkan.waitIdle();
+            net.vulkanmod.render.chunk.TerrainDrawReadback.cancelAfterDeviceIdle();
             ScreenshotReadback.cancelAll(failure);
             throw failure;
         } finally {

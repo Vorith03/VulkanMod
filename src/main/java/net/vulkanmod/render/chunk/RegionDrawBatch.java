@@ -195,6 +195,8 @@ final class RegionDrawBatch {
             if(DEBUG_GENERATED_WORLD_DRAW && gpuOwnsCommands) {
                 reportGeneratedWorldRecording(area, type, candidateTable, indirectCount);
             }
+            TerrainDrawReadback.request(area, type.ordinal(), indirectBuffer, indirectOffset,
+                    indirectCount, useGpuIndirect);
         }
     }
 

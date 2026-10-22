@@ -76,6 +76,10 @@ public class DefaultMainPass implements MainPass {
         RenderTargetManager.bindMain(false, swapChain.getWidth(), swapChain.getHeight());
         Framebuffer.endRenderPass(commandBuffer);
 
+        // Optional diagnostics copy actual draw commands outside rendering, while
+        // the SAME main command buffer is still recording and fence-owned.
+        net.vulkanmod.render.chunk.TerrainDrawReadback.recordPending(commandBuffer);
+
         try(MemoryStack stack = MemoryStack.stackPush()) {
             swapChain.presentLayout(stack, commandBuffer, Renderer.getCurrentImage());
         }

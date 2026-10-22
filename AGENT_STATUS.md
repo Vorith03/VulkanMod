@@ -1,5 +1,29 @@
 # VulkanMod Forge1.20.1 — Terrain appearance work in progress
 
+## October22 continuation — staging repair qualified; production draw readback candidate
+
+Executable e6b9b35bc7421547d62bfe4d2ef3735c431fb0ce passed full1094 /39809988234
+attempt1. JAR12440996437 is actual11,106,031byte runtime payload, SHA256
+ df481ee5b0e646cb6e7aecb35ac233ad56782bc4b2146c8d1c97e172d16872c9.
+Logs12440348598 verified;18 downloaded854x480 CPU/GPU phase pairs independently
+exact,0 validation/sync errors in top-level logs. Native/actual-world staging
+release, mesher production raster, CPU bypass, turnover/recovery passed. Three
+private steps skipped. The installation delay resolved;1093 was cancelled.
+
+A successor candidate adds bounded default-off TerrainDrawReadback: copy ACTUAL
+GPU or CPU-fallback indirect slices after render-pass end but before main command
+buffer finalization; decode only at existing frame-fence retirement. No gameplay
+wait/independent selector, same frame-owned sources, explicit incomplete capture
+on bounds/failure, device-idle cancellation, native GPU+CPU/pixel/recovery oracle.
+Focused helper Java17/pinned-LWJGL compilation with ownership stubs and all24
+offline contracts passed. Full native qualification of this successor is pending.
+See TERRAIN_APPEARANCE_2026-10-22.md for exact bounds/limitations. This is a selected
+production command witness, NOT pixel/presentation timing. Full mission remains
+OPEN: world-entry/input-ready clock, frozen denominator, full-path attribution and
+controlled before/after still need completion. PR12/texture/particle repair and
+existing renderer ownership/defaults remain preserved.
+
+
 ## Qualification observation — October22,16:07UTC
 
 Final full1094 /39809988234, job119934724439: offline contracts, Forge compilation,

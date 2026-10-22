@@ -222,6 +222,7 @@ public class Vulkan {
 
     public static void cleanUp() {
         vkDeviceWaitIdle(Device.device);
+        net.vulkanmod.render.chunk.TerrainDrawReadback.cancelAfterDeviceIdle();
         net.vulkanmod.render.particle.ParticleBillboardCompute.shutdownAfterDeviceIdle();
         GpuTextureInterpolationCompute.shutdownAfterDeviceIdle();
         GpuTerrainSectionMesherBridge.shutdownAfterDeviceIdle();

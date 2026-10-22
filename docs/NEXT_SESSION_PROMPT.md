@@ -1,87 +1,62 @@
-# VulkanMod — Continue terrain appearance and staging turnover qualification
+# VulkanMod — Continue initial terrain appearance measurement
 
-## Qualification observation — October22,16:07UTC
+Follow current AGENTS.md §3A on forge-1.20.1 (MC1.20.1/Forge47.3.0/Java17).
+Owner mission is still the full terrain-appearance assignment, not just a staging
+repair or a stationary FPS run. Preserve portals, texture/particle unsigned-limit
+repairs, GPU mesher CPU omission, REPLACE/APPEND, complete recovery and default-off
+pilots. PR12 remains separate. Read live status, roadmap/ledger and the focused
+TERRAIN_APPEARANCE_2026-10-22.md; recover live delta and relevant CI.
 
-Final full1094 /39809988234, job119934724439: offline contracts, Forge compilation,
-distributable verification, pinned animation evidence and packaged portal anchors
-PASSED. Native tests have NOT started: dependency installation has remained active
-since16:03:50UTC (previous qualified1092 installed these in11s). Live job-log
-retrieval returned404 BlobNotFound; no installation failure log is available yet.
-Do not call this a native failure or success, rerun unchanged work, or promote a
-JAR. Full1093 /39809021545 was superseded/CANCELLED, not qualified. Exact next
-external operation is inspect1094 conclusion/job steps and logs when published;
-fix an actual source failure if one appears, or diagnose the external installation
-failure from its real log. Avoid unproductive polling of the same frozen step.
-No final artifact identity/hash, native qualification, owner verification or causal
-appearance benefit exists for e6b9b35b at this checkpoint. The prior1092 executable
-remains the qualified baseline. Appearance collection and paired results remain
-unfinished; do not request the provisional owner check before final qualification.
+## October22 continuation — staging repair qualified; production draw readback candidate
+
+Executable e6b9b35bc7421547d62bfe4d2ef3735c431fb0ce passed full1094 /39809988234
+attempt1. JAR12440996437 is actual11,106,031byte runtime payload, SHA256
+ df481ee5b0e646cb6e7aecb35ac233ad56782bc4b2146c8d1c97e172d16872c9.
+Logs12440348598 verified;18 downloaded854x480 CPU/GPU phase pairs independently
+exact,0 validation/sync errors in top-level logs. Native/actual-world staging
+release, mesher production raster, CPU bypass, turnover/recovery passed. Three
+private steps skipped. The installation delay resolved;1093 was cancelled.
+
+A successor candidate adds bounded default-off TerrainDrawReadback: copy ACTUAL
+GPU or CPU-fallback indirect slices after render-pass end but before main command
+buffer finalization; decode only at existing frame-fence retirement. No gameplay
+wait/independent selector, same frame-owned sources, explicit incomplete capture
+on bounds/failure, device-idle cancellation, native GPU+CPU/pixel/recovery oracle.
+Focused helper Java17/pinned-LWJGL compilation with ownership stubs and all24
+offline contracts passed. Full native qualification of this successor is pending.
+See TERRAIN_APPEARANCE_2026-10-22.md for exact bounds/limitations. This is a selected
+production command witness, NOT pixel/presentation timing. Full mission remains
+OPEN: world-entry/input-ready clock, frozen denominator, full-path attribution and
+controlled before/after still need completion. PR12/texture/particle repair and
+existing renderer ownership/defaults remain preserved.
 
 
-Follow live AGENTS.md §3A on forge-1.20.1, Java17/MC1.20.1/Forge47.3.0.
-The owner explicitly replaced the previous owner-verification-only scope with the
-terrain appearance assignment. Preserve current GPU texture/particle repairs,
-REPLACE/APPEND, CPU omission/recovery, portal visibility and default-off pilots.
-Read current status, roadmap, ledger and TERRAIN_APPEARANCE_2026-10-22.md; recover
-the live delta rather than repeating prior audits. PR12 remains separate.
+## Concrete next actions
 
-## Recoverable implementation
+1. Finish the new production indirect readback candidate's full qualification.
+   Resolve live code SHA/run rather than inferring from this file. Native screenshot
+   fixture must log VULKANMOD_TERRAIN_DRAW_READBACK_OK for BOTH seeded and real-mesher
+   paths, with nonzero GPU AND CPU fallback commands, original pixels, full-ring
+   turnover and zero validation/synchronization errors. Fix actual failures. Keep
+   e6b9b35b/full1094 as qualified staging baseline until successor passes.
+2. Complete initial-population collection using existing profiler and this bounded
+   ACTUAL production command witness. Add world-entry/usable-frame origins and
+   per-section availability/preparation/admission/service/publication chronology.
+   hasXYNeighbours is an admission rule with a near-camera shortcut, not proof
+   all lighting/halo data are ready. Do not mislabel that predicate input-ready.
+3. Freeze nonempty reference-view section denominator before comparing builds;
+   keep empty/occluded/unsupported/unavailable counts explicit. Include world entry
+   AND input-ready renderer timelines,50/90/99/hole inventory, fairness/frame pacing
+   and memory. Readbacks confirm selection after a fence; recorded_ns is NOT an
+   on-screen timestamp. Legacy/direct paths and portal context must be explicit.
+4. Exercise controlled internal appearance comparisons when runtime permits, then
+   deliver one final exact qualified JAR/hash and minimal owner package. Keep RX/
+   302-mod/save hardware gates explicit. Provisional OWNER_TERRAIN_INITIAL.jvmargs
+   is a staging/visual smoke profile, not finished appearance qualification.
 
-Initial staging fix a4dcf440, full1093 /39809021545. Final candidate e6b9b35b,
-full1094 /39809988234 pending at this checkpoint. Resolve actual live conclusions
-and failure steps; do not declare1093 qualification applies to the final descendant.
-CPU snapshots release by identity after the post-submit dispatch attempt. Matching
-GPU voxel/light inputs revoke discovery, then existing frame-fence callbacks return
-physical slices after graphics-queue upload/compute/frame ordering. Visible output
-is independent. Input failures use the existing deferred recovery callback to
-return staging even with complete CPU geometry. No new allocator, budgets, blocking
-waits or default changes. Sparse native tests protect resident/pending replacement
-generations and read revoked bytes before physical retirement. Mesher raster native
-fixture now stages its preflight BEFORE input submit and uses automatic production
-dispatch; no second manual dispatch. It requires staging released while original
-pixels/bypass/turnover/recovery oracles remain intact.
-
-All24 offline contracts passed locally with downloaded Java17. Extracted production
-store/layout/snapshot plus configuration-only stubs passed4096 bounded turnovers,
-full-cap rejection, idempotence, stale identity protection and zero residual bytes.
-Initial workspace lacked javac; downloaded tooling recovered it. Local full Gradle
-still cannot resolve ForgeGradle. Full remote native/Forge gates are required.
-
-## Evidence and unfinished mission
-
-Read existing owner UUID221fd7a2 aggregate report; private rawlogs were materialized
-outside Git, never commit them. Existing logs confirm saturated2048 staging cap and
-GPU input upload rejection, but no world-entry/input-availability/first-consumption
-coverage trace. Cumulative64.7ms queue,5.6ms build,23.2ms publication and71s benchmark
-warmup are NOT initial appearance measures. Do not invent paired speedups.
-
-All3 workstreams were inspected: lifetime blockage is actionable; existing cached
-visibility/candidate/GPU indirect machinery already exists; no measurement yet
-isolates visibility as material. Do not build a parallel scheduler/mesher/culler.
-Region GPU pages stay allocated under unchanged32MiB budget for reuse; freed slices
-can turn over after fences, but page distribution/output quotas/unsupported models
-still constrain adoption. Full appearance denominator/measurement design is in the
-report and is NOT fully instrumented. Owner targets2–3s nearby/5s intended view are
-aspirational and remain unverified.
-
-## Next concrete actions
-
-1. Finish final1094 integrated qualification, fix actual failures, inspect artifacts
-   and actual JAR SHA256. Previous qualified baseline272b7f81/full1092 remains valid.
-2. Implement bounded initial-population collection using existing profiler,
-   production draw and lifetime owners. Freeze/persist a nonempty reference view
-   denominator; track both world-entry and true input-ready-to-consumption times.
-   Never substitute publication/indirect-recording for selected production output.
-   The existing live selector diagnostic runs an independent blocking probe, so it
-   cannot establish actual production draw timing unchanged.
-3. Obtain controlled internal appearance comparisons where runtime/save evidence
-   permits. Keep unavailable302-mod/RX/exact-save gates explicit. Then deliver a
-   minimal exact-JAR, same-settings before/after owner package. A stationary FPS
-   capture alone is insufficient. Initial/reentry/warm/newgen strata stay separate.
-
-Work autonomously through useful implementation and qualification. The full mission
-is still OPEN: do not stop at this slice or call it release-ready. If essential
-external gates prevent completion, finish independent work and preserve exact
-unresolved questions. Update status/roadmap/ledger/contracts and replace this
-rolling prompt when material, retaining exact executable/run/artifact identities,
-failures and limitations. No private logs, force push or concurrent overwrite.
+No redundant archaeology, separate selector/allocator/culler architecture,
+unsupported model shortcuts, raised budgets, weakened tests, private logs in Git
+or force pushes. Keep working through actionable cycles. Commit coherent changes
+and update status/roadmap/ledger/contract/this complete rolling prompt when material.
+Do not call the complete mission done until its evidence gates are satisfied; do
+not promise background execution after ending.

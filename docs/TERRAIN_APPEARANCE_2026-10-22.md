@@ -1,5 +1,49 @@
 # Terrain appearance: staging turnover candidate — October 22, 2026
 
+## October22 continuation — staging repair qualified, consumption collection in progress
+
+Full1094 /39809988234 attempt1 SUCCESS at executable
+`e6b9b35bc7421547d62bfe4d2ef3735c431fb0ce`. The earlier installation delay resolved;
+all required public native/Forge/compatibility gates passed. Three private steps
+were skipped, not passed. Full1093 remains superseded/cancelled.
+Artifact12440996437 is the actual runtime JAR
+VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1094-ge6b9b35b-all.jar,
+11,106,031bytes, SHA256
+`df481ee5b0e646cb6e7aecb35ac233ad56782bc4b2146c8d1c97e172d16872c9`.
+Downloaded bytes independently checked: ZIP CRC, manifest/build SHA, Java17 major61,
+MC/Forge ranges, mixin config, nested LWJGL Vulkan jar and Linux VMA/shaderc natives.
+Logs12440348598 downloaded/CRC checked. Independently recomputed9 vanilla plus9
+portal854x480 CPU/GPU phase pairs: all exact. No Validation Error/SYNC-HAZARD in
+archived top-level logs. Actual mesher -> production indirect raster marker passed;
+staging/cpu_input_released recorded in native and both actual-world GPU runs.
+This qualifies the ownership correction, not initial-population speed.
+
+A separate bounded opt-in `debugTerrainDrawReadback` collector is now being
+implemented. It copies the ACTUAL production indirect buffer slices AFTER the
+render pass and BEFORE main command-buffer finalization, then decodes selected
+commands at existing frame-fence retirement. It does not run a second selector or
+wait in gameplay. Both GPU-selected and complete CPU fallback buffers are observed;
+CPU indirect buffers gain transfer-source usage only. Existing frame ownership
+protects sources; raw host readback buffers are destroyed exactly once at fence
+retirement or explicit device-idle cancellation on submission failure/shutdown.
+
+Bounds:128 requests/4MiB per recorded frame,32768 requests/30s from first observed
+draw. Exceeding a bound or inspection failure explicitly invalidates the capture.
+Native screenshot fixture explicitly enables a test observer, verifies actual
+packed section0, nonempty GPU AND CPU fallback commands after fences, and retains
+all original pixel/generation/full-ring/recovery assertions. No normal default is
+enabled. Focused Java17 helper compilation against actual pinned LWJGL3.3.1 passed
+with configuration/ownership stubs; all24 offline contracts passed. Full native
+qualification of this NEW collector is still required.
+
+The collector's recorded_ns/confirmed_ns are command recording and fence-confirmed
+CPU observations, NOT a GPU timestamp or on-screen appearance time. It has no
+world-entry origin, input-ready timeline, frozen reference denominator or full
+legacy/direct-path coverage yet; no coverage percentage or target-time claim is
+permitted. It is the production-consumption witness component of the unfinished
+measurement, not a replacement for the contract below.
+
+
 ## Qualification observation — October22,16:07UTC
 
 Final full1094 /39809988234, job119934724439: offline contracts, Forge compilation,

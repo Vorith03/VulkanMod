@@ -59,6 +59,18 @@ public final class GeneratedIndirectDrawSmokeTest {
         boolean oldMask = VRenderSystem.depthMask, oldStencil = VRenderSystem.stencilTest;
         boolean oldBlend = PipelineState.blendInfo.enabled;
         int oldColorMask = VRenderSystem.colorMask;
+        int[] observed = new int[3]; // completed batches, nonempty GPU commands, nonempty CPU commands
+        TerrainDrawReadback.beginCiProbe(observation -> {
+            require(observation.confirmedNanos() >= observation.recordedNanos(),
+                    "Indirect consumption confirmation predates the recorded draw");
+            observed[0]++;
+            for(int i = 0; i < observation.words().length; i += 5) {
+                if(observation.words()[i] == 0 || observation.words()[i + 1] == 0) continue;
+                require(observation.words()[i + 4] == 0,
+                        "Actual consumed indirect bytes selected an unexpected fixture section");
+                observed[observation.gpuCommands() ? 1 : 2]++;
+            }
+        });
         try {
             VRenderSystem.cull = VRenderSystem.depthTest = VRenderSystem.depthMask = VRenderSystem.stencilTest = false;
             PipelineState.blendInfo.enabled = false;
@@ -233,11 +245,18 @@ public final class GeneratedIndirectDrawSmokeTest {
                     }
                 }
             }
+            Vulkan.waitIdle();
+            TerrainDrawReadback.endCiProbeAfterDeviceIdle();
+            require(observed[0] > 0 && observed[1] > 0 && observed[2] > 0,
+                    "Actual indirect consumption readback must observe GPU and complete CPU fallback commands");
+            Initializer.LOGGER.info("VULKANMOD_TERRAIN_DRAW_READBACK_OK: samples={} gpuCommands={} cpuCommands={} meshed={}; actual production buffer bytes, frame-fence completion, original pixels unchanged",
+                    observed[0], observed[1], observed[2], meshed);
             Initializer.LOGGER.info("VULKANMOD_GPU_SELECTOR_RETIRED_SLOT_REUSE_OK: unchanged cached frames span a complete slot ring; changed generation re-adopted on the same numeric slot without CPU command upload; meshed={}", meshed);
             if(meshed) Initializer.LOGGER.info("VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK: baked model qualification, sparse input upload, production bridge async compute/completion/handoff, six resident faces without vertex readback/reupload, native selector and production indirect pixels, REPLACE/APPEND/recovery CPU command bypass; synthetic world inputs and unlit projection, not loaded-world/portal adoption");
             else Initializer.LOGGER.info("VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK: production RegionDrawBatch.draw, real queued candidates/selector/indirect fetch, nonzero resident offset, REPLACE, atomic CPU/GPU APPEND order, zero-exception APPEND, frame-slot reuse, rejected-proof complete CPU recovery and re-adoption, no duplicate accepted CPU command upload; seeded vertices, no loaded world/mesher/portal claim");
         } finally {
             Vulkan.waitIdle();
+            TerrainDrawReadback.endCiProbeAfterDeviceIdle();
             batch.free();
             area.releaseBuffers();
             if(target != null) target.destroyBuffers();
