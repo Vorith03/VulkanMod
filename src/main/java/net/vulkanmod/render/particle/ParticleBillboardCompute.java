@@ -123,7 +123,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         batch.validate(vertices.remaining());
         if(!ready()) return false;
         int groups=(batch.count()+63)/64;
-        if(groups>Device.deviceProperties.limits().maxComputeWorkGroupCount(0)) {
+        if(groups>Integer.toUnsignedLong(Device.deviceProperties.limits().maxComputeWorkGroupCount(0))) {
             capacityRejections++; capacityWorkgroupRejections++; return false;
         }
         long rangeLimit=Math.min(Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange()),

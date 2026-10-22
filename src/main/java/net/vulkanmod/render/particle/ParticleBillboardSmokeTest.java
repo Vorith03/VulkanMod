@@ -11,6 +11,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.BufferBuilderMemory;
 import net.vulkanmod.interfaces.ParticleBillboardBuffer;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.Device;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.joml.Quaternionf;
@@ -195,10 +196,16 @@ public final class ParticleBillboardSmokeTest {
                     ParticleBillboardCompute.ciStorageRangeLimit(32768);
                 }
                 boolean expanded;
+                var limits=Device.deviceProperties.limits();
+                int groups=limits.maxComputeWorkGroupCount(0);
                 try {
+                    // Still only two workgroups: model a uint32 host limit, not
+                    // extra device capability or a larger native dispatch.
+                    if(pass==0) limits.maxComputeWorkGroupCount(0,-1);
                     expanded=ParticleBillboardCompute.expand(buffer,actual.vertexBuffer(),jobs);
                 } finally {
                     ParticleBillboardCompute.ciStorageRangeLimit(0);
+                    limits.maxComputeWorkGroupCount(0,groups);
                 }
                 if(!expanded)
                     throw new AssertionError("Compute did not accept real particle batch");

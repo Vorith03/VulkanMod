@@ -56,6 +56,19 @@ public final class SpriteAnimationSmokeTest {
         return contents;
     }
     public static void verify() {
+        // Native dispatches remain tiny and below Vulkan's required minima. Model
+        // uint32 limits with the sign bit set so host admission cannot reject them.
+        var limits = Device.deviceProperties.limits();
+        int storage = limits.maxStorageBufferRange();
+        int groups = limits.maxComputeWorkGroupCount(0);
+        try {
+            limits.maxStorageBufferRange(-1).maxComputeWorkGroupCount(0, -1);
+            verifyWithLimits();
+        } finally {
+            limits.maxStorageBufferRange(storage).maxComputeWorkGroupCount(0, groups);
+        }
+    }
+    private static void verifyWithLimits() {
         boolean oldEnabled = Initializer.CONFIG.animateOnlyUsedTextures;
         int oldGrace = Initializer.CONFIG.animationVisibilityGraceMs;
         boolean oldUpload = SpriteUtil.shouldUpload();

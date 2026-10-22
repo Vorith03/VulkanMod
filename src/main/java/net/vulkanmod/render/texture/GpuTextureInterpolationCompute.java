@@ -88,6 +88,29 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private static final int PUSH_WORDS = AnimationComputeLayout.PUSH_WORDS;
     private static final int PUSH_CONSTANT_BYTES = PUSH_WORDS * Integer.BYTES;
 
+    // Lifetime counters preserve the first cause despite the resident's one-shot binding latch.
+    private enum Rejection { BINDING_INPUT, BINDING_LIMIT, DESCRIPTOR, DISPATCH_INPUT,
+        UPLOAD_BATCH, MIP_COUNT, MIP_BOUNDS, SOURCE_BOUNDS, WORKGROUP, EMPTY }
+    private static final long[] rejections = new long[Rejection.values().length];
+    private static <T> T reject(Rejection reason) {
+        if(rejections[reason.ordinal()]++ == 0)
+            Initializer.LOGGER.warn("GPU texture interpolation rejection: {}", reason);
+        return null;
+    }
+    public static String rejectionStatistics() {
+        StringBuilder result = new StringBuilder();
+        if(Device.deviceProperties != null) {
+            var limits = Device.deviceProperties.limits();
+            result.append(" gpu_storage_range_limit_u32=").append(Integer.toUnsignedLong(limits.maxStorageBufferRange()))
+                    .append(" gpu_workgroup_x_limit_u32=").append(Integer.toUnsignedLong(limits.maxComputeWorkGroupCount(0)))
+                    .append(" gpu_storage_offset_alignment=").append(limits.minStorageBufferOffsetAlignment());
+        }
+        for(Rejection reason : Rejection.values())
+            result.append(" gpu_interpolation_reject_").append(reason.name().toLowerCase(java.util.Locale.ROOT))
+                    .append("_total=").append(rejections[reason.ordinal()]);
+        return result.toString();
+    }
+
     private static GpuTextureInterpolationCompute instance;
     private static boolean unavailable;
 
@@ -151,8 +174,11 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                 || (long)sourceOffset + sourceBytes > source.getBufferSize()
                 || (sourceOffset % Math.max(4L,
                         Device.deviceProperties.limits().minStorageBufferOffsetAlignment())) != 0L) {
-            return null;
+            return reject(Rejection.BINDING_INPUT);
         }
+        long rangeLimit = Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange());
+        if(sourceBytes > rangeLimit || scratchBytes > rangeLimit)
+            return reject(Rejection.BINDING_LIMIT);
 
         try {
             if(instance == null) {
@@ -179,20 +205,20 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
     private synchronized Binding allocateBinding(TextureResidentBuffer source,
                                                  int sourceOffset, int sourceBytes, int scratchBytes, int mipTableOffset) {
         if(this.closed || this.liveBindings >= MAX_BINDINGS) {
-            return null;
+            return reject(Rejection.BINDING_LIMIT);
         }
 
         if(sharedScratchRequested() && (sourceOffset & 3) == 0
                 && scratchBytes <= SHARED_SCRATCH_PAGE_BYTES
                         - (multiRequested() ? JOB_TABLE_BYTES : 0)
-                && (long)source.getBufferSize() <= Device.deviceProperties.limits().maxStorageBufferRange()
-                && SHARED_SCRATCH_PAGE_BYTES <= Device.deviceProperties.limits().maxStorageBufferRange()) {
+                && (long)source.getBufferSize() <= Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange())
+                && SHARED_SCRATCH_PAGE_BYTES <= Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange())) {
             Binding shared = this.allocateSharedBinding(
                     source, sourceOffset, sourceBytes, scratchBytes, mipTableOffset);
             if(shared != null) return shared;
         }
         long descriptorSet = this.allocateDescriptorSet();
-        if(descriptorSet == VK_NULL_HANDLE) return null;
+        if(descriptorSet == VK_NULL_HANDLE) return reject(Rejection.DESCRIPTOR);
         TextureResidentBuffer scratch = null;
         boolean success = false;
         try {
@@ -379,12 +405,12 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                 || currentIndex < 0 || nextIndex < 0
                 || subFrame <= 0 || duration <= 0 || subFrame >= duration
                 || atlas.formatSize != 4) {
-            return null;
+            return reject(Rejection.DISPATCH_INPUT);
         }
 
         GraphicsQueue graphicsQueue = Device.getGraphicsQueue();
         if(!graphicsQueue.hasActiveUploadBatch()) {
-            return null;
+            return reject(Rejection.UPLOAD_BATCH);
         }
 
         int levels = Math.min(atlas.mipLevels,
@@ -392,7 +418,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                         Math.min(sourceWidths.length,
                                 Math.min(sourceHeights.length, outputOffsets.length))));
         if(levels <= 0) {
-            return null;
+            return reject(Rejection.MIP_COUNT);
         }
 
         int regionCount = 0;
@@ -431,7 +457,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
                     || dstMipX > atlasWidth - width || dstMipY > atlasHeight - height
                     || outputOffsets[mip] < 0 || (outputOffsets[mip] & 3) != 0
                     || outputEnd > binding.scratchBytes) {
-                return null;
+                return reject(Rejection.MIP_BOUNDS);
             }
 
             long currentLastPixelExclusive =
@@ -441,14 +467,14 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             long maxSourceEnd = sourceBase
                     + Math.max(currentLastPixelExclusive, nextLastPixelExclusive) * 4L;
             if(maxSourceEnd > binding.sourceBytes) {
-                return null;
+                return reject(Rejection.SOURCE_BOUNDS);
             }
 
             long pixels = (long)width * height;
             if(pixels > Integer.MAX_VALUE
                     || (pixels - 1L) / WORKGROUP_SIZE + 1L
-                            > Device.deviceProperties.limits().maxComputeWorkGroupCount(0)) {
-                return null;
+                            > Integer.toUnsignedLong(Device.deviceProperties.limits().maxComputeWorkGroupCount(0))) {
+                return reject(Rejection.WORKGROUP);
             }
             regionCount++;
             totalPixels += pixels;
@@ -456,7 +482,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
         }
 
         if(regionCount <= 0 || totalPixels <= 0L) {
-            return null;
+            return reject(Rejection.EMPTY);
         }
 
         boolean fused = BATCH_REQUESTED && binding.mipTableOffset >= 0
@@ -696,7 +722,7 @@ public final class GpuTextureInterpolationCompute implements AutoCloseable {
             return null;
         }
         if(jobPixels <= 0 || (long)(jobPixels - 1) / WORKGROUP_SIZE + 1L
-                > Device.deviceProperties.limits().maxComputeWorkGroupCount(0))
+                > Integer.toUnsignedLong(Device.deviceProperties.limits().maxComputeWorkGroupCount(0)))
             return null;
         // The accepted rows each own a pending atlas copy. Record all prior
         // compute and copies before wrapping; the subsequent transfer-side

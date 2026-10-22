@@ -157,6 +157,7 @@ public final class GpuAnimationSourcePool {
     # Keep the extracted attribution-only test independent of native Vulkan.
     (pool_sources / "GpuTextureInterpolationCompute.java").write_text("""package net.vulkanmod.render.texture;
 public final class GpuTextureInterpolationCompute {
+    public static String rejectionStatistics() { return ""; }
     public static MultiStats multiStats() {
         return new MultiStats(0, 0, 0, 0, 0, 0, 0, 0);
     }

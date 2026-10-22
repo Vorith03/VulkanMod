@@ -414,6 +414,7 @@ public final class TextureTickAttribution {
                 .append(" resident_invalidated=").append(residentInvalidated);
         // Lifetime multi-job counters are deliberately not reset with the
         // benchmark window; their deltas can be compared across matched runs.
+        line.append(GpuTextureInterpolationCompute.rejectionStatistics());
         var multi = GpuTextureInterpolationCompute.multiStats();
         line.append(" gpu_multi_eligible_total=").append(multi.eligible())
                 .append(" gpu_multi_accepted_total=").append(multi.accepted())
