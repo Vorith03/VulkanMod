@@ -199,3 +199,35 @@ jobs:
           archive: false
           retention-days: 14
           if-no-files-found: error
+
+  artifact_audit:
+    name: Audit published terrain executable
+    needs: [plan, build]
+    if: needs.plan.outputs.native == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout audit source
+        uses: actions/checkout@v4
+      - name: Download published runtime JAR without decompressing it
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-all.jar'
+          path: artifact-audit/jar
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Download published smoke evidence
+        uses: actions/download-artifact@v8
+        with:
+          pattern: 'VulkanMod-Forge-smoke-log-*'
+          path: artifact-audit/logs
+          digest-mismatch: error
+      - name: Verify published executable and initial terrain evidence
+        run: python3 scripts/ci/terrain-artifact-audit.py artifact-audit "$GITHUB_SHA" "$GITHUB_RUN_NUMBER"
+      - name: Upload byte audit record
+        uses: actions/upload-artifact@v7
+        with:
+          path: .ci-results/terrain-artifact-audit.json
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

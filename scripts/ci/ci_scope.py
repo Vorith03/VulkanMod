@@ -47,6 +47,7 @@ QUALIFICATION_STEPS = {
     'Validate packaged Immersive Portals mixin anchors',
     'Upload smoke-test logs',
     'Upload distributable JAR',
+    'Verify published executable and initial terrain evidence',
 }
 COMPAT_STEPS = {
     'Smoke-test Create Chronicles compatibility',
@@ -86,14 +87,12 @@ def fully_validated(run, jobs):
             run.get('event') != 'push' or run.get('head_branch') != 'forge-1.20.1' or
             run.get('path') != '.github/workflows/build.yml'):
         return False
-    for job in jobs:
-        if job.get('conclusion') != 'success':
-            continue
-        passed = {s['name'] for s in job.get('steps', [])
-                  if s.get('status') == 'completed' and s.get('conclusion') == 'success'}
-        if NATIVE_STEPS | QUALIFICATION_STEPS <= passed and COMPAT_STEPS & passed:
-            return True
-    return False
+    # Native execution and the dependent published-byte audit are separate jobs.
+    # Only successful jobs contribute; a skipped/missing audit is not qualification.
+    passed = {s['name'] for job in jobs if job.get('conclusion') == 'success'
+              for s in job.get('steps', [])
+              if s.get('status') == 'completed' and s.get('conclusion') == 'success'}
+    return NATIVE_STEPS | QUALIFICATION_STEPS <= passed and bool(COMPAT_STEPS & passed)
 
 
 def git(*args):

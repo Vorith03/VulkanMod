@@ -1,5 +1,24 @@
 # VulkanMod Forge1.20.1 — initial terrain appearance mission OPEN
 
+
+## Final byte audit relocation — October22
+
+Full1102 /39833094706 at6361b8a5c833a3587589c0b724f00d715cfc5177 passed all public
+native/Forge/world/portal/compatibility gates;3 private fixture steps skipped. The
+local workspace disconnected after source was committed cleanly. One bounded
+retry confirmed environment_offline; do not repeat failed local operations or
+claim an independent local byte audit. A small dependent CI job now downloads the
+same workflow's published JAR/logs, verifies actual JAR SHA/CRC/source/Java17/Forge /
+Mixins/nested natives and rechecks original18 pixel pairs, native page turnover,
+production GPU/APPEND/CPU-bypass and global page allocated/retired-to-zero evidence.
+Download-artifact v8 is required for the existing upload-artifact v7 archive:false
+JAR; keep it as a file, decompress only the smoke archive, and fail digest mismatch.
+Overall full qualification requires this audit step across the successful jobs;
+missing/skipped audit is NOT a usable native baseline. Final qualification, actual
+JAR identity and owner package remain pending until that exact run completes.
+Production rendering code is unchanged by this audit relocation. Keep all owner
+performance/input/presentation unknowns explicit; do not promote1102 metadata alone.
+
 ## October22 — page repair qualified; bounded memory trace final qualification pending
 
 Follow AGENTS.md §3A. The page-repair milestone returns native input pages

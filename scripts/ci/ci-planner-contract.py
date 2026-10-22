@@ -57,6 +57,13 @@ class PlannerContract(unittest.TestCase):
                  for name in sorted(scope.NATIVE_STEPS | scope.QUALIFICATION_STEPS | {next(iter(scope.COMPAT_STEPS))})]
         job = dict(conclusion='success', steps=steps)
         self.assertTrue(scope.fully_validated(run, [job]))
+        audit_name = 'Verify published executable and initial terrain evidence'
+        split = [dict(conclusion='success', steps=[dict(s) for s in steps if s['name'] != audit_name]),
+                 dict(conclusion='success', steps=[dict(s) for s in steps if s['name'] == audit_name])]
+        self.assertTrue(scope.fully_validated(run, split))
+        self.assertFalse(scope.fully_validated(run, split[:1]))
+        split[1]['conclusion'] = 'skipped'
+        self.assertFalse(scope.fully_validated(run, split))
         for step in steps:
             for conclusion in ('failed', 'skipped', 'cancelled'):
                 original = step['conclusion']; step['conclusion'] = conclusion
@@ -131,6 +138,10 @@ class PlannerContract(unittest.TestCase):
 
     def test_workflow_retains_all_gates_and_gates_publication(self):
         text = (runner.ROOT/'.github/workflows/build.yml').read_text()
+        audit_script = runner.ROOT/'scripts/ci/terrain-artifact-audit.py'
+        compile(audit_script.read_text(), str(audit_script), 'exec')
+        self.assertIn('needs: [plan, build]', text)
+        self.assertIn('actions/download-artifact@v8', text)
         blocks = {}
         for block in text.split('      - name: ')[1:]:
             blocks[block.splitlines()[0]] = block
