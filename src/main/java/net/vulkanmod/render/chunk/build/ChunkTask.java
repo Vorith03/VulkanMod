@@ -48,11 +48,22 @@ public class ChunkTask {
     protected final TaskDispatcher taskDispatcher;
     protected AtomicBoolean cancelled = new AtomicBoolean(false);
     protected final RenderSection renderSection;
+    private net.vulkanmod.render.chunk.TerrainAppearanceEvents.Ticket appearanceTicket;
     public boolean highPriority = false;
 
     ChunkTask(RenderSection renderSection, TaskDispatcher taskDispatcher) {
         this.renderSection = renderSection;
         this.taskDispatcher = taskDispatcher;
+    }
+
+    protected void captureAppearance(long generation) {
+        var ticket = net.vulkanmod.render.chunk.TerrainAppearanceEvents.capture(renderSection);
+        this.appearanceTicket = ticket != null && ticket.generation() == generation ? ticket : null;
+    }
+
+    public void tracePhase(net.vulkanmod.render.chunk.TerrainAppearanceEvents.Stage stage) {
+        if(net.vulkanmod.render.chunk.TerrainAppearanceEvents.ENABLED && this instanceof BuildTask)
+            net.vulkanmod.render.chunk.TerrainAppearanceEvents.stage(appearanceTicket, stage);
     }
 
     public String name() { return "generic_chk_task"; }
@@ -96,6 +107,7 @@ public class ChunkTask {
             this.region = renderChunkRegion;
             this.origin = origin.immutable();
             this.voxelGeneration = renderSection.getVoxelGeneration();
+            captureAppearance(this.voxelGeneration);
             this.gpuTerrainCpuRecoveryRequired = renderSection.gpuTerrainCpuRecoveryRequired();
             this.gpuTerrainDispatchRecoveryRequired = renderSection.gpuTerrainDispatchRecoveryRequired();
             this.gpuTerrainHadReadyCpuFallback = renderSection.hasReadyGpuTerrainCpuFallback();

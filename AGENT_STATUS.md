@@ -1,5 +1,26 @@
 # VulkanMod Forge1.20.1 — Terrain appearance work in progress
 
+## October22 — chronology follow-up candidate
+
+Staging repair e6b9b35b/full1094 remains the latest completely qualified executable;
+exact bytes/hash and independent18-phase pixel check are in the focused report.
+Readback candidate7503c146/full1095 /39814242766 passed native readback/raster and
+loaded-world/portal gates; public modpack compatibility was still active at this
+observation, so do not call1095 fully qualified yet.
+
+The next candidate adds bounded same-flag TerrainAppearanceEvents, main-world entry
+clock, section-generation stage timestamps and recorded-epoch tags on fence-confirmed
+indirect bytes. It enables collection in BOTH existing same-save CPU/GPU world
+controls, requires positive main-world consumption/worker/publication/GPU-ready
+markers and no incomplete capture, retaining original pixel/lifecycle/portal gates.
+Focused Java17 event/helper compilation, event lifetime/bounds/owner isolation tests,
+all24 offline contracts and shell syntax passed. Full qualification of the combined
+successor is required. Neighbor admission is NOT all-inputs-ready; no frozen full
+terrain denominator, full-path/generation association or presented-frame timing is
+claimed. The full appearance mission remains OPEN. Follow the focused report and
+live delta; do not ask for another stationary benchmark as initial-load evidence.
+
+
 ## October22 continuation — staging repair qualified; production draw readback candidate
 
 Executable e6b9b35bc7421547d62bfe4d2ef3735c431fb0ce passed full1094 /39809988234

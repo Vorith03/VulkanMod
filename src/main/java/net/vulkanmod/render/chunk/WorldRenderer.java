@@ -162,6 +162,9 @@ public class WorldRenderer {
     }
 
     public void setupRenderer(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
+        if(TerrainAppearanceEvents.ENABLED && this == getInstance()
+                && !net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload())
+            TerrainAppearanceEvents.begin(this, this.level);
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Setup_Renderer");
         this.cameraPos = camera.getPosition();
@@ -542,6 +545,8 @@ public class WorldRenderer {
             return false;
         }
 
+        if(TerrainAppearanceEvents.ENABLED)
+            TerrainAppearanceEvents.stage(section, section.getVoxelGeneration(), TerrainAppearanceEvents.Stage.NEIGHBOR_GATE_PASSED);
         section.rebuildChunkAsync(this.taskDispatcher, renderRegionCache);
         if (net.vulkanmod.render.profiling.PerformanceProfiler.isEnabled())
             performanceScheduledBuilds++;
@@ -613,6 +618,7 @@ public class WorldRenderer {
     }
 
     public void setLevel(@Nullable ClientLevel level) {
+        if(this.level != level) TerrainAppearanceEvents.close(this);
         this.cachedAreaFrustum = null;
         this.pendingDirtySections.clear();
         this.lastCameraX = Float.MIN_VALUE;

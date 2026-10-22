@@ -141,7 +141,9 @@ public class TaskDispatcher {
             long queueNanos = scheduledNanos == null ? 0L : Math.max(0L, startNanos - scheduledNanos);
 
             try {
+                task.tracePhase(TerrainAppearanceEvents.Stage.WORKER_START);
                 CompletableFuture<ChunkTask.Result> result = task.doTask(builderPack);
+                task.tracePhase(TerrainAppearanceEvents.Stage.WORKER_FINISH);
                 long elapsedNanos = System.nanoTime() - startNanos;
                 if(task instanceof ChunkTask.BuildTask && result != null && result.isDone()
                         && result.getNow(ChunkTask.Result.CANCELLED) == ChunkTask.Result.SUCCESSFUL) {
@@ -199,6 +201,7 @@ public class TaskDispatcher {
             return;
 
         chunkTask.preparePopulation();
+        chunkTask.tracePhase(TerrainAppearanceEvents.Stage.ADMITTED);
         this.scheduledAt.put(chunkTask, System.nanoTime());
 
         if (chunkTask.highPriority) {
@@ -344,6 +347,7 @@ public class TaskDispatcher {
                                       long generation, boolean stagePreservedLayer,
                                       Runnable publishResult) {
         long queuedAt = System.nanoTime();
+        task.tracePhase(TerrainAppearanceEvents.Stage.PUBLICATION_QUEUED);
         this.pendingUploadBuffers.addAll(uploadBuffers.values());
         this.toUpload.add(() -> {
             boolean populationPublished = false;
@@ -404,6 +408,7 @@ public class TaskDispatcher {
 
                 this.doSectionUpdate(section, uploadBuffers, preservedLayer);
                 publishResult.run();
+                task.tracePhase(TerrainAppearanceEvents.Stage.PUBLICATION_APPLIED);
                 populationPublished = true;
                 this.acceptedResults.incrementAndGet();
                 this.publishedBuilds.incrementAndGet();

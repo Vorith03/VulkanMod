@@ -145,6 +145,7 @@ public final class GpuTerrainSectionMesherBridge {
     }
 
     private static void dispatchWithStagedInput(ChunkArea area, RenderSection section, long generation) {
+        TerrainAppearanceEvents.stage(section, generation, TerrainAppearanceEvents.Stage.GPU_DISPATCH_ATTEMPT);
         if(!ENABLED || area == null || section == null)
             return;
 
@@ -440,6 +441,7 @@ public final class GpuTerrainSectionMesherBridge {
             return;
         }
 
+        TerrainAppearanceEvents.stage(section, generation, TerrainAppearanceEvents.Stage.GPU_READY);
         GpuTerrainDiagnostics.recordSuccess("published", section, generation,
                 result.writtenFaces(), cpuBypassed);
         if(ACTIVE_LOGGED.compareAndSet(false, true)) {
@@ -529,6 +531,7 @@ public final class GpuTerrainSectionMesherBridge {
             return;
         }
 
+        TerrainAppearanceEvents.stage(section, generation, TerrainAppearanceEvents.Stage.GPU_READY);
         GpuTerrainDiagnostics.recordSuccess(
                 "published_atomic_append_rebuild", section, generation,
                 result.writtenFaces(), true);

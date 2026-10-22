@@ -251,9 +251,20 @@ case "$mode" in
     cp -a "run/saves/$template_world" "run/saves/${template_world}-cpu"
     cp -a "run/saves/$template_world" "run/saves/${template_world}-gpu"
     export JAVA_TOOL_OPTIONS="$common_world_options"
-    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-cpu -Dvulkanmod.ciGpuWorldExpectedGpu=false ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-cpu-smoke.log
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-cpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciGpuWorldExpectedGpu=false ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-cpu-smoke.log
     export JAVA_TOOL_OPTIONS="$common_world_options"
-    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
+    for control in cpu gpu; do
+      grep -F 'VULKANMOD_TERRAIN_WORLD_RENDER_ENTER' "vulkan-world-$control-smoke.log"
+      grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=WORKER_START' "vulkan-world-$control-smoke.log"
+      grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=PUBLICATION_APPLIED' "vulkan-world-$control-smoke.log"
+      grep -E 'VULKANMOD_TERRAIN_DRAW_CONSUMED: epoch=[1-9][0-9]* .*selectedPacked=[0-9]' "vulkan-world-$control-smoke.log"
+      if grep -E 'VULKANMOD_TERRAIN_.*INCOMPLETE|VULKANMOD_TERRAIN_(WORLD_TRACE_END|DRAW_CONSUMED):.*incomplete=true' "vulkan-world-$control-smoke.log"; then
+        echo 'Loaded-world consumption chronology was incomplete' >&2
+        exit 1
+      fi
+    done
+    grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=GPU_READY' vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-cpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED" vulkan-world-gpu-smoke.log
@@ -300,6 +311,7 @@ case "$mode" in
     grep -F "VULKANMOD_GPU_GENERATED_INDIRECT_PIXELS_OK" vulkan-screenshot-smoke.log
     grep -F "VULKANMOD_GPU_MESHED_INDIRECT_PIXELS_OK" vulkan-screenshot-smoke.log
     grep -F "VULKANMOD_GPU_SELECTOR_RETIRED_SLOT_REUSE_OK" vulkan-screenshot-smoke.log
+    grep -E "VULKANMOD_TERRAIN_DRAW_READBACK_OK:.*gpuCommands=[1-9][0-9]* cpuCommands=[1-9]" vulkan-screenshot-smoke.log
     grep -F "GPU animation fallback smoke passed" vulkan-screenshot-smoke.log
     grep -F "Unified GPU texture transfer smoke passed" vulkan-screenshot-smoke.log
     grep -F "Shared GPU animation source pool smoke passed" vulkan-screenshot-smoke.log

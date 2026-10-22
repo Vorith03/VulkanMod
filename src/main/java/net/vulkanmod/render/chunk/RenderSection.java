@@ -89,6 +89,8 @@ public class RenderSection {
         this.worldRenderer = worldRenderer;
     }
 
+    WorldRenderer traceOwner() { return this.worldRenderer; }
+
     public Vec3 getCameraPos() {
         return this.worldRenderer == null ? null : this.worldRenderer.getCameraPos();
     }
@@ -150,6 +152,8 @@ public class RenderSection {
     }
 
     public ChunkTask.BuildTask createCompileTask(RenderRegionCache renderRegionCache, TaskDispatcher dispatcher) {
+        if(TerrainAppearanceEvents.ENABLED)
+            TerrainAppearanceEvents.stage(this, getVoxelGeneration(), TerrainAppearanceEvents.Stage.REGION_PREPARE_START);
         boolean flag = this.cancelTasks();
         BlockPos blockpos = new BlockPos(this.xOffset, this.yOffset, this.zOffset).immutable();
         if(this.worldRenderer == null || this.worldRenderer.getLevel() == null)
@@ -157,6 +161,7 @@ public class RenderSection {
         RenderChunkRegion renderchunkregion = renderRegionCache.createRegion(this.worldRenderer.getLevel(), blockpos.offset(-1, -1, -1), blockpos.offset(16, 16, 16), 1);
         boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
         this.compileStatus.rebuildTask = new ChunkTask.BuildTask(this, renderchunkregion, blockpos, !flag1 || flag, dispatcher);
+        this.compileStatus.rebuildTask.tracePhase(TerrainAppearanceEvents.Stage.REGION_SNAPSHOT_READY);
         return this.compileStatus.rebuildTask;
     }
 

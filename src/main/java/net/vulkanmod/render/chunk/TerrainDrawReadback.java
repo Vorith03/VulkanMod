@@ -29,17 +29,17 @@ public final class TerrainDrawReadback {
     private static final List<Request> pending = new ArrayList<>();
     private static final List<Batch> outstanding = new ArrayList<>();
     private static Consumer<Observation> ciObserver;
-    private static long started, sequence;
+    private static long started, sequence, lastWorldEpoch;
     private static int pendingBytes, totalRequests;
     private static boolean invalid;
 
     private TerrainDrawReadback() {}
 
-    public record Observation(long frame, long recordedNanos, long confirmedNanos,
+    public record Observation(long worldEpoch, long frame, long recordedNanos, long confirmedNanos,
                               int regionX, int regionY, int regionZ, int layer,
                               boolean gpuCommands, int[] words) {}
 
-    private record Request(long frame, long recorded, int x, int y, int z, int layer,
+    private record Request(long worldEpoch, long frame, long recorded, int x, int y, int z, int layer,
                            boolean gpu, long source, long offset, int bytes) {}
 
     private static final class Batch {
@@ -55,6 +55,10 @@ public final class TerrainDrawReadback {
     static void request(ChunkArea area, int layer, long source, long offset, int commands, boolean gpu) {
         if(!ENABLED && ciObserver == null) return;
         long now = System.nanoTime();
+        long worldEpoch = TerrainAppearanceEvents.regionEpoch(area);
+        if(worldEpoch != 0 && worldEpoch != lastWorldEpoch) {
+            lastWorldEpoch = worldEpoch; started = now; totalRequests = 0;
+        }
         if(started == 0) started = now;
         if(ciObserver == null && now - started > DURATION_NANOS) return;
         long bytes = (long)commands * RegionBatchLayout.STRIDE;
@@ -68,7 +72,7 @@ public final class TerrainDrawReadback {
             invalidate("bounded_capture_exhausted"); return;
         }
         totalRequests++;
-        pending.add(new Request(sequence, now, area.position.x, area.position.y, area.position.z,
+        pending.add(new Request(worldEpoch, sequence, now, area.position.x, area.position.y, area.position.z,
                 layer, gpu, source, offset, (int)bytes));
         pendingBytes += (int)bytes;
     }
@@ -137,7 +141,7 @@ public final class TerrainDrawReadback {
                 for(Request request : batch.requests) {
                     int[] words = new int[request.bytes / Integer.BYTES];
                     for(int i = 0; i < words.length; i++) words[i] = bytes.getInt();
-                    Observation observation = new Observation(request.frame, request.recorded, System.nanoTime(),
+                    Observation observation = new Observation(request.worldEpoch, request.frame, request.recorded, System.nanoTime(),
                             request.x, request.y, request.z, request.layer, request.gpu, words);
                     if(ciObserver != null) ciObserver.accept(observation);
                     else log(observation);
@@ -159,8 +163,8 @@ public final class TerrainDrawReadback {
             if(selected.length() > 0) selected.append(',');
             selected.append(Integer.toUnsignedString(observation.words[i + 4]));
         }
-        Initializer.LOGGER.info("VULKANMOD_TERRAIN_DRAW_CONSUMED: frame={} recorded_ns={} confirmed_ns={} region=({},{},{}) layer={} gpuCommands={} selectedPacked={} incomplete={}; actual indirect bytes after frame fence, NOT pixel/presentation timing",
-                observation.frame, observation.recordedNanos, observation.confirmedNanos,
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_DRAW_CONSUMED: epoch={} frame={} recorded_ns={} confirmed_ns={} region=({},{},{}) layer={} gpuCommands={} selectedPacked={} incomplete={}; actual indirect bytes after frame fence, NOT pixel/presentation timing",
+                observation.worldEpoch, observation.frame, observation.recordedNanos, observation.confirmedNanos,
                 observation.regionX, observation.regionY, observation.regionZ, observation.layer,
                 observation.gpuCommands, selected, invalid);
     }

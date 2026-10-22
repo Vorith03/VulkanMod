@@ -1,5 +1,43 @@
 # Terrain appearance: staging turnover candidate — October 22, 2026
 
+## World-entry/stage chronology candidate after7503c146
+
+The next coherent slice adds opt-in TerrainAppearanceEvents under the SAME
+`debugTerrainDrawReadback` flag. It records first main-world renderer setup with
+monotonic origin and wall-clock anchor, then first neighbor admission pass, region
+preparation/snapshot ready, worker admission/start/finish, publication queued/applied,
+GPU dispatch ATTEMPT and actual successful GPU output readiness per section generation.
+Old worker tickets cannot enter a replacement world's epoch; non-owning portal
+renderers do not join the main clock. Indirect observations carry the epoch captured
+at draw recording, not the epoch current at delayed fence completion. Reader duration
+and request budget restart for a new known main-world epoch.
+
+Bounds:32768 section-generation records and60s per epoch; duplicate stages are
+suppressed. Cap exhaustion emits an explicit incomplete marker. Weak owner/world
+references and world-close reset avoid retaining departed worlds. No new owner
+locks are acquired under the trace monitor. Focused actual Java17 event/helper
+compilation (pinned LWJGL, configuration/ownership stubs) passed. Behavioral event
+checks cover stable entry/dedup, stale worker rejection, world/owner isolation and
+bounded map rejection. All24 offline contracts and shell syntax passed locally.
+
+CI's existing same-save CPU/GPU world processes explicitly enable collection in
+BOTH controls, require a positive MAIN epoch with actual selected commands, require
+worker/publication and GPU-ready chronology, reject incomplete markers and retain
+all original18 phase pixels/portal/adoption/lifecycle/validation assertions. Native
+screenshot mode also explicitly requires the readback success marker. These are
+correctness/observability controls, not matched appearance performance controls.
+
+Limits remain deliberate and explicit: neighbor admission includes a near-camera
+shortcut and is NOT true lighting/halo availability; snapshots are later CPU-resolved
+inputs, not upstream arrival timestamps. Stage timestamps are first observations
+per generation, not a complete per-attempt/cancellation service-time trace. There
+is no first-usable/presented-frame oracle, camera/projection/reference locking,
+actual geometry-generation association or full legacy/direct/translucent coverage
+in this candidate. Do not infer50/90/99 coverage or2–3s/5s success from these logs.
+They can locate a delayed opaque production handoff on the owner workload while
+retaining unknowns, and are a prerequisite component of the still-open full study.
+
+
 ## October22 continuation — staging repair qualified, consumption collection in progress
 
 Full1094 /39809988234 attempt1 SUCCESS at executable
