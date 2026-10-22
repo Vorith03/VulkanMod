@@ -1,72 +1,71 @@
-# Owner RX 6900 XT integrated GPU qualification — continue from first evidence
+# Owner RX 6900 XT: resolve integrated GPU adoption failures from real benchmark evidence
 
-Continue https://github.com/Vorith03/VulkanMod on forge-1.20.1.
-Preserve Minecraft 1.20.1, Forge 47.3.0, Java 17, default-off GPU experiments.
-Follow AGENTS.md §3A live Git/CI/delta procedure; read current AGENT_STATUS.md,
-ROADMAP.md, GPU_FIRST_OWNERSHIP completion checklist, this file,
-docs/GPU_GENERATED_WORLD_DRAW_WITNESS_2026-10-19.md, profiler instructions,
-optimization ledger and relevant ownership contracts. Do not redo settled audits.
-No broad implementation without a concrete owner-capture defect. No agents
-without authorization; no force push, unrelated release, new recorder, or default
-promotion. Inspect still-open profiler PR #12 before any overlapping work.
+Continue https://github.com/Vorith03/VulkanMod on `forge-1.20.1`.
+Preserve Minecraft 1.20.1 / Forge 47.3.0 / Java 17, experimental default-off,
+user's Create Chronicles pack, and no unnecessary architecture. Follow current
+AGENTS.md §3A, ROADMAP, AGENT_STATUS, affected ownership contracts, CI, latest Git
+delta and [owner benchmark report](OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md).
+Follow precise validation and Git handoff. Do NOT restart broad GPU roadmap.
 
-## Verified October 21 package
+## Live executable and qualification
+- Last internally qualified executable `95221419486931c295b83b1efe1c98ef3df4eef7`,
+  full #1088 run39680381869 successful, JAR artifact12383727666 SHA256
+  `09f491f063d5a3b0def066e029ae1805acaeaaf7fe9b4cd5eb8f2ec292bf01e8`.
+- 19 activation properties in scripts/ci/integrated-gpu-flags.txt;
+  no source commits since this executable as of owner evidence.
+- New **owner RX6900XT** 180-second captures both auto-completed on same #1088
+  executable, fixed framebuffer2552x1374, D32/S12, VSync off, cap260,
+  `VulkanMod_Benchmark` yaw-90/pitch30 xyz0/192/0:
+  - partial GPU run UUID `20c49c53-5e7c-468d-ab90-817dddc1daa6`,
+    10545 frames=58.60fps, final150s62.03fps; mesher/bypass flags false.
+  - integrated19 UUID `221fd7a2-9d5b-4fe4-958b-0e13dac88d87`,
+    12835 frames=71.34fps, final150s75.71fps; +21.7% descriptive.
+  - Both owner latest/debug/benchmark/JFR uploaded in Project conversation;
+    Git stores derived metrics, not private raw logs. They are not a true
+    CPU allfalse baseline, multi-trial study, or visual equivalence proof.
+- Integrated live GPU terrain owner witnesses: CPU bypass/mesher/publish,
+  GPU-generated REPLACE/APPEND draw recorded, 727 published CPU-bypassed
+  sections, 19 CPU recoveries, staging full and unsupported models; keep
+  fail-closed semantics and all exact visual/portal contracts.
 
-- Qualifying executable commit: 95221419486931c295b83b1efe1c98ef3df4eef7.
-- Full build #1088 / GitHub Actions run 39680381869: completed SUCCESS attempt 1.
-- JAR artifact 12383727666:
-  VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1088-g95221419-all.jar.
-- JAR bytes 11,098,113, SHA256:
-  09f491f063d5a3b0def066e029ae1805acaeaaf7fe9b4cd5eb8f2ec292bf01e8.
-- CI capture artifact 12385056493. All public CI phases/gates passed, private
-  fixtures skipped. The subsequent branch commits are documentation-only.
-- Current flags: 19 lines in scripts/ci/integrated-gpu-flags.txt; use all true
-  for GPU and all false for same-JAR CPU control. In both profiles use
-  -Dvulkanmod.performanceProfiler=true,
-  -Dvulkanmod.performanceProfiler.gpuTimestamps=true,
-  -Dvulkanmod.debugGpuGeneratedWorldDraw=true.
-- Required config: earlyWindowControl=false, regionBatching=true; Vulkan device
-  multiDrawIndirect and drawIndirectFirstInstance support; no separate legacy
-  indirectDraw requirement.
+## Concrete unresolved GPU displacement defects: bounded engineering mission
+1. GPU interpolation: admission active, 1510 selected/1505 resident,
+   but `standard_interpolation_gpu_updates=0/2879091`,
+   `interpolation_fallback_dispatch_failed=2810697`, no GPU dispatch.
+   Trace SpriteAnimationState -> GpuAnimatedTextureResidency ->
+   GpuTextureInterpolationCompute's first null/fail decision.
+   Determine exact rejection without guessing; bounded reason telemetry if
+   existing logs and tests cannot distinguish. Preserve CPU fallback,
+   exact pixel/sprite/mip/timing and source mutation semantics.
+2. GPU particle billboards: 126249312 eligible quads yet gpu_quads0,
+   compute_batches0, capacity_rejected_batches15426. Diagnose which guard in
+   ParticleBillboardCompute.expand is refusing batches (group count vs
+   storage span/range and buffer used offset); do not relax Vulkan bounds
+   or remove CPU fallback. Reuse existing batching and scratch contracts.
+3. Terrain already engaged, but output reservation fails 10 and 19 CPU recovery
+   requests; investigate only when relevant to correctness or after the two
+   full non-adoption blockers. No user visual defect has been supplied.
 
-## Current owner-test status and required next action
+Complete bounded fixes if grounded, prefer established primitives, add regression
+witnesses, and qualify via affected native/oracle/CI tests. No speculative
+performance claim or additional test request until a changed executable has
+internally passed. Check open PR#12 before any recorder overlap. No default
+promotion, force pushes or unrelated implementation.
 
-Owner platform: Arch Linux, KDE Wayland, Ryzen 7 5800X, RX 6900 XT 16 GiB,
-5120x1440 monitor but approximately half-sized Minecraft window. **Actual
-framebuffer dimensions UNKNOWN** until startup/profiler logs, specifically
-initial_framebuffer_px and framebuffer_first/last/ranges. **No owner-machine
-run, owner UUID, screenshot comparison or FPS measured yet.** Historical #1028
-UUID e05f2b31 is NOT the baseline for #1088. The 10–25% suggestion was speculative.
+## Owner follow-up once internally qualified
+Provide exact new JAR/link/SHA/flags and a narrow same-save visual CPU-vs-GPU
+comparison exercising opaque, glass/slabs, animated textures, eligible smoke,
+camera motion/dirty/reload/reentry, portal only if available. Obtain actual
+GPU adoption counts and GPU/CPU rendered equivalence evidence. Then use
+matched 180-second runs on the **same new JAR** with all19 true vs all19
+false, stable scene/framebuffer/world/modpack, repeat if variance merits.
+Assess CPU ticks, render time, GPU graphics separately from upload batches,
+frame pacing, CPU work removed, fallbacks, correctness and gameplay.
+Do not ask for previously supplied logs again without new code or question.
 
-Await first CPU allfalse and GPU alltrue SAME-JAR launch, matched same-save
-functional screenshot, latest.log, debug.log and manual vulkanmod-performance.log.
-Keep identical modpack/settings/driver/resource packs/window dimensions, render/
-simulation distance, FOV, VSync/FPS cap, pose/weather/time, and copy the clean
-closed save into each profile. Exercise terrain with normal/mixed geometry,
-animated textures, eligible smoke, camera motion, dirty rebuild, F3+T reload,
-save/reentry; portal only if actual supported mod and scene. Stop on crashes,
-wrong pixels, device loss, validation hazards; preserve CPU recovery evidence.
-Verify GPU command witness, feature admission/fallback, CPU bypass and complete
-fallback, NOT just flags or allocated GPU buffers.
-
-Only after functional/visual correctness, guide ONE matched stationary comparison
-using existing automated benchmark on the same world/pose: minimum settle 60 s,
-10-second stable initial population, 180-second capture; controller auto-save/quit.
-Use the exact options in witness package; avoid screens/movement and note auto
-abort conditions. Collect both UUID benchmark logs, neighboring .cpu-graphics-*.jfr,
-full latest/debug, configuration and screenshot pairs. Separate GPU-main frame
-timings from upload-batch, CPU tick, frame, and GPU command timings. Interpret
-frame avg/p50/p95/p99, stutter, CPU displacement, GPU work, sync/upload cost,
-adoption numerator/denominator and reasons. Keep warmup separate, request extra
-captures only for evidenced ambiguity. Avoid arbitrary mod or renderer expansion.
-
-Do not silently promote to release or claim RX improvement without evidence.
-Qualify any bounded code fix and exact changed executable; no extra owner test
-until source/log analysis cannot resolve the question.
-
-**Durable rolling handoff obligation:** Before ending every successor work session,
-update AGENT_STATUS.md, the relevant witness/benchmark document and optimization
-ledger, and docs/NEXT_SESSION_PROMPT.md with actual evidence, framebuffer,
-exact JAR/commit/capture UUIDs, verdicts, uncertainty and next specific action.
-Finish with a NEW complete copyable continuation prompt that explicitly requires
-its own successor to update the repository handoff and create another NEW prompt.
+**Rolling durability requirement**: At every successor boundary, update
+AGENT_STATUS.md, ROADMAP and benchmark witness/optimization ledger,
+plus this file with current Git/CI/runtime evidence, exact outstanding defects
+and next action. End with a NEW complete copyable continuation prompt for
+the next session, requiring it to do the same. No stale `owner unmeasured`
+language may be treated as current.

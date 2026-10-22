@@ -1,5 +1,19 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## October 21/22 — measured owner partial vs integrated19; GPU effectiveness incomplete
+
+Owner RX6900XT same-build #1088 captures: 180s partial GPU 58.60fps UUID
+20c49c53 versus integrated19 71.34fps UUID221fd7a2 (+21.7%, one each);
+D32/S12 2552x1374; final150s62.03 ->75.71fps. This is **not** the
+same-JAR allfalse CPU control and not release-level evidence. Main GPU
+graphics2.472 ->2.862ms/frame while CPU world render7.589 ->6.527ms/call.
+Real GPU terrain mesher/CPU bypass and live REPLACE/APPEND draw proven;
+interpolation CPU still 2879091/2879091 and particle GPU0/126249312
+(15426 capacity rejections). Focused rejection triage necessary before
+performance qualification. Complete owner report:
+[OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md](OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md).
+
+
 ## October 21 — owner test initiation, not a performance result
 
 Live package reverified: executable 95221419, CI #1088 successful, exact

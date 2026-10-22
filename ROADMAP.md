@@ -1,5 +1,20 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October 21 — owner RX data changes effectiveness gate, not internal CI result
+
+Two real owner benchmark captures on #1088 at 2552x1374, D32/S12 show
+partial GPU 58.60fps versus integrated19 71.34fps, +21.7% single-run
+throughput, no allfalse CPU control. GPU terrain meshing/CPU bypass and
+REPLACE+APPEND world indirect recorded; however GPU interpolation delivered
+0/2879091 updates and GPU particle billboards 0/126249312 eligible quads
+(15426 capacity-rejected batches). Internally qualified CI remains valid,
+but actual owner effectiveness is **incomplete**. Next gate: bounded source-level
+diagnosis and repair of evidenced adoption blockers, preserve correctness/
+fallback, focused native/CI, then matched visual/repeat CPU-control benchmark.
+See docs/OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md for provenance and limits.
+No default/release promotion.
+
+
 ## October21 — integrated GPU milestone internally qualified; advance to owner testing
 
 **COMPLETE for the requested implementation/readiness milestone.** Executable

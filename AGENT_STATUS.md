@@ -1,5 +1,26 @@
 # VulkanMod Forge1.20.1 — qualified integrated GPU checkpoint
 
+## October 21 — two owner RX6900XT captures received; adoption gaps are actionable
+
+See [owner GPU benchmark evidence](docs/OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md).
+Same #1088 JAR, 2552x1374 D32/S12, 180s automated stationary: partial GPU
+20c49c53:10545 frames/58.60fps; integrated19 221fd7a2:12835/71.34fps
+(+21.7%). Final150s:62.03 ->75.71fps. Both completed; no true CPU
+allfalse run, screenshots, or multi-trial causality. Real terrain GPU CPU-bypass,
+mesher and REPLACE/APPEND indirect draw recorded; 727 GPU terrain publishes,
+19 CPU recovery requests, staging and unsupported-model fallbacks preserved.
+
+**Concrete gaps:** integrated GPU interpolation 0/2879091 despite admission
+1510/1505 resident; 2810697 dispatch_failed returns. Particle billboard
+GPU=0/126249312 eligible; 15426 capacity-rejected compute batches. CPU fallback
+dominates both. Do NOT call the GPU milestone performance-complete or release
+qualified. Trace rejection sites, preserve fallback, bounded instrumentation/tests.
+Relevant JFR and full owner logs exist as conversation uploads, not in Git.
+Next: targeted source investigation/repair of two adoption blockers, internal
+qualification, then matched functional and CPU-allfalse vs integrated testing.
+Documentation-only HEAD; qualified executable remains #1088.
+
+
 ## October 21 owner-machine benchmark kickoff (pending evidence)
 
 Current session verified live branch head 3c7b6ef714a2 and its two documentation-only

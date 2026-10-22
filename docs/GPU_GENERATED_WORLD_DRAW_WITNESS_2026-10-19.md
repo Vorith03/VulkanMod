@@ -1,5 +1,17 @@
 # Integrated GPU owner qualification package
 
+**October 21/22 owner benchmark update:** Two automated RX6900XT RADV 180s
+captures now exist at actual 2552x1374, D32/S12, same #1088 JAR. Integrated19
+improves captured FPS over partial GPU from 58.60 to 71.34, while production
+GPU terrain CPU-bypass/mesher and REPLACE/APPEND indirect recording are observed.
+GPU interpolation remains 0 updates (2.81M dispatch_failed), GPU particle
+billboards 0 accepted (15426 capacity-rejected batches), so owner effectiveness
+is not complete. No same-JAR CPU-allfalse baseline, screenshots, dynamic visual
+or portal owner proof. Detailed metrics, UUIDs and next steps are recorded in
+[owner benchmark evidence](OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md).
+Earlier `unmeasured` kickoff note below is historical.
+
+
 **Internally qualified and ready for focused real-world testing.**
 
 **October 21 owner test session:** Package/CI/artifact reverified at live branch; the
