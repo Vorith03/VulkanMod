@@ -1,17 +1,23 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
-## October 21 — unsigned-limit correction supersedes the earlier capacity diagnosis
+## October 21 — texture and particle repairs internally qualified in full #1092
 
-The preserved particle-window slice passed full #1089 /39713898920. Successor
-`b767223c` corrects unsigned uint32 workgroup/storage limits in texture and
-particle admission and adds native high-bit-limit regressions plus bounded reason
-telemetry. Full #1092 /39716738464 on `272b7f81` is running; #1091 was superseded/cancelled; #1090 failed fixture compilation before native tests. `272b7f81` strengthens the nonzero-window regression on the actual uploader-owned buffer. The earlier claim that <=1024
-workgroups excludes the workgroup guard was wrong for a Java int carrying
-0xffffffff (-1). RADV source advertises that X limit; installed owner limits and
-changed-build adoption still require the targeted external check. Source-backed
-mechanism, safety review, exact evidence and owner package are in
+**Disposition: qualified but unmeasured.** Owner re-adoption and controlled net benefit remain pending.
+
+Final executable `272b7f81f09a05e4796e008d64a33c73a5270505`, full **#1092 /39716738464 SUCCESS**.
+JAR12400315181,11,103,766bytes,SHA256
+`2eedcf35295de61e4ecac2fad97d19b84c5813f2734838d7a8db884079fc6e88`; native logs12399703822.
+Unsigned-limit correction and actual-uploader nonzero-window result passed native
+oracles. Particles647 GPU quads/131 batches/2 nonzero windows; original CPU recovery
+and pool retirement passed. Texture exact mip pixels/transformed CPU bypass,
+shared resources and322+ accepted multi jobs passed. Independently checked18 exact
+854x480 CPU/GPU world/portal phase pairs;0 Vulkan validation/synchronization errors
+in14 top-level logs. All required public native/build/compatibility gates passed;
+three private fixture steps skipped. Experiments remain OFF by default.
+**Implemented and internally qualified; owner adoption/visuals/performance/release
+remain OPEN.** The earlier signed-workgroup exclusion is superseded. Final evidence,
+source-backed diagnosis, safety, exact artifact and minimal owner package:
 [GPU_ADOPTION_REPAIRS_2026-10-21.md](GPU_ADOPTION_REPAIRS_2026-10-21.md).
-No causal FPS or release/default-enable claim. Terrain code is unchanged.
 
 ## October 21 — particle candidate coded; CI and owner proof pending
 

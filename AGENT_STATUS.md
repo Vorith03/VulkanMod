@@ -1,70 +1,78 @@
-# VulkanMod Forge1.20.1 — GPU adoption repair checkpoint
+# VulkanMod Forge1.20.1 — GPU adoption repairs internally qualified
 
-## Current authoritative state — October 21, 2026
+## Final executable and evidence — October 21, 2026
 
-Executable candidate **272b7f81f09a05e4796e008d64a33c73a5270505** on
-forge-1.20.1. Full **#1092 /39716738464 IN PROGRESS**. #1091
-/39716188014 on c9b6ef70 was superseded/cancelled. The final successor is not internally qualified yet.
-#1090 /39715651273 failed fixture compilation before native testing; corrected
-with pinned LWJGL writable memory views in c9b6ef70. Do not request an owner
-benchmark until the final candidate's required full gates pass.
+**Code:** `272b7f81f09a05e4796e008d64a33c73a5270505`. **Full #1092 /39716738464 SUCCESS**,
+attempt1, build workflow. Documentation-only descendants do not alter this JAR.
+**Artifact12400315181:** VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1092-g272b7f81-all.jar,
+**11,103,766bytes**, SHA256 `2eedcf35295de61e4ecac2fad97d19b84c5813f2734838d7a8db884079fc6e88`.
+Native logs12399703822 downloaded/CRC-verified. Runtime payload is the actual JAR;
+manifest/version/Java17 major61/MC+Forge ranges, Mixins, nested Vulkan jar CRC,
+Linux+Windows VMA/shaderc natives checked. All required public gates PASSED:
+24 offline contracts, Forge build/package/two startups, native compute/indirect,
+post/depth/readback, nine-phase world and portal pixels/lifecycle, public Create
+Chronicles and CrashAssistant. Three private fixture steps skipped.
 
-Last verified FULL qualified executable is **550a510c6f2ed833eb80e8e03a881ab708faf270**,
-#1089 /39713898920 SUCCESS. JAR artifact12398816155, logs12398058418.
-The artifact ZIP digest is fc457485eef17f1f4c296c253e1d8c5c44ed5b72decc66ec98a18c6e77774adc;
-this is NOT the extracted JAR SHA256. Do not promote that older JAR as the final
-texture+particle repair. Downloaded #1089 logs: particle647 GPU quads/131 batches,
-one nonzero-window batch, deliberate descriptor rejection2, original CPU recovery;
-texture shared/multi/native tick oracles passed. No top-level Vulkan validation
-error/sync-hazard matches. Private fixtures skipped.
+Native texture transformed-ticker/all-mip/clock/alpha/mutation/custom/fallback
+oracles passed under unsigned0xffffffff host limits. Shared/multi markers present;
+322+ accepted multi jobs,2-in-1 dispatch and>=9 bounded table wraps asserted.
+CPU pixel interpolation is cancelled on accepted GPU work. Particle647 GPU quads,
+131 batches,2 nonzero-window batches,267 deliberately recovered quads,2 deliberate
+descriptor rejects,0 capacity/workgroup/range rejects. Production marker verifies
+87 GPU quads, nonzero32KiB descriptor window in the ACTUAL BufferUploader frame
+buffer, CPU bypass and generated geometry/UV/color/light in the absolute drawn slice.
+Sorting/callbacks/pool/fences/teardown/generation retirement oracles passed.
 
-## Surviving implementation and corrected cause
+Both downloaded image sets independently recomputed:9/9 vanilla+9/9 portal phases,
+854x480 exact CPU/GPU words. GPU terrain/cpuCommandUploads0/portal GPU ownership
+witnesses remain. All14 archived top-level Vulkan logs:0 Validation Error/SYNC-HAZARD.
+This is fixture qualification, not RX modpack performance or owner adoption counts.
 
-Interrupted particle descriptor windows survived in550a510c; reviewed/preserved.
-Existing shared buffer, absolute draw/barriers, relative shader addressing, signed
-Java end bounds, 64 allocated+pending descriptor quota and frame retirement remain.
+## Implementation and corrected root cause
 
-**Shared defect:** Vulkan uint32 maxComputeWorkGroupCount(X) was compared as signed
-Java int in texture and particle guards. RADV source advertises0xffffffff, exposed
-as -1, rejecting even one group. Texture maxStorageBufferRange signed comparisons
-also disabled shared scratch. The earlier inference that <=1024 groups excludes
-the workgroup guard was wrong. Installed owner limits still require confirmation;
-new unsigned-limit/rejection summary discriminates them. Exact source and safety
-review: docs/GPU_ADOPTION_REPAIRS_2026-10-21.md.
+Interrupted particle-window changes survived as550a510c and passed full1089.
+Aligned descriptor windows reuse the original frame buffer; shader indices are
+relative, upload/draw/barrier offsets absolute; int bounds,64-set allocated+pending
+quota, resize invalidation and frame retirement are preserved.
 
-b767223c widens affected limits with Integer.toUnsignedLong, preflights standalone
-texture descriptor ranges, adds bounded lifetime rejection reasons. c9b6ef70 fixes
-native test API;272b7f81 proves a forced nonzero-window GPU result in the actual
-BufferUploader frame buffer and reads the exact drawn slice against CPU geometry.
-Existing native texture oracle now exercises high-bit storage/group limits and
-actual transformed-ticker CPU cancellation with exact atlas mip pixels. No shader,
-allocator, queue, default flag, terrain implementation or profiler PR#12 change.
+b767223c fixes shared unsigned uint32 limits read as Java negative ints. RADV
+source advertises X workgroup limit0xffffffff: old signed guard rejects even1
+workgroup, contrary to the earlier <=1024 exclusion. Signed storage range also
+rejected shared texture pages. Integer.toUnsignedLong repairs existing guard sites;
+standalone texture descriptor range preflight and bounded lifetime rejection
+telemetry retain CPU fallback. c9b6ef70 fixes pinned-LWJGL fixture views;272b7f81
+closes actual production-window consumption coverage. No shader, allocator,
+terrain, compatibility/default flags or profiler PR#12 changes.
 
-Local all24 Java17/offline contracts PASS; pinned-LWJGL native-struct probe PASS
-including pre-fix signed rejection at0x80000000 and0xffffffff. Focused Java17
-compilation of all5 changed renderer/profiler classes PASS on reduced mapped
-Forge/pinned-LWJGL classpath (annotation warnings). Full local Gradle dependency
-bootstrap timed out at240s; local native runtime unavailable, not passed.
+Local all24 contracts, exact-LWJGL struct negative probe and focused compilation
+of all5 affected classes passed. Reduced local classpath had missing Dist annotation
+warnings; full Gradle dependency bootstrap timed out240s. Do not relabel those
+local checks a complete native/package run. Required full qualification is1092.
+#1090 failed fixture compilation before native;#1091 superseded/cancelled;
+#1089 is preserved particle-only history, not the final repair artifact.
 
-## Owner evidence and remaining gates
+## State and exact next action
 
-#1088 owner integrated19 UUID221fd7a2:71.34fps at2552x1374/D32/S12; partial
-20c49c53:58.60fps on same JAR. Single trials, no true CPU allfalse control, no
-causal/performance/visual-equivalence claim. Integrated textures0/2879091,
-particles0/126249312; terrain727 GPU-published/CPU-bypassed sections, live
-REPLACE/APPEND,19 CPU recoveries. Preserve working terrain and recovery boundaries.
-Private raw logs remain outside Git. Owner report/ledger contain full comparison.
+**IMPLEMENTED + INTERNALLY QUALIFIED. No known internally actionable defect remains
+in this repair scope.** Owner verified, performance qualified and release/default
+enable gates remain OPEN. Installed RX driver limits/adoption and exact owner
+visuals need the changed-build check; unsigned source mechanism is reproduced,
+not inferred from a fresh owner run. No causal speedup claim.
 
-Next: inspect #1091 and FINAL #1092 results/logs, repair actionable failures, and
-continue until one coherent full qualification is complete. Then download final
-JAR/log artifacts, verify JAR SHA256, native output/cancellation/production-window
-marker and zero synchronization hazards, plus integrated terrain/portal/public
-modpack gates. Record private skipped gates separately. Refresh these documents
-and rolling prompt before finishing. Do not treat pending/quick/older CI as final.
+Deliver/execute docs/GPU_ADOPTION_REPAIRS_2026-10-21.md with
+OWNER_GPU_ADOPTION_ON.jvmargs and OFF.jvmargs. Functional launch: autoBenchmark=false,
+watch animated textures/eligible smoke, F3+T and world reentry. Then restoretrue,
+captureON; require nonzero texture/particle adoption before running matchedOFF on
+SAME new JAR,framebuffer2552x1374,D32/S12,VSyncOFF,cap260,VulkanMod_Benchmark,
+xyz0/192/0,yaw-90,pitch30,60s minimum+10s quiet+180s capture. Compare visuals,
+CPU costs,separate GPU/upload scopes,frame pacing,adoption/recovery. Do not request
+unchanged old logs or more terrain architecture work before changed owner evidence.
 
-After internal success, deliver ONE targeted owner package from
-GPU_ADOPTION_REPAIRS_2026-10-21.md and OWNER_GPU_ADOPTION_{ON,OFF}.jvmargs:
-functional texture/smoke/reload/reentry observations, then matched all19 true vs
-false on SAME new JAR, framebuffer2552x1374 and existing benchmark scene. Owner
-visual/adoption, measured profitability and release/default-enable gates remain
-external. No repeated unchanged owner logs or broad terrain archaeology.
+Prior #1088 owner UUID221fd7a2 integrated71.34fps vs20c49c53 partial58.60fps are
+single-trial descriptive comparisons, no allfalse control/visual equivalence proof.
+Terrain727 GPU publishes,live REPLACE/APPEND,19 recoveries were already observed;
+raw private logs are not committed. Preserve the existing owner report/ledger.
+
+Rolling prompt is docs/NEXT_SESSION_PROMPT.md. Successor must recover live Git/CI
+delta, inspect new owner evidence if supplied, preserve this qualification and
+update the complete rolling handoff at its next material checkpoint.

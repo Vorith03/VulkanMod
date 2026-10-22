@@ -1,5 +1,43 @@
 # GPU texture and particle adoption repairs — October 21, 2026
 
+## Final internal qualification — full #1092 SUCCESS
+
+**Executable:** `272b7f81f09a05e4796e008d64a33c73a5270505`. **Workflow:** `.github/workflows/build.yml`,
+[full #1092 /39716738464](https://github.com/Vorith03/VulkanMod/actions/runs/39716738464),
+attempt1, SUCCESS. Documentation-only descendants preserve this executable.
+**JAR artifact:**[12400315181](https://github.com/Vorith03/VulkanMod/actions/runs/39716738464/artifacts/12400315181),
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1092-g272b7f81-all.jar`.
+Downloaded runtime JAR **11,103,766 bytes**, SHA256
+`2eedcf35295de61e4ecac2fad97d19b84c5813f2734838d7a8db884079fc6e88`.
+The download payload itself is the runtime JAR (META-INF/mods.toml at its root),
+not a wrapper containing a single mod JAR. Native logs artifact12399703822,
+SHA256 `d28a0e712dd723c67630885aee9d810bc6e1deee9211c55075d552c343fe7041`.
+JAR and nested lwjgl-vulkan CRCs, manifest1092-g272b7f81, Java17 major61,
+MC[1.20.1,1.20.2)/Forge[47.3.0,48), Mixins, Linux/Windows VMA+shaderc
+native entries independently checked. All24 CI/offline contracts, build/package,
+both Forge startups, native compute/indirect, post/depth/readback, world/portal,
+public Create Chronicles and CrashAssistant compatibility gates PASSED.
+**Three private fixture steps skipped**; no private resource-pack coverage claim.
+
+| Native evidence | Result on the final executable |
+| --- | --- |
+| Texture interpolation | Six transformed-ticker cases with successful GPU calls and exact all-mip atlas pixels; original clocks/alpha/fallback preserved |
+| Shared texture resources | SHARED_SCRATCH and MULTI_DISPATCH markers present under0xffffffff host limits |
+| Multi-job acceptance | Existing native assertion enforces at least322 accepted jobs, two initial jobs in one dispatch, >=9 table wraps and no stress fallback; exact final atlas pixels |
+| CPU texture displacement | Real transformed ticker selects GPU and cancels original CPU pixel path; native admission/custom/mutation/temporary CPU fallback oracles passed |
+| Particle production result | `VULKANMOD_GPU_PARTICLE_WINDOW_PRODUCTION_OK`:87 GPU quads in actual uploader buffer, forced nonzero32KiB descriptor window, actual drawn slice matches geometry/UV/color/light oracle |
+| Particle lifetime fixture counts |647 GPU quads,131 compute batches,2 nonzero-window batches,267 deliberate CPU-recovery quads,2 deliberate descriptor rejections; zero capacity/workgroup/range rejections |
+| Particle CPU displacement | Successful Drawer branch draws the compute-written original buffer; native GPU delta proves uploader acceptance without CPU expansion; sorting/callback/failure recovery preserved |
+| Terrain preservation |9/9 vanilla plus9/9 public portal phase pairs independently recompared, each854x480, exact CPU/GPU words; GPU owner/cpuCommandUploads0 and portal ownership witnesses present |
+| Synchronization |All14 archived top-level Vulkan logs scanned:0 Validation Error and0 SYNC-HAZARD matches |
+
+Counts are **native fixture evidence**, not owner modpack adoption fractions or
+measured CPU milliseconds saved. The final candidate is IMPLEMENTED and
+INTERNALLY QUALIFIED, ready for owner testing. OWNER VERIFIED, PERFORMANCE
+QUALIFIED and RELEASE READY remain OPEN. There is no remaining known actionable
+internal failure in this repair scope. The only next evidence-changing step is
+the targeted owner package below; do not manufacture unrelated terrain/refactor work.
+
 ## Evidence and corrected root-cause model
 
 Owner #1088 integrated19 UUID `221fd7a2-9d5b-4fe4-958b-0e13dac88d87`
@@ -95,8 +133,7 @@ is untouched; its integrated gates still have to pass on the same new executable
   32 KiB storage window and a 32 KiB prefix. The old signed guard would reject;
   a zero-offset descriptor also cannot cover the draw. The test compares native
   output and production BufferUploader consumption, then restores limits.
-- Full #1092 / run39716738464 on `272b7f81f09a05e4796e008d64a33c73a5270505` is **IN PROGRESS**; #1091 was superseded/cancelled. No successor native or
-  compatibility pass is claimed until that run completes. Private fixtures remain
+- Full #1092 / run39716738464 on `272b7f81f09a05e4796e008d64a33c73a5270505` **PASSED**. #1091 was superseded/cancelled; use the final qualification table above. Private fixtures remain
   external gates. Local Gradle currently lacks a complete cached dependency set.
 
 The first successor attempt #1090 /39715651273 failed compilation because
@@ -123,7 +160,7 @@ local build/native pass is claimed. Full CI remains mandatory.
 
 ## Owner package after successor full qualification
 
-Use the ONE successor JAR identified by the completed qualification record,
+Use the ONE build1092 JAR identified by the completed qualification record above,
 Java17 / Forge47.3.0, earlyWindowControl=false, regionBatching=true. Replace the
 old VulkanMod JAR; do not install two copies. Required properties are in
 [OWNER_GPU_ADOPTION_ON.jvmargs](OWNER_GPU_ADOPTION_ON.jvmargs); the matched control
@@ -159,8 +196,10 @@ Required changed-build adoption evidence:
   and CPU recovery counts. Windowed batches may be zero on unconstrained hardware.
 - Preserve unsupported/custom simulation, callbacks and sorting CPU boundaries.
 
-After functional/adoption success, restore `autoBenchmark=true` and capture ON,
-then run the matched OFF profile on the SAME JAR
+After functional success, restore `autoBenchmark=true` and capture ON. Check
+the adoption criteria in that automated capture; if either feature is still at
+zero, return its new logs before spending time on the control. After adoption
+succeeds, run the matched OFF profile on the SAME JAR
 and identical save snapshot, scene, settings and profiler. Compare average/final
 windows, >25ms frames and frame pacing, CPU world/texture/particle cost, separately
 scoped GPU and upload costs, adoption and recoveries. One pair is screening;
