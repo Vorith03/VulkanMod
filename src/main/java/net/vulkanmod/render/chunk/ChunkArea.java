@@ -540,7 +540,14 @@ public class ChunkArea {
         // the section monitor while this synchronized ChunkArea method is still active;
         // defer recovery to the terrain frame queue so the established lock order is
         // preserved and recovery still executes on the render thread.
+        SectionVoxelSnapshot rejectedInput = voxels == null ? null : voxels.get(slot);
         manager.enqueueFrameOp(() -> {
+            // An input failure never reaches the dispatch-finally consumer. Return
+            // its staging too, including complete-CPU/shadow builds that do not
+            // need recovery. Identity protects a replacement while this waits.
+            if(GpuTerrainSectionMesherBridge.enabled() && rejectedInput != null)
+                releaseConsumedVoxels(rejectedInput.x(), rejectedInput.y(), rejectedInput.z(),
+                        generation, rejectedInput);
             if(section.getChunkArea() != this
                     || !section.stagedGpuTerrainCpuBypassed(generation))
                 return;
@@ -555,7 +562,7 @@ public class ChunkArea {
         return voxels == null || slot < 0 ? null : voxels.get(slot);
     }
 
-    /** CPU dispatch input has been consumed; GPU slices and visible geometry remain owned. */
+    /** Return consumed staging; GPU slices retire at their fence and visible output is untouched. */
     synchronized boolean releaseConsumedVoxels(int x, int y, int z, long generation,
                                                SectionVoxelSnapshot expected) {
         int slot = voxelSlot(x, y, z);

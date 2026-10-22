@@ -89,6 +89,9 @@ public final class GpuSparseLightingGpuSmokeTest {
             require(firstLightingResidency.pageIndex() != secondLightingResidency.pageIndex()
                             || firstLightingResidency.byteOffset() != secondLightingResidency.byteOffset(),
                     "Lighting replacement must allocate a fresh slice instead of overwriting a live slice");
+            store.releaseConsumed(0, 41L);
+            require(store.getResidency(0).valid() && store.getLightingResidency(0).valid(),
+                    "Delayed input consumer must not retire replacement GPU generations");
             verifyReadback(store, secondLightingResidency, replacement);
 
             GpuSparseLightingSnapshot unpaired = lightingFixture(voxel, 0x10203040);
@@ -126,6 +129,22 @@ public final class GpuSparseLightingGpuSmokeTest {
                         boundaryLight, index);
             }
 
+            require(store.upload(0, voxel, 58L) && store.uploadLighting(0, first, 58L),
+                    "Replacement inputs must still admit after turnover");
+            store.releaseConsumed(0, 57L);
+            AreaUploadManager.INSTANCE.submitUploads();
+            var consumedVoxel = store.getResidency(0);
+            var consumedLighting = store.getLightingResidency(0);
+            require(consumedVoxel.valid() && consumedLighting.valid(),
+                    "Delayed consumer must not cancel pending replacement uploads");
+            store.releaseConsumed(0, 58L);
+            require(!store.getResidency(0).valid() && !store.getLightingResidency(0).valid(),
+                    "Consumed generation must revoke both input records");
+            // Revocation is not physical reuse: the same queued GPU bytes remain
+            // readable until the existing frame-fence retirement domain advances.
+            verifyReadback(store, consumedLighting, first);
+            verifyCompute(store, consumedVoxel, consumedLighting, first,
+                    SectionVoxelSnapshot.blockIndex(8, 8, 8));
             verifyCapturedFixtures(store, null, null);
 
             Initializer.LOGGER.info(
