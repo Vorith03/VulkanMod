@@ -185,7 +185,22 @@ public final class ParticleBillboardSmokeTest {
                 if(jobs==null || jobs.count()!=87 || jobs.offset(1)!=224)
                     throw new AssertionError("Mixed stream lost exact GPU slots/order");
                 buffer.reset();
-                if(!ParticleBillboardCompute.expand(buffer,actual.vertexBuffer(),jobs))
+                // First pass forces a nonzero, aligned descriptor window in the
+                // original frame-slot vertex buffer. The GPU must still draw and
+                // match exact CPU reference pixels without a new buffer system.
+                if(pass==0) {
+                    try(var stack=org.lwjgl.system.MemoryStack.stackPush()) {
+                        buffer.copyToVertexBuffer(1,32768,stack.calloc(32768));
+                    }
+                    ParticleBillboardCompute.ciStorageRangeLimit(32768);
+                }
+                boolean expanded;
+                try {
+                    expanded=ParticleBillboardCompute.expand(buffer,actual.vertexBuffer(),jobs);
+                } finally {
+                    ParticleBillboardCompute.ciStorageRangeLimit(0);
+                }
+                if(!expanded)
                     throw new AssertionError("Compute did not accept real particle batch");
                 long slice=buffer.getOffset();
                 // Also exercise the real BufferUploader path and its original shader/state.

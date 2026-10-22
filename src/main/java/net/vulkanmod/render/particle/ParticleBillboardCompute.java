@@ -27,9 +27,12 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     private static boolean unavailable, ciUnavailable;
     private static long inheritedAttempts, eligibleAttempts, layoutFallbacks, unavailableFallbacks, originalCpu, packed;
     private static long gpuQuads, recoveryQuads, batches, preparationNanos, uploadedBytes, bindingsCreated;
-    private static long capacityRejections, descriptorRejections, callbackStateRecoveries;
+    private static long capacityRejections, capacityWorkgroupRejections, capacityRangeRejections;
+    private static long descriptorRejections, callbackStateRecoveries, windowedDispatches;
+    private static int ciStorageRangeLimit;
     private long descriptorSetLayout, descriptorPool, pipelineLayout, pipeline;
-    private final Map<Long,Long> bindings=new HashMap<>();
+    private final Map<Long,WindowBinding> bindings=new HashMap<>();
+    private record WindowBinding(long set, long base, long range) {}
     // vkFreeDescriptorSets is fence-retired. Include sets queued for retirement
     // in the actual pool reservation count; some software drivers do not reject
     // allocations after maxSets, so the host must enforce its own bound.
@@ -76,8 +79,8 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     public static void retireBuffer(long buffer) {
         if(instance==null) return;
         ParticleBillboardCompute owner=instance;
-        Long set=owner.bindings.remove(buffer);
-        if(set!=null) MemoryManager.getInstance().addFrameOp(()->owner.freeSet(set));
+        WindowBinding binding=owner.bindings.remove(buffer);
+        if(binding!=null) MemoryManager.getInstance().addFrameOp(()->owner.freeSet(binding.set()));
     }
     private void freeSet(long set) {
         if(closed) return;
@@ -86,9 +89,9 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             allocatedBindings--;
         }
     }
-    private long binding(VertexBuffer buffer) {
-        Long cached=bindings.get(buffer.getId());
-        if(cached!=null) return cached;
+    private long binding(VertexBuffer buffer, long base, long range) {
+        WindowBinding cached=bindings.get(buffer.getId());
+        if(cached!=null && cached.base()==base && cached.range()>=range) return cached.set();
         // A removed binding is still resident until its frame-op free runs.
         // Never rely on a driver's optional over-allocation behavior.
         if(allocatedBindings >= MAX_BINDINGS) return 0;
@@ -99,16 +102,18 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             if(result!=VK_SUCCESS) return 0;
             long set=out.get(0);
             VkDescriptorBufferInfo.Buffer info=VkDescriptorBufferInfo.calloc(1,stack);
-            info.get(0).buffer(buffer.getId()).offset(0)
-                    // Vertex-buffer growth can exceed the storage range even while this draw fits.
-                    // Admission bounds every accessed byte; never expose the unused allocation tail.
-                    .range(Math.min((long)buffer.getBufferSize(),
-                            Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange())));
+            // A descriptor sees only the aligned window containing this compact draw.
+            // The rest of the shared frame vertex buffer may exceed maxStorageBufferRange.
+            info.get(0).buffer(buffer.getId()).offset(base).range(range);
             VkWriteDescriptorSet.Buffer write=VkWriteDescriptorSet.calloc(1,stack);
             write.get(0).sType$Default().dstSet(set).dstBinding(0).descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1).pBufferInfo(info);
             vkUpdateDescriptorSets(Device.device,write,null);
-            bindings.put(buffer.getId(),set); bindingsCreated++; allocatedBindings++;
+            bindings.put(buffer.getId(),new WindowBinding(set,base,range));
+            bindingsCreated++; allocatedBindings++;
+            // Do not update/reuse a previously recorded descriptor: old commands may
+            // still be in flight until this frame slot's fence has retired.
+            if(cached!=null) MemoryManager.getInstance().addFrameOp(()->freeSet(cached.set()));
             return set;
         }
     }
@@ -118,13 +123,23 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         batch.validate(vertices.remaining());
         if(!ready()) return false;
         int groups=(batch.count()+63)/64;
-        if(groups>Device.deviceProperties.limits().maxComputeWorkGroupCount(0)) { capacityRejections++; return false; }
+        if(groups>Device.deviceProperties.limits().maxComputeWorkGroupCount(0)) {
+            capacityRejections++; capacityWorkgroupRejections++; return false;
+        }
+        long rangeLimit=Math.min(Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange()),
+                ciStorageRangeLimit>0 ? (long)ciStorageRangeLimit : Long.MAX_VALUE);
         int padding=(int)((4-(buffer.getUsedBytes()&3))&3);
         int metadataBytes=batch.count()*4;
-        long needed=buffer.getUsedBytes()+padding+metadataBytes+vertices.remaining();
-        if(needed>Integer.toUnsignedLong(Device.deviceProperties.limits().maxStorageBufferRange()) || needed>Integer.MAX_VALUE) { capacityRejections++; return false; }
+        long listByteOffset=buffer.getUsedBytes()+padding;
+        long needed=listByteOffset+metadataBytes+vertices.remaining();
+        long alignment=Math.max(4L,Device.deviceProperties.limits().minStorageBufferOffsetAlignment());
+        long descriptorBase=descriptorWindowBase(listByteOffset,needed,alignment,rangeLimit);
+        if(descriptorBase<0 || needed>Integer.MAX_VALUE) {
+            capacityRejections++; capacityRangeRejections++; return false;
+        }
         buffer.reserve((int)(padding+metadataBytes+vertices.remaining()));
-        long set=instance.binding(buffer);
+        long descriptorRange=Math.min((long)buffer.getBufferSize()-descriptorBase,rangeLimit);
+        long set=instance.binding(buffer,descriptorBase,descriptorRange);
         if(set==0) { descriptorRejections++; return false; }
         ByteBuffer table=instance.offsets;
         table.clear();
@@ -133,9 +148,9 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         try(MemoryStack stack=MemoryStack.stackPush()) {
             if(padding!=0) buffer.copyToVertexBuffer(1,padding,stack.calloc(padding));
             buffer.copyToVertexBuffer(4,batch.count(),table);
-            int list=(int)buffer.getOffset()/4;
+            int list=(int)((buffer.getOffset()-descriptorBase)/4);
             buffer.copyToVertexBuffer(1,vertices.remaining(),vertices.slice());
-            int base=(int)buffer.getOffset()/4;
+            int base=(int)((buffer.getOffset()-descriptorBase)/4);
             var queue=Device.getGraphicsQueue();
             var command=queue.getCommandBuffer();
             var cmd=command.getHandle();
@@ -143,7 +158,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             barrier.get(0).sType$Default().srcAccessMask(VK_ACCESS_HOST_WRITE_BIT)
                     .dstAccessMask(VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
                     .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                    .buffer(buffer.getId()).offset(list*4L).size(metadataBytes+vertices.remaining());
+                    .buffer(buffer.getId()).offset(listByteOffset).size(metadataBytes+vertices.remaining());
             vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_HOST_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,null,barrier,null);
             vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,instance.pipeline);
             vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_COMPUTE,instance.pipelineLayout,0,stack.longs(set),null);
@@ -156,8 +171,21 @@ public final class ParticleBillboardCompute implements AutoCloseable {
             queue.endIfNeeded(command);
         }
         gpuQuads+=batch.count(); batches++; uploadedBytes+=metadataBytes+vertices.remaining();
+        if(descriptorBase!=0) windowedDispatches++;
         preparationNanos+=System.nanoTime()-start;
         return true;
+    }
+    /** Nearest aligned descriptor base covering the entire compact draw, or -1. */
+    static long descriptorWindowBase(long begin, long end, long alignment, long limit) {
+        if(begin<0 || end<begin || alignment<=0 || (alignment & (alignment-1))!=0 || limit<=0)
+            return -1;
+        long base=begin-(begin%alignment);
+        return end-base<=limit ? base : -1;
+    }
+    /** Native screenshot fixture can simulate a constrained device storage range. */
+    static void ciStorageRangeLimit(int bytes) {
+        if(!Boolean.getBoolean("vulkanmod.ciScreenshotSmoke")) throw new IllegalStateException("CI only");
+        ciStorageRangeLimit=bytes;
     }
     public static long gpuQuads() { return gpuQuads; }
     /** Native CI probe: pool exhaustion must reject before recording a dispatch. */
@@ -166,8 +194,8 @@ public final class ParticleBillboardCompute implements AutoCloseable {
     static int allocatedBindingsForSmoke() { return instance==null?0:instance.allocatedBindings; }
     static long callbackStateRecoveriesForSmoke() { return callbackStateRecoveries; }
     public static String statistics() {
-        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d callback_state_cpu_recoveries=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d allocated_descriptors=%d pending_retirement_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
-                inheritedAttempts,eligibleAttempts,originalCpu,packed,gpuQuads,recoveryQuads,layoutFallbacks,callbackStateRecoveries,unavailableFallbacks,batches,capacityRejections,descriptorRejections,
+        return String.format(Locale.ROOT,"particle_billboard_lifetime inherited_render_attempts=%d exact_class_eligible=%d original_cpu_eligible_calls=%d packed_quads=%d gpu_quads=%d cpu_recovery_quads=%d layout_fallback_calls=%d callback_state_cpu_recoveries=%d unavailable_checks=%d compute_batches=%d capacity_rejected_batches=%d capacity_workgroup_rejected_batches=%d capacity_range_rejected_batches=%d windowed_compute_batches=%d descriptor_rejected_batches=%d preparation_submit_ms=%.3f upload_kib=%.3f descriptor_allocations=%d live_descriptors=%d allocated_descriptors=%d pending_retirement_descriptors=%d offset_scratch_kib=%d simulation=cpu custom_override_denominator=excluded",
+                inheritedAttempts,eligibleAttempts,originalCpu,packed,gpuQuads,recoveryQuads,layoutFallbacks,callbackStateRecoveries,unavailableFallbacks,batches,capacityRejections,capacityWorkgroupRejections,capacityRangeRejections,windowedDispatches,descriptorRejections,
                 preparationNanos/1e6,uploadedBytes/1024.0,bindingsCreated,instance==null?0:instance.bindings.size(),
                 instance==null?0:instance.allocatedBindings,
                 instance==null?0:instance.allocatedBindings-instance.bindings.size(),instance==null?0:256);
