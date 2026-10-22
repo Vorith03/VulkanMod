@@ -158,6 +158,23 @@ public final class ParticleBillboardSmokeTest {
         }
     }
 
+    private static void verifyOutput(net.vulkanmod.vulkan.memory.VertexBuffer buffer,
+                                     long slice, ByteBuffer reference) {
+                MemoryManager.getInstance().MapAndCopy(buffer.getAllocation(),buffer.getBufferSize(),mapped->{
+                    ByteBuffer output=mapped.getByteBuffer(0,buffer.getBufferSize())
+                            .slice((int)slice,reference.remaining()).order(ByteOrder.nativeOrder());
+                    for(int v=0;v<131*4;v++) {
+                        int at=v*28;
+                        for(int f=0;f<5;f++) {
+                            float a=reference.getFloat(at+f*4), b=output.getFloat(at+f*4);
+                            if(!Float.isFinite(b) || Math.abs(a-b)>0.000002f)
+                                throw new AssertionError("Billboard geometry/UV mismatch vertex="+v+" component="+f+" expected="+a+" actual="+b);
+                        }
+                        if(reference.getInt(at+20)!=output.getInt(at+20) || reference.getInt(at+24)!=output.getInt(at+24))
+                            throw new AssertionError("Particle packed color/light mismatch");
+                    }
+                });
+    }
     public static void verify(Minecraft minecraft) throws Exception {
         if(!ParticleBillboardCompute.requested()) throw new AssertionError("Particle pilot disabled in native oracle");
         BufferBuilder cpu=new BufferBuilder(16), gpu=new BufferBuilder(16), sorted=new BufferBuilder(16);
@@ -213,7 +230,34 @@ public final class ParticleBillboardSmokeTest {
                 // Also exercise the real BufferUploader path and its original shader/state.
                 long before=ParticleBillboardCompute.gpuQuads();
                 RenderSystem.setShader(()->shader);
-                BufferUploader.drawWithShader(actual);
+                net.vulkanmod.vulkan.memory.VertexBuffer productionBuffer=null;
+                long productionSlice=-1;
+                long windowedBefore=ParticleBillboardCompute.windowedDispatchesForSmoke();
+                if(pass==0) {
+                    // Inspect the existing uploader-owned frame slot, without a
+                    // production test API or a substitute allocation architecture.
+                    var field=net.vulkanmod.vulkan.Drawer.class.getDeclaredField("vertexBuffers");
+                    field.setAccessible(true);
+                    productionBuffer=((net.vulkanmod.vulkan.memory.VertexBuffer[])
+                            field.get(Renderer.getDrawer()))[Renderer.getCurrentFrame()];
+                    try(var stack=org.lwjgl.system.MemoryStack.stackPush()) {
+                        productionBuffer.copyToVertexBuffer(1,32768,stack.calloc(32768));
+                    }
+                    ParticleBillboardCompute.ciStorageRangeLimit(32768);
+                    limits.maxComputeWorkGroupCount().put(0,-1);
+                }
+                try {
+                    BufferUploader.drawWithShader(actual);
+                    if(pass==0) {
+                        productionSlice=productionBuffer.getOffset();
+                        if(ParticleBillboardCompute.windowedDispatchesForSmoke()!=windowedBefore+1
+                                || productionSlice<32768)
+                            throw new AssertionError("Production draw did not consume a nonzero descriptor window");
+                    }
+                } finally {
+                    ParticleBillboardCompute.ciStorageRangeLimit(0);
+                    limits.maxComputeWorkGroupCount().put(0,groups);
+                }
                 if(ParticleBillboardCompute.gpuQuads()!=before+87) throw new AssertionError("Production uploader kept CPU shadow");
                 verifyCallbackMutation(cpu,gpu,camera);
                 // CPU sorting reads vertex positions: materialize before that callback, never sort compact records.
@@ -233,21 +277,11 @@ public final class ParticleBillboardSmokeTest {
                 ParticleBillboardCompute.ciUnavailable(false);
                 renderer.endFrame();
                 Vulkan.waitIdle(); // Native oracle only: production performs no waits/readback.
-                ByteBuffer expectedBytes=reference;
-                MemoryManager.getInstance().MapAndCopy(buffer.getAllocation(),buffer.getBufferSize(),mapped->{
-                    ByteBuffer output=mapped.getByteBuffer(0,buffer.getBufferSize())
-                            .slice((int)slice,expectedBytes.remaining()).order(ByteOrder.nativeOrder());
-                    for(int v=0;v<131*4;v++) {
-                        int at=v*28;
-                        for(int f=0;f<5;f++) {
-                            float a=expectedBytes.getFloat(at+f*4), b=output.getFloat(at+f*4);
-                            if(!Float.isFinite(b) || Math.abs(a-b)>0.000002f)
-                                throw new AssertionError("Billboard geometry/UV mismatch vertex="+v+" component="+f+" expected="+a+" actual="+b);
-                        }
-                        if(expectedBytes.getInt(at+20)!=output.getInt(at+20) || expectedBytes.getInt(at+24)!=output.getInt(at+24))
-                            throw new AssertionError("Particle packed color/light mismatch");
-                    }
-                });
+                verifyOutput(buffer,slice,reference);
+                if(productionBuffer!=null) {
+                    verifyOutput(productionBuffer,productionSlice,reference);
+                    Initializer.LOGGER.info("VULKANMOD_GPU_PARTICLE_WINDOW_PRODUCTION_OK (87 GPU quads, actual uploader frame buffer, nonzero window, generated draw slice matches CPU geometry/UV/color/light)");
+                }
                 MemoryUtil.memFree(reference); reference=null;
                 // Exercise safe device-idle teardown with frame-retired descriptors
                 // still scheduled, then rebuild the pipeline on the next pass.

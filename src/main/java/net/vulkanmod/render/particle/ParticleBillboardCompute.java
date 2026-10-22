@@ -188,6 +188,7 @@ public final class ParticleBillboardCompute implements AutoCloseable {
         ciStorageRangeLimit=bytes;
     }
     public static long gpuQuads() { return gpuQuads; }
+    static long windowedDispatchesForSmoke() { return windowedDispatches; }
     /** Native CI probe: pool exhaustion must reject before recording a dispatch. */
     static long descriptorRejectionsForSmoke() { return descriptorRejections; }
     /** Includes fence-retired descriptor sets still charged against the 64-set pool. */
