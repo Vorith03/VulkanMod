@@ -360,3 +360,36 @@ Xvfb/software Vulkan were not installed or claimed exercised locally. These are
 local setup observations; full1097 is the actual complete qualification evidence.
 No repository network/build versions or dependency configuration were changed to
 hide environmental failures. Temporary tools/caches/private logs are outside Git.
+
+## Further continuation — generation/path reference correction (qualification pending)
+
+The observer now snapshots numeric CPU geometry-generation ownership at upload or
+atomic APPEND commit, and GPU output residency generations at command recording.
+After the existing frame fence, actual indirect words must match slot/count/index/
+vertex offset uniquely; ambiguity explicitly invalidates capture. Retained old
+geometry remains attributable to its own generation. No live section is consulted
+when the frame retires. Direct and legacy CPU draws record numeric identities only
+after their actual draw commands, then confirm via the same existing frame fence;
+submission-failure cancellation suppresses queued diagnostic callbacks.
+
+All paths remain opt-in through debugTerrainDrawReadback. Main-view pose, exact
+projection float bits, framebuffer, effective distance, smart culling and spectator
+state are recorded on changes. At55s a late census clears diagnostic dedup only,
+forcing current production sources to be observed again. No preloading, second
+selector or geometry ownership changes. Capture is bounded to the first60s main
+world epoch, with the existing128 requests/4MiB/frame,32768 request and4096 source
+bounds; direct events add a4096/frame,32768 numeric identity bound. Exceeding any
+bound is incomplete, never silently accepted. The new script freezes a separate
+visually checked, static CPU reference census and retains missing members as holes.
+Empty/occluded inventory is explicit; unavailable reference inputs block freezing;
+unsupported CPU geometry stays in the denominator. APPEND requires both partial
+commands; GPU-only APPEND with no CPU exceptions is independently complete.
+
+scripts/ci/terrain-appearance.py reports command coverage50/90/99/100 using BOTH
+recording lower bounds and frame-fence upper bounds, nearby64-block section-center
+radius and full reference view. It refuses changed views/workloads/incomplete data,
+never shrinks to delivered/eligible sections and never credits stale/unknown meshes.
+REGION_SNAPSHOT_READY-to-fence is a separately labelled later diagnostic; true
+all-required-input availability and first usable/presented frame remain unknown.
+Do not equate these new bounds with on-screen appearance. No RX speed claim or
+matched initial-population result is established by this source milestone.

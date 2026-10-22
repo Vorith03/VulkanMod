@@ -256,6 +256,9 @@ case "$mode" in
     run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
     for control in cpu gpu; do
       grep -F 'VULKANMOD_TERRAIN_WORLD_RENDER_ENTER' "vulkan-world-$control-smoke.log"
+      grep -F 'VULKANMOD_TERRAIN_VIEW:' "vulkan-world-$control-smoke.log"
+      grep -E 'VULKANMOD_TERRAIN_GEOMETRY_CONSUMED:.*epoch=[1-9].*producer=cpu' "vulkan-world-$control-smoke.log"
+
       grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=WORKER_START' "vulkan-world-$control-smoke.log"
       grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=PUBLICATION_APPLIED' "vulkan-world-$control-smoke.log"
       grep -E 'VULKANMOD_TERRAIN_DRAW_CONSUMED: epoch=[1-9][0-9]* .*selectedPacked=[0-9]' "vulkan-world-$control-smoke.log"
@@ -265,6 +268,7 @@ case "$mode" in
       fi
     done
     grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=GPU_READY' vulkan-world-gpu-smoke.log
+    grep -E 'VULKANMOD_TERRAIN_GEOMETRY_CONSUMED:.*epoch=[1-9].*producer=gpu' vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-cpu-smoke.log
     grep -F "VULKANMOD_GPU_LOADED_WORLD_OK" vulkan-world-gpu-smoke.log
     grep -F "VULKANMOD_GPU_GENERATED_WORLD_INDIRECT_RECORDED" vulkan-world-gpu-smoke.log

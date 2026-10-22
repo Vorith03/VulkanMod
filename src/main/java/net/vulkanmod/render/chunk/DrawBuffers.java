@@ -59,6 +59,9 @@ public class DrawBuffers {
 //        AreaUploadManager.INSTANCE.enqueueParameterUpdate(
 //                new ParametersUpdate(drawParameters, buffer.indexCount, firstIndex, vertexOffset));
 
+        if(!buffer.indexOnly && TerrainAppearanceEvents.ENABLED)
+            drawParameters.traceGeneration = drawParameters.section == null
+                    ? Long.MIN_VALUE : drawParameters.section.getVoxelGeneration();
         drawParameters.indexCount = buffer.indexCount;
         drawParameters.firstIndex = firstIndex;
         drawParameters.vertexOffset = vertexOffset;
@@ -157,6 +160,7 @@ public class DrawBuffers {
 
         AreaBuffer.Segment previous = target.vertexBufferSegment;
         AreaBuffer previousOwner = this.vertexBuffer;
+        if(TerrainAppearanceEvents.ENABLED) target.traceGeneration = staged.generation;
         target.indexCount = staged.indexCount;
         target.firstIndex = staged.firstIndex;
         target.vertexOffset = staged.vertexOffset;
@@ -227,6 +231,7 @@ public class DrawBuffers {
         int stride = 20;
 
         int drawCount = 0;
+        java.util.List<Runnable> traceDraws = TerrainAppearanceEvents.ENABLED ? new java.util.ArrayList<>() : null;
 
         ResettableQueue<RenderSection> queue = chunkArea.sectionQueue;
 
@@ -291,6 +296,7 @@ public class DrawBuffers {
             MemoryUtil.memPutFloat(ptr + 4, (float)((double) section.yOffset - camY));
             MemoryUtil.memPutFloat(ptr + 8, (float)((double) section.zOffset - camZ));
 
+            if(traceDraws != null) traceDraws.add(TerrainDrawReadback.captureCpu(section, terrainRenderType, "legacy_indirect"));
             drawCount++;
         }
 
@@ -313,6 +319,7 @@ public class DrawBuffers {
 //            pipeline.bindDescriptorSets(Drawer.getCommandBuffer(), WorldRenderer.getInstance().getUniformBuffers(), Drawer.getCurrentFrame());
         pipeline.bindDescriptorSets(Renderer.getCommandBuffer(), Renderer.getCurrentFrame());
         vkCmdDrawIndexedIndirect(Renderer.getCommandBuffer(), indirectBuffer.getId(), indirectBuffer.getOffset(), drawCount, stride);
+        if(traceDraws != null) traceDraws.forEach(Runnable::run);
 
 //            fakeIndirectCmd(Drawer.getCommandBuffer(), indirectBuffer, drawCount, uboBuffer);
 
@@ -362,6 +369,7 @@ public class DrawBuffers {
         TerrainRenderType terrainRenderType = TerrainRenderType.get(renderType);
         terrainRenderType.setCutoutUniform();
         boolean isTranslucent = terrainRenderType == TerrainRenderType.TRANSLUCENT;
+        java.util.List<Runnable> traceDraws = TerrainAppearanceEvents.ENABLED ? new java.util.ArrayList<>() : null;
 
         try(MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer pVertexBuffer = stack.longs(vertexBuffer.getId());
@@ -406,6 +414,7 @@ public class DrawBuffers {
             MemoryUtil.memPutFloat(ptr + 16, (float)((double) section.yOffset - camY));
             MemoryUtil.memPutFloat(ptr + 20, (float)((double) section.zOffset - camZ));
 
+            if(traceDraws != null) traceDraws.add(TerrainDrawReadback.captureCpu(section, terrainRenderType, "direct"));
             drawCount++;
 
         }
@@ -430,6 +439,7 @@ public class DrawBuffers {
                 nvkCmdPushConstants(commandBuffer, pipeline.getLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, 12, offset + 12);
 
                 vkCmdDrawIndexed(commandBuffer, indexCount, 1, firstIndex, vertexOffset, 0);
+                if(traceDraws != null) traceDraws.get(i).run();
             }
         }
 
@@ -510,6 +520,7 @@ public class DrawBuffers {
         AreaBuffer.Segment vertexBufferSegment = new AreaBuffer.Segment();
         AreaBuffer.Segment indexBufferSegment;
         boolean ready = false;
+        long traceGeneration = Long.MIN_VALUE;
 
         DrawParameters(TerrainRenderType renderType) {
             this(renderType, null);
@@ -561,6 +572,7 @@ public class DrawBuffers {
             if (chunkArea != null && hadGeometry) {
                 chunkArea.drawBuffers.markMeshChanged(this.renderType);
             }
+            this.traceGeneration = Long.MIN_VALUE;
             this.indexCount = 0;
             this.firstIndex = 0;
             this.vertexOffset = 0;

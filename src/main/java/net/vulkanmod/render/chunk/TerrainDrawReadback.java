@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkBufferCopy;
@@ -27,8 +28,10 @@ public final class TerrainDrawReadback {
     private static final int MAX_REQUESTS = 128;
     private static final int MAX_BYTES = 4 * 1024 * 1024;
     private static final int MAX_TOTAL_REQUESTS = 32768;
-    private static final long DURATION_NANOS = 30_000_000_000L;
+    private static final long DURATION_NANOS = 60_000_000_000L;
     private static final List<Request> pending = new ArrayList<>();
+    private static final List<Runnable> cpuDraws = new ArrayList<>();
+    private static final Map<String, Boolean> consumed = new HashMap<>();
     private static final List<Batch> outstanding = new ArrayList<>();
     private static Consumer<Observation> ciObserver;
     private static final int MAX_SOURCE_KEYS = 4096;
@@ -38,9 +41,10 @@ public final class TerrainDrawReadback {
     private record SourceKey(long epoch, int x, int y, int z, int layer,
                              boolean gpu, long source, long offset) {}
     static boolean active() { return ENABLED || ciObserver != null; }
-    private static long started, sequence, lastWorldEpoch;
+    private static long started, sequence, lastWorldEpoch, cancellation;
     private static int pendingBytes, totalRequests;
     private static boolean invalid;
+    private static long referenceEpoch;
 
     private TerrainDrawReadback() {}
 
@@ -49,7 +53,7 @@ public final class TerrainDrawReadback {
                               boolean gpuCommands, int[] words) {}
 
     private record Request(long worldEpoch, long frame, long recorded, int x, int y, int z, int layer,
-                           boolean gpu, long source, long offset, int bytes) {}
+                           boolean gpu, long source, long offset, int bytes, List<TerrainDrawProvenance.Geometry> geometry) {}
 
     private static final class Batch {
         final long buffer, allocation;
@@ -65,10 +69,8 @@ public final class TerrainDrawReadback {
         if(!ENABLED && ciObserver == null) return;
         long now = System.nanoTime();
         long worldEpoch = TerrainAppearanceEvents.regionEpoch(area);
-        if(worldEpoch != 0 && worldEpoch != lastWorldEpoch) {
-            lastWorldEpoch = worldEpoch; started = now; totalRequests = 0; captured.clear();
-        }
-        if(started == 0) started = now;
+        if(!TerrainAppearanceEvents.withinWindow(worldEpoch)) return;
+        observeEpoch(worldEpoch, now);
         if(ciObserver == null && now - started > DURATION_NANOS) return;
         long bytes = (long)commands * RegionBatchLayout.STRIDE;
         if(commands <= 0 || commands > RegionBatchLayout.MAX_DRAW_COMMANDS
@@ -89,8 +91,74 @@ public final class TerrainDrawReadback {
         captured.put(key, revisions);
         totalRequests++;
         pending.add(new Request(worldEpoch, sequence, now, area.position.x, area.position.y, area.position.z,
-                layer, gpu, source, offset, (int)bytes));
+                layer, gpu, source, offset, (int)bytes, captureGeometry(area, layer)));
         pendingBytes += (int)bytes;
+    }
+
+    /** One late census forces the SAME production sources to be observed again; no geometry preload. */
+    static void referenceIfDue(long epoch, long sinceEntry) {
+        if(!ENABLED || epoch == 0 || epoch == referenceEpoch || sinceEntry < 55_000_000_000L) return;
+        observeEpoch(epoch, System.nanoTime());
+        referenceEpoch = epoch; captured.clear(); consumed.clear();
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_REFERENCE_BEGIN: epoch={} observed_ns={}; production command census, convergence must be independently checked", epoch, System.nanoTime());
+    }
+
+    private static void observeEpoch(long worldEpoch, long now) {
+        if(worldEpoch != 0 && worldEpoch != lastWorldEpoch) {
+            lastWorldEpoch = worldEpoch; started = now; totalRequests = 0;
+            captured.clear(); consumed.clear();
+        }
+        if(started == 0) started = now;
+    }
+
+    private static List<TerrainDrawProvenance.Geometry> captureGeometry(ChunkArea area, int layer) {
+        if(!ENABLED) return List.of(); // Native observer keeps its existing oracle.
+        List<TerrainDrawProvenance.Geometry> geometry = new ArrayList<>();
+        TerrainRenderType type = TerrainRenderType.VALUES[layer];
+        for(int slot = 0; slot < RegionBatchLayout.MAX_SECTIONS; slot++) {
+            RenderSection section = area.getOwnedSection(slot);
+            if(section == null) continue;
+            var cpu = section.getDrawParameters(type);
+            boolean append = cpu.indexCount != 0 && type == RenderSection.gpuTerrainOutputLayer()
+                    && section.gpuTerrainDrawState().ownership() == GpuTerrainDrawHandoff.Ownership.APPEND;
+            if(cpu.indexCount != 0) geometry.add(new TerrainDrawProvenance.Geometry(slot,
+                    cpu.indexCount, cpu.firstIndex, cpu.vertexOffset, cpu.traceGeneration,
+                    section.getVoxelGeneration(), append ? "cpu_append" : "cpu"));
+            var gpu = area.getGpuTerrainOutputResidency(section.xOffset(), section.yOffset(), section.zOffset(), type);
+            if(gpu != null && gpu.valid()) geometry.add(new TerrainDrawProvenance.Geometry(slot,
+                    gpu.faceCount() * 6, 0, gpu.vertexOffset(), gpu.generation(),
+                    section.getVoxelGeneration(), append ? "gpu_append" : "gpu"));
+        }
+        return List.copyOf(geometry);
+    }
+
+    /** Capture numeric provenance BEFORE a direct/legacy draw; enqueue only AFTER recording it. */
+    static Runnable captureCpu(RenderSection section, TerrainRenderType type, String path) {
+        var ticket = TerrainAppearanceEvents.capture(section);
+        var cpu = section.getDrawParameters(type);
+        long generation = cpu.traceGeneration, recorded = System.nanoTime(), frame = sequence;
+        int x = section.xOffset(), y = section.yOffset(), z = section.zOffset(), layer = type.ordinal();
+        return () -> {
+            if(ticket == null || !TerrainAppearanceEvents.withinWindow(ticket.epoch())) return;
+            long now = System.nanoTime();
+            observeEpoch(ticket.epoch(), now);
+            if(now - started > DURATION_NANOS) return;
+            String key = ticket.epoch() + ":" + x + ":" + y + ":" + z + ":" + layer + ":" + generation + ":" + path;
+            if(consumed.containsKey(key)) return;
+            if(consumed.size() >= MAX_TOTAL_REQUESTS || cpuDraws.size() >= 4096) {
+                invalidate("cpu_geometry_cap_exhausted"); return;
+            }
+            consumed.put(key, true);
+            cpuDraws.add(() -> logGeometry(ticket.epoch(), frame, recorded, System.nanoTime(), x, y, z,
+                    layer, generation, ticket.generation(), "cpu", path));
+        };
+    }
+
+    private static void logGeometry(long epoch, long frame, long recorded, long confirmed,
+                                    int x, int y, int z, int layer, long generation,
+                                    long inputGeneration, String producer, String path) {
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_GEOMETRY_CONSUMED: epoch={} frame={} section=({},{},{}) layer={} generation={} input_generation={} producer={} path={} recorded_ns={} confirmed_ns={} incomplete={}; actual submitted command, NOT pixels/presentation",
+                epoch, frame, x, y, z, layer, generation, inputGeneration, producer, path, recorded, confirmed, invalid);
     }
 
     private static void invalidate(String reason) {
@@ -102,6 +170,13 @@ public final class TerrainDrawReadback {
     public static void recordPending(VkCommandBuffer commandBuffer) {
         if(!ENABLED && ciObserver == null && pending.isEmpty()) return;
         sequence++;
+        if(!cpuDraws.isEmpty()) {
+            var draws = List.copyOf(cpuDraws); cpuDraws.clear();
+            long token = cancellation;
+            MemoryManager.getInstance().addFrameOp(() -> {
+                if(!invalid && token == cancellation) draws.forEach(Runnable::run);
+            });
+        }
         if(pending.isEmpty()) return;
         List<Request> requests = List.copyOf(pending);
         int bytes = pendingBytes;
@@ -163,7 +238,23 @@ public final class TerrainDrawReadback {
                     Observation observation = new Observation(request.worldEpoch, request.frame, request.recorded, System.nanoTime(),
                             request.x, request.y, request.z, request.layer, request.gpu, words);
                     if(ciObserver != null) ciObserver.accept(observation);
-                    else log(observation);
+                    else {
+                        log(observation);
+                        for(int i = 0; request.worldEpoch != 0 && i < words.length; i += 5) {
+                            if(words[i] == 0 || words[i + 1] == 0) continue;
+                            var geometry = TerrainDrawProvenance.match(request.geometry, words, i);
+                            if(geometry == null) {
+                                invalidate("unresolved_geometry_provenance"); continue;
+                            }
+                            int slot = geometry.slot();
+                            int x = request.x + (slot & 7) * 16;
+                            int y = request.y + ((slot >>> 3) & 7) * 16;
+                            int z = request.z + ((slot >>> 6) & 7) * 16;
+                            logGeometry(request.worldEpoch, request.frame, request.recorded, observation.confirmedNanos,
+                                    x, y, z, request.layer, geometry.generation(), geometry.inputGeneration(),
+                                    geometry.producer(), "region_indirect");
+                        }
+                    }
                 }
             });
         } catch(RuntimeException failure) {
@@ -190,7 +281,8 @@ public final class TerrainDrawReadback {
 
     /** Submission failure: caller MUST establish device idle before cancelling recorded transfers. */
     public static void cancelAfterDeviceIdle() {
-        pending.clear(); pendingBytes = 0; captured.clear();
+        cancellation++;
+        pending.clear(); pendingBytes = 0; captured.clear(); cpuDraws.clear(); consumed.clear();
         for(Batch batch : List.copyOf(outstanding)) finish(batch, false);
     }
 
@@ -198,14 +290,14 @@ public final class TerrainDrawReadback {
     static void beginCiProbe(Consumer<Observation> observer) {
         if(ciObserver != null || !pending.isEmpty() || !outstanding.isEmpty())
             throw new IllegalStateException("Indirect readback observer already owns work");
-        ciObserver = observer; invalid = false; started = 0; totalRequests = 0; captured.clear();
+        ciObserver = observer; invalid = false; started = 0; totalRequests = 0; captured.clear(); consumed.clear();
     }
 
     /** Fixture has already waited device idle; consume remaining fenced bytes before removing observer. */
     static void endCiProbeAfterDeviceIdle() {
         if(ciObserver == null) return;
         try { for(Batch batch : List.copyOf(outstanding)) finish(batch, !invalid); }
-        finally { ciObserver = null; pending.clear(); pendingBytes = 0; captured.clear(); }
+        finally { ciObserver = null; pending.clear(); pendingBytes = 0; captured.clear(); cpuDraws.clear(); consumed.clear(); }
         if(invalid) throw new AssertionError("Native indirect readback capture was incomplete");
     }
 }

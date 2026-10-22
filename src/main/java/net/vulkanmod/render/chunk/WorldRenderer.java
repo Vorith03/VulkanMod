@@ -164,7 +164,21 @@ public class WorldRenderer {
     public void setupRenderer(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
         if(TerrainAppearanceEvents.ENABLED && this == getInstance()
                 && !net.vulkanmod.compatibility.ImmersivePortalsLevelRendererCompat.shouldCancelWorldRendererReload())
+        {
             TerrainAppearanceEvents.begin(this, this.level);
+            var pos = camera.getPosition();
+            float[] projection = new float[16];
+            RenderSystem.getProjectionMatrix().get(projection);
+            StringBuilder signature = new StringBuilder();
+            signature.append(pos.x).append(',').append(pos.y).append(',').append(pos.z)
+                    .append(',').append(camera.getYRot()).append(',').append(camera.getXRot())
+                    .append(',').append(this.minecraft.getWindow().getWidth())
+                    .append(',').append(this.minecraft.getWindow().getHeight())
+                    .append(',').append(this.minecraft.options.getEffectiveRenderDistance())
+                    .append(',').append(this.minecraft.smartCull).append(',').append(spectator);
+            for(float value : projection) signature.append(',').append(Integer.toHexString(Float.floatToRawIntBits(value)));
+            TerrainAppearanceEvents.view(this, signature.toString());
+        }
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Setup_Renderer");
         this.cameraPos = camera.getPosition();

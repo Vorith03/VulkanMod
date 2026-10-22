@@ -15,6 +15,7 @@ public final class TerrainAppearanceEvents {
     private static final Map<Ticket, Integer> seen = new HashMap<>();
     private static long epoch, origin;
     private static boolean incomplete;
+    private static String view;
 
     public enum Stage { NEIGHBOR_GATE_PASSED, REGION_PREPARE_START, REGION_SNAPSHOT_READY,
         ADMITTED, WORKER_START, WORKER_FINISH, PUBLICATION_QUEUED, PUBLICATION_APPLIED,
@@ -28,9 +29,19 @@ public final class TerrainAppearanceEvents {
         if(!ENABLED || renderer == null || level == null) return;
         if(owner.get() == renderer && world.get() == level) return;
         owner = new WeakReference<>(renderer); world = new WeakReference<>(level);
-        epoch++; origin = System.nanoTime(); seen.clear(); incomplete = false;
+        epoch++; origin = System.nanoTime(); seen.clear(); incomplete = false; view = null;
         Initializer.LOGGER.info("VULKANMOD_TERRAIN_WORLD_RENDER_ENTER: epoch={} origin_ns={} epoch_ms={}; first main-world renderer setup, NOT first usable/presented frame",
                 epoch, origin, System.currentTimeMillis());
+    }
+
+    /** Exact observed main-view signature; a changed signature invalidates a fixed-view trial. */
+    public static synchronized void view(Object renderer, String signature) {
+        if(!ENABLED || origin == 0 || owner.get() != renderer || System.nanoTime() - origin > DURATION) return;
+        TerrainDrawReadback.referenceIfDue(epoch, System.nanoTime() - origin);
+        if(signature.equals(view)) return;
+        view = signature;
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_VIEW: epoch={} observed_ns={} signature={}",
+                epoch, System.nanoTime(), signature);
     }
 
     public static synchronized void close(Object renderer) {
@@ -68,6 +79,11 @@ public final class TerrainAppearanceEvents {
         seen.put(ticket, previous | bit);
         Initializer.LOGGER.info("VULKANMOD_TERRAIN_SECTION_STAGE: epoch={} section=({},{},{}) generation={} stage={} since_entry_ns={} observed_ns={}",
                 epoch, ticket.x, ticket.y, ticket.z, ticket.generation, stage, now - origin, now);
+    }
+
+    static synchronized boolean withinWindow(long requestedEpoch) {
+        return requestedEpoch == 0 || (origin != 0 && requestedEpoch == epoch
+                && System.nanoTime() - origin <= DURATION);
     }
 
     /** Zero means a non-main/unknown region; never attribute portal observations to the main-world clock. */
