@@ -1,5 +1,30 @@
 # VulkanMod Forge1.20.1 — qualified integrated GPU checkpoint
 
+## October 21 — particle descriptor window correction pending #1089 qualification
+
+Code commit `550a510c6f2ed833eb80e8e03a881ab708faf270` changes particle compute
+from a zero-offset full-vertex-buffer storage descriptor to an aligned bounded
+window covering each compact draw. Original CPU recovery, absolute vertex draw,
+shader/vertex barriers, 64-set fence-retired pool and native ownership retained.
+New exact-pixel smoke first pass requires a nonzero descriptor window under a
+fixture-only 32 KiB range. Separate counters: `capacity_workgroup_rejected_batches`,
+`capacity_range_rejected_batches`, `windowed_compute_batches`.
+Full #1089 / run39713898920 was in progress at handoff; **not qualified yet**.
+The workgroup check cannot explain the owner 15426 rejects for batches limited
+to 65536 quads (at most1024 groups, below Vulkan's minimum X limit).
+The prior absolute `buffer.getUsedBytes()` storage-span guard is the
+remaining evidenced capacity branch. Fix intent is bounded descriptor windows;
+actual owner adoption still unmeasured.
+
+Texture 0/2879091 remains OPEN. `interpolationBindingAttempted` latches
+once, while merged `DISPATCH_FAILED` attribution hides whether first failure
+is binding, source/atlas bounds or compute dispatch. Existing data cannot yet
+attribute this; next prioritize bounded reason counters and native reproducer,
+then minimal safe fix. See `docs/NEXT_SESSION_PROMPT.md`. Previous #1088
+JAR remains last internally qualified executable unless #1089 verified.
+No owner re-test requested on an unqualified executable.
+
+
 ## October 21 — two owner RX6900XT captures received; adoption gaps are actionable
 
 See [owner GPU benchmark evidence](docs/OWNER_RX_6900XT_GPU_BENCHMARK_2026-10-21.md).

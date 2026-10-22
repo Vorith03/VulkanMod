@@ -1,5 +1,20 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October 21 — particle descriptor-window candidate and qualification gate
+
+Owner #1088 particle GPU zero-adoption remains the external baseline.
+`550a510c` narrows storage descriptors to an aligned window of the
+existing shared vertex buffer rather than requiring absolute used bytes
+to fit the device's storage range. Groups are bounded by1024, below the
+minimum compliant workgroup-count X limit, so owner capacity rejection
+points to the absolute span guard, not group count. Native nonzero-window
+exact draw test and separate capacity reason counters added. #1089 /
+39713898920 was running on handoff; no new qualified JAR/owner adoption
+claim until verified. Texture-first binding/dispatch reason attribution
+is still the next unresolved production adoption defect. See
+`docs/NEXT_SESSION_PROMPT.md`.
+
+
 ## October 21 — owner RX data changes effectiveness gate, not internal CI result
 
 Two real owner benchmark captures on #1088 at 2552x1374, D32/S12 show

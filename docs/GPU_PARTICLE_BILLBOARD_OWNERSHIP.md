@@ -1,5 +1,23 @@
 # GPU particle billboard ownership pilot
 
+## October 21 — bounded descriptor-window correction under qualification
+
+Commit `550a510c` switches the compute shader's storage descriptor
+from offset-zero global vertex-buffer span to an aligned descriptor
+window covering metadata + compact vertex slice. The original shared
+frame vertex buffer, absolute draw offset, host/compute/vertex memory
+barriers, GPU output consumption, 64-set fence-retired descriptor
+lifetime, buffer resize invalidation and complete CPU recovery remain.
+Changed windows use distinct descriptor sets; the old recorded
+descriptor is freed by existing frame operations. Counters separate
+workgroup versus storage-range rejections; the first native pixel
+smoke pass adds 32 KiB prior buffered vertex content and constrains
+test storage window to 32 KiB so a zero-offset descriptor fails.
+Full #1089 / run39713898920 was still IN PROGRESS at checkpoint;
+do not treat this unqualified source change as an owner-measured fix.
+See NEXT_SESSION_PROMPT and owner RX benchmark report.
+
+
 ## Particle descriptor frame-slot retirement — full #1058 correctness-qualified
 
 Executable `29e95e5c31221276dae83d65363407f0c43f740c` (instrumentation `ebb5d320591a31c46700be4bb340b7cdc5444cda`); [full #1058 / run 39236211314](https://github.com/Vorith03/VulkanMod/actions/runs/39236211314) **PASSED**, Forge JAR artifact **12178863678**, smoke logs **12178788575**. #1057 was coalesced/cancelled by the newer executable, not failed native validation. The preceding **qualified** executable was `ba2f574e8db79ea26b7694d9cb37f31c8d5b2710` / full #1056, JAR 12178027221, smoke logs 12177772301. Native Vulkan screenshot smoke confirmed real-pool pressure, fence-slot retirement and renewed admission; build/package, offline contracts, both Forge startups, terrain/texture/particle pixels and synchronization, screenshots, Create Chronicles/Immersive Portals and Crash Assistant all passed; private packs were skipped. The CI particle lifetime log ended with `allocated_descriptors=64 pending_retirement_descriptors=63` after the **second** deliberate saturation, not production churn or a leak.

@@ -1,5 +1,20 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
+## October 21 — particle candidate coded; CI and owner proof pending
+
+Commit `550a510c` updates ParticleBillboardCompute to use aligned
+storage descriptor windows into the existing frame particle vertex
+buffer, preserving actual absolute vertex draw, CPU fallback, fences,
+pool limits and barriers. Native first-pass smoke constrains range to
+32 KiB and requires a nonzero-window accepted draw and original pixel
+oracles. Distinct workgroup/range/window counters added. No new net-FPS
+claim; full #1089 was still IN PROGRESS at checkpoint. On #1088 GPU
+particles 0/126249312, storage-span guard is the identified live source
+capacity branch; GPU texture interpolation remains 0/2879091 and
+binding/dispatch rejection reason unresolved. Qualification and owner
+performance/effectiveness remain OPEN. See NEXT_SESSION_PROMPT.
+
+
 ## October 21/22 — measured owner partial vs integrated19; GPU effectiveness incomplete
 
 Owner RX6900XT same-build #1088 captures: 180s partial GPU 58.60fps UUID
