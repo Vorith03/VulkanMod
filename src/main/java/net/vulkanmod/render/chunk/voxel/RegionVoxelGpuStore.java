@@ -209,7 +209,8 @@ public final class RegionVoxelGpuStore {
     public synchronized StorageBuffer getPageBuffer(int pageIndex) {
         if(this.closed || pageIndex < 0 || pageIndex >= this.pages.size())
             return null;
-        return this.pages.get(pageIndex).buffer;
+        Page page = this.pages.get(pageIndex);
+        return page == null ? null : page.buffer;
     }
 
     public synchronized int pageCount() {
@@ -235,6 +236,7 @@ public final class RegionVoxelGpuStore {
 
         MemoryManager memoryManager = MemoryManager.getInstance();
         for(Page page : this.pages) {
+            if(page == null) continue;
             page.buffer.freeBuffer();
             memoryManager.addFrameOp(() -> this.budget.release(PAGE_BYTES));
         }
@@ -253,6 +255,7 @@ public final class RegionVoxelGpuStore {
 
     private Slice allocateSlice(int byteLength) {
         for(Page page : this.pages) {
+            if(page == null) continue;
             RegionVoxelPageAllocator.Allocation allocation = page.allocator.allocate(byteLength);
             if(allocation != null)
                 return new Slice(page, allocation);
@@ -271,8 +274,11 @@ public final class RegionVoxelGpuStore {
             throw error;
         }
 
-        Page page = new Page(this.pages.size(), buffer);
-        this.pages.add(page);
+        int index = this.pages.indexOf(null);
+        if(index < 0) index = this.pages.size();
+        Page page = new Page(index, buffer);
+        if(index == this.pages.size()) this.pages.add(page);
+        else this.pages.set(index, page);
         RegionVoxelPageAllocator.Allocation allocation = page.allocator.allocate(byteLength);
         if(allocation == null)
             throw new IllegalStateException("Fresh terrain input page cannot fit one bounded snapshot");
@@ -346,8 +352,23 @@ public final class RegionVoxelGpuStore {
 
         memoryManager.addFrameOp(() -> {
             synchronized(RegionVoxelGpuStore.this) {
-                if(!RegionVoxelGpuStore.this.closed)
-                    slice.page.allocator.free(slice.allocation);
+                if(!RegionVoxelGpuStore.this.closed) {
+                    Page page = slice.page;
+                    page.allocator.free(slice.allocation);
+                    if(page.allocator.isEmpty()) {
+                        // Every allocation, including pending uploads/replacements,
+                        // has now crossed its existing last-use frame fence. This
+                        // input-only page has no rendered-geometry owner. Return its
+                        // actual allocation AND global charge together, instead of
+                        // pinning a quiet region's empty cache until world eviction.
+                        RegionVoxelGpuStore.this.pages.set(page.index, null);
+                        MemoryManager.freeBufferAfterFence(page.buffer.getBufferInfo());
+                        RegionVoxelGpuStore.this.budget.release(PAGE_BYTES);
+                        while(!RegionVoxelGpuStore.this.pages.isEmpty()
+                                && RegionVoxelGpuStore.this.pages.get(RegionVoxelGpuStore.this.pages.size() - 1) == null)
+                            RegionVoxelGpuStore.this.pages.remove(RegionVoxelGpuStore.this.pages.size() - 1);
+                    }
+                }
             }
         });
     }

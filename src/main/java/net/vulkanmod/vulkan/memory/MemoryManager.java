@@ -263,6 +263,15 @@ public class MemoryManager {
         TextureResidentBuffer.onFreed(buffer);
     }
 
+    /**
+     * Existing accounting/destruction primitive for an owner ALREADY inside its
+     * completed frame-fence callback. Do not queue a new callback on the list
+     * currently being drained, and do not use this for merely revoked resources.
+     */
+    public static void freeBufferAfterFence(Buffer.BufferInfo bufferInfo) {
+        freeBuffer(bufferInfo);
+    }
+
     private static void freeBuffer(Buffer.BufferInfo bufferInfo) {
         if(bufferInfo.data() != null) {
             vmaUnmapMemory(allocator, bufferInfo.allocation());

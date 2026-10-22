@@ -153,6 +153,72 @@ public final class GpuSparseLightingGpuSmokeTest {
             Vulkan.waitIdle();
             store.close();
         }
+        verifySharedPageTurnover();
+    }
+
+    /** Constructor-boundary native pressure proof; waits belong exclusively to this fixture. */
+    private static void verifySharedPageTurnover() {
+        var budget = new RegionVoxelGpuStore.PageBudget(RegionVoxelGpuStore.PAGE_BYTES);
+        var first = new RegionVoxelGpuStore(budget);
+        var second = new RegionVoxelGpuStore(budget);
+        var voxel = voxelFixture();
+        var light = lightingFixture(voxel, 0x67452301);
+        try {
+            require(first.upload(0, voxel, 1L) && first.uploadLighting(0, light, 1L),
+                    "First region must fit the one-page budget");
+            AreaUploadManager.INSTANCE.submitUploads();
+            var old = first.getResidency(0);
+            first.releaseConsumed(0, 1L);
+            require(budget.usedBytes() == RegionVoxelGpuStore.PAGE_BYTES,
+                    "Revocation must not advertise unfenced native capacity");
+            require(!second.upload(0, voxel, 1L),
+                    "Second region must respect actual pre-fence exhaustion");
+            retireFixtureInputs();
+            require(first.getPageBuffer(old.pageIndex()) == null && budget.usedBytes() == 0,
+                    "Last fenced slice must return its real page and global charge");
+            require(second.upload(0, voxel, 2L) && second.uploadLighting(0, light, 2L),
+                    "A different region must admit after consumed-input turnover");
+            AreaUploadManager.INSTANCE.submitUploads();
+            verifyReadback(second, second.getLightingResidency(0), light);
+            verifyCompute(second, second.getResidency(0), second.getLightingResidency(0),
+                    light, SectionVoxelSnapshot.blockIndex(8, 8, 8));
+            var live = second.getResidency(0);
+            require(second.upload(1, voxel, 3L) && second.uploadLighting(1, light, 3L),
+                    "Live and pending inputs must share a retained nonempty page");
+            second.releaseConsumed(0, 2L);
+            // Leave slot1's copies RECORDING: retiring the completed slot0 must
+            // preserve both the page and pending publication's numeric owner.
+            Vulkan.waitIdle();
+            Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+            MemoryManager.getInstance().doFrameOps(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
+            require(second.hasVoxelInput(1, 3L) && !second.getResidency(1).valid()
+                            && second.getPageBuffer(live.pageIndex()) != null
+                            && budget.usedBytes() == RegionVoxelGpuStore.PAGE_BYTES,
+                    "Retiring one record must not free another pending input's page");
+            AreaUploadManager.INSTANCE.submitUploads();
+            second.releaseConsumed(1, 2L);
+            require(second.getResidency(1).valid() && second.getLightingResidency(1).valid(),
+                    "Old consumer must not revoke pending replacement ownership");
+            verifyReadback(second, second.getLightingResidency(1), light);
+            second.releaseConsumed(1, 3L);
+            retireFixtureInputs();
+            require(budget.usedBytes() == 0, "Turnover must return all native capacity");
+            Initializer.LOGGER.info("VULKANMOD_GPU_TERRAIN_INPUT_PAGE_TURNOVER_OK: one-page budget, different-region admission, actual GPU bytes/compute, pending/live protection, exact fenced capacity return");
+        } finally {
+            Vulkan.waitIdle();
+            first.close(); second.close();
+            retireFixtureInputs();
+            require(budget.usedBytes() == 0, "Closing retired page slots must not leak/double-release budget");
+        }
+    }
+
+    private static void retireFixtureInputs() {
+        // Uploads can be pending even while an earlier slice is being retired.
+        // Submit them before the TEST wait; production relies on its normal frame fence.
+        AreaUploadManager.INSTANCE.submitUploads();
+        Vulkan.waitIdle();
+        Synchronization.INSTANCE.retireSameQueueCommandBuffersAfterQueueIdle();
+        MemoryManager.getInstance().initFrame(net.vulkanmod.vulkan.Renderer.getCurrentFrame());
     }
 
     /** Runs from the post-model-bake hook, after qualified UV residency exists. */

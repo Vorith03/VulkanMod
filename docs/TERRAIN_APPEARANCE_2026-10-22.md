@@ -438,3 +438,98 @@ that later network light packets have arrived. Such checks would manufacture a
 readiness oracle. They were not added or used to conceal input delay. Snapshot
 readiness remains a later, explicitly labelled renderer milestone. This is a
 precise remaining limit, not a claim that upstream delivery is the bottleneck.
+
+
+### Independent1098 initial-stage evidence (diagnostic, not a speed comparison)
+
+Downloaded logs12446991949:2,789,558bytes,
+SHA256a6eda08c109fdc40d4720b6756b0415d504fbc7bbbdafddfbc467809fd8223c4; ZIP CRC checked.
+Recomputed all18 original exact main/portal854x480 pairs;0 top-level validation/sync
+errors. No unknown geometry generation or incomplete-capture marker. Main CPU125 /
+GPU228 geometry observations; portal CPU3918/GPU6994. GPU controls each include8
+explicitly older retained-geometry observations; these are not falsely assigned
+the current input generation. Complete GPU and CPU/GPU APPEND halves are present.
+
+Only observations BEFORE the first initial screenshot, with first recording per
+section/layer/generation/producer, were used for these stage gaps:
+
+| Small Lavapipe fixture | Admission→worker median/max ms | Worker first-observation median/max ms | Publication queue→applied median/max ms | Applied→first producer recording median/max ms |
+| --- | --- | --- | --- | --- |
+| Main CPU control |35.643/245.865|0.217/60.610|9.705/57.079|10.410/17.702 (2 producer samples)|
+| Main GPU control |41.827/333.714|0.215/44.719|10.119/169.010|20.159/203.892 (3 samples)|
+| Portal CPU control |40.898/294.699|0.232/42.756|16.271/137.465|22.853/42.364 (2 samples)|
+| Portal GPU control |53.576/463.642|0.226/45.459|24.380/194.345|67.923/204.157 (3 samples)|
+
+These are per-generation FIRST observations, not complete per-attempt accounting;
+most builds are empty, and tiny nonempty producer samples preclude a general ranking.
+CPU/GPU controls change19 features and are correctness controls, not a causal test
+of staging or matched owner performance. Full-lifecycle aggregate gaps reached~22s
+because deliberate reload/recovery phases and repeated producer observations were
+mixed in; those aggregates were rejected as initial-load evidence. No queue budget,
+mesher pool size or visibility rewrite is justified by this fixture alone.
+
+
+### Reference analysis inputs
+
+The offline CLI conditions JSON records save_snapshot_id, modpack_id, config_id,
+scene, cache, entry_kind and terrain_kind. Use actual save/mod/config SHA256s when
+available, or an independently verified immutable snapshot identity with its copy
+provenance; do not put a fabricated digest in an identity field. Reference and
+candidate must match these conditions and the exact final view/logical camera.
+The CPU correctness reference is untimed and visually checked; it is not itself a
+performance baseline. Exclusions explicitly list empty, occluded, unsupported and
+unavailable members. Unsupported visible CPU geometry remains in the reference;
+unavailable reference inputs block freezing. No task, empty build or eligible-only
+candidate count can create a reference member or reduce the denominator.
+
+The script's reference/measure subcommands write bounded JSON reports to stdout.
+They report50/90/99/100 section coverage with recording/fence bounds and unresolved
+holes, view-lock time without resetting entry, and separately snapshot-to-fence
+latency. all_required_inputs_to_draw and first_usable_presented_frame stay unknown;
+no few-seconds performance or pixel/presentation inference is permitted.
+
+
+## Second retention repair — empty input pages (candidate)
+
+The one-shot slice repair exposed an independently reproducible global turnover
+limit. Existing RegionVoxelGpuStore returned slice ranges after their fences, but
+kept every512KiB native page charged until region close. The32MiB budget can serve
+only64 one-page region identities without eviction, even when all their inputs
+are consumed and every allocator is empty. A focused run of the ACTUAL pre-change
+store with only upload/memory primitives mocked reproduced, under a one-page
+budget: after fence budget524288, second-region admissionfalse, first-region
+pages1. No historical chat assumption or percentage counter supplied this proof.
+
+The same production-store run after correction reports budget0, second-region
+admissiontrue, first-region pages0, one actual destruction callback. The store now
+returns a page only when its LAST allocation has crossed the existing frame fence.
+Pending uploads/replacements remain allocator-owned and prevent empty-page return.
+Retired page indices become holes; live indices never shift, interior holes are
+reused and trailing holes are removed. Visible terrain/output/model pages are
+untouched. No quota increase, foreign-store scavenger, new allocator/scheduler,
+production wait or silent drop is introduced.
+
+MemoryManager exposes its EXISTING full BufferInfo destruction/accounting primitive
+for a caller already in a completed frame-fence callback. It does not enqueue a
+callback on the ArrayList currently being drained (which would be unsafe), and it
+preserves mapped-memory cleanup, device/native counters and onFreed notification.
+Native buffer destruction and quota return occur together. Normal region close
+continues its original deferred destruction path and skips already retired holes.
+
+A new production-store behavioral contract exercises128 sequential region pairs
+under ONE page, pre-fence exhaustion, pending replacement protection, stale
+consumers, close-after-retirement, interior index reuse with another live page,
+close/pending completion and exact260 destructions. All native quota stays bounded.
+The extended native sparse-lighting fixture additionally requires different-region
+admission, actual copied bytes and compute after turnover, pending/live protection,
+no premature capacity and no double budget release. It is a constructor-only
+fixture; explicit waits are not added to gameplay. Full integration remains
+required before promotion.
+
+Tradeoff: a region quiet long enough for all input slices to retire no longer
+retains a spare native input page. Later isolated rebuilds may allocate a new page;
+allocation churn/frame pacing must be observed on the owner machine. Continuous
+pending input prevents premature trimming, and VMA may internally reuse its own
+heap blocks. Logical buffer budget return is not a promise of immediate OS/driver
+VRAM release. This fixes proven capacity retention; D32 appearance benefit and
+actual RX memory/pacing remain unmeasured.

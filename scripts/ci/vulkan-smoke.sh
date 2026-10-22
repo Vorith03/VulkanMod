@@ -171,6 +171,7 @@ case "$mode" in
     grep -F "VULKANMOD_GPU_TRAVERSAL_STAMP_DOMAIN_OK" vulkan-smoke-no-splash.log
     grep -F "VULKANMOD_GPU_TERRAIN_READMISSION_UPLOAD_OK" vulkan-smoke-no-splash.log
     grep -F "Terrain voxel lifecycle smoke passed (capture=true)" vulkan-smoke-no-splash.log
+    grep -F "VULKANMOD_GPU_TERRAIN_INPUT_PAGE_TURNOVER_OK" vulkan-smoke-no-splash.log
     grep -F "Terrain publication drain smoke passed" vulkan-smoke-no-splash.log
     grep -F "Adaptive chunk scheduling smoke passed" vulkan-smoke-no-splash.log
     ;;

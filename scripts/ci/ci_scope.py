@@ -11,7 +11,7 @@ import urllib.request
 
 CONTRACTS = (
     'vulkan-smoke-fixture-contract.sh', 'prebenchmark-audit-contract.py',
-    'legacy-framebuffer-contract.py', 'terrain-population-contract.py', 'terrain-appearance-contract.py',
+    'legacy-framebuffer-contract.py', 'terrain-population-contract.py', 'terrain-appearance-contract.py', 'terrain-input-page-contract.py',
     'benchmark-hud-contract.py', 'gpu-profiler-contract.py',
     'texture-upload-gpu-contract.py', 'texture-transfer-contract.py',
     'gpu-source-page-contract.py',

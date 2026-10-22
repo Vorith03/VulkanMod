@@ -1,5 +1,26 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October22 — fence-empty input-page ownership correction (candidate)
+
+Consumed input slice retirement now destroys a page ONLY when the final allocation
+has crossed its existing main-frame fence. Pending/live replacement allocations
+keep the page alive. Native BufferInfo destruction/accounting and global quota
+return are one operation inside that already completed fence callback; no callback
+is appended to the frame-op list currently being drained. Page indices of LIVE
+residency never shift; retired holes are reused, trailing holes removed, and lookup
+of an empty retired slot returns null. Close skips previously retired holes and
+retains its original deferred resource release. The32MiB/512KiB/alignment budgets,
+generation checks, output/APPEND/model ownership and CPU recovery are unchanged.
+
+The old store reproduced cross-region starvation under a one-page shared budget
+after all input slices retired. Updated production-store contract admits128 region
+pairs under the same bound, with pending/live protection and exact native-resource
+accounting. Full native different-region byte/compute and integrated raster/bypass /
+lifecycle qualification is required before promotion; see the focused appearance
+report for the actual final run. More frequent isolated input-page allocations are
+an explicit owner pacing/memory gate, not a proven net performance improvement.
+
+
 ## October22 — staging + frame-fenced consumption observation qualified in full1097
 
 Executable2577508c/full1097 /39817774598 SUCCESS; exact JAR/hash and full evidence

@@ -6,6 +6,7 @@ The reference is a separate, untimed, visually checked CPU run of the same immut
 save/view. Unavailable reference members remain holes in every measured trial.
 """
 import argparse
+from collections import defaultdict
 import hashlib
 import json
 import math
@@ -95,8 +96,11 @@ def freeze(trace, conditions, visual_reference, excluded):
     if any(tuple(item) in xyz for category in ('empty', 'occluded') for item in excluded[category]):
         raise ValueError('nonempty production reference overlaps excluded/empty inventory')
     # A changing generation during the census is not a static reference.
+    generations = defaultdict(set)
+    for d in draws:
+        generations[d['key']].add(d['generation'])
     for key in keys:
-        if len({d['generation'] for d in draws if d['key'] == key}) != 1:
+        if len(generations[key]) != 1:
             raise ValueError('reference generation changed during census')
     return {'schema': 1, 'metric': 'frame-fence-confirmed nonempty production command coverage',
             'conditions': conditions, 'view': trace['final_view'], 'intent': next(iter(trace['intents'])),
@@ -152,11 +156,14 @@ def measure(trace, reference, conditions):
                                 key=lambda d: d['confirmed_ns']))
         if complete:
             first[key] = min(complete, key=lambda d: d['confirmed_ns'])
-    xyz_members = {key[:3] for key in members}
+    section_layers = defaultdict(list)
+    for key in members:
+        section_layers[key[:3]].append(key)
+    xyz_members = set(section_layers)
     section_times = {}
     recording_times = {}
     for xyz in xyz_members:
-        layers = [key for key in members if key[:3] == xyz]
+        layers = section_layers[xyz]
         if all(key in first for key in layers):
             section_times[xyz] = max(first[key]['confirmed_ns'] for key in layers) - trace['origin']
             recording_times[xyz] = max(first[key]['recorded_ns'] for key in layers) - trace['origin']
@@ -197,7 +204,7 @@ def main():
     try:
         trace = load(args.log, args.epoch)
         conditions = json.loads(args.conditions.read_text())
-        required = {'save_sha256', 'mods_sha256', 'config_sha256', 'scene', 'cache', 'entry_kind', 'terrain_kind'}
+        required = {'save_snapshot_id', 'modpack_id', 'config_id', 'scene', 'cache', 'entry_kind', 'terrain_kind'}
         if not required <= conditions.keys():
             raise ValueError('missing immutable workload/cache/entry/terrain conditions')
         if args.operation == 'reference':

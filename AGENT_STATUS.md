@@ -1,80 +1,72 @@
-# VulkanMod Forge1.20.1 — Terrain appearance mission OPEN
+# VulkanMod Forge1.20.1 — initial terrain appearance mission OPEN
 
-## October22 — integrated staging/observation build1097 qualified; full appearance mission OPEN
+## October22 — second input retention repair ready for full qualification
 
-Executable `2577508c0de67917b362e6b454fda2f924d6ac0a`, full workflow build
-#1097 /39817774598 attempt1 SUCCESS. Actual runtime artifact12443882313:
-VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1097-g2577508c-all.jar,
-11,125,845bytes,SHA256 `5fc766cd9cf23ad392f5df2580ffee5ca2724fb3e889250cb199b11ccc3b3d48`.
-Downloaded actual JAR CRC/manifest/buildSHA/Java17 classmajor61/MC+Forge ranges /
-Mixins/nested LWJGL Vulkan CRC/Linux+Windows VMA+shaderc checked. Logs12443168969,
-SHA256469c3d5d8b886d90b4b67ba4aebd229a88c10779efb6f241419a317ef2381096, CRC verified.
-All required public offline/Forge/package/dual startup/native/post/depth/screenshot /
-loaded-world/public portal/Create Chronicles/CrashAssistant gates passed. Three
-private fixture steps skipped. Independently recomputed18 exact854x480 main/portal
-CPU/GPU phase pairs;0 validation/sync errors in top-level logs. Native readback
-seeded AND real-mesher paths each5 samples/5 GPU commands/1 complete CPU fallback;
-original pixels/CPU bypass/full-ring/generation/recovery preserved. Enabled main/
-portal world controls recorded initial and reentry epochs,4345 CPU/4106 GPU world
-observations,9 GPU-ready events, no incomplete capture. Fixture counts are NOT RX
-coverage or a performance comparison. Prior1094/1095/1096 all passed their slices;
-1093 superseded/cancelled. No new default enable or release promotion.
+Follow AGENTS.md §3A. The current logical milestone returns native input pages
+when their last allocation has crossed the existing frame fence. The previous
+store reproduced one-page cross-region starvation after all slices had retired:
+budget524288/second region rejected. Same production-store harness after correction:
+budget0/second region admitted/one destruction. No new allocator, foreign scavenger,
+quota increase, gameplay wait or output/visibility/default changes. Pending/live
+inputs retain pages, stable live indices survive holes, close skips retired holes.
+MemoryManager's existing full BufferInfo cleanup/accounting primitive is called
+only from the already completed fence callback. Isolated later rebuilds may allocate
+pages again; owner pacing/churn must be measured, not presumed improved.
 
-This qualifies consumed/rejected staging turnover and bounded ACTUAL command
-consumption/stage observability. It does NOT qualify2–3s nearby/5s intended-view
-appearance. Full true input-ready, first usable/presented frame, frozen full-view
-reference denominator, legacy/direct/translucent/generation association and matched
-appearance/pacing/memory comparisons remain OPEN. Same settings alone do not make
-an old uninstrumented executable a matched diagnostic-overhead control.
+Java17 actual Forge/LWJGL focused compilation and all26 offline contracts passed.
+The new production-store contract exercises128 cross-region pairs at ONE page,
+pre-fence pressure, pending/stale protection, interior index reuse, close races and
+exact260 destructions. Native sparse fixture now requires different-region actual
+bytes/compute, last-slice capacity return and pending/live protection. Full native,
+world/portal pixel/bypass/compatibility qualification of THIS final slice is pending.
+Do not promote an intermediate JAR or ask for its owner benchmark.
 
-Exact new profile: OWNER_TERRAIN_INITIAL.jvmargs, all19 integrated flags unchanged,
-explicit debugTerrainDrawReadback=true,autoBenchmark=false,duration0,summary1s.
-One focused changed-build RX/D32 chronology/visual capture can diagnose whether
-staging is now turning over and whether output pressure or publication->consumption
-delay dominates. This owner-only evidence does not replace the unfinished full
-measurement. Details and honest limits: TERRAIN_APPEARANCE_2026-10-22.md.
+## Qualified prior components
 
-## What is implemented
+Full1100 /39827354426 at e82d00ae2be357b3530a35862cbaa8127a062508 SUCCESS.
+That run qualifies generation-aware production geometry consumption, direct/
+translucent observation and late census. Previous full1098 /39825029683 also passed;
+its logs12446991949 independently CRC/SHA checked,18 exact main/portal pixel pairs
+recomputed,0 validation/sync errors and0 unresolved geometry generations. 1099
+superseded/CANCELLED (plain glass is cutout; actual translucent fixture uses stained
+glass). Full1094/1097 qualified the first one-shot CPU snapshot + input slice repair.
+All original texture/particle repairs, REPLACE/APPEND, portals, complete CPU fallback
+and old rendering oracles remain. PR12 is untouched. Experiments stay OFF by default.
 
-Consumed CPU voxel staging returns by identity. Matching GPU voxel/light slices
-revoke discovery then retire through EXISTING frame fences; visible geometry,
-atomic APPEND, CPU recovery and quotas/default-off flags are unchanged. Failed
-inputs also return staging through existing deferred recovery. Original native
-mesher -> actual raster/CPU-bypass/recovery/turnover tests remain.
+The observer records numeric geometry owners at command recording, verifies actual
+indirect words after existing frame fences, and confirms CPU direct/legacy commands
+through that same fence domain. Stale geometry is attributed to its OWN generation.
+At55s it re-observes current production sources for a late reference census;60s
+capture bounds,128 requests/4MiB/frame,32768 requests/4096 source keys remain.
+Logical camera movement rejects a trial. Entry eye/FOV interpolation (including an
+observed non-finite first projection) is separately reported; command progress is
+credited only through the exact finite reference view, WITHOUT resetting entry.
+The paired fixture holds its initial scene through61s before all original9 phases.
 
-Opt-in debugTerrainDrawReadback copies ACTUAL production GPU/CPU-fallback indirect
-slices after render pass and before command-buffer finalization. It inspects only
-at existing frame-fence retirement; no independent selector or gameplay wait.
-Chronology records first main-world setup, first section-generation admission /
-region snapshot / worker / publication / GPU attempt + successful readiness events,
-with world-epoch ownership and stale-worker isolation. Loaded-world CPU AND GPU
-controls require positive MAIN epoch actual selection and complete chronology,
-retaining original18 exact pixel/portal/lifecycle tests.
+scripts/ci/terrain-appearance.py freezes a separately checked CPU nonempty reference,
+keeps unsupported CPU geometry and missing members, requires APPEND halves, rejects
+unknown/stale inputs and reports50/90/99/100 recording/fence bounds plus holes.
+Offline analysis now groups references linearly:32768 synthetic members processed
+in0.44s locally. Tool IDs/conditions are explicit; never fabricate save/mod digests.
 
-Final2577508c suppresses unchanged diagnostic reads using exact existing producer
-revisions/source identity and re-observes changed readiness; cancellation permits
-retry. Bounds remain128 requests/4MiB per frame,32768 requests/30s main epoch,
-4096 source keys; stage map32768 generation records/60s. CPU barriers use host /
-transfer / indirect stages; compute is required only for GPU command sources.
-Focused Java17/pinned LWJGL3.3.1 compilation, event isolation/bounds, duplicate /
-changed-readiness/cancellation/admission tests and all24 contracts passed locally.
-Local GRADLE_OPTS proxy override was corrected; ForgeGradle/dependency resolution
-now works, but initial local bootstrap reached480s after mapped-jar/dependency progress. No full local Forge/native
-pass is claimed. Full CI supplies those gates.
+## Remaining gates and next action
 
-## Limits and next action
+Finish the current page-retirement slice's full integration, inspect exact JAR/log
+bytes and native/loaded-world census output, then finish one owner package in
+TERRAIN_INITIAL_OWNER_TEST.md and update final evidence/rolling prompt. The owner
+check keeps2552x1374,D32/S12,VSyncOFF,cap260 and the existing saved camera; fresh
+process,65s fixed view, NEW latest/performance logs and visual entry evidence.
+Separate matched speed comparisons use OWNER_TERRAIN_COMPARE.jvmargs (tracing FALSE
+in BOTH), same immutable saves/settings and known cache strata. Actual pre-staging
+1092 JAR12400315181 was downloaded/CRC/SHA verified; exact identity is in the package.
+No private owner logs or packs are committed.
 
-Full mission NOT complete: no true all-inputs-ready oracle, first-usable/presented
-frame oracle, fixed-camera/full-view frozen denominator, full legacy/direct /
-translucent coverage, geometry-generation association or matched initial-appearance
-before/after is claimed. Stages are FIRST observations per generation, not complete
-per-attempt service accounting. Raw command recording/confirmation bounds are not
-pixel appearance. No2–3s/5s, RX performance or release/default-enable claim.
-
-Final1097 and actual artifact verification passed. Continue the OPEN measurement work; read
-`docs/TERRAIN_APPEARANCE_2026-10-22.md` for evidence/measurement contract. The exact
-owner profile is OWNER_TERRAIN_INITIAL.jvmargs (all19 flags, tracing, autoBenchmark
-false, continuous1s summaries). It is a narrow changed-build D32 chronology/visual
-check, not finished appearance qualification. Do not repeat unchanged stationary
-benchmarks. Representative RX/302-mod/save evidence remains external. PR12 is
-untouched. Follow live AGENTS§3A and maintain the complete NEXT_SESSION_PROMPT.
+The complete mission remains OPEN: no matched RX/D32 appearance/pacing/memory result,
+true all-required-input arrival oracle or first usable/presented-frame witness.
+REGION_SNAPSHOT_READY is a later CPU-resolved milestone; lightOnInSection plus an
+empty current light queue cannot prove later network packets have arrived or cover
+arbitrary Forge callbacks. Keep those unknowns explicit. A command fence is not
+presentation. Do not invent target success,50/90/99 pixel coverage or matched benefit.
+All3 workstreams were inspected; new schedulers/cullers, budget increases and model
+expansion lack new owner critical-path evidence. The second page-retention repair
+has a direct bounded-capacity reproduction and is not a speculative quota increase.
