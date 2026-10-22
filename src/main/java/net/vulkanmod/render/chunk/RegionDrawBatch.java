@@ -195,8 +195,13 @@ final class RegionDrawBatch {
             if(DEBUG_GENERATED_WORLD_DRAW && gpuOwnsCommands) {
                 reportGeneratedWorldRecording(area, type, candidateTable, indirectCount);
             }
-            TerrainDrawReadback.request(area, type.ordinal(), indirectBuffer, indirectOffset,
-                    indirectCount, useGpuIndirect);
+            if(TerrainDrawReadback.active())
+                TerrainDrawReadback.request(area, type.ordinal(), indirectBuffer, indirectOffset,
+                        indirectCount, useGpuIndirect, new TerrainDrawReadback.Revisions(
+                                candidateTable == null ? Long.MIN_VALUE : candidateTable.generation(),
+                                area.getVisibilityRevision(), buffers.getMeshRevision(type),
+                                area.getGeneratedCandidateRevision(), area.getCandidateGeometryRevision(type),
+                                indirectCount));
         }
     }
 

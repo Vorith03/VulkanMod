@@ -10,6 +10,8 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.lwjgl.vulkan.VK10.*;
@@ -29,6 +31,13 @@ public final class TerrainDrawReadback {
     private static final List<Request> pending = new ArrayList<>();
     private static final List<Batch> outstanding = new ArrayList<>();
     private static Consumer<Observation> ciObserver;
+    private static final int MAX_SOURCE_KEYS = 4096;
+    private static final Map<SourceKey, Revisions> captured = new HashMap<>();
+    record Revisions(long candidateGeneration, long visibility, long mesh,
+                     long generated, long readiness, int commands) {}
+    private record SourceKey(long epoch, int x, int y, int z, int layer,
+                             boolean gpu, long source, long offset) {}
+    static boolean active() { return ENABLED || ciObserver != null; }
     private static long started, sequence, lastWorldEpoch;
     private static int pendingBytes, totalRequests;
     private static boolean invalid;
@@ -52,12 +61,12 @@ public final class TerrainDrawReadback {
     }
 
     /** Called only after vkCmdDrawIndexedIndirect has been recorded. No renderer ownership changes. */
-    static void request(ChunkArea area, int layer, long source, long offset, int commands, boolean gpu) {
+    static void request(ChunkArea area, int layer, long source, long offset, int commands, boolean gpu, Revisions revisions) {
         if(!ENABLED && ciObserver == null) return;
         long now = System.nanoTime();
         long worldEpoch = TerrainAppearanceEvents.regionEpoch(area);
         if(worldEpoch != 0 && worldEpoch != lastWorldEpoch) {
-            lastWorldEpoch = worldEpoch; started = now; totalRequests = 0;
+            lastWorldEpoch = worldEpoch; started = now; totalRequests = 0; captured.clear();
         }
         if(started == 0) started = now;
         if(ciObserver == null && now - started > DURATION_NANOS) return;
@@ -67,10 +76,17 @@ public final class TerrainDrawReadback {
                 || offset > Long.MAX_VALUE - bytes) {
             invalidate("invalid_draw_range"); return;
         }
+        SourceKey key = new SourceKey(worldEpoch, area.position.x, area.position.y, area.position.z,
+                layer, gpu, source, offset);
+        if(revisions.equals(captured.get(key))) return;
+        if(!captured.containsKey(key) && captured.size() >= MAX_SOURCE_KEYS) {
+            invalidate("source_key_cap_exhausted"); return;
+        }
         if(pending.size() >= MAX_REQUESTS || bytes > MAX_BYTES - pendingBytes
                 || totalRequests >= MAX_TOTAL_REQUESTS) {
             invalidate("bounded_capture_exhausted"); return;
         }
+        captured.put(key, revisions);
         totalRequests++;
         pending.add(new Request(worldEpoch, sequence, now, area.position.x, area.position.y, area.position.z,
                 layer, gpu, source, offset, (int)bytes));
@@ -103,14 +119,17 @@ public final class TerrainDrawReadback {
             manager.addFrameOp(() -> finish(batch, !invalid));
             int destination = 0;
             for(Request request : requests) {
+                // CPU-only diagnostics must not require a compute-capable graphics queue.
+                int sourceAccess = VK_ACCESS_INDIRECT_COMMAND_READ_BIT | (request.gpu
+                        ? VK_ACCESS_SHADER_WRITE_BIT : VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+                int sourceStages = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | (request.gpu
+                        ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
                 var sourceBarrier = VkBufferMemoryBarrier.calloc(1, stack).sType$Default()
-                        .srcAccessMask(VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT
-                                | VK_ACCESS_HOST_WRITE_BIT)
+                        .srcAccessMask(sourceAccess)
                         .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
                         .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                         .buffer(request.source).offset(request.offset).size(request.bytes);
-                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-                                | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+                vkCmdPipelineBarrier(commandBuffer, sourceStages,
                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, null, sourceBarrier, null);
                 var copy = VkBufferCopy.calloc(1, stack).srcOffset(request.offset)
                         .dstOffset(destination).size(request.bytes);
@@ -171,7 +190,7 @@ public final class TerrainDrawReadback {
 
     /** Submission failure: caller MUST establish device idle before cancelling recorded transfers. */
     public static void cancelAfterDeviceIdle() {
-        pending.clear(); pendingBytes = 0;
+        pending.clear(); pendingBytes = 0; captured.clear();
         for(Batch batch : List.copyOf(outstanding)) finish(batch, false);
     }
 
@@ -179,14 +198,14 @@ public final class TerrainDrawReadback {
     static void beginCiProbe(Consumer<Observation> observer) {
         if(ciObserver != null || !pending.isEmpty() || !outstanding.isEmpty())
             throw new IllegalStateException("Indirect readback observer already owns work");
-        ciObserver = observer; invalid = false; started = 0; totalRequests = 0;
+        ciObserver = observer; invalid = false; started = 0; totalRequests = 0; captured.clear();
     }
 
     /** Fixture has already waited device idle; consume remaining fenced bytes before removing observer. */
     static void endCiProbeAfterDeviceIdle() {
         if(ciObserver == null) return;
         try { for(Batch batch : List.copyOf(outstanding)) finish(batch, !invalid); }
-        finally { ciObserver = null; pending.clear(); pendingBytes = 0; }
+        finally { ciObserver = null; pending.clear(); pendingBytes = 0; captured.clear(); }
         if(invalid) throw new AssertionError("Native indirect readback capture was incomplete");
     }
 }

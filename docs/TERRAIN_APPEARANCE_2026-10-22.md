@@ -1,5 +1,33 @@
 # Terrain appearance: staging turnover candidate — October 22, 2026
 
+## Capture turnover follow-up after full1096
+
+Chronology executable2e767e01/full1096 /39816038364 passed the full required public
+suite. Readback7503c146/full1095 /39814242766 also passed; independently downloaded
+1095 logs contain BOTH native readback markers, each9 samples/10 GPU commands/1
+complete CPU fallback command, seeded and real-mesher variants, and0 top-level
+validation/synchronization errors. Final combined artifact verification follows.
+
+A bounded diagnostics correction suppresses repeated readbacks of unchanged source
+buffer/range plus EXACT existing candidate/visibility/mesh/generated/readiness
+revisions and command count. Changed readiness or ownership re-admits observation;
+no renderer commands/candidates/scheduling are cached or modified by this map.
+At66 observed regions and~71fps, a capture copying every draw could exhaust32768
+requests in roughly7s; that is a budget calculation, not measured collector cost.
+Unchanged-source suppression keeps the initial-population witness useful without
+raising the4MiB/frame,128-request/frame or32768-request limits. The source-key map
+is independently bounded to4096 numeric keys and cleared on main-world epoch
+change, CI observer reset and device-idle cancellation. Cancellation clears pending
+captures so identical source revisions can be retried rather than silently skipped.
+
+CPU-source barriers use HOST/TRANSFER/INDIRECT stages; compute scope is used only
+for actual GPU-generated command sources, avoiding a new compute-capability
+requirement for CPU-only diagnostics. Focused Java17/pinned-LWJGL compilation,
+unchanged suppression, changed-readiness re-observation, cancellation retry,
+bounded admission/explicit incomplete tests and all24 contracts passed locally.
+Full qualification of this final follow-up is required before owner distribution.
+
+
 ## World-entry/stage chronology candidate after7503c146
 
 The next coherent slice adds opt-in TerrainAppearanceEvents under the SAME
