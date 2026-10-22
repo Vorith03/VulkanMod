@@ -62,10 +62,12 @@ public final class SpriteAnimationSmokeTest {
         int storage = limits.maxStorageBufferRange();
         int groups = limits.maxComputeWorkGroupCount(0);
         try {
-            limits.maxStorageBufferRange(-1).maxComputeWorkGroupCount(0, -1);
+            MemoryUtil.memPutInt(limits.address() + org.lwjgl.vulkan.VkPhysicalDeviceLimits.MAXSTORAGEBUFFERRANGE, -1);
+            limits.maxComputeWorkGroupCount().put(0, -1);
             verifyWithLimits();
         } finally {
-            limits.maxStorageBufferRange(storage).maxComputeWorkGroupCount(0, groups);
+            MemoryUtil.memPutInt(limits.address() + org.lwjgl.vulkan.VkPhysicalDeviceLimits.MAXSTORAGEBUFFERRANGE, storage);
+            limits.maxComputeWorkGroupCount().put(0, groups);
         }
     }
     private static void verifyWithLimits() {

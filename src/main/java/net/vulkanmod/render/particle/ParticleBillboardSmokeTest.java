@@ -201,11 +201,11 @@ public final class ParticleBillboardSmokeTest {
                 try {
                     // Still only two workgroups: model a uint32 host limit, not
                     // extra device capability or a larger native dispatch.
-                    if(pass==0) limits.maxComputeWorkGroupCount(0,-1);
+                    if(pass==0) limits.maxComputeWorkGroupCount().put(0,-1);
                     expanded=ParticleBillboardCompute.expand(buffer,actual.vertexBuffer(),jobs);
                 } finally {
                     ParticleBillboardCompute.ciStorageRangeLimit(0);
-                    limits.maxComputeWorkGroupCount(0,groups);
+                    limits.maxComputeWorkGroupCount().put(0,groups);
                 }
                 if(!expanded)
                     throw new AssertionError("Compute did not accept real particle batch");
