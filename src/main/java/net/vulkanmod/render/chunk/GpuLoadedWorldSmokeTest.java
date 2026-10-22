@@ -142,7 +142,7 @@ public final class GpuLoadedWorldSmokeTest {
                 }
                 level.setBlockAndUpdate(new BlockPos(20, 82, 4), Blocks.OAK_SLAB.defaultBlockState());
                 // CPU-owned translucent geometry stays in the same saved paired scene.
-                level.setBlockAndUpdate(new BlockPos(18, 82, 6), Blocks.GLASS.defaultBlockState());
+                level.setBlockAndUpdate(new BlockPos(18, 82, 6), Blocks.RED_STAINED_GLASS.defaultBlockState());
                 if(PORTAL) createPortal(level);
             });
             scenePlaced = true;
