@@ -1,5 +1,18 @@
 # VulkanMod Forge 1.20.1 — Canonical Roadmap
 
+## October 21 — unsigned-limit correction supersedes the earlier capacity diagnosis
+
+The preserved particle-window slice passed full #1089 /39713898920. Successor
+`b767223c` corrects unsigned uint32 workgroup/storage limits in texture and
+particle admission and adds native high-bit-limit regressions plus bounded reason
+telemetry. Full #1092 /39716738464 on `272b7f81` is running; #1091 was superseded/cancelled; #1090 failed fixture compilation before native tests. `272b7f81` strengthens the nonzero-window regression on the actual uploader-owned buffer. The earlier claim that <=1024
+workgroups excludes the workgroup guard was wrong for a Java int carrying
+0xffffffff (-1). RADV source advertises that X limit; installed owner limits and
+changed-build adoption still require the targeted external check. Source-backed
+mechanism, safety review, exact evidence and owner package are in
+[GPU_ADOPTION_REPAIRS_2026-10-21.md](docs/GPU_ADOPTION_REPAIRS_2026-10-21.md).
+No causal FPS or release/default-enable claim. Terrain code is unchanged.
+
 ## October 21 — particle descriptor-window candidate and qualification gate
 
 Owner #1088 particle GPU zero-adoption remains the external baseline.

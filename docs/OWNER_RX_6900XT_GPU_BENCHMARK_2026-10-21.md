@@ -1,5 +1,18 @@
 # October 21 owner RX 6900 XT automated benchmarks — two configurations, one executable
 
+## October 21 — unsigned-limit correction supersedes the earlier capacity diagnosis
+
+The preserved particle-window slice passed full #1089 /39713898920. Successor
+`b767223c` corrects unsigned uint32 workgroup/storage limits in texture and
+particle admission and adds native high-bit-limit regressions plus bounded reason
+telemetry. Full #1092 /39716738464 on `272b7f81` is running; #1091 was superseded/cancelled; #1090 failed fixture compilation before native tests. `272b7f81` strengthens the nonzero-window regression on the actual uploader-owned buffer. The earlier claim that <=1024
+workgroups excludes the workgroup guard was wrong for a Java int carrying
+0xffffffff (-1). RADV source advertises that X limit; installed owner limits and
+changed-build adoption still require the targeted external check. Source-backed
+mechanism, safety review, exact evidence and owner package are in
+[GPU_ADOPTION_REPAIRS_2026-10-21.md](GPU_ADOPTION_REPAIRS_2026-10-21.md).
+No causal FPS or release/default-enable claim. Terrain code is unchanged.
+
 ## Evidence and scope
 
 Owner-supplied full benchmark logs, latest.log, debug.log and JFR for two **completed** automated 180-second stationary runs on the **same** #1088 JAR `0.3.2-forge.2-build.1088-g95221419`, Java17, Forge47.3.0, Create Chronicles (~302 mods), Linux RADV RX6900XT. No CPU-allfalse same-build baseline, owner screenshots, gameplay-motion correctness, or portal scene has been supplied. User subjectively reported faster world loading and reduced cloud/day/night stutter in first partial-GPU run; not controlled measurements.
