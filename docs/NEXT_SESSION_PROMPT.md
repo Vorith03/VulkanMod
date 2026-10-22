@@ -1,5 +1,23 @@
 # VulkanMod — Continue terrain appearance and staging turnover qualification
 
+## Qualification observation — October22,16:07UTC
+
+Final full1094 /39809988234, job119934724439: offline contracts, Forge compilation,
+distributable verification, pinned animation evidence and packaged portal anchors
+PASSED. Native tests have NOT started: dependency installation has remained active
+since16:03:50UTC (previous qualified1092 installed these in11s). Live job-log
+retrieval returned404 BlobNotFound; no installation failure log is available yet.
+Do not call this a native failure or success, rerun unchanged work, or promote a
+JAR. Full1093 /39809021545 was superseded/CANCELLED, not qualified. Exact next
+external operation is inspect1094 conclusion/job steps and logs when published;
+fix an actual source failure if one appears, or diagnose the external installation
+failure from its real log. Avoid unproductive polling of the same frozen step.
+No final artifact identity/hash, native qualification, owner verification or causal
+appearance benefit exists for e6b9b35b at this checkpoint. The prior1092 executable
+remains the qualified baseline. Appearance collection and paired results remain
+unfinished; do not request the provisional owner check before final qualification.
+
+
 Follow live AGENTS.md §3A on forge-1.20.1, Java17/MC1.20.1/Forge47.3.0.
 The owner explicitly replaced the previous owner-verification-only scope with the
 terrain appearance assignment. Preserve current GPU texture/particle repairs,
