@@ -1,4 +1,25 @@
-# VulkanMod Forge1.20.1 — GPU adoption repairs internally qualified
+# VulkanMod Forge1.20.1 — Terrain appearance work in progress
+
+## October 22 — owner-directed terrain appearance mission OPEN
+
+Owner superseded the prior owner-test-only next action with staging/GPU adoption/
+visibility work for D32 initial appearance. Implementation `a4dcf440` returns
+consumed CPU snapshots by identity and retires matching GPU inputs through existing
+frame fences; `e6b9b35b` additionally returns failed inputs through existing deferred
+recovery and tests stale resident/pending generations and reads before retirement.
+No budgets/defaults/visibility or texture/particle repairs are changed. Local24
+offline contracts and4096 extracted production staging turnovers passed. Full1093
+/39809021545 tests the first slice; full1094 /39809988234 is PENDING for the final
+candidate. No new qualified JAR or causal speedup is claimed at this checkpoint.
+The complete appearance assignment remains OPEN: frozen denominator/input-ready/
+first-consumption collection, controlled appearance before/after, pacing/memory
+and exact owner package are not yet delivered. Detailed source/evidence assessment
+and measurement contract: docs/TERRAIN_APPEARANCE_2026-10-22.md. Preserve1092 as
+qualified comparison baseline; PR12 untouched. Do not revert to the old instruction
+to avoid terrain work or call publication counts appearance evidence.
+
+## Preserved prior repair qualification
+
 
 ## Final executable and evidence — October 21, 2026
 

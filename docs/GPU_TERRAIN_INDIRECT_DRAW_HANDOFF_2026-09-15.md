@@ -1,5 +1,26 @@
 # GPU terrain indirect-draw handoff — 2026-09-15
 
+## October22 — single-consumer mesher input staging (candidate, qualification pending)
+
+CPU voxel snapshots are no longer persistent inputs after the mesher dispatch
+attempt. The bridge returns the exact captured snapshot by identity; async output
+completion retains numeric plans, model/output owners and its helper result, not
+the snapshot. Matching-generation GPU voxel/light inputs lose discoverability;
+existing frame-fence slice retirement still owns physical reuse after graphics
+queue upload -> compute -> main-frame submission. Rendered output/APPEND pairing
+and CPU recovery are unchanged. Input failures return staging from the existing
+deferred recovery callback, even when complete CPU geometry needs no rebuild.
+A replaced CPU snapshot or newer pending/resident GPU generation is protected.
+
+Byte/entry/page quotas, region page caching, selector ABI, visibility/provenance,
+output retirement and default-off activation remain. The raster fixture stages its
+worker plan before uploads and uses actual automatic post-submit dispatch; it
+requires input revocation while the original production pixels/bypass/retirement
+oracles run. Native sparse fixtures additionally read consumed bytes before
+retirement and reject stale consumers. Final candidate e6b9b35b/full1094 pending;
+see TERRAIN_APPEARANCE_2026-10-22.md. No initial-appearance or RX speedup claim.
+
+
 ## October21 — integrated production ownership qualified in full #1088
 
 Executable `95221419486931c295b83b1efe1c98ef3df4eef7` passed full #1088 /39680381869,

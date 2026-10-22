@@ -126,3 +126,38 @@ reference before requesting the full owner timing comparison. Exact owner save /
 before/after, peak initial memory/responsiveness comparisons, and minimal fully
 specified appearance-test package remain OPEN; a new stationary FPS run alone
 will not close them. No promise of2–3s/5s or release readiness.
+
+## Provisional owner package: staging/visual smoke, not performance qualification
+
+Use only after final full qualification succeeds and exact artifact/hash is filled
+in below. This is a narrow changed-build hardware check, not a substitute for the
+missing section-event coverage comparison.
+
+1. Use candidate e6b9b35b's final qualified JAR; previous272b7f81/full1092 is the
+   comparison executable. Never install both. Keep config/fml.toml
+   earlyWindowControl=false and the existing VulkanMod config/modpack unchanged.
+2. Both executables use identical OWNER_TERRAIN_INITIAL.jvmargs. It keeps all19
+   feature flags and profiling identical, disables stationary automation, removes
+   capture duration expiry, and emits1s windows. Restart Prism's game process for
+   each run. Keep the window focused and avoid settings/reloads during timing.
+3. Restore the SAME saved VulkanMod_Benchmark snapshot with spectator at0/192/0,
+   yaw-90,pitch30 before each process. Do not teleport after entry or preload the
+   candidate. Keep2552x1374,D32/S12,VSyncOFF,cap260. Record natural warm-cache
+   state/order; do not drop caches. New generation and world reentry are separate
+   tests, not pooled with this existing-save initial-entry pair.
+4. Record the screen before joining through30s after first rendered world frame;
+   keep the camera fixed. Capture a converged reference image around60s. Note holes,
+   incorrect geometry, severe stalls or loss of responsiveness. This video can
+   establish visible first-frame/nearby impressions and frame timestamps; it cannot
+   establish the missing per-section denominator/input-ready latency by itself.
+5. Leave60s for staging/retirement turnover, then exit normally. Return new
+   latest.log, debug.log, vulkanmod-performance.log (or actual configured profiler
+   output), video/reference image, trial order and observed defects. Check new
+   staging/cpu_input_released summaries, input/upload/output rejection reasons,
+   staging occupancy, actual GPU publication/draw markers and CPU bypass. A freed
+   cap with rising output failures or worse frame pacing is not a proven win.
+
+Do not repeat old stationary captures as the appearance test. A single pair is a
+smoke check; repeat/order-balance only if observed variance affects the conclusion.
+The full appearance qualification still requires the event collection described
+above. No owner check is claimed performed here.
