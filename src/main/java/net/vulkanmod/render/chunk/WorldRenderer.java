@@ -177,7 +177,10 @@ public class WorldRenderer {
                     .append(',').append(this.minecraft.options.getEffectiveRenderDistance())
                     .append(',').append(this.minecraft.smartCull).append(',').append(spectator);
             for(float value : projection) signature.append(',').append(Integer.toHexString(Float.floatToRawIntBits(value)));
-            TerrainAppearanceEvents.view(this, signature.toString());
+            var entity = camera.getEntity();
+            String intent = entity == null ? "unknown" : entity.getX() + "," + entity.getY() + "," + entity.getZ()
+                    + "," + entity.getYRot() + "," + entity.getXRot();
+            TerrainAppearanceEvents.view(this, signature.toString(), intent);
         }
         Profiler2 profiler = Profiler2.getMainProfiler();
         profiler.push("Setup_Renderer");

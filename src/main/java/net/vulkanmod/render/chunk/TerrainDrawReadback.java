@@ -95,6 +95,11 @@ public final class TerrainDrawReadback {
         pendingBytes += (int)bytes;
     }
 
+    static void viewChanged() {
+        // Diagnostic dedup may not hide the first consumption through a new projection.
+        captured.clear(); consumed.clear();
+    }
+
     /** One late census forces the SAME production sources to be observed again; no geometry preload. */
     static void referenceIfDue(long epoch, long sinceEntry) {
         if(!ENABLED || epoch == 0 || epoch == referenceEpoch || sinceEntry < 55_000_000_000L) return;
@@ -137,13 +142,14 @@ public final class TerrainDrawReadback {
         var ticket = TerrainAppearanceEvents.capture(section);
         var cpu = section.getDrawParameters(type);
         long generation = cpu.traceGeneration, recorded = System.nanoTime(), frame = sequence;
+        String geometryKey = cpu.indexCount + ":" + cpu.firstIndex + ":" + cpu.vertexOffset;
         int x = section.xOffset(), y = section.yOffset(), z = section.zOffset(), layer = type.ordinal();
         return () -> {
             if(ticket == null || !TerrainAppearanceEvents.withinWindow(ticket.epoch())) return;
             long now = System.nanoTime();
             observeEpoch(ticket.epoch(), now);
             if(now - started > DURATION_NANOS) return;
-            String key = ticket.epoch() + ":" + x + ":" + y + ":" + z + ":" + layer + ":" + generation + ":" + path;
+            String key = ticket.epoch() + ":" + x + ":" + y + ":" + z + ":" + layer + ":" + generation + ":" + path + ":" + geometryKey;
             if(consumed.containsKey(key)) return;
             if(consumed.size() >= MAX_TOTAL_REQUESTS || cpuDraws.size() >= 4096) {
                 invalidate("cpu_geometry_cap_exhausted"); return;

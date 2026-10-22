@@ -20,12 +20,12 @@ def rejects(fn):
     raise AssertionError('invalid evidence was accepted')
 
 
-view = '0,192,0,-90,30,2552,1374,32,true,true,projection'
+view = '0,192,0,-90,30,2552,1374,32,true,true,' + ','.join(['3f800000'] * 16)
 conditions = {'save': 'immutable'}
-reference = {'schema': 1, 'metric': 'command coverage', 'conditions': conditions, 'view': view,
+reference = {'schema': 1, 'metric': 'command coverage', 'conditions': conditions, 'view': view, 'intent': 'pose',
              'sections_layers': [(0, 0, 0, 0), (16, 0, 0, 0), (16, 0, 0, 1), (128, 0, 0, 0)],
              'limits': []}
-trace = {'origin': 1_000_000_000, 'views': {view}, 'draws': [], 'stages': {},
+trace = {'origin': 1_000_000_000, 'views': {view}, 'intents': {'pose'}, 'final_view': view, 'view_locked_since': 1_000_000_000, 'draws': [], 'stages': {},
          'sha256': 'fixture', 'reference': 55_000_000_000}
 
 
@@ -57,7 +57,7 @@ assert a.measure(trace, reference, conditions)['intended_view']['fence_upper_bou
 trace['stages'][(128, 0, 0, 2, 'REGION_SNAPSHOT_READY')] = 8_000_000_000
 assert a.measure(trace, reference, conditions)['intended_view']['observed'] == 2
 rejects(lambda: a.measure(trace, reference, {'save': 'different'}))
-bad = copy.deepcopy(trace); bad['views'] = {'changed'}
+bad = copy.deepcopy(trace); bad['final_view'] = 'changed'
 rejects(lambda: a.measure(bad, reference, conditions))
 empty = {**reference, 'sections_layers': []}
 rejects(lambda: a.measure(trace, empty, conditions))
@@ -73,16 +73,25 @@ rejects(lambda: a.freeze(ref_trace, conditions, True, {}))
 with tempfile.TemporaryDirectory() as tmp:
     log = Path(tmp) / 'latest.log'
     lines = f'''VULKANMOD_TERRAIN_WORLD_RENDER_ENTER: epoch=1 origin_ns=100 epoch_ms=0;
-VULKANMOD_TERRAIN_VIEW: epoch=1 observed_ns=100 signature={view}
+VULKANMOD_TERRAIN_VIEW: epoch=1 observed_ns=100 signature={view} intent=pose
 VULKANMOD_TERRAIN_WORLD_RENDER_ENTER: epoch=3 origin_ns=200 epoch_ms=0;
-VULKANMOD_TERRAIN_VIEW: epoch=3 observed_ns=200 signature={view}
+VULKANMOD_TERRAIN_VIEW: epoch=3 observed_ns=200 signature={view} intent=pose
 '''
     log.write_text(lines)
     assert a.load(log, 1)['origin'] == 100
     assert a.load(log, 3)['origin'] == 200
+    # Entry eye/FOV interpolation is an explicit conservative delay, never a new origin.
+    transition = lines.replace('signature=' + view, 'signature=' + view.replace('192,', '190,', 1), 1)
+    transition += f'VULKANMOD_TERRAIN_VIEW: epoch=1 observed_ns=150 signature={view} intent=pose\n'
+    log.write_text(transition)
+    entry = a.load(log, 1)
+    assert entry['origin'] == 100 and entry['view_locked_since'] == 150
+    invalid_projection = lines.replace('3f800000', 'ffc00000')
+    log.write_text(invalid_projection)
+    rejects(lambda: a.load(log, 1))
     log.write_text(lines + 'VULKANMOD_TERRAIN_DRAW_READBACK_INCOMPLETE: exhausted\n')
     rejects(lambda: a.load(log, 1))
-    log.write_text(lines + 'VULKANMOD_TERRAIN_VIEW: epoch=1 observed_ns=200 signature=changed\n')
+    log.write_text(lines + 'VULKANMOD_TERRAIN_VIEW: epoch=1 observed_ns=200 signature=changed intent=moved\n')
     rejects(lambda: a.load(log, 1))
     test = Path(tmp) / 'ProvenanceTest.java'
     test.write_text('''import java.util.List;

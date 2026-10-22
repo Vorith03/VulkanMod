@@ -39,6 +39,7 @@ public final class GpuLoadedWorldSmokeTest {
     private static final boolean GPU = Boolean.getBoolean("vulkanmod.ciGpuWorldExpectedGpu");
     private static final boolean PORTAL = Boolean.getBoolean("vulkanmod.ciGpuWorldPortal");
     private static java.lang.reflect.Method portalRenderCount;
+    private static final boolean APPEARANCE_CENSUS = Boolean.getBoolean("vulkanmod.ciTerrainAppearanceCensus");
     private static final boolean PREPARE = Boolean.getBoolean("vulkanmod.ciGpuWorldPrepare");
     private static final String WORLD = System.getProperty("vulkanmod.ciGpuWorldLoad",
             "VulkanMod-CI-GPU-" + UUID.randomUUID());
@@ -140,6 +141,8 @@ public final class GpuLoadedWorldSmokeTest {
                     level.setBlockAndUpdate(new BlockPos(x + 16, 81, z), qualified);
                 }
                 level.setBlockAndUpdate(new BlockPos(20, 82, 4), Blocks.OAK_SLAB.defaultBlockState());
+                // CPU-owned translucent geometry stays in the same saved paired scene.
+                level.setBlockAndUpdate(new BlockPos(18, 82, 6), Blocks.GLASS.defaultBlockState());
                 if(PORTAL) createPortal(level);
             });
             scenePlaced = true;
@@ -288,6 +291,8 @@ public final class GpuLoadedWorldSmokeTest {
             if(PORTAL && phase != 4) ready &= portalViews > 0 && (!GPU || portalGeneratedDraws > 0);
             if(phase >= 1 && phase <= 3 || phase == 8) ready &= ordinary != null && ordinary.getVoxelGeneration() > previousSectionGeneration;
             if(phase == 6) ready &= GpuTerrainModelRegistry.generation() > previousModelGeneration;
+            if(ready && APPEARANCE_CENSUS && phase == 0 && !PREPARE)
+                ready &= TerrainAppearanceEvents.lateCensusWindowReached();
             if(ready && !GPU) ready &= ordinary.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0
                     && mixed.getDrawParameters(RenderSection.gpuTerrainOutputLayer()).indexCount > 0;
             if(ready && GPU) {

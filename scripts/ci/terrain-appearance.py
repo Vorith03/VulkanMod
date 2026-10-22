@@ -18,7 +18,7 @@ UNKNOWN = -(1 << 63)
 
 
 def load(path, epoch):
-    trace = {'origin': None, 'views': set(), 'draws': [], 'stages': {}, 'reference': None,
+    trace = {'origin': None, 'views': set(), 'intents': set(), 'view_events': [], 'draws': [], 'stages': {}, 'reference': None,
              'incomplete': False, 'epoch': epoch, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     for line in path.read_text(errors='replace').splitlines():
         if PREFIX not in line:
@@ -38,6 +38,8 @@ def load(path, epoch):
             trace['origin'] = value
         elif marker == 'VIEW':
             trace['views'].add(fields['signature'])
+            trace['intents'].add(fields.get('intent', 'unknown'))
+            trace['view_events'].append((int(fields['observed_ns']), fields['signature']))
         elif marker == 'REFERENCE_BEGIN':
             trace['reference'] = int(fields['observed_ns'])
         elif marker == 'GEOMETRY_CONSUMED':
@@ -55,8 +57,14 @@ def load(path, epoch):
         raise ValueError('missing world-render entry origin')
     if trace['incomplete']:
         raise ValueError('incomplete capture; percentages forbidden')
-    if len(trace['views']) != 1:
-        raise ValueError('fixed view missing or changed; percentages forbidden')
+    if not trace['view_events'] or len(trace['intents']) != 1 or 'unknown' in trace['intents']:
+        raise ValueError('fixed logical camera missing or changed; percentages forbidden')
+    trace['view_events'].sort()
+    trace['final_view'] = trace['view_events'][-1][1]
+    trace['view_locked_since'] = max(t for t, view in trace['view_events'] if view == trace['final_view'])
+    projection = trace['final_view'].split(',')[10:]
+    if len(projection) != 16 or any((int(word, 16) & 0x7f800000) == 0x7f800000 for word in projection):
+        raise ValueError('missing/non-finite final production projection')
     return trace
 
 
@@ -65,6 +73,8 @@ def freeze(trace, conditions, visual_reference, excluded):
         raise ValueError('reference requires independent final visual correctness/convergence check')
     if trace['reference'] is None:
         raise ValueError('missing late production reference census')
+    if trace['view_locked_since'] >= trace['reference']:
+        raise ValueError('reference view changed during late census')
     draws = [d for d in trace['draws'] if d['recorded_ns'] >= trace['reference']]
     if not draws or any(d['producer'] != 'cpu' for d in draws):
         raise ValueError('reference requires nonempty CPU-owned production geometry')
@@ -75,6 +85,11 @@ def freeze(trace, conditions, visual_reference, excluded):
         raise ValueError('explicit empty/occluded/unsupported/unavailable inventory required')
     if excluded['unavailable']:
         raise ValueError('reference inputs unavailable; freeze only after they are available')
+    latest = {}
+    for key in trace['stages']:
+        latest[key[:3]] = max(key[3], latest.get(key[:3], UNKNOWN))
+    if any(d['generation'] < latest.get(d['key'][:3], UNKNOWN) for d in draws):
+        raise ValueError('reference has an unresolved newer input generation')
     keys = sorted({d['key'] for d in draws})
     xyz = {key[:3] for key in keys}
     if any(tuple(item) in xyz for category in ('empty', 'occluded') for item in excluded[category]):
@@ -84,7 +99,7 @@ def freeze(trace, conditions, visual_reference, excluded):
         if len({d['generation'] for d in draws if d['key'] == key}) != 1:
             raise ValueError('reference generation changed during census')
     return {'schema': 1, 'metric': 'frame-fence-confirmed nonempty production command coverage',
-            'conditions': conditions, 'view': next(iter(trace['views'])),
+            'conditions': conditions, 'view': trace['final_view'], 'intent': next(iter(trace['intents'])),
             'source_log_sha256': trace['sha256'], 'sections_layers': keys,
             'exclusions': excluded, 'visual_reference_checked': True,
             'limits': ['not a pixel/presentation or first-usable-frame oracle',
@@ -102,7 +117,7 @@ def milestone(times, denominator):
 def measure(trace, reference, conditions):
     if reference.get('schema') != 1 or reference.get('conditions') != conditions:
         raise ValueError('reference schema/immutable workload conditions differ')
-    if reference['view'] != next(iter(trace['views'])):
+    if reference['view'] != trace['final_view'] or reference.get('intent') != next(iter(trace['intents'])):
         raise ValueError('reference/candidate camera, projection or visibility settings differ')
     members = {tuple(key) for key in reference['sections_layers']}
     if not members or len(members) != len(reference['sections_layers']):
@@ -120,7 +135,8 @@ def measure(trace, reference, conditions):
         latest[xyz] = max(d['input_generation'], latest.get(xyz, UNKNOWN))
     parts = {}
     for d in trace['draws']:
-        if d['key'] not in members or d['generation'] == UNKNOWN or d['generation'] != latest[d['key'][:3]]:
+        if (d['key'] not in members or d['generation'] == UNKNOWN or d['generation'] != latest[d['key'][:3]]
+                or d['recorded_ns'] < trace['view_locked_since']):
             continue
         if d['confirmed_ns'] < d['recorded_ns'] or d['recorded_ns'] < trace['origin']:
             raise ValueError('impossible recording/fence chronology')
@@ -152,6 +168,8 @@ def measure(trace, reference, conditions):
         if start is not None and d['recorded_ns'] >= start:
             snapshot_delays.append((d['confirmed_ns'] - start) / 1e6)
     return {'metric': reference['metric'], 'conditions': conditions, 'log_sha256': trace['sha256'],
+            'view_locked_seconds_since_entry': (trace['view_locked_since'] - trace['origin']) / 1e9,
+            'entry_projection_transition_excluded_from_progress': len(trace['views']) > 1,
             'intended_view': {'denominator': len(xyz_members), 'observed': len(section_times),
                               'fence_upper_bound_seconds': milestone(section_times.values(), len(xyz_members)),
                               'recording_lower_bound_seconds': milestone(recording_times.values(), len(xyz_members)),

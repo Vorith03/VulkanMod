@@ -251,12 +251,14 @@ case "$mode" in
     cp -a "run/saves/$template_world" "run/saves/${template_world}-cpu"
     cp -a "run/saves/$template_world" "run/saves/${template_world}-gpu"
     export JAVA_TOOL_OPTIONS="$common_world_options"
-    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-cpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciGpuWorldExpectedGpu=false ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-cpu-smoke.log
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-cpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciTerrainAppearanceCensus=true -Dvulkanmod.ciGpuWorldExpectedGpu=false ${integrated_gpu_flags//=true/=false} -Dvulkanmod.validation=true" vulkan-world-cpu-smoke.log
     export JAVA_TOOL_OPTIONS="$common_world_options"
-    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
+    run_client "-Dvulkanmod.ciGpuWorldSmoke=true -Dvulkanmod.ciGpuWorldLoad=${template_world}-gpu -Dvulkanmod.debugTerrainDrawReadback=true -Dvulkanmod.ciTerrainAppearanceCensus=true -Dvulkanmod.ciGpuWorldExpectedGpu=true ${integrated_gpu_flags} -Dvulkanmod.debugGpuGeneratedWorldDraw=true -Dvulkanmod.validation=true" vulkan-world-gpu-smoke.log
     for control in cpu gpu; do
       grep -F 'VULKANMOD_TERRAIN_WORLD_RENDER_ENTER' "vulkan-world-$control-smoke.log"
       grep -F 'VULKANMOD_TERRAIN_VIEW:' "vulkan-world-$control-smoke.log"
+      grep -F 'VULKANMOD_TERRAIN_REFERENCE_BEGIN:' "vulkan-world-$control-smoke.log"
+      grep -E 'VULKANMOD_TERRAIN_GEOMETRY_CONSUMED:.*layer=3 .*producer=cpu path=(direct|legacy_indirect)' "vulkan-world-$control-smoke.log"
       grep -E 'VULKANMOD_TERRAIN_GEOMETRY_CONSUMED:.*epoch=[1-9].*producer=cpu' "vulkan-world-$control-smoke.log"
 
       grep -E 'VULKANMOD_TERRAIN_SECTION_STAGE:.*stage=WORKER_START' "vulkan-world-$control-smoke.log"

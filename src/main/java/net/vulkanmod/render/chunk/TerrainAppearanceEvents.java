@@ -35,13 +35,14 @@ public final class TerrainAppearanceEvents {
     }
 
     /** Exact observed main-view signature; a changed signature invalidates a fixed-view trial. */
-    public static synchronized void view(Object renderer, String signature) {
+    public static synchronized void view(Object renderer, String signature, String intent) {
         if(!ENABLED || origin == 0 || owner.get() != renderer || System.nanoTime() - origin > DURATION) return;
         TerrainDrawReadback.referenceIfDue(epoch, System.nanoTime() - origin);
         if(signature.equals(view)) return;
         view = signature;
-        Initializer.LOGGER.info("VULKANMOD_TERRAIN_VIEW: epoch={} observed_ns={} signature={}",
-                epoch, System.nanoTime(), signature);
+        TerrainDrawReadback.viewChanged();
+        Initializer.LOGGER.info("VULKANMOD_TERRAIN_VIEW: epoch={} observed_ns={} signature={} intent={}",
+                epoch, System.nanoTime(), signature, intent);
     }
 
     public static synchronized void close(Object renderer) {
@@ -79,6 +80,10 @@ public final class TerrainAppearanceEvents {
         seen.put(ticket, previous | bit);
         Initializer.LOGGER.info("VULKANMOD_TERRAIN_SECTION_STAGE: epoch={} section=({},{},{}) generation={} stage={} since_entry_ns={} observed_ns={}",
                 epoch, ticket.x, ticket.y, ticket.z, ticket.generation, stage, now - origin, now);
+    }
+
+    static synchronized boolean lateCensusWindowReached() {
+        return ENABLED && origin != 0 && System.nanoTime() - origin >= 61_000_000_000L;
     }
 
     static synchronized boolean withinWindow(long requestedEpoch) {

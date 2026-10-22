@@ -393,3 +393,48 @@ REGION_SNAPSHOT_READY-to-fence is a separately labelled later diagnostic; true
 all-required-input availability and first usable/presented frame remain unknown.
 Do not equate these new bounds with on-screen appearance. No RX speed claim or
 matched initial-population result is established by this source milestone.
+
+
+### Integrated late-census exercise (source follow-up)
+
+The existing same-save world/portal fixture now holds the initial scene through
+61s from its first main renderer setup, before any dirty/recovery/camera phase.
+It adds one saved glass block to the already CPU-exception mixed section so the
+initial census includes actual translucent direct/legacy CPU geometry. All nine
+original lifecycle/pixel phases and actual ordinary REPLACE/mixed APPEND CPU-bypass
+assertions remain. Both controls explicitly enable the same census property and
+must emit late-census and translucent-consumption markers. This remains a small
+Lavapipe D2 correctness/observability control, not the owner's D32 performance
+comparison. True initial input readiness and on-screen presentation remain external
+or unresolved measurement gates; synthetic success must not be promoted to them.
+
+
+### Live1098 observation changes reference admission
+
+Actual stationary saved-world entry showed eye height interpolating from86 to
+87.6199994087 and FOV converging over the first~0.74s; the first production projection
+contained NaN words. Exact signatures correctly exposed this. A saved stationary
+logical camera alone is not an already fixed production projection. The follow-up
+records the logical camera entity pose separately and rejects any movement. It
+allows entry eye/FOV interpolation only as an explicitly reported view-lock delay,
+credits NO commands before the last transition to the exact frozen reference
+projection, and NEVER moves the world-entry origin. A changed final reference view,
+movement, a late-census view change or non-finite final matrix rejects coverage.
+Diagnostic dedup resets on actual view changes so the first command through the
+final projection is observed even when geometry revisions are unchanged. This is
+conservative command coverage, not an assertion about the first visible pixels.
+
+### Remaining optimization attribution boundary
+
+A final source pass confirmed the existing32-slot mesher helper pool, early
+nonblocking completion polling, frame-fenced completion fallback and graphics-queue
+upload ordering. No evidence from the old owner run attributes a large initial
+appearance delay to descriptor saturation, publication budgets or cached CPU
+visibility. New retained-staging behavior must be observed before changing those
+budgets or batching ownership. Unsupported custom models/callbacks cannot acquire
+a general all-input-ready guarantee from a chunk-presence check. lightOnInSection
+only checks enabled columns; an empty current light-work queue also cannot prove
+that later network light packets have arrived. Such checks would manufacture a
+readiness oracle. They were not added or used to conceal input delay. Snapshot
+readiness remains a later, explicitly labelled renderer milestone. This is a
+precise remaining limit, not a claim that upstream delivery is the bottleneck.
