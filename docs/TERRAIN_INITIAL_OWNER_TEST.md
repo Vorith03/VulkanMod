@@ -1,77 +1,74 @@
-# Initial terrain owner test — final artifact qualification pending
+# Initial terrain owner test — qualified build 1104
 
-Do not run an unqualified candidate. The final executable/artifact/hash will be
-filled in after the empty-input-page repair passes full integration and its actual bytes are checked.
-The candidate preserves MC1.20.1 /Forge47.3.0 /Java17 and default-OFF experiments.
+Source `543c9858c1e46f6bbd563e733d344b92510c0761`,
+[full workflow1104](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069)
+SUCCESS including published-byte audit.
+[JAR](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069/artifacts/12457519722):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1104-g543c9858-all.jar`,
+11,135,570 bytes, SHA256
+`4c430880956a16ae3ab94d676d47e34e6ba4aaba8af14df3b22c6b670ee98d9a`.
+MC1.20.1/Forge47.3.0/Java17; experiments default OFF.
 
-## Smallest next hardware check
+## Smallest next hardware check — two fresh65s processes
 
-Use the final JAR and [OWNER_TERRAIN_INITIAL.jvmargs](OWNER_TERRAIN_INITIAL.jvmargs).
-Replace existing VulkanMod feature/profiler properties to avoid duplicate overrides;
-keep unrelated memory/GC options. Keep the same302-mod setup, VulkanMod config,
-config/fml.toml earlyWindowControl=false, framebuffer2552x1374,D32/S12,VSyncOFF,
-cap260. This diagnostic explicitly enables the same19 integrated GPU features and
-bounded tracing. It is not a net-speed benchmark: tracing adds work.
+Restore the SAME offline backup of the existing saved VulkanMod_Benchmark before
+each run. Keep the302-mod setup, config/fml.toml earlyWindowControl=false,
+2552x1374,D32/S12,VSyncOFF,cap260, saved player0/192/0,yaw-90,pitch30 and game mode.
+Keep unrelated RAM/GC settings. Replace previous VulkanMod properties to avoid
+duplicate overrides. Preserve natural OS/driver caches and record trial order.
 
-Start a fresh game process and enter the existing, saved VulkanMod_Benchmark view:
-player0/192/0,yaw-90,pitch30, same saved game mode. No automatic teleport runs.
-Keep camera/settings fixed for65s, then exit normally. Do not reload resources,
-move, teleport, change distance/visibility or preload candidate geometry. Keep
-natural OS/driver caches; note trial order and whether the game process was fresh.
-Re-entry and newly generated terrain are different strata, not interchangeable
-repeats of this initial existing-save trial.
+1. Untimed CPU correctness reference: same new JAR with
+   [OWNER_TERRAIN_REFERENCE.jvmargs](OWNER_TERRAIN_REFERENCE.jvmargs).
+   Ten terrain/selection experiments OFF, nine texture/particle features ON,
+   tracing ON. Hold the saved view65s, then exit normally. Confirm late terrain
+   is correct and converged; if still populating around55s, say so.
+2. Candidate diagnostic: restore SAME offline snapshot, restart with
+   [OWNER_TERRAIN_INITIAL.jvmargs](OWNER_TERRAIN_INITIAL.jvmargs).
+   All19 integrated features and tracing ON. Hold the SAME view65s, exit normally.
 
-Return NEW latest.log and logs/vulkanmod-performance.log. For actual appearance,
-include an entry-to-converged-view clip if available, or observations of first
-usable frame, nearby terrain at2–3s, intended view at5s, remaining holes, and worst
-initial hitches. No new stationary post-convergence benchmark or unchanged old
-logs are needed. The trace runs from first joined-world rendering, records the
-entry eye/FOV transition separately, and performs a late production census at55s.
-The65s wait lets existing frame fences confirm the last capture before shutdown.
-If the view is still changing/populating after the census, say so; that run cannot
-be called a converged full-view reference. Do not treat50/90/99 as complete.
+Do not move, teleport, reload, change visibility/settings or preload geometry.
+Return NEW latest.log and logs/vulkanmod-performance.log from EACH run, labelled
+reference/candidate. Include an entry-to-converged clip when available, or first
+usable-frame observations, terrain at2–3s/5s, holes and hitches. Logs stay private.
+No unchanged old logs or new stationary post-convergence benchmark are needed.
 
-The owner-specific questions are whether consumed inputs now turn over under
-D32 pressure, whether output reservations/recovery or renderer handoff dominates,
-and whether real modpack pixels remain correct. Wrong/stale terrain, missing CPU
-exceptions, worse hitches or rising output failures count against the candidate.
-The agent will extract generations, selected sources, producer ownership, queue /
-publication gaps and fixed-reference command coverage. The owner does not need to
-construct reference manifests or enumerate sections manually. Logs stay private.
+The agent constructs the frozen nonempty section/layer reference; the owner need
+not enumerate sections. Empty sections are not progress; unavailable members stay
+holes; APPEND requires BOTH geometry halves. Nearby uses64-block horizontal
+section-center radius, intended view the independent converged CPU section/layer
+set under the same camera and visibility. Portal child views are separate.
+50/90/99 are milestones, never complete; report unresolved holes even at99%.
+World entry is first main-world rendering; eye/FOV convergence is recorded without
+resetting that clock. Census55s/capture60s/normal exit65s allow existing fences.
+A nonconverged CPU reference cannot prove a complete denominator.
 
-## Matched visual/performance comparison after correctness
+These are correctness/pressure controls, NOT a matched speed comparison: terrain
+feature configuration differs, tracing adds work, and cache order is uncontrolled.
+Check turnover, actual GPU consumption/CPU displacement, CPU exceptions, rejection,
+recovery, publication delay and pacing. Last-fence page retirement can cause later
+isolated edits to allocate again; record hitches. Input charges exclude output
+geometry and driver heap; sampled heap is not an exact peak.
 
-The separately verified pre-staging baseline is full1092, executable
-272b7f81f09a05e4796e008d64a33c73a5270505,
-[JAR artifact12400315181](https://github.com/Vorith03/VulkanMod/actions/runs/39716738464/artifacts/12400315181).
-Actual11,103,766byte JAR SHA256:
+## Matched appearance/performance comparison after correctness
+
+Baseline: source272b7f81f09a05e4796e008d64a33c73a5270505,
+[JAR1092](https://github.com/Vorith03/VulkanMod/actions/runs/39716738464/artifacts/12400315181),
+11,103,766 bytes, actual SHA256
 `2eedcf35295de61e4ecac2fad97d19b84c5813f2734838d7a8db884079fc6e88`.
-This retains the qualified texture/particle adoption repairs.
+It preserves texture/particle repairs.
 
-Use [OWNER_TERRAIN_COMPARE.jvmargs](OWNER_TERRAIN_COMPARE.jvmargs) for BOTH
-executables: same19 features/profiling, tracing explicitly FALSE in both. An old
-JAR silently ignoring a true tracing property would NOT have comparable overhead.
-Only the candidate JAR changes. Keep identical modpack/config/framebuffer/FPS /
-distances and restore the SAME offline save snapshot before each fresh-process
-trial. Copying a save is not preloading geometry. Do not manipulate privileged
-caches; record natural cache state and run order. An existing-save pair and a
-new-generation pair need separate immutable starting snapshots and results.
+Use [OWNER_TERRAIN_COMPARE.jvmargs](OWNER_TERRAIN_COMPARE.jvmargs) for BOTH baseline
+and candidate: same19 features/profiling, tracing FALSE in both. Only JAR changes.
+Restore identical offline save snapshots and preserve all owner settings. Record
+cache conditions/order; no privileged cache manipulation. Initial entry, re-entry,
+warm-cache and newly generated terrain are separate strata. New generation needs
+its own immutable starting snapshot. Capture entry-to-converged views and fresh
+logs in both; retain first usable frame,2s/3s/5s,50/90/99 coverage and remaining
+holes. Reverse order/repeat when variance affects the conclusion. Compare pacing,
+worst stalls, retained/observed memory, adoption, fallback and recovery.
 
-Capture world entry through the fixed view using the same recording method in
-both trials. Retain first usable frame,2s/3s/5s views, eventual reference view and
-unresolved holes, plus fresh performance/latest logs for each executable. One A/B
-pair is a screening comparison; repeat in reversed order when variance changes
-the conclusion. Initial entry, re-entry and warm caches must remain separate.
-The agent will check frame pacing/worst stalls, sampled memory/retained native
-budgets, adoption/recovery and visible timing. Sampled heap is not an exact peak.
-No FPS-only result or post-convergence settling notice establishes appearance.
-
-The diagnostic/correctness capture and this performance comparison are different
-controls. The first minimal capture can identify a correctness/pressure blocker
-before spending time on repeated A/B trials. Neither script command percentages
-nor queue/publish counts alone establish2–3s/5s on-screen success. True all-required
-input availability remains unknown for unsupported arbitrary Forge callbacks;
-REGION_SNAPSHOT_READY is explicitly a later renderer milestone. Future arrival of
-light packets cannot be proved by an empty current light-work queue. These limits
-remain visible in every report, and the full performance/release mission remains
-open until the missing evidence is actually obtained.
+True all-required-input arrival and first usable PRESENTED frame are unknown from
+command/fence traces. REGION_SNAPSHOT_READY is a later renderer milestone; current
+empty light queues cannot prove future packets or arbitrary Forge callback inputs.
+On-screen evidence is required for2–3s/5s. Full appearance/performance/release
+qualification remains OPEN until the hardware evidence is actually obtained.

@@ -1,0 +1,124 @@
+{
+  "executable": {
+    "filename": "VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1104-g543c9858-all.jar",
+    "bytes": 11135570,
+    "sha256": "4c430880956a16ae3ab94d676d47e34e6ba4aaba8af14df3b22c6b670ee98d9a",
+    "commit": "543c9858c1e46f6bbd563e733d344b92510c0761",
+    "version": "0.3.2-forge.2-build.1104-g543c9858",
+    "crc": "passed",
+    "java_class_major": 61,
+    "forge": "[47.3.0,48)",
+    "minecraft": "[1.20.1,1.20.2)",
+    "mixins_nested_vulkan_linux_windows_natives": "passed"
+  },
+  "evidence": {
+    "original_exact_pixel_pairs": 18,
+    "vulkan_validation_sync_errors": 0,
+    "native_one_page_turnover_bytes_compute": "passed",
+    "world_observations": {
+      "vulkan-world-vanilla-cpu": {
+        "main_epoch": 1,
+        "geometry_observations": 91,
+        "producers": {
+          "cpu": 91
+        },
+        "paths": {
+          "region_indirect": 67,
+          "direct": 24
+        },
+        "view_lock_seconds_since_entry": 0.75937788,
+        "census_seconds_since_entry": 55.007661908,
+        "input_pages": {
+          "entry_bytes": 0,
+          "peak_charge_observed_bytes": 0,
+          "last_retained_charge_bytes": 0,
+          "events": {
+            "entry": 1
+          }
+        }
+      },
+      "vulkan-world-vanilla-gpu": {
+        "main_epoch": 1,
+        "geometry_observations": 57,
+        "producers": {
+          "gpu": 22,
+          "cpu": 5,
+          "cpu_append": 15,
+          "gpu_append": 15
+        },
+        "paths": {
+          "region_indirect": 52,
+          "direct": 5
+        },
+        "view_lock_seconds_since_entry": 0.755574031,
+        "census_seconds_since_entry": 55.011607909,
+        "input_pages": {
+          "entry_bytes": 0,
+          "peak_charge_observed_bytes": 2097152,
+          "last_retained_charge_bytes": 0,
+          "events": {
+            "entry": 1,
+            "allocated": 7,
+            "retired": 7
+          }
+        }
+      },
+      "vulkan-world-cpu": {
+        "main_epoch": 1,
+        "geometry_observations": 13708,
+        "producers": {
+          "cpu": 13708
+        },
+        "paths": {
+          "direct": 22,
+          "region_indirect": 13686
+        },
+        "view_lock_seconds_since_entry": 0.815756072,
+        "census_seconds_since_entry": 55.005126905,
+        "input_pages": {
+          "entry_bytes": 0,
+          "peak_charge_observed_bytes": 0,
+          "last_retained_charge_bytes": 0,
+          "events": {
+            "entry": 1
+          }
+        }
+      },
+      "vulkan-world-gpu": {
+        "main_epoch": 1,
+        "geometry_observations": 19746,
+        "producers": {
+          "cpu": 11,
+          "gpu": 6579,
+          "cpu_append": 6578,
+          "gpu_append": 6578
+        },
+        "paths": {
+          "direct": 11,
+          "region_indirect": 19735
+        },
+        "view_lock_seconds_since_entry": 0.872707391,
+        "census_seconds_since_entry": 55.008467457,
+        "input_pages": {
+          "entry_bytes": 0,
+          "peak_charge_observed_bytes": 2097152,
+          "last_retained_charge_bytes": 0,
+          "events": {
+            "entry": 1,
+            "allocated": 4,
+            "retired": 4
+          }
+        }
+      }
+    },
+    "limits": [
+      "Small D2 software correctness controls; not RX/D32 speed qualification",
+      "CPU/GPU controls change19 features; not a causal repair performance comparison",
+      "Recording/fence witnesses are not first usable pixels/presentation",
+      "True all-required-input availability and matched owner appearance remain unknown",
+      "Portal child-view geometry is not credited to main-world coverage",
+      "Charges are global input buffers, not output geometry or driver heap",
+      "No new visually accepted reference or coverage percentage is asserted by this audit"
+    ]
+  }
+}
