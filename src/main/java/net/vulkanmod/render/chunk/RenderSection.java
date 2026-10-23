@@ -330,23 +330,22 @@ public class RenderSection {
         this.initialDirtyCoalescible = false;
     }
 
-    public synchronized void setDirty(boolean playerChanged) {
-        // An uncaptured, already-dirty initial owner has nothing to revoke.
-        // Queued/running/compiled work MUST still advance its generation.
-        // The publication dispatcher and region capture both close this window
-        // under the same lock, so queued results cannot race this shortcut.
-        if(this.initialDirtyCoalescible && this.dirty
-                && this.compileStatus.rebuildTask == null
-                && this.compileStatus.compiledSection == CompiledSection.UNCOMPILED) {
-            this.playerChanged |= playerChanged;
-            if(this.worldRenderer != null)
-                this.worldRenderer.requestSectionRebuild(this);
-            return;
+    public void setDirty(boolean playerChanged) {
+        // Publication admission and this initial-dirty shortcut share the
+        // section monitor. Never elide a generation change while any producer
+        // has captured a region or queued even a legacy publication callback.
+        synchronized(this) {
+            if(this.initialDirtyCoalescible && this.dirty
+                    && this.compileStatus.rebuildTask == null
+                    && this.compileStatus.compiledSection == CompiledSection.UNCOMPILED) {
+                this.playerChanged |= playerChanged;
+            } else {
+                this.invalidateVoxels(true);
+                this.playerChanged = playerChanged || this.dirty && this.playerChanged;
+                this.dirty = true;
+            }
         }
-
-        this.invalidateVoxels(true);
-        this.playerChanged = playerChanged || this.dirty && this.playerChanged;
-        this.dirty = true;
+        // Retain the original request outside the section lock.
         if(this.worldRenderer != null)
             this.worldRenderer.requestSectionRebuild(this);
     }
