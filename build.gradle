@@ -293,6 +293,7 @@ tasks.named('check').configure {
     dependsOn 'testMemoryPressurePolicy'
     dependsOn 'testForgeRenderStageContract'
     dependsOn 'testChunkTaskOriginSnapshot'
+    dependsOn 'testRenderSectionInitialDirty'
     dependsOn 'testGpuTerrainMesherLifecycle'
     dependsOn 'testFramebufferRetirementOrder'
     dependsOn 'testVulkanImageCreationContract'
@@ -346,6 +347,12 @@ tasks.register('testForgeRenderStageContract', JavaExec) {
     dependsOn 'testClasses'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'net.vulkanmod.mixin.chunk.ForgeRenderStageMixinTest'
+}
+
+tasks.register('testRenderSectionInitialDirty', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.vulkanmod.render.chunk.RenderSectionInitialDirtyTest'
 }
 
 tasks.register('testChunkTaskOriginSnapshot', JavaExec) {

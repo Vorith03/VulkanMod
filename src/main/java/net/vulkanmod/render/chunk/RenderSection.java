@@ -317,6 +317,19 @@ public class RenderSection {
     }
 
     public void setDirty(boolean playerChanged) {
+        // A new or ring-repositioned section is already invalidated by reset().
+        // Until its first rebuild task has captured a region, another notice
+        // cannot stale any snapshot/publication for this owner. Coalesce only
+        // that initial state; in-flight, compiled and recovery dirtying must
+        // still advance the generation and revoke old GPU/CPU results.
+        if(this.dirty && this.compileStatus.rebuildTask == null
+                && this.compileStatus.compiledSection == CompiledSection.UNCOMPILED) {
+            this.playerChanged |= playerChanged;
+            if(this.worldRenderer != null)
+                this.worldRenderer.requestSectionRebuild(this);
+            return;
+        }
+
         this.invalidateVoxels(true);
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
