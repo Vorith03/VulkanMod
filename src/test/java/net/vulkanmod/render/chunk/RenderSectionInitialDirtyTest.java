@@ -10,6 +10,8 @@ public final class RenderSectionInitialDirtyTest {
     public static void main(String[] args) {
         // Standalone JavaExec has no Minecraft startup lifecycle. RenderSection
         // constructs TerrainRenderType/RenderType, which require vanilla registries.
+        // Vanilla initializes its version before bootstrap/data fixers.
+        net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         RenderSection section = new RenderSection(0, 0, 0, 0);
         long initialGeneration = section.getVoxelGeneration();
