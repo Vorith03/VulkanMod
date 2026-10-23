@@ -37,6 +37,9 @@ public class RenderSection {
     private final CompileStatus compileStatus = new CompileStatus();
 
     private boolean dirty = true;
+    // Only the truly uncaptured initial/ring owner may coalesce dirty notices.
+    // Real publication and build admission revoke that permission immediately.
+    private boolean initialDirtyCoalescible = true;
     private long voxelGeneration;
     private long gpuTerrainPreflightGeneration = Long.MIN_VALUE;
     private long gpuTerrainPreflightModelGeneration = Long.MIN_VALUE;
@@ -152,6 +155,8 @@ public class RenderSection {
     }
 
     public ChunkTask.BuildTask createCompileTask(RenderRegionCache renderRegionCache, TaskDispatcher dispatcher) {
+        // Seal the initial coalescing window before capturing any mutable region input.
+        this.preventInitialDirtyCoalescing();
         if(TerrainAppearanceEvents.ENABLED)
             TerrainAppearanceEvents.stage(this, getVoxelGeneration(), TerrainAppearanceEvents.Stage.REGION_PREPARE_START);
         boolean flag = this.cancelTasks();
@@ -305,6 +310,9 @@ public class RenderSection {
         this.cancelTasks();
         this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
+        // reset() invalidated the previous owner generation and cancelled its tasks.
+        // A late older-generation publication still fails the existing generation gate.
+        synchronized(this) { this.initialDirtyCoalescible = true; }
         this.dirty = true;
         this.visibility = 0;
         this.completelyEmpty = true;
@@ -316,13 +324,19 @@ public class RenderSection {
             drawParameters.reset(this.chunkArea);
     }
 
-    public void setDirty(boolean playerChanged) {
-        // A new or ring-repositioned section is already invalidated by reset().
-        // Until its first rebuild task has captured a region, another notice
-        // cannot stale any snapshot/publication for this owner. Coalesce only
-        // that initial state; in-flight, compiled and recovery dirtying must
-        // still advance the generation and revoke old GPU/CPU results.
-        if(this.dirty && this.compileStatus.rebuildTask == null
+    /** Also called by the publication dispatcher before it queues any result,
+     * including synthetic/unversioned results that bypass createCompileTask(). */
+    public synchronized void preventInitialDirtyCoalescing() {
+        this.initialDirtyCoalescible = false;
+    }
+
+    public synchronized void setDirty(boolean playerChanged) {
+        // An uncaptured, already-dirty initial owner has nothing to revoke.
+        // Queued/running/compiled work MUST still advance its generation.
+        // The publication dispatcher and region capture both close this window
+        // under the same lock, so queued results cannot race this shortcut.
+        if(this.initialDirtyCoalescible && this.dirty
+                && this.compileStatus.rebuildTask == null
                 && this.compileStatus.compiledSection == CompiledSection.UNCOMPILED) {
             this.playerChanged |= playerChanged;
             if(this.worldRenderer != null)

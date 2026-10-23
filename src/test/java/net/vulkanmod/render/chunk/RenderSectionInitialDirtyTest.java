@@ -23,6 +23,16 @@ public final class RenderSectionInitialDirtyTest {
                 "repeated initial notices must not churn a generation with no captured work");
         require(section.isDirtyFromPlayer(), "coalescing must preserve player-change intent");
 
+        // A queued completion without a CompileTask must revoke coalescing,
+        // just like a captured region. The native publication smoke exercises
+        // the actual queue and stale-generation rejection.
+        RenderSection queued = new RenderSection(1, 0, 0, 0);
+        long queuedGeneration = queued.getVoxelGeneration();
+        queued.preventInitialDirtyCoalescing();
+        queued.setDirty(false);
+        require(queued.getVoxelGeneration() == queuedGeneration + 1,
+                "queued publication must invalidate even an initially uncompiled owner");
+
         section.setNotDirty();
         section.setDirty(false);
         require(section.getVoxelGeneration() == initialGeneration + 1,
@@ -44,6 +54,10 @@ public final class RenderSectionInitialDirtyTest {
             section.setDirty(false);
         require(section.getVoxelGeneration() == ringGeneration,
                 "ring-reassigned, uncaptured owner must coalesce repeated notices");
+        section.preventInitialDirtyCoalescing();
+        section.setDirty(false);
+        require(section.getVoxelGeneration() == ringGeneration + 1,
+                "new publication after ring reuse must close the coalescing window");
 
         System.out.println("Initial section invalidation coalescing contract passed");
     }

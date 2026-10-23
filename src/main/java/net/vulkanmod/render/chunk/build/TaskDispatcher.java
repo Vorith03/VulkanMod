@@ -346,6 +346,10 @@ public class TaskDispatcher {
                                       @Nullable TerrainRenderType preservedLayer,
                                       long generation, boolean stagePreservedLayer,
                                       Runnable publishResult) {
+        // Publish callbacks may exist even without a RenderSection BuildTask
+        // (e.g. native smoke/legacy callers). They must always be invalidated
+        // by later dirty notifications, not mistaken for uncaptured work.
+        section.preventInitialDirtyCoalescing();
         long queuedAt = System.nanoTime();
         task.tracePhase(TerrainAppearanceEvents.Stage.PUBLICATION_QUEUED);
         this.pendingUploadBuffers.addAll(uploadBuffers.values());
