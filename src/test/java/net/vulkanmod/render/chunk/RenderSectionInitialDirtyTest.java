@@ -8,6 +8,9 @@ import net.vulkanmod.render.chunk.build.CompiledSection;
  */
 public final class RenderSectionInitialDirtyTest {
     public static void main(String[] args) {
+        // Standalone JavaExec has no Minecraft startup lifecycle. RenderSection
+        // constructs TerrainRenderType/RenderType, which require vanilla registries.
+        net.minecraft.server.Bootstrap.bootStrap();
         RenderSection section = new RenderSection(0, 0, 0, 0);
         long initialGeneration = section.getVoxelGeneration();
         require(section.isDirty() && !section.isCompiled(), "new section starts uncompiled and dirty");
