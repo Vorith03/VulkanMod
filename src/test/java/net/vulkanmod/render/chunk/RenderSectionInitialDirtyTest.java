@@ -46,18 +46,39 @@ public final class RenderSectionInitialDirtyTest {
                 "dirty compiled section must never coalesce subsequent invalidation");
         require(section.isDirtyFromPlayer(), "compiled invalidation retains player intent");
 
+        // A build/publication admission is permanent for this ring section.
+        // A later reset must not reopen the shortcut while an unversioned or
+        // frame-fenced old publication might still exist.
+        section.preventInitialDirtyCoalescing();
         section.setOrigin(16, 0, 0);
         long ringGeneration = section.getVoxelGeneration();
         require(!section.isCompiled() && section.isDirty(),
                 "ring reassignment resets compilation and starts dirty");
-        for(int i = 0; i < 4096; i++)
-            section.setDirty(false);
-        require(section.getVoxelGeneration() == ringGeneration,
-                "ring-reassigned, uncaptured owner must coalesce repeated notices");
-        section.preventInitialDirtyCoalescing();
         section.setDirty(false);
         require(section.getVoxelGeneration() == ringGeneration + 1,
-                "new publication after ring reuse must close the coalescing window");
+                "previously captured ring owner must still invalidate after reset");
+
+        // First camera positioning is different: it has never admitted work,
+        // even if it calls reset()/setOrigin before its first chunk packet.
+        RenderSection virgin = new RenderSection(2, 0, 0, 0);
+        virgin.setOrigin(16, 0, 16);
+        long firstPositionGeneration = virgin.getVoxelGeneration();
+        for(int i = 0; i < 4096; i++)
+            virgin.setDirty(false);
+        require(virgin.getVoxelGeneration() == firstPositionGeneration,
+                "initial camera positioning must retain virgin coalescing");
+        virgin.preventInitialDirtyCoalescing();
+        virgin.setOrigin(32, 0, 16);
+        long reusedGeneration = virgin.getVoxelGeneration();
+        virgin.setDirty(false);
+        require(virgin.getVoxelGeneration() == reusedGeneration + 1,
+                "first admission must permanently revoke coalescing across later ring resets");
+
+        queued.setOrigin(16, 0, 16);
+        long queuedAfterReset = queued.getVoxelGeneration();
+        queued.setDirty(false);
+        require(queued.getVoxelGeneration() == queuedAfterReset + 1,
+                "queued unversioned publication must not regain virgin status after ring reset");
 
         System.out.println("Initial section invalidation coalescing contract passed");
     }

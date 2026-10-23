@@ -310,9 +310,10 @@ public class RenderSection {
         this.cancelTasks();
         this.clearGlobalBlockEntities();
         this.compileStatus.compiledSection = CompiledSection.UNCOMPILED;
-        // reset() invalidated the previous owner generation and cancelled its tasks.
-        // A late older-generation publication still fails the existing generation gate.
-        synchronized(this) { this.initialDirtyCoalescible = true; }
+        // A retired owner may still have cached/queued draw or legacy publication
+        // callbacks. Never reopen the virgin-only coalescing permission here:
+        // the first camera reposition retains its initial true value, whereas a
+        // section that ever admitted a build/publication stays conservative.
         this.dirty = true;
         this.visibility = 0;
         this.completelyEmpty = true;
