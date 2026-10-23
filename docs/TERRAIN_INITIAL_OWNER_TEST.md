@@ -1,13 +1,23 @@
-# Initial terrain owner test — qualified build 1104
+# Initial terrain owner test — qualified build 1110
 
-Source `543c9858c1e46f6bbd563e733d344b92510c0761`,
-[full workflow1104](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069)
-SUCCESS including published-byte audit.
-[JAR](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069/artifacts/12457519722):
-`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1104-g543c9858-all.jar`,
-11,135,570 bytes, SHA256
-`4c430880956a16ae3ab94d676d47e34e6ba4aaba8af14df3b22c6b670ee98d9a`.
-MC1.20.1/Forge47.3.0/Java17; experiments default OFF.
+Executable source `b26385b4c1216c7c1191132507415417a2d2f12c`,
+[full workflow #1110](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963)
+SUCCESS including dependent published-byte audit.
+[JAR](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963/artifacts/12520408712):
+`VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1110-gb26385b4-all.jar`,
+11,135,757 bytes, published-byte SHA256
+`c0a076889e7cda16dd50a1f653cff0e6731fe955b7eafaa58599b0f49a6e2e74`.
+MC1.20.1/Forge47.3.0/Java17; experiments default OFF. Published
+[byte audit](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963/artifacts/12521317020)
+and all required public rendering/portal/compatibility gates passed; three
+private pack steps skipped. See [initial-dirty evidence](TERRAIN_INITIAL_DIRTY_2026-10-23.md).
+
+The October 23 owner build-1104 GPU diagnostic is already recorded and
+does not need to be re-uploaded or re-run unchanged. It gives command/fence
+timing and a high **raw** dirty-notice count, but not a converged CPU
+section/layer reference, first presented pixel or causal 1104→1110 gain.
+The new owner evidence is the paired CPU reference and GPU candidate
+on **build 1110** described below.
 
 ## Smallest next hardware check — two fresh65s processes
 
@@ -66,6 +76,20 @@ its own immutable starting snapshot. Capture entry-to-converged views and fresh
 logs in both; retain first usable frame,2s/3s/5s,50/90/99 coverage and remaining
 holes. Reverse order/repeat when variance affects the conclusion. Compare pacing,
 worst stalls, retained/observed memory, adoption, fallback and recovery.
+
+### Attribution of the October 23 initial-dirty repair (optional after correctness)
+
+To isolate this one repair from the broader GPU-first work, compare
+qualified [build 1104](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069/artifacts/12457519722)
+against **build 1110**, with `OWNER_TERRAIN_COMPARE.jvmargs` for BOTH,
+the same immutable save/view and 65-second entry observation each.
+Both JARs share the earlier texture/particle and staging repairs. The
+old trace-ON diagnostic is not a matched trace-OFF baseline. Record first
+usable on-screen terrain, near/view coverage/hole persistence and frame
+stalls; compare with the same cache/order caveats above. Coalescing has
+no asserted net benefit until these data show one. Do not substitute this
+attribution comparison for a CPU correctness reference or for the broader
+build-1092→1110 comparison.
 
 True all-required-input arrival and first usable PRESENTED frame are unknown from
 command/fence traces. REGION_SNAPSHOT_READY is a later renderer milestone; current

@@ -1,6 +1,16 @@
 # Optimization effectiveness ledger — October 10, 2026 reality check
 
-## Final integrated qualification — build 1104
+## Latest executable — October 23, 2026
+
+The current internally qualified build is [#1110](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963)
+at `b26385b4c1216c7c1191132507415417a2d2f12c` (published JAR SHA256 `c0a076889e7cda16dd50a1f653cff0e6731fe955b7eafaa58599b0f49a6e2e74`).
+The first-admission-only initial dirty coalescing repair passed the full public
+suite and artifact audit; D32 first-usable terrain, hitch and net-speed improvement
+remain **unmeasured**. Keep defaults OFF and the real owner evidence gate OPEN.
+See [repair evidence](TERRAIN_INITIAL_DIRTY_2026-10-23.md) and
+[updated owner procedure](TERRAIN_INITIAL_OWNER_TEST.md).
+
+## Prior qualified baseline — build 1104
 
 Executable source `543c9858c1e46f6bbd563e733d344b92510c0761`.
 [Full workflow 1104](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069)

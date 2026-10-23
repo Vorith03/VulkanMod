@@ -1,6 +1,35 @@
 # VulkanMod Forge1.20.1 — initial terrain appearance mission OPEN
 
-## Final integrated qualification — build 1104
+## Current executable and gate — October 23, 2026
+
+The current *internally qualified executable* is source `b26385b4c1216c7c1191132507415417a2d2f12c`,
+[full CI #1110](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963)
+SUCCESS including dependent published-byte audit. The exact
+[JAR artifact 12520408712](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963/artifacts/12520408712)
+is `VulkanMod_Forge_1.20.1-0.3.2-forge.2-build.1110-gb26385b4-all.jar`,
+11,135,757 bytes, SHA256
+`c0a076889e7cda16dd50a1f653cff0e6731fe955b7eafaa58599b0f49a6e2e74`.
+[Published-byte audit 12521317020](https://github.com/Vorith03/VulkanMod/actions/runs/39995855963/artifacts/12521317020)
+verified the original 18 exact main/portal CPU/GPU pixel pairs, zero Vulkan
+validation/sync errors, packaged MC1.20.1/Forge47.3.0/Java17 and native modules,
+and one-page GPU input turnover. The three private resource-pack steps SKIPPED.
+Experiments remain default OFF; this is not RX/D32 performance or release qualification.
+
+The new bounded initial-dirty coalescing repair is safe under its qualified
+generation/publication contracts: virgin, already-dirty owners may elide
+redundant invalidation only **before first build or publication admission**.
+The permission never reopens on ring reset/reposition. The October 23 owner
+capture from build 1104 shows an initial appearance/stall problem, but its raw
+dirty-notice count is measured **before** ring-owner filtering and cannot prove
+how much actual invalidation is saved. **Net world-entry and hitch reduction
+are UNMEASURED.** See [focused analysis](docs/TERRAIN_INITIAL_DIRTY_2026-10-23.md)
+and [exact owner protocol](docs/TERRAIN_INITIAL_OWNER_TEST.md).
+Next gate: one new same-save build-1110 CPU reference / integrated GPU capture,
+then matched trace-OFF 1104/1110 attribution and/or 1092/1110 net comparison
+as the question requires. Do not request unchanged old logs, increase budgets,
+or claim the 2–3s nearby / 5s view target from CI.
+
+## Prior qualified baseline — build 1104
 
 Executable source `543c9858c1e46f6bbd563e733d344b92510c0761`.
 [Full workflow 1104](https://github.com/Vorith03/VulkanMod/actions/runs/39850115069)
